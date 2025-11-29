@@ -47,18 +47,27 @@ impl MemoryStorage {
     /// Get the number of stored items.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.data.lock().expect("MemoryStorage mutex poisoned").len()
+        self.data
+            .lock()
+            .expect("MemoryStorage mutex poisoned")
+            .len()
     }
 
     /// Check if storage is empty.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.data.lock().expect("MemoryStorage mutex poisoned").is_empty()
+        self.data
+            .lock()
+            .expect("MemoryStorage mutex poisoned")
+            .is_empty()
     }
 
     /// Clear all stored data.
     pub fn clear(&self) {
-        self.data.lock().expect("MemoryStorage mutex poisoned").clear();
+        self.data
+            .lock()
+            .expect("MemoryStorage mutex poisoned")
+            .clear();
     }
 }
 
@@ -71,15 +80,25 @@ impl Storage for MemoryStorage {
     }
 
     fn load(&self, key: &str) -> Option<Vec<u8>> {
-        self.data.lock().expect("MemoryStorage mutex poisoned").get(key).cloned()
+        self.data
+            .lock()
+            .expect("MemoryStorage mutex poisoned")
+            .get(key)
+            .cloned()
     }
 
     fn remove(&self, key: &str) {
-        self.data.lock().expect("MemoryStorage mutex poisoned").remove(key);
+        self.data
+            .lock()
+            .expect("MemoryStorage mutex poisoned")
+            .remove(key);
     }
 
     fn contains(&self, key: &str) -> bool {
-        self.data.lock().expect("MemoryStorage mutex poisoned").contains_key(key)
+        self.data
+            .lock()
+            .expect("MemoryStorage mutex poisoned")
+            .contains_key(key)
     }
 }
 
@@ -109,13 +128,19 @@ impl MemoryRouter {
     /// Get navigation history.
     #[must_use]
     pub fn history(&self) -> Vec<String> {
-        self.history.lock().expect("MemoryRouter mutex poisoned").clone()
+        self.history
+            .lock()
+            .expect("MemoryRouter mutex poisoned")
+            .clone()
     }
 
     /// Get history length.
     #[must_use]
     pub fn history_len(&self) -> usize {
-        self.history.lock().expect("MemoryRouter mutex poisoned").len()
+        self.history
+            .lock()
+            .expect("MemoryRouter mutex poisoned")
+            .len()
     }
 }
 
@@ -123,11 +148,17 @@ impl Router for MemoryRouter {
     fn navigate(&self, route: &str) {
         let mut current = self.route.lock().expect("MemoryRouter mutex poisoned");
         *current = route.to_string();
-        self.history.lock().expect("MemoryRouter mutex poisoned").push(route.to_string());
+        self.history
+            .lock()
+            .expect("MemoryRouter mutex poisoned")
+            .push(route.to_string());
     }
 
     fn current_route(&self) -> String {
-        self.route.lock().expect("MemoryRouter mutex poisoned").clone()
+        self.route
+            .lock()
+            .expect("MemoryRouter mutex poisoned")
+            .clone()
     }
 }
 
