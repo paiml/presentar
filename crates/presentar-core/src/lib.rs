@@ -7,18 +7,21 @@
 //! - Events and messages: [`Event`], [`Message`]
 
 mod color;
-mod geometry;
 mod constraints;
 mod event;
-mod widget;
+mod geometry;
 mod state;
+pub mod widget;
 
-pub use color::Color;
-pub use geometry::{Point, Size, Rect, CornerRadius};
+pub use color::{Color, ColorParseError};
 pub use constraints::Constraints;
 pub use event::{Event, Key, MouseButton};
-pub use widget::{Widget, WidgetId, TypeId};
-pub use state::{State, Command};
+pub use geometry::{CornerRadius, Point, Rect, Size};
+pub use state::{Command, CounterMessage, CounterState, State};
+pub use widget::{
+    AccessibleRole, Canvas, FontStyle, FontWeight, LayoutResult, TextStyle, Transform2D, TypeId,
+    Widget, WidgetId,
+};
 
 #[cfg(test)]
 mod tests {
@@ -449,13 +452,19 @@ mod tests {
             let c = Constraints::new(50.0, 150.0, 50.0, 150.0);
 
             // Within bounds
-            assert_eq!(c.constrain(Size::new(100.0, 100.0)), Size::new(100.0, 100.0));
+            assert_eq!(
+                c.constrain(Size::new(100.0, 100.0)),
+                Size::new(100.0, 100.0)
+            );
 
             // Below min
             assert_eq!(c.constrain(Size::new(10.0, 10.0)), Size::new(50.0, 50.0));
 
             // Above max
-            assert_eq!(c.constrain(Size::new(200.0, 200.0)), Size::new(150.0, 150.0));
+            assert_eq!(
+                c.constrain(Size::new(200.0, 200.0)),
+                Size::new(150.0, 150.0)
+            );
         }
 
         #[test]
@@ -486,7 +495,9 @@ mod tests {
 
         #[test]
         fn test_event_mouse_move() {
-            let e = Event::MouseMove { position: Point::new(100.0, 200.0) };
+            let e = Event::MouseMove {
+                position: Point::new(100.0, 200.0),
+            };
             if let Event::MouseMove { position } = e {
                 assert_eq!(position.x, 100.0);
                 assert_eq!(position.y, 200.0);
@@ -520,7 +531,10 @@ mod tests {
 
         #[test]
         fn test_event_scroll() {
-            let e = Event::Scroll { delta_x: 0.0, delta_y: -10.0 };
+            let e = Event::Scroll {
+                delta_x: 0.0,
+                delta_y: -10.0,
+            };
             if let Event::Scroll { delta_y, .. } = e {
                 assert_eq!(delta_y, -10.0);
             } else {
@@ -530,7 +544,9 @@ mod tests {
 
         #[test]
         fn test_event_text_input() {
-            let e = Event::TextInput { text: "hello".to_string() };
+            let e = Event::TextInput {
+                text: "hello".to_string(),
+            };
             if let Event::TextInput { text } = e {
                 assert_eq!(text, "hello");
             } else {

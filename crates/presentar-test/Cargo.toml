@@ -1,6 +1,6 @@
 [package]
-name = "presentar-core"
-description = "Core types and traits for Presentar UI framework"
+name = "presentar-test"
+description = "Testing harness for Presentar applications"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -9,11 +9,11 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+presentar-core = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
-serde_json = { workspace = true }
 
 [lints]
 workspace = true

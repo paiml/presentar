@@ -1,0 +1,22 @@
+[package]
+name = "presentar"
+description = "WASM-first visualization and rapid application framework"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+presentar-core = { workspace = true }
+presentar-widgets = { workspace = true }
+presentar-layout = { workspace = true }
+presentar-yaml = { workspace = true }
+
+[dev-dependencies]
+presentar-test = { workspace = true }
+proptest = { workspace = true }
+
+[lints]
+workspace = true

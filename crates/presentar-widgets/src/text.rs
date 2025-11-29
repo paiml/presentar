@@ -1,0 +1,216 @@
+//! Text widget for displaying text content.
+
+use presentar_core::{
+    widget::{FontStyle, FontWeight, LayoutResult, TextStyle},
+    Canvas, Color, Constraints, Event, Rect, Size, TypeId, Widget,
+};
+use serde::{Deserialize, Serialize};
+use std::any::Any;
+
+/// Text widget for displaying styled text.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Text {
+    /// Text content
+    content: String,
+    /// Text color
+    color: Color,
+    /// Font size in pixels
+    font_size: f32,
+    /// Font weight
+    font_weight: FontWeight,
+    /// Font style
+    font_style: FontStyle,
+    /// Line height multiplier
+    line_height: f32,
+    /// Maximum width before wrapping (None = no wrapping)
+    max_width: Option<f32>,
+    /// Test ID
+    test_id_value: Option<String>,
+    /// Cached bounds
+    #[serde(skip)]
+    bounds: Rect,
+}
+
+impl Text {
+    /// Create new text widget.
+    #[must_use]
+    pub fn new(content: impl Into<String>) -> Self {
+        Self {
+            content: content.into(),
+            color: Color::BLACK,
+            font_size: 16.0,
+            font_weight: FontWeight::Normal,
+            font_style: FontStyle::Normal,
+            line_height: 1.2,
+            max_width: None,
+            test_id_value: None,
+            bounds: Rect::default(),
+        }
+    }
+
+    /// Set text color.
+    #[must_use]
+    pub fn color(mut self, color: Color) -> Self {
+        self.color = color;
+        self
+    }
+
+    /// Set font size.
+    #[must_use]
+    pub fn font_size(mut self, size: f32) -> Self {
+        self.font_size = size;
+        self
+    }
+
+    /// Set font weight.
+    #[must_use]
+    pub fn font_weight(mut self, weight: FontWeight) -> Self {
+        self.font_weight = weight;
+        self
+    }
+
+    /// Set font style.
+    #[must_use]
+    pub fn font_style(mut self, style: FontStyle) -> Self {
+        self.font_style = style;
+        self
+    }
+
+    /// Set line height multiplier.
+    #[must_use]
+    pub fn line_height(mut self, multiplier: f32) -> Self {
+        self.line_height = multiplier;
+        self
+    }
+
+    /// Set maximum width for text wrapping.
+    #[must_use]
+    pub fn max_width(mut self, width: f32) -> Self {
+        self.max_width = Some(width);
+        self
+    }
+
+    /// Set test ID.
+    #[must_use]
+    pub fn with_test_id(mut self, id: impl Into<String>) -> Self {
+        self.test_id_value = Some(id.into());
+        self
+    }
+
+    /// Get the text content.
+    #[must_use]
+    pub fn content(&self) -> &str {
+        &self.content
+    }
+
+    /// Estimate text size (simplified - real implementation would use font metrics).
+    fn estimate_size(&self, max_width: f32) -> Size {
+        // Simplified: assume ~0.6 em width per character
+        let char_width = self.font_size * 0.6;
+        let line_height = self.font_size * self.line_height;
+
+        if self.content.is_empty() {
+            return Size::new(0.0, line_height);
+        }
+
+        let total_width = self.content.len() as f32 * char_width;
+
+        if let Some(max_w) = self.max_width {
+            let effective_max = max_w.min(max_width);
+            if total_width > effective_max {
+                let lines = (total_width / effective_max).ceil();
+                return Size::new(effective_max, lines * line_height);
+            }
+        }
+
+        Size::new(total_width.min(max_width), line_height)
+    }
+}
+
+impl Widget for Text {
+    fn type_id(&self) -> TypeId {
+        TypeId::of::<Self>()
+    }
+
+    fn measure(&self, constraints: Constraints) -> Size {
+        let size = self.estimate_size(constraints.max_width);
+        constraints.constrain(size)
+    }
+
+    fn layout(&mut self, bounds: Rect) -> LayoutResult {
+        self.bounds = bounds;
+        LayoutResult {
+            size: bounds.size(),
+        }
+    }
+
+    fn paint(&self, canvas: &mut dyn Canvas) {
+        let style = TextStyle {
+            size: self.font_size,
+            color: self.color,
+            weight: self.font_weight,
+            style: self.font_style,
+        };
+
+        canvas.draw_text(&self.content, self.bounds.origin(), &style);
+    }
+
+    fn event(&mut self, _event: &Event) -> Option<Box<dyn Any + Send>> {
+        None // Text is not interactive
+    }
+
+    fn children(&self) -> &[Box<dyn Widget>] {
+        &[]
+    }
+
+    fn children_mut(&mut self) -> &mut [Box<dyn Widget>] {
+        &mut []
+    }
+
+    fn test_id(&self) -> Option<&str> {
+        self.test_id_value.as_deref()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use presentar_core::Widget;
+
+    #[test]
+    fn test_text_new() {
+        let t = Text::new("Hello");
+        assert_eq!(t.content(), "Hello");
+        assert_eq!(t.font_size, 16.0);
+    }
+
+    #[test]
+    fn test_text_builder() {
+        let t = Text::new("Test")
+            .color(Color::WHITE)
+            .font_size(24.0)
+            .font_weight(FontWeight::Bold)
+            .with_test_id("my-text");
+
+        assert_eq!(t.color, Color::WHITE);
+        assert_eq!(t.font_size, 24.0);
+        assert_eq!(t.font_weight, FontWeight::Bold);
+        assert_eq!(Widget::test_id(&t), Some("my-text"));
+    }
+
+    #[test]
+    fn test_text_measure() {
+        let t = Text::new("Hello");
+        let size = t.measure(Constraints::loose(Size::new(1000.0, 1000.0)));
+        assert!(size.width > 0.0);
+        assert!(size.height > 0.0);
+    }
+
+    #[test]
+    fn test_text_empty() {
+        let t = Text::new("");
+        let size = t.measure(Constraints::loose(Size::new(1000.0, 1000.0)));
+        assert_eq!(size.width, 0.0);
+        assert!(size.height > 0.0); // Line height
+    }
+}
