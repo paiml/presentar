@@ -295,7 +295,8 @@ impl Widget for Button {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use presentar_core::Widget;
+    use presentar_core::draw::DrawCommand;
+    use presentar_core::{RecordingCanvas, Widget};
 
     #[test]
     fn test_button_new() {
@@ -339,5 +340,518 @@ mod tests {
         let size = b.measure(Constraints::loose(Size::new(1000.0, 1000.0)));
         assert!(size.width > 0.0);
         assert!(size.height > 0.0);
+    }
+
+    // ===== Paint Tests =====
+
+    #[test]
+    fn test_button_paint_draws_background() {
+        let mut button = Button::new("Click");
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        let mut canvas = RecordingCanvas::new();
+        button.paint(&mut canvas);
+
+        // Should have at least 2 commands: background rect + text
+        assert!(canvas.command_count() >= 2);
+
+        // First command should be the background rect
+        match &canvas.commands()[0] {
+            DrawCommand::Rect { bounds, style, .. } => {
+                assert_eq!(bounds.width, 100.0);
+                assert_eq!(bounds.height, 40.0);
+                assert!(style.fill.is_some());
+            }
+            _ => panic!("Expected Rect command for background"),
+        }
+    }
+
+    #[test]
+    fn test_button_paint_draws_text() {
+        let mut button = Button::new("Hello");
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        let mut canvas = RecordingCanvas::new();
+        button.paint(&mut canvas);
+
+        // Should have text command
+        let has_text = canvas
+            .commands()
+            .iter()
+            .any(|cmd| matches!(cmd, DrawCommand::Text { content, .. } if content == "Hello"));
+        assert!(has_text, "Should draw button label text");
+    }
+
+    #[test]
+    fn test_button_paint_disabled_uses_gray() {
+        let mut button = Button::new("Disabled").disabled(true);
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        let mut canvas = RecordingCanvas::new();
+        button.paint(&mut canvas);
+
+        // Check text color is gray (disabled)
+        let text_cmd = canvas
+            .commands()
+            .iter()
+            .find(|cmd| matches!(cmd, DrawCommand::Text { .. }));
+
+        if let Some(DrawCommand::Text { style, .. }) = text_cmd {
+            // Disabled text should be grayish
+            assert!(style.color.r > 0.5 && style.color.g > 0.5 && style.color.b > 0.5);
+        } else {
+            panic!("Expected Text command");
+        }
+    }
+
+    #[test]
+    fn test_button_paint_hovered_uses_hover_color() {
+        let mut button = Button::new("Hover")
+            .background(Color::RED)
+            .background_hover(Color::BLUE);
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        // Simulate hover
+        button.event(&Event::MouseEnter);
+
+        let mut canvas = RecordingCanvas::new();
+        button.paint(&mut canvas);
+
+        // Background should use hover color
+        match &canvas.commands()[0] {
+            DrawCommand::Rect { style, .. } => {
+                assert_eq!(style.fill, Some(Color::BLUE));
+            }
+            _ => panic!("Expected Rect command"),
+        }
+    }
+
+    #[test]
+    fn test_button_paint_pressed_uses_pressed_color() {
+        let mut button = Button::new("Press")
+            .background(Color::RED)
+            .background_pressed(Color::GREEN);
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        // Simulate press
+        button.event(&Event::MouseEnter);
+        button.event(&Event::MouseDown {
+            position: Point::new(50.0, 20.0),
+            button: MouseButton::Left,
+        });
+
+        let mut canvas = RecordingCanvas::new();
+        button.paint(&mut canvas);
+
+        // Background should use pressed color
+        match &canvas.commands()[0] {
+            DrawCommand::Rect { style, .. } => {
+                assert_eq!(style.fill, Some(Color::GREEN));
+            }
+            _ => panic!("Expected Rect command"),
+        }
+    }
+
+    #[test]
+    fn test_button_paint_text_centered() {
+        let mut button = Button::new("X");
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        let mut canvas = RecordingCanvas::new();
+        button.paint(&mut canvas);
+
+        // Text should be roughly centered
+        let text_cmd = canvas
+            .commands()
+            .iter()
+            .find(|cmd| matches!(cmd, DrawCommand::Text { .. }));
+
+        if let Some(DrawCommand::Text { position, .. }) = text_cmd {
+            // Text should be somewhere in the middle, not at edge
+            assert!(position.x > 10.0 && position.x < 90.0);
+            assert!(position.y > 5.0 && position.y < 35.0);
+        } else {
+            panic!("Expected Text command");
+        }
+    }
+
+    #[test]
+    fn test_button_paint_custom_colors() {
+        let mut button = Button::new("Custom")
+            .background(Color::rgb(1.0, 0.0, 0.0))
+            .text_color(Color::rgb(0.0, 1.0, 0.0));
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        let mut canvas = RecordingCanvas::new();
+        button.paint(&mut canvas);
+
+        // Check background color
+        match &canvas.commands()[0] {
+            DrawCommand::Rect { style, .. } => {
+                let fill = style.fill.unwrap();
+                assert!((fill.r - 1.0).abs() < 0.01);
+                assert!(fill.g < 0.01);
+                assert!(fill.b < 0.01);
+            }
+            _ => panic!("Expected Rect command"),
+        }
+
+        // Check text color
+        let text_cmd = canvas
+            .commands()
+            .iter()
+            .find(|cmd| matches!(cmd, DrawCommand::Text { .. }));
+        if let Some(DrawCommand::Text { style, .. }) = text_cmd {
+            assert!(style.color.r < 0.01);
+            assert!((style.color.g - 1.0).abs() < 0.01);
+            assert!(style.color.b < 0.01);
+        }
+    }
+
+    // ===== Event Handling Tests =====
+
+    use presentar_core::Key;
+
+    #[test]
+    fn test_button_event_mouse_enter_sets_hovered() {
+        let mut button = Button::new("Test");
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        assert!(!button.hovered);
+        let result = button.event(&Event::MouseEnter);
+        assert!(button.hovered);
+        assert!(result.is_none()); // No message emitted
+    }
+
+    #[test]
+    fn test_button_event_mouse_leave_clears_hovered() {
+        let mut button = Button::new("Test");
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        button.event(&Event::MouseEnter);
+        assert!(button.hovered);
+
+        let result = button.event(&Event::MouseLeave);
+        assert!(!button.hovered);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_button_event_mouse_leave_clears_pressed() {
+        let mut button = Button::new("Test");
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        // Enter and press
+        button.event(&Event::MouseEnter);
+        button.event(&Event::MouseDown {
+            position: Point::new(50.0, 20.0),
+            button: MouseButton::Left,
+        });
+        assert!(button.pressed);
+
+        // Leave should clear pressed
+        button.event(&Event::MouseLeave);
+        assert!(!button.pressed);
+        assert!(!button.hovered);
+    }
+
+    #[test]
+    fn test_button_event_mouse_down_sets_pressed() {
+        let mut button = Button::new("Test");
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        assert!(!button.pressed);
+        let result = button.event(&Event::MouseDown {
+            position: Point::new(50.0, 20.0),
+            button: MouseButton::Left,
+        });
+        assert!(button.pressed);
+        assert!(result.is_none()); // MouseDown doesn't emit click
+    }
+
+    #[test]
+    fn test_button_event_mouse_down_outside_bounds_no_press() {
+        let mut button = Button::new("Test");
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        let result = button.event(&Event::MouseDown {
+            position: Point::new(150.0, 20.0), // Outside bounds
+            button: MouseButton::Left,
+        });
+        assert!(!button.pressed);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_button_event_mouse_down_right_button_no_press() {
+        let mut button = Button::new("Test");
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        let result = button.event(&Event::MouseDown {
+            position: Point::new(50.0, 20.0),
+            button: MouseButton::Right,
+        });
+        assert!(!button.pressed);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_button_event_mouse_up_emits_clicked() {
+        let mut button = Button::new("Test");
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        // Press down
+        button.event(&Event::MouseDown {
+            position: Point::new(50.0, 20.0),
+            button: MouseButton::Left,
+        });
+        assert!(button.pressed);
+
+        // Release inside bounds
+        let result = button.event(&Event::MouseUp {
+            position: Point::new(50.0, 20.0),
+            button: MouseButton::Left,
+        });
+        assert!(!button.pressed);
+        assert!(result.is_some());
+
+        // Verify it's a ButtonClicked message
+        let _msg: Box<ButtonClicked> = result.unwrap().downcast::<ButtonClicked>().unwrap();
+    }
+
+    #[test]
+    fn test_button_event_mouse_up_outside_bounds_no_click() {
+        let mut button = Button::new("Test");
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        // Press down inside
+        button.event(&Event::MouseDown {
+            position: Point::new(50.0, 20.0),
+            button: MouseButton::Left,
+        });
+        assert!(button.pressed);
+
+        // Release outside bounds
+        let result = button.event(&Event::MouseUp {
+            position: Point::new(150.0, 20.0),
+            button: MouseButton::Left,
+        });
+        assert!(!button.pressed);
+        assert!(result.is_none()); // No click emitted
+    }
+
+    #[test]
+    fn test_button_event_mouse_up_without_prior_press_no_click() {
+        let mut button = Button::new("Test");
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        // Mouse up without prior press
+        let result = button.event(&Event::MouseUp {
+            position: Point::new(50.0, 20.0),
+            button: MouseButton::Left,
+        });
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_button_event_mouse_up_right_button_no_effect() {
+        let mut button = Button::new("Test");
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        // Press with left button
+        button.event(&Event::MouseDown {
+            position: Point::new(50.0, 20.0),
+            button: MouseButton::Left,
+        });
+
+        // Release with right button (should not trigger click)
+        let result = button.event(&Event::MouseUp {
+            position: Point::new(50.0, 20.0),
+            button: MouseButton::Right,
+        });
+        assert!(button.pressed); // Still pressed
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_button_event_key_down_enter_sets_pressed() {
+        let mut button = Button::new("Test");
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        let result = button.event(&Event::KeyDown { key: Key::Enter });
+        assert!(button.pressed);
+        assert!(result.is_none()); // KeyDown doesn't emit click
+    }
+
+    #[test]
+    fn test_button_event_key_down_space_sets_pressed() {
+        let mut button = Button::new("Test");
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        let result = button.event(&Event::KeyDown { key: Key::Space });
+        assert!(button.pressed);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_button_event_key_up_enter_emits_clicked() {
+        let mut button = Button::new("Test");
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        // Key down first
+        button.event(&Event::KeyDown { key: Key::Enter });
+        assert!(button.pressed);
+
+        // Key up emits click
+        let result = button.event(&Event::KeyUp { key: Key::Enter });
+        assert!(!button.pressed);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_button_event_key_up_space_emits_clicked() {
+        let mut button = Button::new("Test");
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        button.event(&Event::KeyDown { key: Key::Space });
+        let result = button.event(&Event::KeyUp { key: Key::Space });
+        assert!(!button.pressed);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_button_event_key_other_no_effect() {
+        let mut button = Button::new("Test");
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        let result = button.event(&Event::KeyDown { key: Key::Escape });
+        assert!(!button.pressed);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_button_event_disabled_blocks_mouse_enter() {
+        let mut button = Button::new("Test").disabled(true);
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        let result = button.event(&Event::MouseEnter);
+        assert!(!button.hovered);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_button_event_disabled_blocks_mouse_down() {
+        let mut button = Button::new("Test").disabled(true);
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        let result = button.event(&Event::MouseDown {
+            position: Point::new(50.0, 20.0),
+            button: MouseButton::Left,
+        });
+        assert!(!button.pressed);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_button_event_disabled_blocks_key_down() {
+        let mut button = Button::new("Test").disabled(true);
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        let result = button.event(&Event::KeyDown { key: Key::Enter });
+        assert!(!button.pressed);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_button_event_disabled_blocks_key_up() {
+        let mut button = Button::new("Test").disabled(true);
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        let result = button.event(&Event::KeyUp { key: Key::Enter });
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_button_click_full_interaction_flow() {
+        let mut button = Button::new("Submit");
+        button.layout(Rect::new(10.0, 10.0, 100.0, 40.0));
+
+        // Full click flow: enter -> down -> up -> leave
+        button.event(&Event::MouseEnter);
+        assert!(button.hovered);
+        assert!(!button.pressed);
+
+        button.event(&Event::MouseDown {
+            position: Point::new(50.0, 25.0),
+            button: MouseButton::Left,
+        });
+        assert!(button.hovered);
+        assert!(button.pressed);
+
+        let result = button.event(&Event::MouseUp {
+            position: Point::new(50.0, 25.0),
+            button: MouseButton::Left,
+        });
+        assert!(button.hovered);
+        assert!(!button.pressed);
+        assert!(result.is_some()); // Click emitted
+
+        button.event(&Event::MouseLeave);
+        assert!(!button.hovered);
+        assert!(!button.pressed);
+    }
+
+    #[test]
+    fn test_button_drag_out_and_release_no_click() {
+        let mut button = Button::new("Drag");
+        button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
+
+        // Press inside
+        button.event(&Event::MouseEnter);
+        button.event(&Event::MouseDown {
+            position: Point::new(50.0, 20.0),
+            button: MouseButton::Left,
+        });
+        assert!(button.pressed);
+
+        // Leave while pressed
+        button.event(&Event::MouseLeave);
+        assert!(!button.pressed); // Cleared by leave
+
+        // Release outside
+        let result = button.event(&Event::MouseUp {
+            position: Point::new(150.0, 20.0),
+            button: MouseButton::Left,
+        });
+        assert!(result.is_none()); // No click
+    }
+
+    #[test]
+    fn test_button_event_bounds_edge_cases() {
+        let mut button = Button::new("Edge");
+        button.layout(Rect::new(10.0, 20.0, 100.0, 40.0));
+
+        // Click at top-left corner (inside)
+        button.event(&Event::MouseDown {
+            position: Point::new(10.0, 20.0),
+            button: MouseButton::Left,
+        });
+        assert!(button.pressed);
+        button.pressed = false;
+
+        // Click at bottom-right corner (inside, at edge)
+        button.event(&Event::MouseDown {
+            position: Point::new(109.9, 59.9),
+            button: MouseButton::Left,
+        });
+        assert!(button.pressed);
+        button.pressed = false;
+
+        // Click just outside right edge
+        button.event(&Event::MouseDown {
+            position: Point::new(111.0, 30.0),
+            button: MouseButton::Left,
+        });
+        assert!(!button.pressed);
     }
 }

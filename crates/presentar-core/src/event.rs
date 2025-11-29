@@ -350,4 +350,63 @@ mod tests {
         );
         assert_eq!(Event::FocusIn.position(), None);
     }
+
+    #[test]
+    fn test_event_mouse_up_position() {
+        let pos = Point::new(50.0, 75.0);
+        let event = Event::MouseUp {
+            position: pos,
+            button: MouseButton::Right,
+        };
+        assert_eq!(event.position(), Some(pos));
+        assert!(event.is_mouse());
+    }
+
+    #[test]
+    fn test_event_scroll() {
+        let event = Event::Scroll {
+            delta_x: 10.0,
+            delta_y: -5.0,
+        };
+        assert!(!event.is_mouse());
+        assert!(!event.is_keyboard());
+        assert!(event.position().is_none());
+    }
+
+    #[test]
+    fn test_event_resize() {
+        let event = Event::Resize {
+            width: 800.0,
+            height: 600.0,
+        };
+        assert!(!event.is_mouse());
+        assert!(!event.is_keyboard());
+        assert!(!event.is_focus());
+    }
+
+    #[test]
+    fn test_event_key_up() {
+        let event = Event::KeyUp { key: Key::Space };
+        assert!(event.is_keyboard());
+        assert!(!event.is_mouse());
+    }
+
+    #[test]
+    fn test_mouse_button_equality() {
+        assert_eq!(MouseButton::Left, MouseButton::Left);
+        assert_ne!(MouseButton::Left, MouseButton::Right);
+    }
+
+    #[test]
+    fn test_key_equality() {
+        assert_eq!(Key::Enter, Key::Enter);
+        assert_ne!(Key::Enter, Key::Space);
+    }
+
+    #[test]
+    fn test_event_mouse_leave() {
+        let event = Event::MouseLeave;
+        assert!(event.is_mouse());
+        assert!(event.position().is_none());
+    }
 }

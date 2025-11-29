@@ -26,6 +26,8 @@ pub struct CacheEntry {
 pub struct LayoutCache {
     entries: HashMap<CacheKey, CacheEntry>,
     current_frame: u64,
+    hits: usize,
+    misses: usize,
 }
 
 impl LayoutCache {
@@ -38,10 +40,14 @@ impl LayoutCache {
     /// Look up a cached size.
     #[must_use]
     pub fn get(&mut self, key: CacheKey) -> Option<Size> {
-        self.entries.get_mut(&key).map(|entry| {
+        if let Some(entry) = self.entries.get_mut(&key) {
             entry.last_used_frame = self.current_frame;
-            entry.size
-        })
+            self.hits += 1;
+            Some(entry.size)
+        } else {
+            self.misses += 1;
+            None
+        }
     }
 
     /// Insert a computed size into the cache.
@@ -58,6 +64,20 @@ impl LayoutCache {
     /// Clear the entire cache.
     pub fn clear(&mut self) {
         self.entries.clear();
+        self.hits = 0;
+        self.misses = 0;
+    }
+
+    /// Get the number of cache hits.
+    #[must_use]
+    pub fn hits(&self) -> usize {
+        self.hits
+    }
+
+    /// Get the number of cache misses.
+    #[must_use]
+    pub fn misses(&self) -> usize {
+        self.misses
     }
 
     /// Advance to the next frame and evict stale entries.
@@ -170,5 +190,56 @@ mod tests {
         }
 
         assert!(!cache.is_empty());
+    }
+
+    #[test]
+    fn test_cache_hits_and_misses() {
+        let mut cache = LayoutCache::new();
+        let key = CacheKey {
+            widget_id: 1,
+            constraints_hash: 100,
+        };
+
+        assert_eq!(cache.hits(), 0);
+        assert_eq!(cache.misses(), 0);
+
+        // Miss
+        let _ = cache.get(key);
+        assert_eq!(cache.hits(), 0);
+        assert_eq!(cache.misses(), 1);
+
+        // Insert and hit
+        cache.insert(key, Size::new(10.0, 10.0));
+        let _ = cache.get(key);
+        assert_eq!(cache.hits(), 1);
+        assert_eq!(cache.misses(), 1);
+
+        // Another hit
+        let _ = cache.get(key);
+        assert_eq!(cache.hits(), 2);
+        assert_eq!(cache.misses(), 1);
+    }
+
+    #[test]
+    fn test_cache_clear_resets_stats() {
+        let mut cache = LayoutCache::new();
+        let key = CacheKey {
+            widget_id: 1,
+            constraints_hash: 100,
+        };
+
+        cache.insert(key, Size::new(10.0, 10.0));
+        let _ = cache.get(key);
+        let _ = cache.get(CacheKey {
+            widget_id: 2,
+            constraints_hash: 200,
+        });
+
+        assert_eq!(cache.hits(), 1);
+        assert_eq!(cache.misses(), 1);
+
+        cache.clear();
+        assert_eq!(cache.hits(), 0);
+        assert_eq!(cache.misses(), 0);
     }
 }

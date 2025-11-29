@@ -148,6 +148,12 @@ impl Color {
         }
     }
 
+    /// Create a color with explicit alpha value.
+    #[must_use]
+    pub fn rgba(r: f32, g: f32, b: f32, a: f32) -> Self {
+        Self::new(r, g, b, a)
+    }
+
     // Common colors
     /// Black color
     pub const BLACK: Self = Self {
@@ -161,6 +167,34 @@ impl Color {
         r: 1.0,
         g: 1.0,
         b: 1.0,
+        a: 1.0,
+    };
+    /// Red color
+    pub const RED: Self = Self {
+        r: 1.0,
+        g: 0.0,
+        b: 0.0,
+        a: 1.0,
+    };
+    /// Green color
+    pub const GREEN: Self = Self {
+        r: 0.0,
+        g: 1.0,
+        b: 0.0,
+        a: 1.0,
+    };
+    /// Blue color
+    pub const BLUE: Self = Self {
+        r: 0.0,
+        g: 0.0,
+        b: 1.0,
+        a: 1.0,
+    };
+    /// Yellow color
+    pub const YELLOW: Self = Self {
+        r: 1.0,
+        g: 1.0,
+        b: 0.0,
         a: 1.0,
     };
     /// Transparent color
@@ -225,5 +259,113 @@ mod tests {
             ColorParseError::InvalidLength.to_string(),
             "invalid hex string length (expected 6 or 8)"
         );
+    }
+
+    #[test]
+    fn test_color_new_clamps_values() {
+        let c = Color::new(1.5, -0.5, 0.5, 2.0);
+        assert_eq!(c.r, 1.0);
+        assert_eq!(c.g, 0.0);
+        assert_eq!(c.b, 0.5);
+        assert_eq!(c.a, 1.0);
+    }
+
+    #[test]
+    fn test_color_rgb() {
+        let c = Color::rgb(0.5, 0.6, 0.7);
+        assert_eq!(c.r, 0.5);
+        assert_eq!(c.g, 0.6);
+        assert_eq!(c.b, 0.7);
+        assert_eq!(c.a, 1.0);
+    }
+
+    #[test]
+    fn test_color_from_hex_6_char() {
+        let c = Color::from_hex("#ff0000").unwrap();
+        assert_eq!(c.r, 1.0);
+        assert_eq!(c.g, 0.0);
+        assert_eq!(c.b, 0.0);
+    }
+
+    #[test]
+    fn test_color_from_hex_8_char() {
+        let c = Color::from_hex("#ff000080").unwrap();
+        assert_eq!(c.r, 1.0);
+        assert!((c.a - 0.502).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_color_from_hex_no_hash() {
+        let c = Color::from_hex("00ff00").unwrap();
+        assert_eq!(c.g, 1.0);
+    }
+
+    #[test]
+    fn test_color_from_hex_invalid_length() {
+        let result = Color::from_hex("fff");
+        assert_eq!(result, Err(ColorParseError::InvalidLength));
+    }
+
+    #[test]
+    fn test_color_from_hex_invalid_chars() {
+        let result = Color::from_hex("gggggg");
+        assert_eq!(result, Err(ColorParseError::InvalidHex));
+    }
+
+    #[test]
+    fn test_color_to_hex() {
+        let c = Color::RED;
+        assert_eq!(c.to_hex(), "#ff0000");
+    }
+
+    #[test]
+    fn test_color_to_hex_with_alpha() {
+        let c = Color::new(1.0, 0.0, 0.0, 0.5);
+        assert_eq!(c.to_hex_with_alpha(), "#ff000080");
+    }
+
+    #[test]
+    fn test_color_contrast_ratio_black_white() {
+        let ratio = Color::BLACK.contrast_ratio(&Color::WHITE);
+        assert!((ratio - 21.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_color_contrast_ratio_same_color() {
+        let ratio = Color::RED.contrast_ratio(&Color::RED);
+        assert!((ratio - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_color_lerp_endpoints() {
+        let c = Color::BLACK.lerp(&Color::WHITE, 0.0);
+        assert_eq!(c, Color::BLACK);
+
+        let c = Color::BLACK.lerp(&Color::WHITE, 1.0);
+        assert_eq!(c.r, 1.0);
+    }
+
+    #[test]
+    fn test_color_lerp_midpoint() {
+        let c = Color::BLACK.lerp(&Color::WHITE, 0.5);
+        assert!((c.r - 0.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_color_lerp_clamps_t() {
+        let c = Color::BLACK.lerp(&Color::WHITE, 1.5);
+        assert_eq!(c.r, 1.0);
+    }
+
+    #[test]
+    fn test_color_relative_luminance_white() {
+        let lum = Color::WHITE.relative_luminance();
+        assert!((lum - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_color_relative_luminance_black() {
+        let lum = Color::BLACK.relative_luminance();
+        assert!(lum < 0.01);
     }
 }

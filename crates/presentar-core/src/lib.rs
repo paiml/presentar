@@ -5,19 +5,34 @@
 //! - Color representation: [`Color`] with WCAG contrast calculations
 //! - Layout constraints: [`Constraints`]
 //! - Events and messages: [`Event`], [`Message`]
+//! - Draw commands: [`DrawCommand`] for GPU rendering
 
+mod canvas;
 mod color;
 mod constraints;
+pub mod draw;
 mod event;
 mod geometry;
+mod runtime;
 mod state;
+pub mod theme;
 pub mod widget;
 
+pub use canvas::RecordingCanvas;
 pub use color::{Color, ColorParseError};
 pub use constraints::Constraints;
+pub use draw::{
+    BoxStyle, DrawCommand, FillRule, LineCap, LineJoin, PathRef, Sampling, Shadow, StrokeStyle,
+    TensorRef, Transform2D as DrawTransform,
+};
 pub use event::{Event, Key, MouseButton};
 pub use geometry::{CornerRadius, Point, Rect, Size};
+pub use runtime::{
+    default_executor, CommandExecutor, ExecutionResult, ExecutorConfig, MemoryRouter,
+    MemoryStorage, Router, Storage,
+};
 pub use state::{Command, CounterMessage, CounterState, State};
+pub use theme::{ColorPalette, Radii, Shadows, Spacing, Theme, Typography};
 pub use widget::{
     AccessibleRole, Canvas, FontStyle, FontWeight, LayoutResult, TextStyle, Transform2D, TypeId,
     Widget, WidgetId,

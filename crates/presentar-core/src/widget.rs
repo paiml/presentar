@@ -126,7 +126,7 @@ pub trait Canvas {
 }
 
 /// Text style for rendering.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TextStyle {
     /// Font size in pixels
     pub size: f32,
@@ -257,6 +257,8 @@ pub enum AccessibleRole {
     Menu,
     /// Menu item
     MenuItem,
+    /// Combo box / dropdown select
+    ComboBox,
     /// Slider
     Slider,
     /// Progress bar
@@ -265,6 +267,10 @@ pub enum AccessibleRole {
     Tab,
     /// Tab panel
     TabPanel,
+    /// Radio group
+    RadioGroup,
+    /// Radio button
+    Radio,
 }
 
 #[cfg(test)]

@@ -252,4 +252,78 @@ mod tests {
         let size = c.measure(Constraints::loose(Size::new(100.0, 100.0)));
         assert_eq!(size, Size::new(50.0, 50.0));
     }
+
+    #[test]
+    fn test_container_measure_with_max_size() {
+        let c = Container::new()
+            .max_width(30.0)
+            .max_height(30.0)
+            .min_width(100.0);
+        let size = c.measure(Constraints::loose(Size::new(200.0, 200.0)));
+        assert_eq!(size.width, 30.0); // max wins over min
+    }
+
+    #[test]
+    fn test_container_corner_radius() {
+        let c = Container::new().corner_radius(CornerRadius::uniform(8.0));
+        assert_eq!(c.corner_radius, CornerRadius::uniform(8.0));
+    }
+
+    #[test]
+    fn test_container_type_id() {
+        let c = Container::new();
+        assert_eq!(Widget::type_id(&c), TypeId::of::<Container>());
+    }
+
+    #[test]
+    fn test_container_layout_sets_bounds() {
+        let mut c = Container::new().padding(10.0);
+        let result = c.layout(Rect::new(0.0, 0.0, 100.0, 80.0));
+        assert_eq!(result.size, Size::new(100.0, 80.0));
+        assert_eq!(c.bounds, Rect::new(0.0, 0.0, 100.0, 80.0));
+    }
+
+    #[test]
+    fn test_container_children_empty() {
+        let c = Container::new();
+        assert!(c.children().is_empty());
+    }
+
+    #[test]
+    fn test_container_event_no_children_returns_none() {
+        let mut c = Container::new();
+        c.layout(Rect::new(0.0, 0.0, 100.0, 100.0));
+        let result = c.event(&Event::MouseEnter);
+        assert!(result.is_none());
+    }
+
+    // Paint tests
+    use presentar_core::draw::DrawCommand;
+    use presentar_core::RecordingCanvas;
+
+    #[test]
+    fn test_container_paint_no_background() {
+        let mut c = Container::new();
+        c.layout(Rect::new(0.0, 0.0, 100.0, 100.0));
+        let mut canvas = RecordingCanvas::new();
+        c.paint(&mut canvas);
+        assert_eq!(canvas.command_count(), 0);
+    }
+
+    #[test]
+    fn test_container_paint_with_background() {
+        let mut c = Container::new().background(Color::RED);
+        c.layout(Rect::new(0.0, 0.0, 100.0, 50.0));
+        let mut canvas = RecordingCanvas::new();
+        c.paint(&mut canvas);
+        assert_eq!(canvas.command_count(), 1);
+        match &canvas.commands()[0] {
+            DrawCommand::Rect { bounds, style, .. } => {
+                assert_eq!(bounds.width, 100.0);
+                assert_eq!(bounds.height, 50.0);
+                assert_eq!(style.fill, Some(Color::RED));
+            }
+            _ => panic!("Expected Rect"),
+        }
+    }
 }

@@ -175,7 +175,8 @@ impl Widget for Text {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use presentar_core::Widget;
+    use presentar_core::draw::DrawCommand;
+    use presentar_core::{Point, RecordingCanvas, Widget};
 
     #[test]
     fn test_text_new() {
@@ -212,5 +213,182 @@ mod tests {
         let size = t.measure(Constraints::loose(Size::new(1000.0, 1000.0)));
         assert_eq!(size.width, 0.0);
         assert!(size.height > 0.0); // Line height
+    }
+
+    // ===== Paint Tests =====
+
+    #[test]
+    fn test_text_paint_draws_text() {
+        let mut text = Text::new("Hello World");
+        text.layout(Rect::new(10.0, 20.0, 200.0, 30.0));
+
+        let mut canvas = RecordingCanvas::new();
+        text.paint(&mut canvas);
+
+        assert_eq!(canvas.command_count(), 1);
+        match &canvas.commands()[0] {
+            DrawCommand::Text {
+                content, position, ..
+            } => {
+                assert_eq!(content, "Hello World");
+                assert_eq!(*position, Point::new(10.0, 20.0));
+            }
+            _ => panic!("Expected Text command"),
+        }
+    }
+
+    #[test]
+    fn test_text_paint_uses_color() {
+        let mut text = Text::new("Colored").color(Color::RED);
+        text.layout(Rect::new(0.0, 0.0, 100.0, 20.0));
+
+        let mut canvas = RecordingCanvas::new();
+        text.paint(&mut canvas);
+
+        match &canvas.commands()[0] {
+            DrawCommand::Text { style, .. } => {
+                assert_eq!(style.color, Color::RED);
+            }
+            _ => panic!("Expected Text command"),
+        }
+    }
+
+    #[test]
+    fn test_text_paint_uses_font_size() {
+        let mut text = Text::new("Large").font_size(32.0);
+        text.layout(Rect::new(0.0, 0.0, 200.0, 40.0));
+
+        let mut canvas = RecordingCanvas::new();
+        text.paint(&mut canvas);
+
+        match &canvas.commands()[0] {
+            DrawCommand::Text { style, .. } => {
+                assert_eq!(style.size, 32.0);
+            }
+            _ => panic!("Expected Text command"),
+        }
+    }
+
+    #[test]
+    fn test_text_paint_uses_font_weight() {
+        let mut text = Text::new("Bold").font_weight(FontWeight::Bold);
+        text.layout(Rect::new(0.0, 0.0, 100.0, 20.0));
+
+        let mut canvas = RecordingCanvas::new();
+        text.paint(&mut canvas);
+
+        match &canvas.commands()[0] {
+            DrawCommand::Text { style, .. } => {
+                assert_eq!(style.weight, FontWeight::Bold);
+            }
+            _ => panic!("Expected Text command"),
+        }
+    }
+
+    #[test]
+    fn test_text_paint_uses_font_style() {
+        let mut text = Text::new("Italic").font_style(FontStyle::Italic);
+        text.layout(Rect::new(0.0, 0.0, 100.0, 20.0));
+
+        let mut canvas = RecordingCanvas::new();
+        text.paint(&mut canvas);
+
+        match &canvas.commands()[0] {
+            DrawCommand::Text { style, .. } => {
+                assert_eq!(style.style, FontStyle::Italic);
+            }
+            _ => panic!("Expected Text command"),
+        }
+    }
+
+    #[test]
+    fn test_text_paint_empty() {
+        let mut text = Text::new("");
+        text.layout(Rect::new(0.0, 0.0, 100.0, 20.0));
+
+        let mut canvas = RecordingCanvas::new();
+        text.paint(&mut canvas);
+
+        // Should still draw (empty text)
+        assert_eq!(canvas.command_count(), 1);
+        match &canvas.commands()[0] {
+            DrawCommand::Text { content, .. } => {
+                assert!(content.is_empty());
+            }
+            _ => panic!("Expected Text command"),
+        }
+    }
+
+    #[test]
+    fn test_text_paint_position_from_layout() {
+        let mut text = Text::new("Positioned");
+        text.layout(Rect::new(50.0, 100.0, 200.0, 30.0));
+
+        let mut canvas = RecordingCanvas::new();
+        text.paint(&mut canvas);
+
+        match &canvas.commands()[0] {
+            DrawCommand::Text { position, .. } => {
+                assert_eq!(position.x, 50.0);
+                assert_eq!(position.y, 100.0);
+            }
+            _ => panic!("Expected Text command"),
+        }
+    }
+
+    // ===== Widget Trait Tests =====
+
+    #[test]
+    fn test_text_type_id() {
+        let t = Text::new("test");
+        assert_eq!(Widget::type_id(&t), TypeId::of::<Text>());
+    }
+
+    #[test]
+    fn test_text_layout_sets_bounds() {
+        let mut t = Text::new("test");
+        let result = t.layout(Rect::new(10.0, 20.0, 100.0, 30.0));
+        assert_eq!(result.size, Size::new(100.0, 30.0));
+        assert_eq!(t.bounds, Rect::new(10.0, 20.0, 100.0, 30.0));
+    }
+
+    #[test]
+    fn test_text_children_empty() {
+        let t = Text::new("test");
+        assert!(t.children().is_empty());
+    }
+
+    #[test]
+    fn test_text_event_returns_none() {
+        let mut t = Text::new("test");
+        t.layout(Rect::new(0.0, 0.0, 100.0, 20.0));
+        let result = t.event(&Event::MouseEnter);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_text_line_height() {
+        let t = Text::new("test").line_height(1.5);
+        assert_eq!(t.line_height, 1.5);
+    }
+
+    #[test]
+    fn test_text_max_width() {
+        let t = Text::new("test").max_width(200.0);
+        assert_eq!(t.max_width, Some(200.0));
+    }
+
+    #[test]
+    fn test_text_measure_with_max_width() {
+        let t = Text::new("A very long text that should wrap").max_width(50.0);
+        let size = t.measure(Constraints::loose(Size::new(1000.0, 1000.0)));
+        assert!(size.width <= 50.0);
+        assert!(size.height > t.font_size); // Multiple lines
+    }
+
+    #[test]
+    fn test_text_content_accessor() {
+        let t = Text::new("Hello World");
+        assert_eq!(t.content(), "Hello World");
     }
 }

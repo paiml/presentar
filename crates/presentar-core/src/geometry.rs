@@ -392,4 +392,175 @@ mod tests {
         assert!(CornerRadius::ZERO.is_zero());
         assert!(!CornerRadius::uniform(1.0).is_zero());
     }
+
+    // ===== Point Tests =====
+
+    #[test]
+    fn test_point_new() {
+        let p = Point::new(10.0, 20.0);
+        assert_eq!(p.x, 10.0);
+        assert_eq!(p.y, 20.0);
+    }
+
+    #[test]
+    fn test_point_distance() {
+        let p1 = Point::new(0.0, 0.0);
+        let p2 = Point::new(3.0, 4.0);
+        assert_eq!(p1.distance(&p2), 5.0);
+    }
+
+    #[test]
+    fn test_point_add() {
+        let p1 = Point::new(1.0, 2.0);
+        let p2 = Point::new(3.0, 4.0);
+        assert_eq!(p1 + p2, Point::new(4.0, 6.0));
+    }
+
+    #[test]
+    fn test_point_sub() {
+        let p1 = Point::new(5.0, 7.0);
+        let p2 = Point::new(2.0, 3.0);
+        assert_eq!(p1 - p2, Point::new(3.0, 4.0));
+    }
+
+    // ===== Size Tests =====
+
+    #[test]
+    fn test_size_new() {
+        let s = Size::new(100.0, 50.0);
+        assert_eq!(s.width, 100.0);
+        assert_eq!(s.height, 50.0);
+    }
+
+    #[test]
+    fn test_size_area() {
+        let s = Size::new(10.0, 20.0);
+        assert_eq!(s.area(), 200.0);
+    }
+
+    #[test]
+    fn test_size_aspect_ratio() {
+        let s = Size::new(16.0, 9.0);
+        assert!((s.aspect_ratio() - 1.777).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_size_aspect_ratio_zero_height() {
+        let s = Size::new(10.0, 0.0);
+        assert_eq!(s.aspect_ratio(), 0.0);
+    }
+
+    #[test]
+    fn test_size_contains() {
+        let big = Size::new(100.0, 100.0);
+        let small = Size::new(50.0, 50.0);
+        assert!(big.contains(&small));
+        assert!(!small.contains(&big));
+    }
+
+    // ===== Rect Tests =====
+
+    #[test]
+    fn test_rect_from_points() {
+        let r = Rect::from_points(Point::new(10.0, 20.0), Point::new(50.0, 70.0));
+        assert_eq!(r.x, 10.0);
+        assert_eq!(r.y, 20.0);
+        assert_eq!(r.width, 40.0);
+        assert_eq!(r.height, 50.0);
+    }
+
+    #[test]
+    fn test_rect_from_size() {
+        let r = Rect::from_size(Size::new(100.0, 50.0));
+        assert_eq!(r.x, 0.0);
+        assert_eq!(r.y, 0.0);
+        assert_eq!(r.width, 100.0);
+    }
+
+    #[test]
+    fn test_rect_corners() {
+        let r = Rect::new(10.0, 20.0, 100.0, 50.0);
+        assert_eq!(r.top_left(), Point::new(10.0, 20.0));
+        assert_eq!(r.top_right(), Point::new(110.0, 20.0));
+        assert_eq!(r.bottom_left(), Point::new(10.0, 70.0));
+        assert_eq!(r.bottom_right(), Point::new(110.0, 70.0));
+    }
+
+    #[test]
+    fn test_rect_center() {
+        let r = Rect::new(0.0, 0.0, 100.0, 50.0);
+        assert_eq!(r.center(), Point::new(50.0, 25.0));
+    }
+
+    #[test]
+    fn test_rect_contains_point() {
+        let r = Rect::new(10.0, 10.0, 100.0, 100.0);
+        assert!(r.contains_point(&Point::new(50.0, 50.0)));
+        assert!(r.contains_point(&Point::new(10.0, 10.0))); // Edge
+        assert!(!r.contains_point(&Point::new(5.0, 50.0)));
+    }
+
+    #[test]
+    fn test_rect_intersects() {
+        let r1 = Rect::new(0.0, 0.0, 100.0, 100.0);
+        let r2 = Rect::new(50.0, 50.0, 100.0, 100.0);
+        let r3 = Rect::new(200.0, 200.0, 50.0, 50.0);
+        assert!(r1.intersects(&r2));
+        assert!(!r1.intersects(&r3));
+    }
+
+    #[test]
+    fn test_rect_intersection() {
+        let r1 = Rect::new(0.0, 0.0, 100.0, 100.0);
+        let r2 = Rect::new(50.0, 50.0, 100.0, 100.0);
+        let inter = r1.intersection(&r2).unwrap();
+        assert_eq!(inter, Rect::new(50.0, 50.0, 50.0, 50.0));
+    }
+
+    #[test]
+    fn test_rect_intersection_none() {
+        let r1 = Rect::new(0.0, 0.0, 50.0, 50.0);
+        let r2 = Rect::new(100.0, 100.0, 50.0, 50.0);
+        assert!(r1.intersection(&r2).is_none());
+    }
+
+    #[test]
+    fn test_rect_union() {
+        let r1 = Rect::new(0.0, 0.0, 50.0, 50.0);
+        let r2 = Rect::new(25.0, 25.0, 50.0, 50.0);
+        let u = r1.union(&r2);
+        assert_eq!(u, Rect::new(0.0, 0.0, 75.0, 75.0));
+    }
+
+    #[test]
+    fn test_rect_inset() {
+        let r = Rect::new(0.0, 0.0, 100.0, 100.0);
+        let inset = r.inset(10.0);
+        assert_eq!(inset, Rect::new(10.0, 10.0, 80.0, 80.0));
+    }
+
+    #[test]
+    fn test_rect_inset_clamps() {
+        let r = Rect::new(0.0, 0.0, 20.0, 20.0);
+        let inset = r.inset(15.0);
+        assert_eq!(inset.width, 0.0);
+        assert_eq!(inset.height, 0.0);
+    }
+
+    #[test]
+    fn test_rect_with_origin() {
+        let r = Rect::new(0.0, 0.0, 100.0, 50.0);
+        let moved = r.with_origin(Point::new(20.0, 30.0));
+        assert_eq!(moved.x, 20.0);
+        assert_eq!(moved.y, 30.0);
+        assert_eq!(moved.width, 100.0);
+    }
+
+    #[test]
+    fn test_rect_with_size() {
+        let r = Rect::new(10.0, 20.0, 100.0, 50.0);
+        let resized = r.with_size(Size::new(200.0, 100.0));
+        assert_eq!(resized.x, 10.0);
+        assert_eq!(resized.width, 200.0);
+    }
 }

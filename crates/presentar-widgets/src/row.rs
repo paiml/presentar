@@ -214,9 +214,15 @@ impl Widget for Row {
             child.layout(child_bounds);
             self.child_bounds.push(child_bounds);
 
-            x += size.width + self.gap + extra_gap;
-            if i < num_children - 1 && self.main_axis_alignment == MainAxisAlignment::SpaceBetween {
-                x += extra_gap - self.gap; // SpaceBetween replaces gap with extra_gap
+            // Move x for next child
+            if i < num_children - 1 {
+                x += size.width;
+                if self.main_axis_alignment == MainAxisAlignment::SpaceBetween {
+                    // SpaceBetween uses only extra_gap (no regular gap)
+                    x += extra_gap;
+                } else {
+                    x += self.gap + extra_gap;
+                }
             }
         }
 
@@ -256,7 +262,55 @@ impl Widget for Row {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use presentar_core::widget::AccessibleRole;
     use presentar_core::Widget;
+
+    // Test widget with fixed size for layout testing
+    struct FixedWidget {
+        size: Size,
+    }
+
+    impl FixedWidget {
+        fn new(width: f32, height: f32) -> Self {
+            Self {
+                size: Size::new(width, height),
+            }
+        }
+    }
+
+    impl Widget for FixedWidget {
+        fn type_id(&self) -> TypeId {
+            TypeId::of::<Self>()
+        }
+
+        fn measure(&self, constraints: Constraints) -> Size {
+            constraints.constrain(self.size)
+        }
+
+        fn layout(&mut self, _bounds: Rect) -> LayoutResult {
+            LayoutResult { size: self.size }
+        }
+
+        fn paint(&self, _canvas: &mut dyn Canvas) {}
+
+        fn event(&mut self, _event: &Event) -> Option<Box<dyn Any + Send>> {
+            None
+        }
+
+        fn children(&self) -> &[Box<dyn Widget>] {
+            &[]
+        }
+
+        fn children_mut(&mut self) -> &mut [Box<dyn Widget>] {
+            &mut []
+        }
+
+        fn accessible_role(&self) -> AccessibleRole {
+            AccessibleRole::Generic
+        }
+    }
+
+    // ===== Basic Tests =====
 
     #[test]
     fn test_row_empty() {
@@ -285,5 +339,331 @@ mod tests {
         assert_eq!(row.main_axis_alignment, MainAxisAlignment::Start);
         assert_eq!(row.cross_axis_alignment, CrossAxisAlignment::Center);
         assert_eq!(row.gap, 0.0);
+    }
+
+    #[test]
+    fn test_row_type_id() {
+        let row = Row::new();
+        assert_eq!(Widget::type_id(&row), TypeId::of::<Row>());
+    }
+
+    #[test]
+    fn test_row_children() {
+        let row = Row::new()
+            .child(FixedWidget::new(50.0, 30.0))
+            .child(FixedWidget::new(50.0, 30.0));
+        assert_eq!(row.children().len(), 2);
+    }
+
+    // ===== Measure Tests =====
+
+    #[test]
+    fn test_row_measure_single_child() {
+        let row = Row::new().child(FixedWidget::new(50.0, 30.0));
+        let size = row.measure(Constraints::loose(Size::new(200.0, 100.0)));
+        assert_eq!(size, Size::new(50.0, 30.0));
+    }
+
+    #[test]
+    fn test_row_measure_multiple_children() {
+        let row = Row::new()
+            .child(FixedWidget::new(50.0, 30.0))
+            .child(FixedWidget::new(60.0, 40.0));
+        let size = row.measure(Constraints::loose(Size::new(200.0, 100.0)));
+        assert_eq!(size, Size::new(110.0, 40.0));
+    }
+
+    #[test]
+    fn test_row_measure_with_gap() {
+        let row = Row::new()
+            .gap(10.0)
+            .child(FixedWidget::new(50.0, 30.0))
+            .child(FixedWidget::new(50.0, 30.0));
+        let size = row.measure(Constraints::loose(Size::new(200.0, 100.0)));
+        assert_eq!(size, Size::new(110.0, 30.0)); // 50 + 10 + 50
+    }
+
+    #[test]
+    fn test_row_measure_constrained() {
+        let row = Row::new()
+            .child(FixedWidget::new(100.0, 50.0))
+            .child(FixedWidget::new(100.0, 50.0));
+        let size = row.measure(Constraints::tight(Size::new(150.0, 40.0)));
+        assert_eq!(size, Size::new(150.0, 40.0)); // Constrained to tight
+    }
+
+    // ===== MainAxisAlignment Tests =====
+
+    #[test]
+    fn test_row_alignment_start() {
+        let mut row = Row::new()
+            .main_axis_alignment(MainAxisAlignment::Start)
+            .child(FixedWidget::new(30.0, 20.0))
+            .child(FixedWidget::new(30.0, 20.0));
+
+        row.layout(Rect::new(0.0, 0.0, 200.0, 50.0));
+
+        assert_eq!(row.child_bounds.len(), 2);
+        assert_eq!(row.child_bounds[0].x, 0.0);
+        assert_eq!(row.child_bounds[1].x, 30.0);
+    }
+
+    #[test]
+    fn test_row_alignment_end() {
+        let mut row = Row::new()
+            .main_axis_alignment(MainAxisAlignment::End)
+            .child(FixedWidget::new(30.0, 20.0))
+            .child(FixedWidget::new(30.0, 20.0));
+
+        row.layout(Rect::new(0.0, 0.0, 200.0, 50.0));
+
+        // 200 - 60 = 140 remaining, children at 140 and 170
+        assert_eq!(row.child_bounds[0].x, 140.0);
+        assert_eq!(row.child_bounds[1].x, 170.0);
+    }
+
+    #[test]
+    fn test_row_alignment_center() {
+        let mut row = Row::new()
+            .main_axis_alignment(MainAxisAlignment::Center)
+            .child(FixedWidget::new(30.0, 20.0))
+            .child(FixedWidget::new(30.0, 20.0));
+
+        row.layout(Rect::new(0.0, 0.0, 200.0, 50.0));
+
+        // 200 - 60 = 140 remaining, offset = 70
+        assert_eq!(row.child_bounds[0].x, 70.0);
+        assert_eq!(row.child_bounds[1].x, 100.0);
+    }
+
+    #[test]
+    fn test_row_alignment_space_between() {
+        let mut row = Row::new()
+            .main_axis_alignment(MainAxisAlignment::SpaceBetween)
+            .child(FixedWidget::new(30.0, 20.0))
+            .child(FixedWidget::new(30.0, 20.0));
+
+        row.layout(Rect::new(0.0, 0.0, 200.0, 50.0));
+
+        // First at start, last at end
+        assert_eq!(row.child_bounds[0].x, 0.0);
+        assert_eq!(row.child_bounds[1].x, 170.0); // 200 - 30
+    }
+
+    #[test]
+    fn test_row_alignment_space_between_single_child() {
+        let mut row = Row::new()
+            .main_axis_alignment(MainAxisAlignment::SpaceBetween)
+            .child(FixedWidget::new(30.0, 20.0));
+
+        row.layout(Rect::new(0.0, 0.0, 200.0, 50.0));
+
+        // Single child should be at start
+        assert_eq!(row.child_bounds[0].x, 0.0);
+    }
+
+    #[test]
+    fn test_row_alignment_space_between_three_children() {
+        let mut row = Row::new()
+            .main_axis_alignment(MainAxisAlignment::SpaceBetween)
+            .child(FixedWidget::new(30.0, 20.0))
+            .child(FixedWidget::new(30.0, 20.0))
+            .child(FixedWidget::new(30.0, 20.0));
+
+        row.layout(Rect::new(0.0, 0.0, 200.0, 50.0));
+
+        // 200 - 90 = 110 remaining, gap = 55
+        assert_eq!(row.child_bounds[0].x, 0.0);
+        assert_eq!(row.child_bounds[1].x, 85.0); // 30 + 55
+        assert_eq!(row.child_bounds[2].x, 170.0); // 200 - 30
+    }
+
+    #[test]
+    fn test_row_alignment_space_around() {
+        let mut row = Row::new()
+            .main_axis_alignment(MainAxisAlignment::SpaceAround)
+            .child(FixedWidget::new(40.0, 20.0))
+            .child(FixedWidget::new(40.0, 20.0));
+
+        row.layout(Rect::new(0.0, 0.0, 200.0, 50.0));
+
+        // 200 - 80 = 120 remaining, gap = 60, half-gap = 30
+        // First at 30, second at 30 + 40 + 60 = 130
+        assert_eq!(row.child_bounds[0].x, 30.0);
+        assert_eq!(row.child_bounds[1].x, 130.0);
+    }
+
+    #[test]
+    fn test_row_alignment_space_evenly() {
+        let mut row = Row::new()
+            .main_axis_alignment(MainAxisAlignment::SpaceEvenly)
+            .child(FixedWidget::new(40.0, 20.0))
+            .child(FixedWidget::new(40.0, 20.0));
+
+        row.layout(Rect::new(0.0, 0.0, 200.0, 50.0));
+
+        // 200 - 80 = 120 remaining, 3 gaps (n+1), gap = 40
+        // First at 40, second at 40 + 40 + 40 = 120
+        assert_eq!(row.child_bounds[0].x, 40.0);
+        assert_eq!(row.child_bounds[1].x, 120.0);
+    }
+
+    // ===== CrossAxisAlignment Tests =====
+
+    #[test]
+    fn test_row_cross_alignment_start() {
+        let mut row = Row::new()
+            .cross_axis_alignment(CrossAxisAlignment::Start)
+            .child(FixedWidget::new(30.0, 20.0));
+
+        row.layout(Rect::new(0.0, 0.0, 200.0, 100.0));
+
+        assert_eq!(row.child_bounds[0].y, 0.0);
+        assert_eq!(row.child_bounds[0].height, 20.0);
+    }
+
+    #[test]
+    fn test_row_cross_alignment_end() {
+        let mut row = Row::new()
+            .cross_axis_alignment(CrossAxisAlignment::End)
+            .child(FixedWidget::new(30.0, 20.0));
+
+        row.layout(Rect::new(0.0, 0.0, 200.0, 100.0));
+
+        assert_eq!(row.child_bounds[0].y, 80.0); // 100 - 20
+        assert_eq!(row.child_bounds[0].height, 20.0);
+    }
+
+    #[test]
+    fn test_row_cross_alignment_center() {
+        let mut row = Row::new()
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .child(FixedWidget::new(30.0, 20.0));
+
+        row.layout(Rect::new(0.0, 0.0, 200.0, 100.0));
+
+        assert_eq!(row.child_bounds[0].y, 40.0); // (100 - 20) / 2
+        assert_eq!(row.child_bounds[0].height, 20.0);
+    }
+
+    #[test]
+    fn test_row_cross_alignment_stretch() {
+        let mut row = Row::new()
+            .cross_axis_alignment(CrossAxisAlignment::Stretch)
+            .child(FixedWidget::new(30.0, 20.0));
+
+        row.layout(Rect::new(0.0, 0.0, 200.0, 100.0));
+
+        assert_eq!(row.child_bounds[0].y, 0.0);
+        assert_eq!(row.child_bounds[0].height, 100.0); // Stretched to container
+    }
+
+    // ===== Gap Tests =====
+
+    #[test]
+    fn test_row_gap_single_child() {
+        let mut row = Row::new().gap(20.0).child(FixedWidget::new(30.0, 20.0));
+
+        row.layout(Rect::new(0.0, 0.0, 200.0, 50.0));
+
+        // Single child: no gap applied
+        assert_eq!(row.child_bounds[0].x, 0.0);
+    }
+
+    #[test]
+    fn test_row_gap_multiple_children() {
+        let mut row = Row::new()
+            .gap(15.0)
+            .child(FixedWidget::new(30.0, 20.0))
+            .child(FixedWidget::new(30.0, 20.0))
+            .child(FixedWidget::new(30.0, 20.0));
+
+        row.layout(Rect::new(0.0, 0.0, 200.0, 50.0));
+
+        assert_eq!(row.child_bounds[0].x, 0.0);
+        assert_eq!(row.child_bounds[1].x, 45.0); // 30 + 15
+        assert_eq!(row.child_bounds[2].x, 90.0); // 45 + 30 + 15
+    }
+
+    #[test]
+    fn test_row_gap_with_alignment_center() {
+        let mut row = Row::new()
+            .gap(10.0)
+            .main_axis_alignment(MainAxisAlignment::Center)
+            .child(FixedWidget::new(30.0, 20.0))
+            .child(FixedWidget::new(30.0, 20.0));
+
+        row.layout(Rect::new(0.0, 0.0, 200.0, 50.0));
+
+        // Total: 30 + 10 + 30 = 70, remaining = 130, offset = 65
+        assert_eq!(row.child_bounds[0].x, 65.0);
+        assert_eq!(row.child_bounds[1].x, 105.0); // 65 + 30 + 10
+    }
+
+    // ===== Edge Cases =====
+
+    #[test]
+    fn test_row_layout_empty() {
+        let mut row = Row::new();
+        let result = row.layout(Rect::new(0.0, 0.0, 200.0, 50.0));
+        assert_eq!(result.size, Size::ZERO);
+    }
+
+    #[test]
+    fn test_row_content_larger_than_bounds() {
+        let mut row = Row::new()
+            .child(FixedWidget::new(100.0, 30.0))
+            .child(FixedWidget::new(100.0, 30.0))
+            .child(FixedWidget::new(100.0, 30.0));
+
+        // Container only 200 wide, content is 300
+        row.layout(Rect::new(0.0, 0.0, 200.0, 50.0));
+
+        // Children still placed sequentially (overflow)
+        assert_eq!(row.child_bounds[0].x, 0.0);
+        assert_eq!(row.child_bounds[1].x, 100.0);
+        assert_eq!(row.child_bounds[2].x, 200.0);
+    }
+
+    #[test]
+    fn test_row_with_offset_bounds() {
+        let mut row = Row::new()
+            .child(FixedWidget::new(30.0, 20.0))
+            .child(FixedWidget::new(30.0, 20.0));
+
+        row.layout(Rect::new(50.0, 25.0, 200.0, 50.0));
+
+        // Children should be offset by bounds origin
+        assert_eq!(row.child_bounds[0].x, 50.0);
+        assert_eq!(row.child_bounds[0].y, 40.0); // 25 + (50-20)/2
+        assert_eq!(row.child_bounds[1].x, 80.0);
+    }
+
+    #[test]
+    fn test_row_varying_child_heights() {
+        let mut row = Row::new()
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .child(FixedWidget::new(30.0, 20.0))
+            .child(FixedWidget::new(30.0, 60.0))
+            .child(FixedWidget::new(30.0, 40.0));
+
+        row.layout(Rect::new(0.0, 0.0, 200.0, 100.0));
+
+        // All centered differently based on their heights
+        assert_eq!(row.child_bounds[0].y, 40.0); // (100-20)/2
+        assert_eq!(row.child_bounds[1].y, 20.0); // (100-60)/2
+        assert_eq!(row.child_bounds[2].y, 30.0); // (100-40)/2
+    }
+
+    // ===== Enum Default Tests =====
+
+    #[test]
+    fn test_main_axis_alignment_default() {
+        assert_eq!(MainAxisAlignment::default(), MainAxisAlignment::Start);
+    }
+
+    #[test]
+    fn test_cross_axis_alignment_default() {
+        assert_eq!(CrossAxisAlignment::default(), CrossAxisAlignment::Center);
     }
 }

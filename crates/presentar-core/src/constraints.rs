@@ -183,4 +183,76 @@ mod tests {
         assert_eq!(c.with_min_height(10.0).min_height, 10.0);
         assert_eq!(c.with_max_height(200.0).max_height, 200.0);
     }
+
+    #[test]
+    fn test_constraints_tight() {
+        let c = Constraints::tight(Size::new(100.0, 50.0));
+        assert_eq!(c.min_width, 100.0);
+        assert_eq!(c.max_width, 100.0);
+        assert_eq!(c.min_height, 50.0);
+        assert_eq!(c.max_height, 50.0);
+        assert!(c.is_tight());
+    }
+
+    #[test]
+    fn test_constraints_loose() {
+        let c = Constraints::loose(Size::new(100.0, 50.0));
+        assert_eq!(c.min_width, 0.0);
+        assert_eq!(c.max_width, 100.0);
+        assert_eq!(c.min_height, 0.0);
+        assert_eq!(c.max_height, 50.0);
+        assert!(!c.is_tight());
+    }
+
+    #[test]
+    fn test_constraints_unbounded() {
+        let c = Constraints::unbounded();
+        assert_eq!(c.min_width, 0.0);
+        assert!(c.max_width.is_infinite());
+        assert!(!c.is_bounded());
+    }
+
+    #[test]
+    fn test_constraints_constrain() {
+        let c = Constraints::new(10.0, 100.0, 20.0, 80.0);
+        assert_eq!(c.constrain(Size::new(50.0, 50.0)), Size::new(50.0, 50.0));
+        assert_eq!(c.constrain(Size::new(5.0, 5.0)), Size::new(10.0, 20.0));
+        assert_eq!(c.constrain(Size::new(200.0, 200.0)), Size::new(100.0, 80.0));
+    }
+
+    #[test]
+    fn test_constraints_is_tight_false() {
+        let c = Constraints::new(0.0, 100.0, 0.0, 100.0);
+        assert!(!c.is_tight());
+    }
+
+    #[test]
+    fn test_constraints_has_bounded_width() {
+        let c = Constraints::new(0.0, 100.0, 0.0, f32::INFINITY);
+        assert!(c.has_bounded_width());
+        assert!(!c.has_bounded_height());
+    }
+
+    #[test]
+    fn test_constraints_is_bounded() {
+        let bounded = Constraints::new(0.0, 100.0, 0.0, 100.0);
+        assert!(bounded.is_bounded());
+
+        let unbounded = Constraints::unbounded();
+        assert!(!unbounded.is_bounded());
+    }
+
+    #[test]
+    fn test_constraints_biggest_unbounded() {
+        let c = Constraints::unbounded();
+        assert_eq!(c.biggest(), Size::new(0.0, 0.0));
+    }
+
+    #[test]
+    fn test_constraints_deflate_to_zero() {
+        let c = Constraints::new(10.0, 20.0, 10.0, 20.0);
+        let deflated = c.deflate(50.0, 50.0);
+        assert_eq!(deflated.min_width, 0.0);
+        assert_eq!(deflated.max_width, 0.0);
+    }
 }
