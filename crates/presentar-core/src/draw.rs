@@ -96,7 +96,7 @@ impl Default for BoxStyle {
 impl BoxStyle {
     /// Create a box with only fill color.
     #[must_use]
-    pub fn fill(color: Color) -> Self {
+    pub const fn fill(color: Color) -> Self {
         Self {
             fill: Some(color),
             stroke: None,
@@ -106,7 +106,7 @@ impl BoxStyle {
 
     /// Create a box with only stroke.
     #[must_use]
-    pub fn stroke(style: StrokeStyle) -> Self {
+    pub const fn stroke(style: StrokeStyle) -> Self {
         Self {
             fill: None,
             stroke: Some(style),
@@ -116,7 +116,7 @@ impl BoxStyle {
 
     /// Add a shadow to the box.
     #[must_use]
-    pub fn with_shadow(mut self, shadow: Shadow) -> Self {
+    pub const fn with_shadow(mut self, shadow: Shadow) -> Self {
         self.shadow = Some(shadow);
         self
     }
@@ -219,12 +219,12 @@ impl Transform2D {
         let b = self.matrix;
         Self {
             matrix: [
-                a[0] * b[0] + a[2] * b[1],
-                a[1] * b[0] + a[3] * b[1],
-                a[0] * b[2] + a[2] * b[3],
-                a[1] * b[2] + a[3] * b[3],
-                a[0] * b[4] + a[2] * b[5] + a[4],
-                a[1] * b[4] + a[3] * b[5] + a[5],
+                a[0].mul_add(b[0], a[2] * b[1]),
+                a[1].mul_add(b[0], a[3] * b[1]),
+                a[0].mul_add(b[2], a[2] * b[3]),
+                a[1].mul_add(b[2], a[3] * b[3]),
+                a[0].mul_add(b[4], a[2] * b[5]) + a[4],
+                a[1].mul_add(b[4], a[3] * b[5]) + a[5],
             ],
         }
     }
@@ -234,8 +234,8 @@ impl Transform2D {
     pub fn apply(&self, point: Point) -> Point {
         let m = self.matrix;
         Point::new(
-            m[0] * point.x + m[2] * point.y + m[4],
-            m[1] * point.x + m[3] * point.y + m[5],
+            m[0].mul_add(point.x, m[2] * point.y) + m[4],
+            m[1].mul_add(point.x, m[3] * point.y) + m[5],
         )
     }
 }
@@ -331,7 +331,7 @@ pub enum DrawCommand {
 impl DrawCommand {
     /// Create a filled rectangle.
     #[must_use]
-    pub fn filled_rect(bounds: Rect, color: Color) -> Self {
+    pub const fn filled_rect(bounds: Rect, color: Color) -> Self {
         Self::Rect {
             bounds,
             radius: CornerRadius::ZERO,
@@ -341,7 +341,7 @@ impl DrawCommand {
 
     /// Create a rounded rectangle.
     #[must_use]
-    pub fn rounded_rect(bounds: Rect, radius: f32, color: Color) -> Self {
+    pub const fn rounded_rect(bounds: Rect, radius: f32, color: Color) -> Self {
         Self::Rect {
             bounds,
             radius: CornerRadius::uniform(radius),
@@ -351,7 +351,7 @@ impl DrawCommand {
 
     /// Create a stroked rectangle.
     #[must_use]
-    pub fn stroked_rect(bounds: Rect, stroke: StrokeStyle) -> Self {
+    pub const fn stroked_rect(bounds: Rect, stroke: StrokeStyle) -> Self {
         Self::Rect {
             bounds,
             radius: CornerRadius::ZERO,
@@ -361,7 +361,7 @@ impl DrawCommand {
 
     /// Create a filled circle.
     #[must_use]
-    pub fn filled_circle(center: Point, radius: f32, color: Color) -> Self {
+    pub const fn filled_circle(center: Point, radius: f32, color: Color) -> Self {
         Self::Circle {
             center,
             radius,

@@ -94,7 +94,7 @@ impl Image {
 
     /// Set how the image should fit.
     #[must_use]
-    pub fn fit(mut self, fit: ImageFit) -> Self {
+    pub const fn fit(mut self, fit: ImageFit) -> Self {
         self.fit = fit;
         self
     }
@@ -147,31 +147,31 @@ impl Image {
 
     /// Get the fit mode.
     #[must_use]
-    pub fn get_fit(&self) -> ImageFit {
+    pub const fn get_fit(&self) -> ImageFit {
         self.fit
     }
 
     /// Get the intrinsic width.
     #[must_use]
-    pub fn get_width(&self) -> Option<f32> {
+    pub const fn get_width(&self) -> Option<f32> {
         self.width
     }
 
     /// Get the intrinsic height.
     #[must_use]
-    pub fn get_height(&self) -> Option<f32> {
+    pub const fn get_height(&self) -> Option<f32> {
         self.height
     }
 
     /// Check if image is loading.
     #[must_use]
-    pub fn is_loading(&self) -> bool {
+    pub const fn is_loading(&self) -> bool {
         self.loading
     }
 
     /// Check if image failed to load.
     #[must_use]
-    pub fn has_error(&self) -> bool {
+    pub const fn has_error(&self) -> bool {
         self.error
     }
 

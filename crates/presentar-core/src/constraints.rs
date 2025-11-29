@@ -61,19 +61,19 @@ impl Constraints {
 
     /// Create tight constraints that allow only the exact size.
     #[must_use]
-    pub fn tight(size: Size) -> Self {
+    pub const fn tight(size: Size) -> Self {
         Self::new(size.width, size.width, size.height, size.height)
     }
 
     /// Create loose constraints that allow any size up to the given maximum.
     #[must_use]
-    pub fn loose(size: Size) -> Self {
+    pub const fn loose(size: Size) -> Self {
         Self::new(0.0, size.width, 0.0, size.height)
     }
 
     /// Create unbounded constraints.
     #[must_use]
-    pub fn unbounded() -> Self {
+    pub const fn unbounded() -> Self {
         Self::new(0.0, f32::INFINITY, 0.0, f32::INFINITY)
     }
 
@@ -129,31 +129,31 @@ impl Constraints {
 
     /// Get the smallest size that satisfies these constraints.
     #[must_use]
-    pub fn smallest(&self) -> Size {
+    pub const fn smallest(&self) -> Size {
         Size::new(self.min_width, self.min_height)
     }
 
     /// Create constraints with a different minimum width.
     #[must_use]
-    pub fn with_min_width(&self, min_width: f32) -> Self {
+    pub const fn with_min_width(&self, min_width: f32) -> Self {
         Self::new(min_width, self.max_width, self.min_height, self.max_height)
     }
 
     /// Create constraints with a different maximum width.
     #[must_use]
-    pub fn with_max_width(&self, max_width: f32) -> Self {
+    pub const fn with_max_width(&self, max_width: f32) -> Self {
         Self::new(self.min_width, max_width, self.min_height, self.max_height)
     }
 
     /// Create constraints with a different minimum height.
     #[must_use]
-    pub fn with_min_height(&self, min_height: f32) -> Self {
+    pub const fn with_min_height(&self, min_height: f32) -> Self {
         Self::new(self.min_width, self.max_width, min_height, self.max_height)
     }
 
     /// Create constraints with a different maximum height.
     #[must_use]
-    pub fn with_max_height(&self, max_height: f32) -> Self {
+    pub const fn with_max_height(&self, max_height: f32) -> Self {
         Self::new(self.min_width, self.max_width, self.min_height, max_height)
     }
 

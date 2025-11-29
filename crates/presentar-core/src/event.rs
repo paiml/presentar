@@ -264,7 +264,7 @@ pub enum Key {
 impl Event {
     /// Check if this is a mouse event.
     #[must_use]
-    pub fn is_mouse(&self) -> bool {
+    pub const fn is_mouse(&self) -> bool {
         matches!(
             self,
             Self::MouseMove { .. }
@@ -277,7 +277,7 @@ impl Event {
 
     /// Check if this is a keyboard event.
     #[must_use]
-    pub fn is_keyboard(&self) -> bool {
+    pub const fn is_keyboard(&self) -> bool {
         matches!(
             self,
             Self::KeyDown { .. } | Self::KeyUp { .. } | Self::TextInput { .. }
@@ -286,13 +286,13 @@ impl Event {
 
     /// Check if this is a focus event.
     #[must_use]
-    pub fn is_focus(&self) -> bool {
+    pub const fn is_focus(&self) -> bool {
         matches!(self, Self::FocusIn | Self::FocusOut)
     }
 
     /// Get the position if this is a positional mouse event.
     #[must_use]
-    pub fn position(&self) -> Option<Point> {
+    pub const fn position(&self) -> Option<Point> {
         match self {
             Self::MouseMove { position }
             | Self::MouseDown { position, .. }

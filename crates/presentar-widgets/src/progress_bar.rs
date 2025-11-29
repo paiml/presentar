@@ -88,14 +88,14 @@ impl ProgressBar {
 
     /// Set the progress mode.
     #[must_use]
-    pub fn mode(mut self, mode: ProgressMode) -> Self {
+    pub const fn mode(mut self, mode: ProgressMode) -> Self {
         self.mode = mode;
         self
     }
 
     /// Set indeterminate mode.
     #[must_use]
-    pub fn indeterminate(self) -> Self {
+    pub const fn indeterminate(self) -> Self {
         self.mode(ProgressMode::Indeterminate)
     }
 
@@ -122,35 +122,35 @@ impl ProgressBar {
 
     /// Set the track color (background).
     #[must_use]
-    pub fn track_color(mut self, color: Color) -> Self {
+    pub const fn track_color(mut self, color: Color) -> Self {
         self.track_color = color;
         self
     }
 
     /// Set the fill color (progress).
     #[must_use]
-    pub fn fill_color(mut self, color: Color) -> Self {
+    pub const fn fill_color(mut self, color: Color) -> Self {
         self.fill_color = color;
         self
     }
 
     /// Show percentage label.
     #[must_use]
-    pub fn with_label(mut self) -> Self {
+    pub const fn with_label(mut self) -> Self {
         self.show_label = true;
         self
     }
 
     /// Set whether to show the label.
     #[must_use]
-    pub fn show_label(mut self, show: bool) -> Self {
+    pub const fn show_label(mut self, show: bool) -> Self {
         self.show_label = show;
         self
     }
 
     /// Set the label color.
     #[must_use]
-    pub fn label_color(mut self, color: Color) -> Self {
+    pub const fn label_color(mut self, color: Color) -> Self {
         self.label_color = color;
         self
     }
@@ -171,13 +171,13 @@ impl ProgressBar {
 
     /// Get the current value.
     #[must_use]
-    pub fn get_value(&self) -> f32 {
+    pub const fn get_value(&self) -> f32 {
         self.value
     }
 
     /// Get the current mode.
     #[must_use]
-    pub fn get_mode(&self) -> ProgressMode {
+    pub const fn get_mode(&self) -> ProgressMode {
         self.mode
     }
 
@@ -216,43 +216,43 @@ impl ProgressBar {
 
     /// Get the track color.
     #[must_use]
-    pub fn get_track_color(&self) -> Color {
+    pub const fn get_track_color(&self) -> Color {
         self.track_color
     }
 
     /// Get the fill color.
     #[must_use]
-    pub fn get_fill_color(&self) -> Color {
+    pub const fn get_fill_color(&self) -> Color {
         self.fill_color
     }
 
     /// Get the label color.
     #[must_use]
-    pub fn get_label_color(&self) -> Color {
+    pub const fn get_label_color(&self) -> Color {
         self.label_color
     }
 
     /// Get whether label is shown.
     #[must_use]
-    pub fn is_label_shown(&self) -> bool {
+    pub const fn is_label_shown(&self) -> bool {
         self.show_label
     }
 
     /// Get the minimum width.
     #[must_use]
-    pub fn get_min_width(&self) -> f32 {
+    pub const fn get_min_width(&self) -> f32 {
         self.min_width
     }
 
     /// Get the height.
     #[must_use]
-    pub fn get_height(&self) -> f32 {
+    pub const fn get_height(&self) -> f32 {
         self.height
     }
 
     /// Get the corner radius.
     #[must_use]
-    pub fn get_corner_radius(&self) -> f32 {
+    pub const fn get_corner_radius(&self) -> f32 {
         self.corner_radius
     }
 }

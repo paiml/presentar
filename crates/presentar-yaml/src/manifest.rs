@@ -97,11 +97,11 @@ pub struct LayoutConfig {
     pub sections: Vec<Section>,
 }
 
-fn default_columns() -> u32 {
+const fn default_columns() -> u32 {
     12
 }
 
-fn default_gap() -> u32 {
+const fn default_gap() -> u32 {
     16
 }
 

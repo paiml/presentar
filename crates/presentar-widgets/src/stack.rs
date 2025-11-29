@@ -33,7 +33,7 @@ pub enum StackAlignment {
 impl StackAlignment {
     /// Get horizontal offset ratio (0.0 = left, 0.5 = center, 1.0 = right).
     #[must_use]
-    pub fn horizontal_ratio(&self) -> f32 {
+    pub const fn horizontal_ratio(&self) -> f32 {
         match self {
             Self::TopLeft | Self::CenterLeft | Self::BottomLeft => 0.0,
             Self::TopCenter | Self::Center | Self::BottomCenter => 0.5,
@@ -43,7 +43,7 @@ impl StackAlignment {
 
     /// Get vertical offset ratio (0.0 = top, 0.5 = center, 1.0 = bottom).
     #[must_use]
-    pub fn vertical_ratio(&self) -> f32 {
+    pub const fn vertical_ratio(&self) -> f32 {
         match self {
             Self::TopLeft | Self::TopCenter | Self::TopRight => 0.0,
             Self::CenterLeft | Self::Center | Self::CenterRight => 0.5,
@@ -102,14 +102,14 @@ impl Stack {
 
     /// Set alignment.
     #[must_use]
-    pub fn alignment(mut self, alignment: StackAlignment) -> Self {
+    pub const fn alignment(mut self, alignment: StackAlignment) -> Self {
         self.alignment = alignment;
         self
     }
 
     /// Set fit mode.
     #[must_use]
-    pub fn fit(mut self, fit: StackFit) -> Self {
+    pub const fn fit(mut self, fit: StackFit) -> Self {
         self.fit = fit;
         self
     }
@@ -129,13 +129,13 @@ impl Stack {
 
     /// Get alignment.
     #[must_use]
-    pub fn get_alignment(&self) -> StackAlignment {
+    pub const fn get_alignment(&self) -> StackAlignment {
         self.alignment
     }
 
     /// Get fit mode.
     #[must_use]
-    pub fn get_fit(&self) -> StackFit {
+    pub const fn get_fit(&self) -> StackFit {
         self.fit
     }
 }
@@ -178,10 +178,10 @@ impl Widget for Stack {
             let child_size = child.measure(child_constraints);
 
             // Calculate position based on alignment
-            let x =
-                bounds.x + (bounds.width - child_size.width) * self.alignment.horizontal_ratio();
-            let y =
-                bounds.y + (bounds.height - child_size.height) * self.alignment.vertical_ratio();
+            let x = (bounds.width - child_size.width)
+                .mul_add(self.alignment.horizontal_ratio(), bounds.x);
+            let y = (bounds.height - child_size.height)
+                .mul_add(self.alignment.vertical_ratio(), bounds.y);
 
             let child_bounds = Rect::new(x, y, child_size.width, child_size.height);
             child.layout(child_bounds);

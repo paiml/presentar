@@ -27,15 +27,15 @@ impl Point {
     pub fn distance(&self, other: &Self) -> f32 {
         let dx = self.x - other.x;
         let dy = self.y - other.y;
-        (dx * dx + dy * dy).sqrt()
+        dx.hypot(dy)
     }
 
     /// Linear interpolation between two points.
     #[must_use]
     pub fn lerp(&self, other: &Self, t: f32) -> Self {
         Self::new(
-            self.x + (other.x - self.x) * t,
-            self.y + (other.y - self.y) * t,
+            (other.x - self.x).mul_add(t, self.x),
+            (other.y - self.y).mul_add(t, self.y),
         )
     }
 }
@@ -157,19 +157,19 @@ impl Rect {
 
     /// Create from size at origin.
     #[must_use]
-    pub fn from_size(size: Size) -> Self {
+    pub const fn from_size(size: Size) -> Self {
         Self::new(0.0, 0.0, size.width, size.height)
     }
 
     /// Get the origin (top-left) point.
     #[must_use]
-    pub fn origin(&self) -> Point {
+    pub const fn origin(&self) -> Point {
         Point::new(self.x, self.y)
     }
 
     /// Get the size.
     #[must_use]
-    pub fn size(&self) -> Size {
+    pub const fn size(&self) -> Size {
         Size::new(self.width, self.height)
     }
 
@@ -181,7 +181,7 @@ impl Rect {
 
     /// Get top-left corner.
     #[must_use]
-    pub fn top_left(&self) -> Point {
+    pub const fn top_left(&self) -> Point {
         Point::new(self.x, self.y)
     }
 
@@ -259,20 +259,20 @@ impl Rect {
         Self::new(
             self.x + amount,
             self.y + amount,
-            (self.width - 2.0 * amount).max(0.0),
-            (self.height - 2.0 * amount).max(0.0),
+            2.0f32.mul_add(-amount, self.width).max(0.0),
+            2.0f32.mul_add(-amount, self.height).max(0.0),
         )
     }
 
     /// Create a new rectangle with the given position.
     #[must_use]
-    pub fn with_origin(&self, origin: Point) -> Self {
+    pub const fn with_origin(&self, origin: Point) -> Self {
         Self::new(origin.x, origin.y, self.width, self.height)
     }
 
     /// Create a new rectangle with the given size.
     #[must_use]
-    pub fn with_size(&self, size: Size) -> Self {
+    pub const fn with_size(&self, size: Size) -> Self {
         Self::new(self.x, self.y, size.width, size.height)
     }
 }

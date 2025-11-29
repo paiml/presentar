@@ -87,14 +87,14 @@ impl Toggle {
 
     /// Set the toggle state.
     #[must_use]
-    pub fn on(mut self, on: bool) -> Self {
+    pub const fn on(mut self, on: bool) -> Self {
         self.on = on;
         self
     }
 
     /// Set whether the toggle is disabled.
     #[must_use]
-    pub fn disabled(mut self, disabled: bool) -> Self {
+    pub const fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
     }
@@ -129,35 +129,35 @@ impl Toggle {
 
     /// Set the track off color.
     #[must_use]
-    pub fn track_off_color(mut self, color: Color) -> Self {
+    pub const fn track_off_color(mut self, color: Color) -> Self {
         self.track_off_color = color;
         self
     }
 
     /// Set the track on color.
     #[must_use]
-    pub fn track_on_color(mut self, color: Color) -> Self {
+    pub const fn track_on_color(mut self, color: Color) -> Self {
         self.track_on_color = color;
         self
     }
 
     /// Set the thumb color.
     #[must_use]
-    pub fn thumb_color(mut self, color: Color) -> Self {
+    pub const fn thumb_color(mut self, color: Color) -> Self {
         self.thumb_color = color;
         self
     }
 
     /// Set the disabled color.
     #[must_use]
-    pub fn disabled_color(mut self, color: Color) -> Self {
+    pub const fn disabled_color(mut self, color: Color) -> Self {
         self.disabled_color = color;
         self
     }
 
     /// Set the label color.
     #[must_use]
-    pub fn label_color(mut self, color: Color) -> Self {
+    pub const fn label_color(mut self, color: Color) -> Self {
         self.label_color = color;
         self
     }
@@ -185,13 +185,13 @@ impl Toggle {
 
     /// Get current state.
     #[must_use]
-    pub fn is_on(&self) -> bool {
+    pub const fn is_on(&self) -> bool {
         self.on
     }
 
     /// Get disabled state.
     #[must_use]
-    pub fn is_disabled(&self) -> bool {
+    pub const fn is_disabled(&self) -> bool {
         self.disabled
     }
 
@@ -203,25 +203,25 @@ impl Toggle {
 
     /// Get the track width.
     #[must_use]
-    pub fn get_track_width(&self) -> f32 {
+    pub const fn get_track_width(&self) -> f32 {
         self.track_width
     }
 
     /// Get the track height.
     #[must_use]
-    pub fn get_track_height(&self) -> f32 {
+    pub const fn get_track_height(&self) -> f32 {
         self.track_height
     }
 
     /// Get the thumb size.
     #[must_use]
-    pub fn get_thumb_size(&self) -> f32 {
+    pub const fn get_thumb_size(&self) -> f32 {
         self.thumb_size
     }
 
     /// Get the spacing.
     #[must_use]
-    pub fn get_spacing(&self) -> f32 {
+    pub const fn get_spacing(&self) -> f32 {
         self.spacing
     }
 
@@ -270,7 +270,7 @@ impl Widget for Toggle {
         let label_width = if self.label.is_empty() {
             0.0
         } else {
-            self.label.len() as f32 * 8.0 + self.spacing
+            (self.label.len() as f32).mul_add(8.0, self.spacing)
         };
         let preferred = Size::new(self.track_width + label_width, self.track_height.max(20.0));
         constraints.constrain(preferred)

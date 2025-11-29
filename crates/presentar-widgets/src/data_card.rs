@@ -39,7 +39,7 @@ impl DataQuality {
 
     /// Get quality label.
     #[must_use]
-    pub fn label(&self) -> &'static str {
+    pub const fn label(&self) -> &'static str {
         match self {
             Self::Unknown => "Unknown",
             Self::Poor => "Poor",
@@ -51,7 +51,7 @@ impl DataQuality {
 
     /// Get quality score (0-100).
     #[must_use]
-    pub fn score(&self) -> u8 {
+    pub const fn score(&self) -> u8 {
         match self {
             Self::Unknown => 0,
             Self::Poor => 25,
@@ -63,7 +63,7 @@ impl DataQuality {
 }
 
 /// Data column/field schema.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DataColumn {
     /// Column name
     pub name: String,
@@ -89,7 +89,7 @@ impl DataColumn {
 
     /// Set nullable.
     #[must_use]
-    pub fn nullable(mut self) -> Self {
+    pub const fn nullable(mut self) -> Self {
         self.nullable = true;
         self
     }
@@ -126,21 +126,21 @@ impl DataStats {
 
     /// Set row count.
     #[must_use]
-    pub fn rows(mut self, count: u64) -> Self {
+    pub const fn rows(mut self, count: u64) -> Self {
         self.rows = Some(count);
         self
     }
 
     /// Set column count.
     #[must_use]
-    pub fn columns(mut self, count: u32) -> Self {
+    pub const fn columns(mut self, count: u32) -> Self {
         self.columns = Some(count);
         self
     }
 
     /// Set size in bytes.
     #[must_use]
-    pub fn size_bytes(mut self, bytes: u64) -> Self {
+    pub const fn size_bytes(mut self, bytes: u64) -> Self {
         self.size_bytes = Some(bytes);
         self
     }
@@ -296,7 +296,7 @@ impl DataCard {
 
     /// Set quality.
     #[must_use]
-    pub fn quality(mut self, quality: DataQuality) -> Self {
+    pub const fn quality(mut self, quality: DataQuality) -> Self {
         self.quality = quality;
         self
     }
@@ -331,7 +331,7 @@ impl DataCard {
 
     /// Set statistics.
     #[must_use]
-    pub fn stats(mut self, stats: DataStats) -> Self {
+    pub const fn stats(mut self, stats: DataStats) -> Self {
         self.stats = stats;
         self
     }
@@ -380,14 +380,14 @@ impl DataCard {
 
     /// Set background color.
     #[must_use]
-    pub fn background(mut self, color: Color) -> Self {
+    pub const fn background(mut self, color: Color) -> Self {
         self.background = color;
         self
     }
 
     /// Set border color.
     #[must_use]
-    pub fn border_color(mut self, color: Color) -> Self {
+    pub const fn border_color(mut self, color: Color) -> Self {
         self.border_color = color;
         self
     }
@@ -401,7 +401,7 @@ impl DataCard {
 
     /// Set whether to show schema preview.
     #[must_use]
-    pub fn show_schema(mut self, show: bool) -> Self {
+    pub const fn show_schema(mut self, show: bool) -> Self {
         self.show_schema = show;
         self
     }
@@ -442,7 +442,7 @@ impl DataCard {
 
     /// Get quality.
     #[must_use]
-    pub fn get_quality(&self) -> DataQuality {
+    pub const fn get_quality(&self) -> DataQuality {
         self.quality
     }
 
@@ -466,7 +466,7 @@ impl DataCard {
 
     /// Get stats.
     #[must_use]
-    pub fn get_stats(&self) -> &DataStats {
+    pub const fn get_stats(&self) -> &DataStats {
         &self.stats
     }
 
@@ -710,7 +710,7 @@ impl Widget for DataCard {
 
             let mut tx = self.bounds.x + padding;
             for tag in self.tags.iter().take(5) {
-                let tag_width = tag.len() as f32 * 6.0 + 12.0;
+                let tag_width = (tag.len() as f32).mul_add(6.0, 12.0);
                 canvas.fill_rect(
                     Rect::new(tx, self.bounds.y + y_offset + 4.0, tag_width, 18.0),
                     tag_bg,

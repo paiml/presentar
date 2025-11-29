@@ -53,21 +53,21 @@ impl Column {
 
     /// Set main axis alignment.
     #[must_use]
-    pub fn main_axis_alignment(mut self, alignment: MainAxisAlignment) -> Self {
+    pub const fn main_axis_alignment(mut self, alignment: MainAxisAlignment) -> Self {
         self.main_axis_alignment = alignment;
         self
     }
 
     /// Set cross axis alignment.
     #[must_use]
-    pub fn cross_axis_alignment(mut self, alignment: CrossAxisAlignment) -> Self {
+    pub const fn cross_axis_alignment(mut self, alignment: CrossAxisAlignment) -> Self {
         self.cross_axis_alignment = alignment;
         self
     }
 
     /// Set gap between children.
     #[must_use]
-    pub fn gap(mut self, gap: f32) -> Self {
+    pub const fn gap(mut self, gap: f32) -> Self {
         self.gap = gap;
         self
     }

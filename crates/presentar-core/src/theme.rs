@@ -112,7 +112,7 @@ impl Default for Typography {
 impl Typography {
     /// Standard typography scale (based on 16px base).
     #[must_use]
-    pub fn standard() -> Self {
+    pub const fn standard() -> Self {
         Self {
             base_size: 16.0,
             h1_scale: 2.5,       // 40px
@@ -129,7 +129,7 @@ impl Typography {
 
     /// Compact typography scale (based on 14px base).
     #[must_use]
-    pub fn compact() -> Self {
+    pub const fn compact() -> Self {
         Self {
             base_size: 14.0,
             h1_scale: 2.286,      // 32px
@@ -217,7 +217,7 @@ impl Spacing {
 
     /// Small spacing (1x).
     #[must_use]
-    pub fn sm(&self) -> f32 {
+    pub const fn sm(&self) -> f32 {
         self.unit
     }
 
@@ -280,7 +280,7 @@ impl Radii {
 
     /// Small radius (1x).
     #[must_use]
-    pub fn sm(&self) -> f32 {
+    pub const fn sm(&self) -> f32 {
         self.unit
     }
 
@@ -304,7 +304,7 @@ impl Radii {
 
     /// Full/pill radius.
     #[must_use]
-    pub fn full(&self) -> f32 {
+    pub const fn full(&self) -> f32 {
         9999.0
     }
 }
@@ -415,28 +415,28 @@ impl Theme {
 
     /// Create a theme with custom colors.
     #[must_use]
-    pub fn with_colors(mut self, colors: ColorPalette) -> Self {
+    pub const fn with_colors(mut self, colors: ColorPalette) -> Self {
         self.colors = colors;
         self
     }
 
     /// Create a theme with custom typography.
     #[must_use]
-    pub fn with_typography(mut self, typography: Typography) -> Self {
+    pub const fn with_typography(mut self, typography: Typography) -> Self {
         self.typography = typography;
         self
     }
 
     /// Create a theme with custom spacing.
     #[must_use]
-    pub fn with_spacing(mut self, spacing: Spacing) -> Self {
+    pub const fn with_spacing(mut self, spacing: Spacing) -> Self {
         self.spacing = spacing;
         self
     }
 
     /// Create a theme with custom radii.
     #[must_use]
-    pub fn with_radii(mut self, radii: Radii) -> Self {
+    pub const fn with_radii(mut self, radii: Radii) -> Self {
         self.radii = radii;
         self
     }

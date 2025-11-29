@@ -24,19 +24,19 @@ pub enum Value {
 impl Value {
     /// Create a new null value.
     #[must_use]
-    pub fn null() -> Self {
+    pub const fn null() -> Self {
         Self::Null
     }
 
     /// Create a new boolean value.
     #[must_use]
-    pub fn bool(v: bool) -> Self {
+    pub const fn bool(v: bool) -> Self {
         Self::Bool(v)
     }
 
     /// Create a new number value.
     #[must_use]
-    pub fn number(v: f64) -> Self {
+    pub const fn number(v: f64) -> Self {
         Self::Number(v)
     }
 
@@ -48,55 +48,55 @@ impl Value {
 
     /// Create a new array value.
     #[must_use]
-    pub fn array(v: Vec<Value>) -> Self {
+    pub const fn array(v: Vec<Self>) -> Self {
         Self::Array(v)
     }
 
     /// Create a new object value.
     #[must_use]
-    pub fn object(v: HashMap<String, Value>) -> Self {
+    pub const fn object(v: HashMap<String, Self>) -> Self {
         Self::Object(v)
     }
 
     /// Check if value is null.
     #[must_use]
-    pub fn is_null(&self) -> bool {
+    pub const fn is_null(&self) -> bool {
         matches!(self, Self::Null)
     }
 
     /// Check if value is a boolean.
     #[must_use]
-    pub fn is_bool(&self) -> bool {
+    pub const fn is_bool(&self) -> bool {
         matches!(self, Self::Bool(_))
     }
 
     /// Check if value is a number.
     #[must_use]
-    pub fn is_number(&self) -> bool {
+    pub const fn is_number(&self) -> bool {
         matches!(self, Self::Number(_))
     }
 
     /// Check if value is a string.
     #[must_use]
-    pub fn is_string(&self) -> bool {
+    pub const fn is_string(&self) -> bool {
         matches!(self, Self::String(_))
     }
 
     /// Check if value is an array.
     #[must_use]
-    pub fn is_array(&self) -> bool {
+    pub const fn is_array(&self) -> bool {
         matches!(self, Self::Array(_))
     }
 
     /// Check if value is an object.
     #[must_use]
-    pub fn is_object(&self) -> bool {
+    pub const fn is_object(&self) -> bool {
         matches!(self, Self::Object(_))
     }
 
     /// Get as boolean.
     #[must_use]
-    pub fn as_bool(&self) -> Option<bool> {
+    pub const fn as_bool(&self) -> Option<bool> {
         match self {
             Self::Bool(v) => Some(*v),
             _ => None,
@@ -105,7 +105,7 @@ impl Value {
 
     /// Get as number.
     #[must_use]
-    pub fn as_number(&self) -> Option<f64> {
+    pub const fn as_number(&self) -> Option<f64> {
         match self {
             Self::Number(v) => Some(*v),
             _ => None,
@@ -123,7 +123,7 @@ impl Value {
 
     /// Get as array.
     #[must_use]
-    pub fn as_array(&self) -> Option<&Vec<Value>> {
+    pub const fn as_array(&self) -> Option<&Vec<Self>> {
         match self {
             Self::Array(v) => Some(v),
             _ => None,
@@ -132,7 +132,7 @@ impl Value {
 
     /// Get as mutable array.
     #[must_use]
-    pub fn as_array_mut(&mut self) -> Option<&mut Vec<Value>> {
+    pub fn as_array_mut(&mut self) -> Option<&mut Vec<Self>> {
         match self {
             Self::Array(v) => Some(v),
             _ => None,
@@ -141,7 +141,7 @@ impl Value {
 
     /// Get as object.
     #[must_use]
-    pub fn as_object(&self) -> Option<&HashMap<String, Value>> {
+    pub const fn as_object(&self) -> Option<&HashMap<String, Self>> {
         match self {
             Self::Object(v) => Some(v),
             _ => None,
@@ -150,7 +150,7 @@ impl Value {
 
     /// Get field from object.
     #[must_use]
-    pub fn get(&self, key: &str) -> Option<&Value> {
+    pub fn get(&self, key: &str) -> Option<&Self> {
         match self {
             Self::Object(map) => map.get(key),
             _ => None,
@@ -211,14 +211,14 @@ impl From<String> for Value {
     }
 }
 
-impl<T: Into<Value>> From<Vec<T>> for Value {
+impl<T: Into<Self>> From<Vec<T>> for Value {
     fn from(v: Vec<T>) -> Self {
         Self::Array(v.into_iter().map(Into::into).collect())
     }
 }
 
 /// Execution error.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExecutionError {
     /// Source not found in data context
     SourceNotFound(String),
@@ -296,7 +296,7 @@ pub struct ExpressionExecutor;
 impl ExpressionExecutor {
     /// Create a new executor.
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self
     }
 

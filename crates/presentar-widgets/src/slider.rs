@@ -115,28 +115,28 @@ impl Slider {
 
     /// Set disabled state.
     #[must_use]
-    pub fn disabled(mut self, disabled: bool) -> Self {
+    pub const fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
     }
 
     /// Set track color.
     #[must_use]
-    pub fn track_color(mut self, color: Color) -> Self {
+    pub const fn track_color(mut self, color: Color) -> Self {
         self.track_color = color;
         self
     }
 
     /// Set active track color.
     #[must_use]
-    pub fn active_color(mut self, color: Color) -> Self {
+    pub const fn active_color(mut self, color: Color) -> Self {
         self.active_color = color;
         self
     }
 
     /// Set thumb color.
     #[must_use]
-    pub fn thumb_color(mut self, color: Color) -> Self {
+    pub const fn thumb_color(mut self, color: Color) -> Self {
         self.thumb_color = color;
         self
     }
@@ -171,19 +171,19 @@ impl Slider {
 
     /// Get current value.
     #[must_use]
-    pub fn get_value(&self) -> f32 {
+    pub const fn get_value(&self) -> f32 {
         self.value
     }
 
     /// Get minimum value.
     #[must_use]
-    pub fn get_min(&self) -> f32 {
+    pub const fn get_min(&self) -> f32 {
         self.min
     }
 
     /// Get maximum value.
     #[must_use]
-    pub fn get_max(&self) -> f32 {
+    pub const fn get_max(&self) -> f32 {
         self.max
     }
 
@@ -213,14 +213,14 @@ impl Slider {
     /// Calculate thumb position X from bounds.
     fn thumb_x(&self) -> f32 {
         let track_start = self.bounds.x + self.thumb_radius;
-        let track_width = self.bounds.width - 2.0 * self.thumb_radius;
-        track_start + track_width * self.normalized_value()
+        let track_width = 2.0f32.mul_add(-self.thumb_radius, self.bounds.width);
+        track_width.mul_add(self.normalized_value(), track_start)
     }
 
     /// Calculate value from X position.
     fn value_from_x(&self, x: f32) -> f32 {
         let track_start = self.bounds.x + self.thumb_radius;
-        let track_width = self.bounds.width - 2.0 * self.thumb_radius;
+        let track_width = 2.0f32.mul_add(-self.thumb_radius, self.bounds.width);
         if track_width <= 0.0 {
             0.0
         } else {
@@ -252,7 +252,7 @@ impl Widget for Slider {
         let track_rect = Rect::new(
             self.bounds.x + self.thumb_radius,
             track_y,
-            self.bounds.width - 2.0 * self.thumb_radius,
+            2.0f32.mul_add(-self.thumb_radius, self.bounds.width),
             self.track_height,
         );
 

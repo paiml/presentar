@@ -22,7 +22,7 @@ pub enum CheckState {
 impl CheckState {
     /// Toggle between checked and unchecked.
     #[must_use]
-    pub fn toggle(&self) -> Self {
+    pub const fn toggle(&self) -> Self {
         match self {
             Self::Unchecked => Self::Checked,
             Self::Checked | Self::Indeterminate => Self::Unchecked,
@@ -31,13 +31,13 @@ impl CheckState {
 
     /// Check if checked (true for Checked, false for others).
     #[must_use]
-    pub fn is_checked(&self) -> bool {
+    pub const fn is_checked(&self) -> bool {
         matches!(self, Self::Checked)
     }
 
     /// Check if indeterminate.
     #[must_use]
-    pub fn is_indeterminate(&self) -> bool {
+    pub const fn is_indeterminate(&self) -> bool {
         matches!(self, Self::Indeterminate)
     }
 }
@@ -114,7 +114,7 @@ impl Checkbox {
 
     /// Set the checked state.
     #[must_use]
-    pub fn checked(mut self, checked: bool) -> Self {
+    pub const fn checked(mut self, checked: bool) -> Self {
         self.state = if checked {
             CheckState::Checked
         } else {
@@ -125,7 +125,7 @@ impl Checkbox {
 
     /// Set the state directly.
     #[must_use]
-    pub fn state(mut self, state: CheckState) -> Self {
+    pub const fn state(mut self, state: CheckState) -> Self {
         self.state = state;
         self
     }
@@ -139,7 +139,7 @@ impl Checkbox {
 
     /// Set disabled state.
     #[must_use]
-    pub fn disabled(mut self, disabled: bool) -> Self {
+    pub const fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
     }
@@ -160,21 +160,21 @@ impl Checkbox {
 
     /// Set checked box color.
     #[must_use]
-    pub fn checked_color(mut self, color: Color) -> Self {
+    pub const fn checked_color(mut self, color: Color) -> Self {
         self.checked_color = color;
         self
     }
 
     /// Set check mark color.
     #[must_use]
-    pub fn check_color(mut self, color: Color) -> Self {
+    pub const fn check_color(mut self, color: Color) -> Self {
         self.check_color = color;
         self
     }
 
     /// Set label color.
     #[must_use]
-    pub fn label_color(mut self, color: Color) -> Self {
+    pub const fn label_color(mut self, color: Color) -> Self {
         self.label_color = color;
         self
     }
@@ -195,19 +195,19 @@ impl Checkbox {
 
     /// Get current state.
     #[must_use]
-    pub fn get_state(&self) -> CheckState {
+    pub const fn get_state(&self) -> CheckState {
         self.state
     }
 
     /// Check if currently checked.
     #[must_use]
-    pub fn is_checked(&self) -> bool {
+    pub const fn is_checked(&self) -> bool {
         self.state.is_checked()
     }
 
     /// Check if indeterminate.
     #[must_use]
-    pub fn is_indeterminate(&self) -> bool {
+    pub const fn is_indeterminate(&self) -> bool {
         self.state.is_indeterminate()
     }
 
@@ -269,8 +269,8 @@ impl Widget for Checkbox {
                 CheckState::Checked => {
                     // Draw checkmark (simplified as a filled inner rect)
                     let inner = Rect::new(
-                        box_rect.x + self.box_size * 0.25,
-                        box_rect.y + self.box_size * 0.25,
+                        self.box_size.mul_add(0.25, box_rect.x),
+                        self.box_size.mul_add(0.25, box_rect.y),
                         self.box_size * 0.5,
                         self.box_size * 0.5,
                     );
@@ -279,8 +279,8 @@ impl Widget for Checkbox {
                 CheckState::Indeterminate => {
                     // Draw horizontal line
                     let line = Rect::new(
-                        box_rect.x + self.box_size * 0.2,
-                        box_rect.y + self.box_size * 0.4,
+                        self.box_size.mul_add(0.2, box_rect.x),
+                        self.box_size.mul_add(0.4, box_rect.y),
                         self.box_size * 0.6,
                         self.box_size * 0.2,
                     );

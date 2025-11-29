@@ -1,4 +1,44 @@
 //! State management for Presentar applications.
+//!
+//! This module implements the Elm Architecture pattern for predictable state
+//! management: `State + Message → (State, Command)`.
+//!
+//! # Examples
+//!
+//! ```
+//! use presentar_core::{State, Command};
+//! use serde::{Deserialize, Serialize};
+//!
+//! // Define your application state
+//! #[derive(Clone, Default, Serialize, Deserialize)]
+//! struct AppState {
+//!     count: i32,
+//! }
+//!
+//! // Define messages that modify state
+//! enum AppMessage {
+//!     Increment,
+//!     Decrement,
+//!     Reset,
+//! }
+//!
+//! impl State for AppState {
+//!     type Message = AppMessage;
+//!
+//!     fn update(&mut self, msg: Self::Message) -> Command<Self::Message> {
+//!         match msg {
+//!             AppMessage::Increment => self.count += 1,
+//!             AppMessage::Decrement => self.count -= 1,
+//!             AppMessage::Reset => self.count = 0,
+//!         }
+//!         Command::None
+//!     }
+//! }
+//!
+//! let mut state = AppState::default();
+//! state.update(AppMessage::Increment);
+//! assert_eq!(state.count, 1);
+//! ```
 
 use serde::{Deserialize, Serialize};
 use std::future::Future;
@@ -67,7 +107,7 @@ impl<M> Command<M> {
 
     /// Check if this is the none command.
     #[must_use]
-    pub fn is_none(&self) -> bool {
+    pub const fn is_none(&self) -> bool {
         matches!(self, Self::None)
     }
 

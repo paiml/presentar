@@ -49,7 +49,7 @@ impl Grade {
 
     /// Get the minimum percentage for this grade.
     #[must_use]
-    pub fn min_percentage(&self) -> f32 {
+    pub const fn min_percentage(&self) -> f32 {
         match self {
             Self::A => 90.0,
             Self::B => 80.0,
@@ -61,7 +61,7 @@ impl Grade {
 
     /// Get grade as a letter string.
     #[must_use]
-    pub fn letter(&self) -> &'static str {
+    pub const fn letter(&self) -> &'static str {
         match self {
             Self::A => "A",
             Self::B => "B",
@@ -73,7 +73,7 @@ impl Grade {
 
     /// Check if this is a passing grade (C or better).
     #[must_use]
-    pub fn is_passing(&self) -> bool {
+    pub const fn is_passing(&self) -> bool {
         matches!(self, Self::A | Self::B | Self::C)
     }
 }
@@ -132,7 +132,7 @@ impl Criterion {
 
     /// Mark as passed with a perfect score.
     #[must_use]
-    pub fn pass(mut self) -> Self {
+    pub const fn pass(mut self) -> Self {
         self.score = 100.0;
         self.passed = true;
         self
@@ -140,7 +140,7 @@ impl Criterion {
 
     /// Mark as failed with zero score.
     #[must_use]
-    pub fn fail(mut self) -> Self {
+    pub const fn fail(mut self) -> Self {
         self.score = 0.0;
         self.passed = false;
         self

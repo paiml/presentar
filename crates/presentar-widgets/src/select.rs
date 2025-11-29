@@ -42,7 +42,7 @@ impl SelectOption {
 
     /// Set disabled state.
     #[must_use]
-    pub fn disabled(mut self, disabled: bool) -> Self {
+    pub const fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
     }
@@ -183,7 +183,7 @@ impl Select {
 
     /// Set disabled state.
     #[must_use]
-    pub fn disabled(mut self, disabled: bool) -> Self {
+    pub const fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
     }
@@ -211,14 +211,14 @@ impl Select {
 
     /// Set background color.
     #[must_use]
-    pub fn background_color(mut self, color: Color) -> Self {
+    pub const fn background_color(mut self, color: Color) -> Self {
         self.background_color = color;
         self
     }
 
     /// Set border color.
     #[must_use]
-    pub fn border_color(mut self, color: Color) -> Self {
+    pub const fn border_color(mut self, color: Color) -> Self {
         self.border_color = color;
         self
     }
@@ -239,7 +239,7 @@ impl Select {
 
     /// Get selected index.
     #[must_use]
-    pub fn get_selected(&self) -> Option<usize> {
+    pub const fn get_selected(&self) -> Option<usize> {
         self.selected
     }
 
@@ -263,7 +263,7 @@ impl Select {
 
     /// Check if dropdown is open.
     #[must_use]
-    pub fn is_open(&self) -> bool {
+    pub const fn is_open(&self) -> bool {
         self.open
     }
 
@@ -287,7 +287,7 @@ impl Select {
 
     /// Get item rect at index.
     fn item_rect(&self, index: usize) -> Rect {
-        let y = self.bounds.y + self.item_height + (index as f32 * self.item_height);
+        let y = (index as f32).mul_add(self.item_height, self.bounds.y + self.item_height);
         Rect::new(self.bounds.x, y, self.bounds.width, self.item_height)
     }
 

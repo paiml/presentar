@@ -75,7 +75,7 @@ impl DataSeries {
 
     /// Set series color.
     #[must_use]
-    pub fn color(mut self, color: Color) -> Self {
+    pub const fn color(mut self, color: Color) -> Self {
         self.color = color;
         self
     }
@@ -96,14 +96,14 @@ impl DataSeries {
 
     /// Set whether to show points.
     #[must_use]
-    pub fn show_points(mut self, show: bool) -> Self {
+    pub const fn show_points(mut self, show: bool) -> Self {
         self.show_points = show;
         self
     }
 
     /// Set whether to fill area.
     #[must_use]
-    pub fn fill(mut self, fill: bool) -> Self {
+    pub const fn fill(mut self, fill: bool) -> Self {
         self.fill = fill;
         self
     }
@@ -196,21 +196,21 @@ impl Axis {
 
     /// Set minimum value.
     #[must_use]
-    pub fn min(mut self, min: f64) -> Self {
+    pub const fn min(mut self, min: f64) -> Self {
         self.min = Some(min);
         self
     }
 
     /// Set maximum value.
     #[must_use]
-    pub fn max(mut self, max: f64) -> Self {
+    pub const fn max(mut self, max: f64) -> Self {
         self.max = Some(max);
         self
     }
 
     /// Set range.
     #[must_use]
-    pub fn range(mut self, min: f64, max: f64) -> Self {
+    pub const fn range(mut self, min: f64, max: f64) -> Self {
         self.min = Some(min);
         self.max = Some(max);
         self
@@ -225,21 +225,21 @@ impl Axis {
 
     /// Set whether to show grid.
     #[must_use]
-    pub fn show_grid(mut self, show: bool) -> Self {
+    pub const fn show_grid(mut self, show: bool) -> Self {
         self.show_grid = show;
         self
     }
 
     /// Set axis color.
     #[must_use]
-    pub fn color(mut self, color: Color) -> Self {
+    pub const fn color(mut self, color: Color) -> Self {
         self.color = color;
         self
     }
 
     /// Set grid color.
     #[must_use]
-    pub fn grid_color(mut self, color: Color) -> Self {
+    pub const fn grid_color(mut self, color: Color) -> Self {
         self.grid_color = color;
         self
     }
@@ -352,7 +352,7 @@ impl Chart {
 
     /// Set chart type.
     #[must_use]
-    pub fn chart_type(mut self, chart_type: ChartType) -> Self {
+    pub const fn chart_type(mut self, chart_type: ChartType) -> Self {
         self.kind = chart_type;
         self
     }
@@ -394,14 +394,14 @@ impl Chart {
 
     /// Set legend position.
     #[must_use]
-    pub fn legend(mut self, position: LegendPosition) -> Self {
+    pub const fn legend(mut self, position: LegendPosition) -> Self {
         self.legend = position;
         self
     }
 
     /// Set background color.
     #[must_use]
-    pub fn background(mut self, color: Color) -> Self {
+    pub const fn background(mut self, color: Color) -> Self {
         self.background = color;
         self
     }
@@ -443,7 +443,7 @@ impl Chart {
 
     /// Get chart type.
     #[must_use]
-    pub fn get_chart_type(&self) -> ChartType {
+    pub const fn get_chart_type(&self) -> ChartType {
         self.kind
     }
 
@@ -517,8 +517,8 @@ impl Chart {
         Rect::new(
             self.bounds.x + self.padding,
             self.bounds.y + self.padding + title_height,
-            self.bounds.width - self.padding * 2.0,
-            self.bounds.height - self.padding * 2.0 - title_height,
+            self.padding.mul_add(-2.0, self.bounds.width),
+            self.padding.mul_add(-2.0, self.bounds.height) - title_height,
         )
     }
 
@@ -528,8 +528,8 @@ impl Chart {
         let x_range = (x_max - x_min).max(1e-10);
         let y_range = (y_max - y_min).max(1e-10);
 
-        let px = plot.x + ((x - x_min) / x_range) as f32 * plot.width;
-        let py = plot.y + plot.height - ((y - y_min) / y_range) as f32 * plot.height;
+        let px = (((x - x_min) / x_range) as f32).mul_add(plot.width, plot.x);
+        let py = (((y - y_min) / y_range) as f32).mul_add(-plot.height, plot.y + plot.height);
 
         Point::new(px, py)
     }
@@ -542,7 +542,7 @@ impl Chart {
         if self.x_axis.show_grid {
             for i in 0..=self.x_axis.grid_lines {
                 let t = i as f32 / self.x_axis.grid_lines as f32;
-                let x = plot.x + t * plot.width;
+                let x = t.mul_add(plot.width, plot.x);
                 canvas.fill_rect(
                     Rect::new(x, plot.y, 1.0, plot.height),
                     self.x_axis.grid_color,
@@ -554,7 +554,7 @@ impl Chart {
         if self.y_axis.show_grid {
             for i in 0..=self.y_axis.grid_lines {
                 let t = i as f32 / self.y_axis.grid_lines as f32;
-                let y = plot.y + t * plot.height;
+                let y = t.mul_add(plot.height, plot.y);
                 canvas.fill_rect(
                     Rect::new(plot.x, y, plot.width, 1.0),
                     self.y_axis.grid_color,
@@ -572,8 +572,8 @@ impl Chart {
         // X axis labels
         for i in 0..=self.x_axis.grid_lines {
             let t = i as f64 / self.x_axis.grid_lines as f64;
-            let value = x_min + t * (x_max - x_min);
-            let x = plot.x + (t as f32) * plot.width;
+            let value = t.mul_add(x_max - x_min, x_min);
+            let x = (t as f32).mul_add(plot.width, plot.x);
             canvas.draw_text(
                 &format!("{value:.1}"),
                 Point::new(x, plot.y + plot.height + 15.0),
@@ -584,8 +584,8 @@ impl Chart {
         // Y axis labels
         for i in 0..=self.y_axis.grid_lines {
             let t = i as f64 / self.y_axis.grid_lines as f64;
-            let value = y_max - t * (y_max - y_min);
-            let y = plot.y + (t as f32) * plot.height;
+            let value = t.mul_add(-(y_max - y_min), y_max);
+            let y = (t as f32).mul_add(plot.height, plot.y);
             canvas.draw_text(
                 &format!("{value:.1}"),
                 Point::new(plot.x - 35.0, y + 4.0),
@@ -609,7 +609,7 @@ impl Chart {
                     // Draw line as thin rectangle
                     let dx = pt.x - p.x;
                     let dy = pt.y - p.y;
-                    let len = (dx * dx + dy * dy).sqrt();
+                    let len = dx.hypot(dy);
                     if len > 0.0 {
                         // Simplified: draw horizontal/vertical segments
                         canvas.fill_rect(
@@ -669,7 +669,8 @@ impl Chart {
         for (si, series) in self.series.iter().enumerate() {
             for (i, &(_, y)) in series.points.iter().enumerate() {
                 let bar_height = ((y - y_min) / y_range) as f32 * plot.height;
-                let x = plot.x + bar_gap + i as f32 * group_width + si as f32 * bar_width;
+                let x = (si as f32)
+                    .mul_add(bar_width, (i as f32).mul_add(group_width, plot.x + bar_gap));
                 let rect = Rect::new(
                     x,
                     plot.y + plot.height - bar_height,
@@ -745,7 +746,7 @@ impl Chart {
 
         let entry_height = 20.0;
         let legend_width = 100.0;
-        let legend_height = self.series.len() as f32 * entry_height + 10.0;
+        let legend_height = (self.series.len() as f32).mul_add(entry_height, 10.0);
 
         let (lx, ly) = match self.legend {
             LegendPosition::TopRight => (
@@ -786,7 +787,7 @@ impl Chart {
         };
 
         for (i, series) in self.series.iter().enumerate() {
-            let ey = ly + 5.0 + i as f32 * entry_height;
+            let ey = (i as f32).mul_add(entry_height, ly + 5.0);
             // Color box
             canvas.fill_rect(Rect::new(lx + 5.0, ey + 4.0, 12.0, 12.0), series.color);
             // Label
@@ -827,7 +828,7 @@ impl Widget for Chart {
             canvas.draw_text(
                 title,
                 Point::new(
-                    self.bounds.x + self.bounds.width / 2.0 - (title.len() as f32 * 4.0),
+                    (title.len() as f32).mul_add(-4.0, self.bounds.x + self.bounds.width / 2.0),
                     self.bounds.y + 25.0,
                 ),
                 &text_style,

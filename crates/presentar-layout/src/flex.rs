@@ -72,28 +72,28 @@ impl FlexItem {
 
     /// Set the grow factor.
     #[must_use]
-    pub fn grow(mut self, grow: f32) -> Self {
+    pub const fn grow(mut self, grow: f32) -> Self {
         self.grow = grow;
         self
     }
 
     /// Set the shrink factor.
     #[must_use]
-    pub fn shrink(mut self, shrink: f32) -> Self {
+    pub const fn shrink(mut self, shrink: f32) -> Self {
         self.shrink = shrink;
         self
     }
 
     /// Set the basis.
     #[must_use]
-    pub fn basis(mut self, basis: f32) -> Self {
+    pub const fn basis(mut self, basis: f32) -> Self {
         self.basis = Some(basis);
         self
     }
 
     /// Set self alignment.
     #[must_use]
-    pub fn align_self(mut self, align: FlexAlign) -> Self {
+    pub const fn align_self(mut self, align: FlexAlign) -> Self {
         self.align_self = Some(align);
         self
     }
@@ -102,7 +102,7 @@ impl FlexItem {
 /// Distribute available space among flex items.
 #[must_use]
 #[allow(dead_code)]
-pub fn distribute_flex(items: &[FlexItem], sizes: &[f32], available: f32) -> Vec<f32> {
+pub(crate) fn distribute_flex(items: &[FlexItem], sizes: &[f32], available: f32) -> Vec<f32> {
     if items.is_empty() {
         return Vec::new();
     }

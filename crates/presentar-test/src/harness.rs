@@ -29,7 +29,7 @@ impl Harness {
 
     /// Set the viewport size.
     #[must_use]
-    pub fn viewport(mut self, width: f32, height: f32) -> Self {
+    pub const fn viewport(mut self, width: f32, height: f32) -> Self {
         self.viewport = Rect::new(0.0, 0.0, width, height);
         self
     }

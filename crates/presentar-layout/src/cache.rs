@@ -14,7 +14,7 @@ pub struct CacheKey {
 
 /// Cached layout result.
 #[derive(Debug, Clone, Copy)]
-pub struct CacheEntry {
+pub(crate) struct CacheEntry {
     /// Computed size
     pub size: Size,
     /// Frame when this entry was last used
@@ -70,13 +70,13 @@ impl LayoutCache {
 
     /// Get the number of cache hits.
     #[must_use]
-    pub fn hits(&self) -> usize {
+    pub const fn hits(&self) -> usize {
         self.hits
     }
 
     /// Get the number of cache misses.
     #[must_use]
-    pub fn misses(&self) -> usize {
+    pub const fn misses(&self) -> usize {
         self.misses
     }
 

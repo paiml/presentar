@@ -60,49 +60,49 @@ impl Container {
 
     /// Set the background color.
     #[must_use]
-    pub fn background(mut self, color: Color) -> Self {
+    pub const fn background(mut self, color: Color) -> Self {
         self.background = Some(color);
         self
     }
 
     /// Set the corner radius.
     #[must_use]
-    pub fn corner_radius(mut self, radius: CornerRadius) -> Self {
+    pub const fn corner_radius(mut self, radius: CornerRadius) -> Self {
         self.corner_radius = radius;
         self
     }
 
     /// Set uniform padding on all sides.
     #[must_use]
-    pub fn padding(mut self, padding: f32) -> Self {
+    pub const fn padding(mut self, padding: f32) -> Self {
         self.padding = padding;
         self
     }
 
     /// Set minimum width.
     #[must_use]
-    pub fn min_width(mut self, width: f32) -> Self {
+    pub const fn min_width(mut self, width: f32) -> Self {
         self.min_width = Some(width);
         self
     }
 
     /// Set minimum height.
     #[must_use]
-    pub fn min_height(mut self, height: f32) -> Self {
+    pub const fn min_height(mut self, height: f32) -> Self {
         self.min_height = Some(height);
         self
     }
 
     /// Set maximum width.
     #[must_use]
-    pub fn max_width(mut self, width: f32) -> Self {
+    pub const fn max_width(mut self, width: f32) -> Self {
         self.max_width = Some(width);
         self
     }
 
     /// Set maximum height.
     #[must_use]
-    pub fn max_height(mut self, height: f32) -> Self {
+    pub const fn max_height(mut self, height: f32) -> Self {
         self.max_height = Some(height);
         self
     }

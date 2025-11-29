@@ -116,42 +116,42 @@ impl Tooltip {
 
     /// Set the placement.
     #[must_use]
-    pub fn placement(mut self, placement: TooltipPlacement) -> Self {
+    pub const fn placement(mut self, placement: TooltipPlacement) -> Self {
         self.placement = placement;
         self
     }
 
     /// Set the show delay in milliseconds.
     #[must_use]
-    pub fn delay_ms(mut self, ms: u32) -> Self {
+    pub const fn delay_ms(mut self, ms: u32) -> Self {
         self.delay_ms = ms;
         self
     }
 
     /// Set visibility.
     #[must_use]
-    pub fn visible(mut self, visible: bool) -> Self {
+    pub const fn visible(mut self, visible: bool) -> Self {
         self.visible = visible;
         self
     }
 
     /// Set background color.
     #[must_use]
-    pub fn background(mut self, color: Color) -> Self {
+    pub const fn background(mut self, color: Color) -> Self {
         self.background = color;
         self
     }
 
     /// Set text color.
     #[must_use]
-    pub fn text_color(mut self, color: Color) -> Self {
+    pub const fn text_color(mut self, color: Color) -> Self {
         self.text_color = color;
         self
     }
 
     /// Set border color.
     #[must_use]
-    pub fn border_color(mut self, color: Color) -> Self {
+    pub const fn border_color(mut self, color: Color) -> Self {
         self.border_color = color;
         self
     }
@@ -186,7 +186,7 @@ impl Tooltip {
 
     /// Set whether to show arrow.
     #[must_use]
-    pub fn show_arrow(mut self, show: bool) -> Self {
+    pub const fn show_arrow(mut self, show: bool) -> Self {
         self.show_arrow = show;
         self
     }
@@ -200,7 +200,7 @@ impl Tooltip {
 
     /// Remove maximum width constraint.
     #[must_use]
-    pub fn no_max_width(mut self) -> Self {
+    pub const fn no_max_width(mut self) -> Self {
         self.max_width = None;
         self
     }
@@ -214,7 +214,7 @@ impl Tooltip {
 
     /// Set anchor bounds for positioning.
     #[must_use]
-    pub fn anchor(mut self, bounds: Rect) -> Self {
+    pub const fn anchor(mut self, bounds: Rect) -> Self {
         self.anchor_bounds = bounds;
         self
     }
@@ -241,25 +241,25 @@ impl Tooltip {
 
     /// Get the placement.
     #[must_use]
-    pub fn get_placement(&self) -> TooltipPlacement {
+    pub const fn get_placement(&self) -> TooltipPlacement {
         self.placement
     }
 
     /// Get the delay in milliseconds.
     #[must_use]
-    pub fn get_delay_ms(&self) -> u32 {
+    pub const fn get_delay_ms(&self) -> u32 {
         self.delay_ms
     }
 
     /// Check if visible.
     #[must_use]
-    pub fn is_visible(&self) -> bool {
+    pub const fn is_visible(&self) -> bool {
         self.visible
     }
 
     /// Get the anchor bounds.
     #[must_use]
-    pub fn get_anchor(&self) -> Rect {
+    pub const fn get_anchor(&self) -> Rect {
         self.anchor_bounds
     }
 
@@ -293,7 +293,7 @@ impl Tooltip {
     /// Calculate tooltip size.
     fn calculate_size(&self) -> Size {
         let text_width = self.estimate_text_width();
-        let max_text = self.max_width.map(|m| m - self.padding * 2.0);
+        let max_text = self.max_width.map(|m| self.padding.mul_add(-2.0, m));
 
         let content_width = match max_text {
             Some(max) if text_width > max => max,
@@ -309,8 +309,8 @@ impl Tooltip {
         let content_height = lines * self.text_size * 1.2;
 
         Size::new(
-            content_width + self.padding * 2.0,
-            content_height + self.padding * 2.0,
+            self.padding.mul_add(2.0, content_width),
+            self.padding.mul_add(2.0, content_height),
         )
     }
 
@@ -463,7 +463,7 @@ impl Widget for Tooltip {
     fn event(&mut self, event: &Event) -> Option<Box<dyn Any + Send>> {
         // Tooltip doesn't handle events directly
         // Visibility is controlled by the parent/anchor widget
-        if let Event::MouseLeave = event {
+        if matches!(event, Event::MouseLeave) {
             self.hide();
         }
         None

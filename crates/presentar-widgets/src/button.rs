@@ -72,56 +72,56 @@ impl Button {
 
     /// Set background color.
     #[must_use]
-    pub fn background(mut self, color: Color) -> Self {
+    pub const fn background(mut self, color: Color) -> Self {
         self.background = color;
         self
     }
 
     /// Set hover background color.
     #[must_use]
-    pub fn background_hover(mut self, color: Color) -> Self {
+    pub const fn background_hover(mut self, color: Color) -> Self {
         self.background_hover = color;
         self
     }
 
     /// Set pressed background color.
     #[must_use]
-    pub fn background_pressed(mut self, color: Color) -> Self {
+    pub const fn background_pressed(mut self, color: Color) -> Self {
         self.background_pressed = color;
         self
     }
 
     /// Set text color.
     #[must_use]
-    pub fn text_color(mut self, color: Color) -> Self {
+    pub const fn text_color(mut self, color: Color) -> Self {
         self.text_color = color;
         self
     }
 
     /// Set corner radius.
     #[must_use]
-    pub fn corner_radius(mut self, radius: CornerRadius) -> Self {
+    pub const fn corner_radius(mut self, radius: CornerRadius) -> Self {
         self.corner_radius = radius;
         self
     }
 
     /// Set padding.
     #[must_use]
-    pub fn padding(mut self, padding: f32) -> Self {
+    pub const fn padding(mut self, padding: f32) -> Self {
         self.padding = padding;
         self
     }
 
     /// Set font size.
     #[must_use]
-    pub fn font_size(mut self, size: f32) -> Self {
+    pub const fn font_size(mut self, size: f32) -> Self {
         self.font_size = size;
         self
     }
 
     /// Set disabled state.
     #[must_use]
-    pub fn disabled(mut self, disabled: bool) -> Self {
+    pub const fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
     }
@@ -172,8 +172,8 @@ impl Widget for Button {
     fn measure(&self, constraints: Constraints) -> Size {
         let text_size = self.estimate_text_size();
         let size = Size::new(
-            text_size.width + self.padding * 2.0,
-            text_size.height + self.padding * 2.0,
+            self.padding.mul_add(2.0, text_size.width),
+            self.padding.mul_add(2.0, text_size.height),
         );
         constraints.constrain(size)
     }

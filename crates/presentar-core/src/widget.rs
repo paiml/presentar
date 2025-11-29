@@ -1,4 +1,34 @@
 //! Widget trait and related types.
+//!
+//! This module defines the core `Widget` trait and supporting types for building
+//! UI components in Presentar.
+//!
+//! # Widget Lifecycle
+//!
+//! Widgets follow a measure-layout-paint cycle:
+//!
+//! 1. **Measure**: Compute intrinsic size given constraints
+//! 2. **Layout**: Position self and children within allocated bounds
+//! 3. **Paint**: Generate draw commands for rendering
+//!
+//! # Examples
+//!
+//! ```
+//! use presentar_core::{WidgetId, TypeId, Transform2D};
+//!
+//! // Create widget identifiers
+//! let id = WidgetId::new(42);
+//! assert_eq!(id.0, 42);
+//!
+//! // Get type IDs for widget type comparison
+//! let string_type = TypeId::of::<String>();
+//! let i32_type = TypeId::of::<i32>();
+//! assert_ne!(string_type, i32_type);
+//!
+//! // Create transforms for rendering
+//! let translate = Transform2D::translate(10.0, 20.0);
+//! let scale = Transform2D::scale(2.0, 2.0);
+//! ```
 
 use crate::constraints::Constraints;
 use crate::event::Event;
@@ -126,6 +156,25 @@ pub trait Canvas {
 }
 
 /// Text style for rendering.
+///
+/// # Examples
+///
+/// ```
+/// use presentar_core::{TextStyle, FontWeight, FontStyle, Color};
+///
+/// // Use default style
+/// let default_style = TextStyle::default();
+/// assert_eq!(default_style.size, 16.0);
+/// assert_eq!(default_style.weight, FontWeight::Normal);
+///
+/// // Create custom style
+/// let heading_style = TextStyle {
+///     size: 24.0,
+///     color: Color::from_hex("#1a1a1a").expect("valid hex"),
+///     weight: FontWeight::Bold,
+///     style: FontStyle::Normal,
+/// };
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TextStyle {
     /// Font size in pixels
@@ -195,7 +244,7 @@ impl Transform2D {
 
     /// Create a translation transform.
     #[must_use]
-    pub fn translate(x: f32, y: f32) -> Self {
+    pub const fn translate(x: f32, y: f32) -> Self {
         Self {
             matrix: [1.0, 0.0, 0.0, 1.0, x, y],
         }
@@ -203,7 +252,7 @@ impl Transform2D {
 
     /// Create a scale transform.
     #[must_use]
-    pub fn scale(sx: f32, sy: f32) -> Self {
+    pub const fn scale(sx: f32, sy: f32) -> Self {
         Self {
             matrix: [sx, 0.0, 0.0, sy, 0.0, 0.0],
         }

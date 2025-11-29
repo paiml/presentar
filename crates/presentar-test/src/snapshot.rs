@@ -163,12 +163,12 @@ impl Snapshot {
         }
     }
 
-    fn save_image(_path: &Path, _image: &Image) {
+    const fn save_image(_path: &Path, _image: &Image) {
         // Would use a pure Rust PNG encoder
         // Placeholder implementation
     }
 
-    fn save_diff(_path: &Path, _baseline: &Image, _actual: &Image) {
+    const fn save_diff(_path: &Path, _baseline: &Image, _actual: &Image) {
         // Would generate a visual diff image
         // Placeholder implementation
     }

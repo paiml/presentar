@@ -178,13 +178,13 @@ pub enum ExecutionResult<M> {
 impl<M> ExecutionResult<M> {
     /// Check if the result has no messages.
     #[must_use]
-    pub fn is_none(&self) -> bool {
+    pub const fn is_none(&self) -> bool {
         matches!(self, Self::None)
     }
 
     /// Check if there are messages.
     #[must_use]
-    pub fn has_messages(&self) -> bool {
+    pub const fn has_messages(&self) -> bool {
         matches!(self, Self::Message(_) | Self::Messages(_))
     }
 
@@ -225,7 +225,7 @@ pub struct CommandExecutor<R, S> {
 
 impl<R: Router, S: Storage> CommandExecutor<R, S> {
     /// Create a new command executor.
-    pub fn new(config: ExecutorConfig<R, S>) -> Self {
+    pub const fn new(config: ExecutorConfig<R, S>) -> Self {
         Self { config }
     }
 

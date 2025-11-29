@@ -80,7 +80,7 @@ pub struct SelectorParser<'a> {
 impl<'a> SelectorParser<'a> {
     /// Create a new parser.
     #[must_use]
-    pub fn new(input: &'a str) -> Self {
+    pub const fn new(input: &'a str) -> Self {
         Self { input, pos: 0 }
     }
 
@@ -222,7 +222,7 @@ impl<'a> SelectorParser<'a> {
 }
 
 /// Selector parsing error.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SelectorError {
     /// Empty selector
     Empty,

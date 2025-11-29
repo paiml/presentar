@@ -39,7 +39,7 @@ impl ModelStatus {
 
     /// Get status label.
     #[must_use]
-    pub fn label(&self) -> &'static str {
+    pub const fn label(&self) -> &'static str {
         match self {
             Self::Draft => "Draft",
             Self::Review => "Review",
@@ -84,7 +84,7 @@ impl ModelMetric {
 
     /// Set lower is better.
     #[must_use]
-    pub fn lower_is_better(mut self) -> Self {
+    pub const fn lower_is_better(mut self) -> Self {
         self.higher_is_better = false;
         self
     }
@@ -211,7 +211,7 @@ impl ModelCard {
 
     /// Set status.
     #[must_use]
-    pub fn status(mut self, status: ModelStatus) -> Self {
+    pub const fn status(mut self, status: ModelStatus) -> Self {
         self.status = status;
         self
     }
@@ -246,7 +246,7 @@ impl ModelCard {
 
     /// Set parameter count.
     #[must_use]
-    pub fn parameters(mut self, count: u64) -> Self {
+    pub const fn parameters(mut self, count: u64) -> Self {
         self.parameters = Some(count);
         self
     }
@@ -302,14 +302,14 @@ impl ModelCard {
 
     /// Set background color.
     #[must_use]
-    pub fn background(mut self, color: Color) -> Self {
+    pub const fn background(mut self, color: Color) -> Self {
         self.background = color;
         self
     }
 
     /// Set border color.
     #[must_use]
-    pub fn border_color(mut self, color: Color) -> Self {
+    pub const fn border_color(mut self, color: Color) -> Self {
         self.border_color = color;
         self
     }
@@ -323,7 +323,7 @@ impl ModelCard {
 
     /// Set whether to show metrics chart.
     #[must_use]
-    pub fn show_metrics_chart(mut self, show: bool) -> Self {
+    pub const fn show_metrics_chart(mut self, show: bool) -> Self {
         self.show_metrics_chart = show;
         self
     }
@@ -364,7 +364,7 @@ impl ModelCard {
 
     /// Get status.
     #[must_use]
-    pub fn get_status(&self) -> ModelStatus {
+    pub const fn get_status(&self) -> ModelStatus {
         self.status
     }
 
@@ -388,7 +388,7 @@ impl ModelCard {
 
     /// Get parameter count.
     #[must_use]
-    pub fn get_parameters(&self) -> Option<u64> {
+    pub const fn get_parameters(&self) -> Option<u64> {
         self.parameters
     }
 
@@ -580,7 +580,7 @@ impl Widget for ModelCard {
             let metric_width =
                 (self.bounds.width - padding * 2.0) / self.metrics.len().min(4) as f32;
             for (i, metric) in self.metrics.iter().take(4).enumerate() {
-                let mx = self.bounds.x + padding + i as f32 * metric_width;
+                let mx = (i as f32).mul_add(metric_width, self.bounds.x + padding);
                 canvas.draw_text(
                     &metric.name,
                     Point::new(mx, self.bounds.y + y_offset + 12.0),
@@ -606,7 +606,7 @@ impl Widget for ModelCard {
 
             let mut tx = self.bounds.x + padding;
             for tag in self.tags.iter().take(5) {
-                let tag_width = tag.len() as f32 * 6.0 + 12.0;
+                let tag_width = (tag.len() as f32).mul_add(6.0, 12.0);
                 canvas.fill_rect(
                     Rect::new(tx, self.bounds.y + y_offset, tag_width, 18.0),
                     tag_bg,

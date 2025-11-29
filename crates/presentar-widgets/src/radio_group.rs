@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::any::Any;
 
 /// A single radio option.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RadioOption {
     /// Option value
     pub value: String,
@@ -31,7 +31,7 @@ impl RadioOption {
 
     /// Set the option as disabled.
     #[must_use]
-    pub fn disabled(mut self) -> Self {
+    pub const fn disabled(mut self) -> Self {
         self.disabled = true;
         self
     }
@@ -147,7 +147,7 @@ impl RadioGroup {
 
     /// Set orientation.
     #[must_use]
-    pub fn orientation(mut self, orientation: RadioOrientation) -> Self {
+    pub const fn orientation(mut self, orientation: RadioOrientation) -> Self {
         self.orientation = orientation;
         self
     }
@@ -175,21 +175,21 @@ impl RadioGroup {
 
     /// Set border color.
     #[must_use]
-    pub fn border_color(mut self, color: Color) -> Self {
+    pub const fn border_color(mut self, color: Color) -> Self {
         self.border_color = color;
         self
     }
 
     /// Set fill color for selected state.
     #[must_use]
-    pub fn fill_color(mut self, color: Color) -> Self {
+    pub const fn fill_color(mut self, color: Color) -> Self {
         self.fill_color = color;
         self
     }
 
     /// Set label text color.
     #[must_use]
-    pub fn label_color(mut self, color: Color) -> Self {
+    pub const fn label_color(mut self, color: Color) -> Self {
         self.label_color = color;
         self
     }
@@ -224,7 +224,7 @@ impl RadioGroup {
 
     /// Get selected index.
     #[must_use]
-    pub fn get_selected_index(&self) -> Option<usize> {
+    pub const fn get_selected_index(&self) -> Option<usize> {
         self.selected
     }
 
@@ -248,7 +248,7 @@ impl RadioGroup {
 
     /// Check if any option is selected.
     #[must_use]
-    pub fn has_selection(&self) -> bool {
+    pub const fn has_selection(&self) -> bool {
         self.selected.is_some()
     }
 
@@ -340,11 +340,11 @@ impl RadioGroup {
         let item = self.item_size();
         match self.orientation {
             RadioOrientation::Vertical => {
-                let y = self.bounds.y + (index as f32 * (item.height + self.spacing));
+                let y = (index as f32).mul_add(item.height + self.spacing, self.bounds.y);
                 Rect::new(self.bounds.x, y, self.bounds.width, item.height)
             }
             RadioOrientation::Horizontal => {
-                let x = self.bounds.x + (index as f32 * (item.width + self.spacing));
+                let x = (index as f32).mul_add(item.width + self.spacing, self.bounds.x);
                 Rect::new(x, self.bounds.y, item.width, item.height)
             }
         }
@@ -378,7 +378,7 @@ impl Widget for RadioGroup {
                 } else {
                     0.0
                 };
-                Size::new(item.width, count * item.height + total_spacing)
+                Size::new(item.width, count.mul_add(item.height, total_spacing))
             }
             RadioOrientation::Horizontal => {
                 let total_spacing = if count > 1.0 {
@@ -386,7 +386,7 @@ impl Widget for RadioGroup {
                 } else {
                     0.0
                 };
-                Size::new(count * item.width + total_spacing, item.height)
+                Size::new(count.mul_add(item.width, total_spacing), item.height)
             }
         };
 

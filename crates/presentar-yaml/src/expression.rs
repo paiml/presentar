@@ -14,7 +14,7 @@ pub struct Expression {
 }
 
 /// A transform operation in the expression pipeline.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Transform {
     /// Filter rows: `filter(field=value)`
     Filter {
@@ -80,7 +80,7 @@ pub struct ExpressionParser;
 impl ExpressionParser {
     /// Create a new parser.
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self
     }
 
@@ -197,7 +197,7 @@ impl ExpressionParser {
 }
 
 /// Expression parsing error.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExpressionError {
     /// Empty expression
     EmptyExpression,

@@ -114,14 +114,14 @@ impl TextInput {
 
     /// Set disabled state.
     #[must_use]
-    pub fn disabled(mut self, disabled: bool) -> Self {
+    pub const fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
     }
 
     /// Set password mode.
     #[must_use]
-    pub fn obscure(mut self, obscure: bool) -> Self {
+    pub const fn obscure(mut self, obscure: bool) -> Self {
         self.obscure = obscure;
         self
     }
@@ -139,35 +139,35 @@ impl TextInput {
 
     /// Set text style.
     #[must_use]
-    pub fn text_style(mut self, style: TextStyle) -> Self {
+    pub const fn text_style(mut self, style: TextStyle) -> Self {
         self.text_style = style;
         self
     }
 
     /// Set placeholder color.
     #[must_use]
-    pub fn placeholder_color(mut self, color: Color) -> Self {
+    pub const fn placeholder_color(mut self, color: Color) -> Self {
         self.placeholder_color = color;
         self
     }
 
     /// Set background color.
     #[must_use]
-    pub fn background_color(mut self, color: Color) -> Self {
+    pub const fn background_color(mut self, color: Color) -> Self {
         self.background_color = color;
         self
     }
 
     /// Set border color.
     #[must_use]
-    pub fn border_color(mut self, color: Color) -> Self {
+    pub const fn border_color(mut self, color: Color) -> Self {
         self.border_color = color;
         self
     }
 
     /// Set focus border color.
     #[must_use]
-    pub fn focus_border_color(mut self, color: Color) -> Self {
+    pub const fn focus_border_color(mut self, color: Color) -> Self {
         self.focus_border_color = color;
         self
     }
@@ -220,13 +220,13 @@ impl TextInput {
 
     /// Get cursor position.
     #[must_use]
-    pub fn cursor_position(&self) -> usize {
+    pub const fn cursor_position(&self) -> usize {
         self.cursor
     }
 
     /// Check if focused.
     #[must_use]
-    pub fn is_focused(&self) -> bool {
+    pub const fn is_focused(&self) -> bool {
         self.focused
     }
 
@@ -308,7 +308,7 @@ impl Widget for TextInput {
     }
 
     fn measure(&self, constraints: Constraints) -> Size {
-        let height = self.text_style.size + 2.0 * self.padding;
+        let height = 2.0f32.mul_add(self.padding, self.text_style.size);
         let width = self.min_width.max(constraints.min_width);
         constraints.constrain(Size::new(width, height))
     }

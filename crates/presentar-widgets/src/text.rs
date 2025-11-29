@@ -50,42 +50,42 @@ impl Text {
 
     /// Set text color.
     #[must_use]
-    pub fn color(mut self, color: Color) -> Self {
+    pub const fn color(mut self, color: Color) -> Self {
         self.color = color;
         self
     }
 
     /// Set font size.
     #[must_use]
-    pub fn font_size(mut self, size: f32) -> Self {
+    pub const fn font_size(mut self, size: f32) -> Self {
         self.font_size = size;
         self
     }
 
     /// Set font weight.
     #[must_use]
-    pub fn font_weight(mut self, weight: FontWeight) -> Self {
+    pub const fn font_weight(mut self, weight: FontWeight) -> Self {
         self.font_weight = weight;
         self
     }
 
     /// Set font style.
     #[must_use]
-    pub fn font_style(mut self, style: FontStyle) -> Self {
+    pub const fn font_style(mut self, style: FontStyle) -> Self {
         self.font_style = style;
         self
     }
 
     /// Set line height multiplier.
     #[must_use]
-    pub fn line_height(mut self, multiplier: f32) -> Self {
+    pub const fn line_height(mut self, multiplier: f32) -> Self {
         self.line_height = multiplier;
         self
     }
 
     /// Set maximum width for text wrapping.
     #[must_use]
-    pub fn max_width(mut self, width: f32) -> Self {
+    pub const fn max_width(mut self, width: f32) -> Self {
         self.max_width = Some(width);
         self
     }

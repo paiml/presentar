@@ -136,7 +136,7 @@ impl Color {
         let g = Self::linearize(self.g);
         let b = Self::linearize(self.b);
 
-        0.2126 * r + 0.7152 * g + 0.0722 * b
+        0.0722f32.mul_add(b, 0.2126f32.mul_add(r, 0.7152 * g))
     }
 
     /// Calculate contrast ratio between two colors per WCAG 2.1.
@@ -159,10 +159,10 @@ impl Color {
     pub fn lerp(&self, other: &Self, t: f32) -> Self {
         let t = t.clamp(0.0, 1.0);
         Self::new(
-            self.r + (other.r - self.r) * t,
-            self.g + (other.g - self.g) * t,
-            self.b + (other.b - self.b) * t,
-            self.a + (other.a - self.a) * t,
+            (other.r - self.r).mul_add(t, self.r),
+            (other.g - self.g).mul_add(t, self.g),
+            (other.b - self.b).mul_add(t, self.b),
+            (other.a - self.a).mul_add(t, self.a),
         )
     }
 

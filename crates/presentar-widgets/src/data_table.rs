@@ -44,14 +44,14 @@ impl TableColumn {
 
     /// Set text alignment.
     #[must_use]
-    pub fn align(mut self, align: TextAlign) -> Self {
+    pub const fn align(mut self, align: TextAlign) -> Self {
         self.align = align;
         self
     }
 
     /// Make column sortable.
     #[must_use]
-    pub fn sortable(mut self) -> Self {
+    pub const fn sortable(mut self) -> Self {
         self.sortable = true;
         self
     }
@@ -74,7 +74,7 @@ pub enum SortDirection {
 }
 
 /// Message emitted when table sorting changes.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TableSortChanged {
     /// Column key being sorted
     pub column: String,
@@ -297,56 +297,56 @@ impl DataTable {
 
     /// Enable row selection.
     #[must_use]
-    pub fn selectable(mut self, selectable: bool) -> Self {
+    pub const fn selectable(mut self, selectable: bool) -> Self {
         self.selectable = selectable;
         self
     }
 
     /// Enable striped rows.
     #[must_use]
-    pub fn striped(mut self, striped: bool) -> Self {
+    pub const fn striped(mut self, striped: bool) -> Self {
         self.striped = striped;
         self
     }
 
     /// Enable borders.
     #[must_use]
-    pub fn bordered(mut self, bordered: bool) -> Self {
+    pub const fn bordered(mut self, bordered: bool) -> Self {
         self.bordered = bordered;
         self
     }
 
     /// Set header background color.
     #[must_use]
-    pub fn header_bg(mut self, color: Color) -> Self {
+    pub const fn header_bg(mut self, color: Color) -> Self {
         self.header_bg = color;
         self
     }
 
     /// Set row background color.
     #[must_use]
-    pub fn row_bg(mut self, color: Color) -> Self {
+    pub const fn row_bg(mut self, color: Color) -> Self {
         self.row_bg = color;
         self
     }
 
     /// Set alternate row background color.
     #[must_use]
-    pub fn row_alt_bg(mut self, color: Color) -> Self {
+    pub const fn row_alt_bg(mut self, color: Color) -> Self {
         self.row_alt_bg = color;
         self
     }
 
     /// Set selected row background color.
     #[must_use]
-    pub fn selected_bg(mut self, color: Color) -> Self {
+    pub const fn selected_bg(mut self, color: Color) -> Self {
         self.selected_bg = color;
         self
     }
 
     /// Set text color.
     #[must_use]
-    pub fn text_color(mut self, color: Color) -> Self {
+    pub const fn text_color(mut self, color: Color) -> Self {
         self.text_color = color;
         self
     }
@@ -391,7 +391,7 @@ impl DataTable {
 
     /// Get selected row index.
     #[must_use]
-    pub fn get_selected_row(&self) -> Option<usize> {
+    pub const fn get_selected_row(&self) -> Option<usize> {
         self.selected_row
     }
 
@@ -403,7 +403,7 @@ impl DataTable {
 
     /// Get current sort direction.
     #[must_use]
-    pub fn get_sort_direction(&self) -> SortDirection {
+    pub const fn get_sort_direction(&self) -> SortDirection {
         self.sort_direction
     }
 
@@ -447,12 +447,12 @@ impl DataTable {
 
     /// Calculate total height.
     fn calculate_height(&self) -> f32 {
-        self.header_height + (self.rows.len() as f32 * self.row_height)
+        (self.rows.len() as f32).mul_add(self.row_height, self.header_height)
     }
 
     /// Get row Y position.
     fn row_y(&self, index: usize) -> f32 {
-        self.bounds.y + self.header_height + (index as f32 * self.row_height)
+        (index as f32).mul_add(self.row_height, self.bounds.y + self.header_height)
     }
 }
 

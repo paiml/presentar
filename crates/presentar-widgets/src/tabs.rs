@@ -34,7 +34,7 @@ impl Tab {
 
     /// Set the tab as disabled.
     #[must_use]
-    pub fn disabled(mut self) -> Self {
+    pub const fn disabled(mut self) -> Self {
         self.disabled = true;
         self
     }
@@ -154,7 +154,7 @@ impl Tabs {
 
     /// Set the active tab by index.
     #[must_use]
-    pub fn active(mut self, index: usize) -> Self {
+    pub const fn active(mut self, index: usize) -> Self {
         self.active = index;
         self
     }
@@ -170,7 +170,7 @@ impl Tabs {
 
     /// Set tab orientation.
     #[must_use]
-    pub fn orientation(mut self, orientation: TabOrientation) -> Self {
+    pub const fn orientation(mut self, orientation: TabOrientation) -> Self {
         self.orientation = orientation;
         self
     }
@@ -198,35 +198,35 @@ impl Tabs {
 
     /// Set tab background color.
     #[must_use]
-    pub fn tab_bg(mut self, color: Color) -> Self {
+    pub const fn tab_bg(mut self, color: Color) -> Self {
         self.tab_bg = color;
         self
     }
 
     /// Set active tab background color.
     #[must_use]
-    pub fn active_bg(mut self, color: Color) -> Self {
+    pub const fn active_bg(mut self, color: Color) -> Self {
         self.active_bg = color;
         self
     }
 
     /// Set inactive tab text color.
     #[must_use]
-    pub fn inactive_color(mut self, color: Color) -> Self {
+    pub const fn inactive_color(mut self, color: Color) -> Self {
         self.inactive_color = color;
         self
     }
 
     /// Set active tab text color.
     #[must_use]
-    pub fn active_color(mut self, color: Color) -> Self {
+    pub const fn active_color(mut self, color: Color) -> Self {
         self.active_color = color;
         self
     }
 
     /// Set whether to show border.
     #[must_use]
-    pub fn show_border(mut self, show: bool) -> Self {
+    pub const fn show_border(mut self, show: bool) -> Self {
         self.show_border = show;
         self
     }
@@ -259,7 +259,7 @@ impl Tabs {
 
     /// Get active tab index.
     #[must_use]
-    pub fn get_active(&self) -> usize {
+    pub const fn get_active(&self) -> usize {
         self.active
     }
 
@@ -277,7 +277,7 @@ impl Tabs {
 
     /// Check if a tab is active.
     #[must_use]
-    pub fn is_active(&self, index: usize) -> bool {
+    pub const fn is_active(&self, index: usize) -> bool {
         self.active == index
     }
 
@@ -360,7 +360,7 @@ impl Tabs {
     fn tab_rect(&self, index: usize, tab_width: f32) -> Rect {
         match self.orientation {
             TabOrientation::Top | TabOrientation::Bottom => {
-                let x = self.bounds.x + (index as f32 * (tab_width + self.spacing));
+                let x = (index as f32).mul_add(tab_width + self.spacing, self.bounds.x);
                 let y = if self.orientation == TabOrientation::Top {
                     self.bounds.y
                 } else {
@@ -369,7 +369,7 @@ impl Tabs {
                 Rect::new(x, y, tab_width, self.tab_size)
             }
             TabOrientation::Left | TabOrientation::Right => {
-                let y = self.bounds.y + (index as f32 * (self.tab_size + self.spacing));
+                let y = (index as f32).mul_add(self.tab_size + self.spacing, self.bounds.y);
                 let x = if self.orientation == TabOrientation::Left {
                     self.bounds.x
                 } else {
