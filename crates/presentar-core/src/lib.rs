@@ -6,6 +6,43 @@
 //! - Layout constraints: [`Constraints`]
 //! - Events and messages: [`Event`], [`Message`]
 //! - Draw commands: [`DrawCommand`] for GPU rendering
+//!
+//! # Quick Start
+//!
+//! ```rust
+//! use presentar_core::{Color, Size, Constraints, Rect};
+//!
+//! // Create a size
+//! let size = Size::new(100.0, 50.0);
+//!
+//! // Create constraints
+//! let constraints = Constraints::new(0.0, 200.0, 0.0, 100.0);
+//! let bounded = constraints.constrain(size);
+//!
+//! // Create a color
+//! let red = Color::RED;
+//! assert_eq!(red.r, 1.0);
+//! ```
+//!
+//! # Widget Trait
+//!
+//! The core [`Widget`] trait defines the measure-layout-paint cycle:
+//!
+//! ```rust,ignore
+//! use presentar_core::{Widget, Constraints, Size, Canvas};
+//!
+//! struct MyWidget;
+//!
+//! impl Widget for MyWidget {
+//!     fn measure(&self, constraints: &Constraints) -> Size {
+//!         constraints.constrain(Size::new(100.0, 50.0))
+//!     }
+//!
+//!     fn layout(&mut self, size: Size) { }
+//!
+//!     fn paint(&self, canvas: &mut dyn Canvas) { }
+//! }
+//! ```
 
 mod canvas;
 mod color;
