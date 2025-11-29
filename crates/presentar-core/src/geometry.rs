@@ -1,4 +1,32 @@
 //! Geometric primitives: Point, Size, Rect, `CornerRadius`.
+//!
+//! This module provides the fundamental geometric types used throughout Presentar
+//! for layout calculations and rendering.
+//!
+//! # Examples
+//!
+//! ```
+//! use presentar_core::{Point, Size, Rect};
+//!
+//! // Create points and calculate distances
+//! let p1 = Point::new(0.0, 0.0);
+//! let p2 = Point::new(3.0, 4.0);
+//! assert_eq!(p1.distance(&p2), 5.0);
+//!
+//! // Create sizes
+//! let size = Size::new(100.0, 50.0);
+//! assert_eq!(size.area(), 5000.0);
+//!
+//! // Create rectangles
+//! let rect = Rect::new(10.0, 20.0, 100.0, 50.0);
+//! assert!(rect.contains_point(&Point::new(50.0, 40.0)));
+//!
+//! // Rectangle intersection
+//! let r1 = Rect::new(0.0, 0.0, 100.0, 100.0);
+//! let r2 = Rect::new(50.0, 50.0, 100.0, 100.0);
+//! let inter = r1.intersection(&r2).expect("should intersect");
+//! assert_eq!(inter.width, 50.0);
+//! ```
 
 use serde::{Deserialize, Serialize};
 use std::ops::{Add, Sub};
