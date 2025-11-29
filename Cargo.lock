@@ -422,6 +422,7 @@ dependencies = [
 name = "presentar-widgets"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "presentar-core",
  "proptest",
  "serde",

@@ -1,9 +1,40 @@
 //! Layout constraints for widgets.
+//!
+//! # Examples
+//!
+//! ```
+//! use presentar_core::{Constraints, Size};
+//!
+//! // Create constraints with min/max bounds
+//! let constraints = Constraints::new(0.0, 200.0, 0.0, 100.0);
+//!
+//! // Constrain a size to fit
+//! let size = Size::new(300.0, 50.0);  // Too wide
+//! let bounded = constraints.constrain(size);
+//! assert_eq!(bounded.width, 200.0);   // Clamped to max
+//! assert_eq!(bounded.height, 50.0);   // Within bounds
+//! ```
 
 use crate::geometry::Size;
 use serde::{Deserialize, Serialize};
 
 /// Layout constraints that specify minimum and maximum sizes.
+///
+/// # Examples
+///
+/// ```
+/// use presentar_core::{Constraints, Size};
+///
+/// // Tight constraints allow only one size
+/// let tight = Constraints::tight(Size::new(100.0, 50.0));
+/// assert_eq!(tight.min_width, 100.0);
+/// assert_eq!(tight.max_width, 100.0);
+///
+/// // Loose constraints allow any size up to maximum
+/// let loose = Constraints::loose(Size::new(400.0, 300.0));
+/// assert_eq!(loose.min_width, 0.0);
+/// assert_eq!(loose.max_width, 400.0);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Constraints {
     /// Minimum width

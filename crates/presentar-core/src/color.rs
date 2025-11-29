@@ -1,8 +1,35 @@
 //! Color representation with WCAG contrast calculations.
+//!
+//! # Examples
+//!
+//! ```
+//! use presentar_core::Color;
+//!
+//! // Create from RGB
+//! let red = Color::rgb(1.0, 0.0, 0.0);
+//! assert_eq!(red.r, 1.0);
+//!
+//! // Create from hex
+//! let blue = Color::from_hex("#0000ff").expect("valid hex");
+//! assert_eq!(blue.b, 1.0);
+//!
+//! // Use predefined constants
+//! assert_eq!(Color::WHITE, Color::rgb(1.0, 1.0, 1.0));
+//! ```
 
 use serde::{Deserialize, Serialize};
 
 /// RGBA color with values in the range [0.0, 1.0].
+///
+/// # Examples
+///
+/// ```
+/// use presentar_core::Color;
+///
+/// let color = Color::new(0.5, 0.5, 0.5, 1.0);
+/// assert_eq!(color.r, 0.5);
+/// assert_eq!(color.a, 1.0);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Color {
     /// Red component [0.0, 1.0]
