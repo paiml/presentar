@@ -1,0 +1,48 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/presentar-core",
+    "crates/presentar-widgets",
+    "crates/presentar-layout",
+    "crates/presentar-yaml",
+    "crates/presentar-test",
+    "crates/presentar",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["Pragmatic AI Labs"]
+license = "MIT"
+repository = "https://github.com/paiml/presentar"
+rust-version = "1.85"
+
+[workspace.dependencies]
+# Sovereign Stack
+trueno = "0.7.3"
+trueno-viz = "0.1.1"
+
+# Internal crates
+presentar-core = { path = "crates/presentar-core" }
+presentar-widgets = { path = "crates/presentar-widgets" }
+presentar-layout = { path = "crates/presentar-layout" }
+presentar-yaml = { path = "crates/presentar-yaml" }
+presentar-test = { path = "crates/presentar-test" }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
+
+# Testing
+proptest = "1.5"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = "warn"
+pedantic = "warn"
+nursery = "warn"
+cargo = "warn"
