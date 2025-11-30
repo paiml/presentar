@@ -100,7 +100,7 @@
     <text x="15" y="166" fill="#8b949e" font-family="monospace" font-size="10">ProgressBar • ModelCard • DataCard</text>
 
     <!-- Navigation/Feedback -->
-    <text x="15" y="188" fill="#58a6ff" font-family="system-ui, sans-serif" font-size="11" font-weight="bold">Navigation & Feedback</text>
+    <text x="15" y="188" fill="#58a6ff" font-family="system-ui, sans-serif" font-size="11" font-weight="bold">Navigation &amp; Feedback</text>
     <text x="15" y="204" fill="#8b949e" font-family="monospace" font-size="10">Tabs • Menu • Modal • Tooltip</text>
 
     <!-- Media -->
