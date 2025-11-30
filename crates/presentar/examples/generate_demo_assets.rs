@@ -18,7 +18,7 @@ use std::path::Path;
 ///
 /// Architecture:
 /// - Input: 50-dim word embedding average
-/// - Hidden: 50 -> 16 (ReLU)
+/// - Hidden: 50 -> 16 (`ReLU`)
 /// - Output: 16 -> 3 (softmax)
 ///
 /// Total params: 50*16 + 16 + 16*3 + 3 = 800 + 16 + 48 + 3 = 867
@@ -63,9 +63,10 @@ pub fn generate_sentiment_model() -> AprModel {
 /// Generate 100 points of synthetic OHLCV stock data
 ///
 /// Columns:
-/// - timestamp: Unix timestamp (i64 stored as f32 for simplicity)
+/// - timestamp: Unix timestamp (`i64` stored as `f32` for simplicity)
 /// - open, high, low, close: Price data
 /// - volume: Trading volume
+#[allow(clippy::many_single_char_names)] // o, c, h, l, v are standard OHLCV abbreviations
 pub fn generate_timeseries_dataset() -> AldDataset {
     let mut dataset = AldDataset::new();
 
@@ -82,7 +83,7 @@ pub fn generate_timeseries_dataset() -> AldDataset {
 
     for i in 0..n {
         // Simple LCG for deterministic randomness
-        seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+        seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12345);
         let rand = (seed >> 16) as f32 / 65536.0;
 
         // Random walk with drift
@@ -129,7 +130,7 @@ fn generate_weights(fan_in: usize, fan_out: usize, seed: u32) -> Vec<f32> {
     let mut s = seed;
 
     for _ in 0..(fan_in * fan_out) {
-        s = s.wrapping_mul(1103515245).wrapping_add(12345);
+        s = s.wrapping_mul(1_103_515_245).wrapping_add(12345);
         let rand = (s >> 16) as f32 / 32768.0 - 1.0; // -1 to 1
         weights.push(rand * scale);
     }

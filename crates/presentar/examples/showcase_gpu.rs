@@ -17,7 +17,7 @@ use std::f32::consts::PI;
 // ============================================================================
 
 /// Animation easing functions for smooth transitions
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Easing {
     Linear,
     EaseInOut,
@@ -36,7 +36,7 @@ impl Easing {
                 if t < 0.5 {
                     2.0 * t * t
                 } else {
-                    1.0 - (-2.0 * t + 2.0).powi(2) / 2.0
+                    1.0 - (-2.0f32).mul_add(t, 2.0).powi(2) / 2.0
                 }
             }
             Self::EaseOutBounce => {
@@ -46,13 +46,13 @@ impl Easing {
                     N1 * t * t
                 } else if t < 2.0 / D1 {
                     let t = t - 1.5 / D1;
-                    N1 * t * t + 0.75
+                    (N1 * t).mul_add(t, 0.75)
                 } else if t < 2.5 / D1 {
                     let t = t - 2.25 / D1;
-                    N1 * t * t + 0.9375
+                    (N1 * t).mul_add(t, 0.9375)
                 } else {
                     let t = t - 2.625 / D1;
-                    N1 * t * t + 0.984375
+                    (N1 * t).mul_add(t, 0.984_375)
                 }
             }
             Self::EaseOutElastic => {
@@ -60,7 +60,7 @@ impl Easing {
                     t
                 } else {
                     let c4 = (2.0 * PI) / 3.0;
-                    2.0_f32.powf(-10.0 * t) * ((t * 10.0 - 0.75) * c4).sin() + 1.0
+                    (-10.0 * t).exp2().mul_add(((t * 10.0 - 0.75) * c4).sin(), 1.0)
                 }
             }
         }
@@ -81,7 +81,7 @@ pub struct AnimatedValue {
 impl AnimatedValue {
     /// Create new animated value
     #[must_use]
-    pub fn new(value: f32) -> Self {
+    pub const fn new(value: f32) -> Self {
         Self {
             start: value,
             end: value,
@@ -106,13 +106,13 @@ impl AnimatedValue {
         if self.progress < 1.0 {
             self.progress = (self.progress + dt_ms / self.duration_ms).min(1.0);
             let t = self.easing.apply(self.progress);
-            self.current = self.start + (self.end - self.start) * t;
+            self.current = (self.end - self.start).mul_add(t, self.start);
         }
     }
 
     /// Get current value
     #[must_use]
-    pub fn value(&self) -> f32 {
+    pub const fn value(&self) -> f32 {
         self.current
     }
 
@@ -167,15 +167,15 @@ impl AnimColor {
     #[must_use]
     pub fn lerp(self, other: Self, t: f32) -> Self {
         Self {
-            r: self.r + (other.r - self.r) * t,
-            g: self.g + (other.g - self.g) * t,
-            b: self.b + (other.b - self.b) * t,
-            a: self.a + (other.a - self.a) * t,
+            r: (other.r - self.r).mul_add(t, self.r),
+            g: (other.g - self.g).mul_add(t, self.g),
+            b: (other.b - self.b).mul_add(t, self.b),
+            a: (other.a - self.a).mul_add(t, self.a),
         }
     }
 
     #[must_use]
-    pub fn to_array(self) -> [f32; 4] {
+    pub const fn to_array(self) -> [f32; 4] {
         [self.r, self.g, self.b, self.a]
     }
 }
@@ -230,7 +230,7 @@ impl FrameTiming {
 
     /// Get frame count
     #[must_use]
-    pub fn frame_count(&self) -> u64 {
+    pub const fn frame_count(&self) -> u64 {
         self.frame_count
     }
 
@@ -380,7 +380,7 @@ impl BarChart {
 
     /// Get corner radius for rounded bars
     #[must_use]
-    pub fn corner_radius(&self) -> f32 {
+    pub const fn corner_radius(&self) -> f32 {
         self.corner_radius
     }
 
@@ -412,7 +412,7 @@ pub struct Particle {
 impl Particle {
     /// Create new particle at position
     #[must_use]
-    pub fn new(x: f32, y: f32, color: AnimColor) -> Self {
+    pub const fn new(x: f32, y: f32, color: AnimColor) -> Self {
         Self {
             x,
             y,
@@ -485,7 +485,7 @@ impl ParticleSystem {
 
     /// Maximum particles
     #[must_use]
-    pub fn max_particles(&self) -> usize {
+    pub const fn max_particles(&self) -> usize {
         self.max_particles
     }
 
@@ -507,7 +507,7 @@ impl ParticleSystem {
 
             let mut p = Particle::new(x, y, color);
             p.vx = angle.cos() * speed;
-            p.vy = angle.sin() * speed - 80.0; // Upward bias
+            p.vy = angle.sin().mul_add(speed, -80.0); // Upward bias
             p.size = 4.0 + (i as f32 % 8.0);
             p.lifetime = 800.0 + (i as f32 * 50.0) % 400.0;
             p.max_lifetime = p.lifetime;
@@ -558,14 +558,12 @@ impl DonutChart {
     /// Create donut chart with n segments
     #[must_use]
     pub fn new(segments: usize) -> Self {
-        let colors = vec![
-            AnimColor::INDIGO,
+        let colors = [AnimColor::INDIGO,
             AnimColor::EMERALD,
             AnimColor::AMBER,
             AnimColor::ROSE,
             AnimColor::SKY,
-            AnimColor::from_hex(0x8B5CF6),
-        ];
+            AnimColor::from_hex(0x008B_5CF6)];
 
         Self {
             values: (0..segments).map(|_| AnimatedValue::new(1.0)).collect(),
@@ -608,7 +606,7 @@ impl DonutChart {
 
     /// Current rotation angle
     #[must_use]
-    pub fn rotation(&self) -> f32 {
+    pub const fn rotation(&self) -> f32 {
         self.rotation
     }
 
@@ -636,7 +634,7 @@ impl DonutChart {
 
     /// Inner/outer radius ratio
     #[must_use]
-    pub fn radii(&self) -> (f32, f32) {
+    pub const fn radii(&self) -> (f32, f32) {
         (self.inner_radius, self.outer_radius)
     }
 }
@@ -680,13 +678,13 @@ impl FpsCounter {
 
     /// Get current FPS
     #[must_use]
-    pub fn current_fps(&self) -> u32 {
+    pub const fn current_fps(&self) -> u32 {
         self.current_fps
     }
 
     /// Get performance grade
     #[must_use]
-    pub fn grade(&self) -> &'static str {
+    pub const fn grade(&self) -> &'static str {
         match self.current_fps {
             fps if fps >= 58 => "A+",
             fps if fps >= 50 => "A",
@@ -699,7 +697,7 @@ impl FpsCounter {
 
     /// Get color based on FPS
     #[must_use]
-    pub fn color(&self) -> AnimColor {
+    pub const fn color(&self) -> AnimColor {
         match self.current_fps {
             fps if fps >= 55 => AnimColor::EMERALD,
             fps if fps >= 40 => AnimColor::AMBER,
@@ -728,7 +726,7 @@ pub enum Theme {
 impl Theme {
     /// Background color
     #[must_use]
-    pub fn background(self) -> AnimColor {
+    pub const fn background(self) -> AnimColor {
         match self {
             Self::Light => AnimColor::new(0.98, 0.98, 0.98, 1.0),
             Self::Dark => AnimColor::new(0.08, 0.09, 0.11, 1.0),
@@ -737,7 +735,7 @@ impl Theme {
 
     /// Text color
     #[must_use]
-    pub fn text(self) -> AnimColor {
+    pub const fn text(self) -> AnimColor {
         match self {
             Self::Light => AnimColor::new(0.07, 0.09, 0.11, 1.0),
             Self::Dark => AnimColor::new(0.95, 0.95, 0.97, 1.0),
@@ -746,7 +744,7 @@ impl Theme {
 
     /// Card background
     #[must_use]
-    pub fn card(self) -> AnimColor {
+    pub const fn card(self) -> AnimColor {
         match self {
             Self::Light => AnimColor::WHITE,
             Self::Dark => AnimColor::new(0.12, 0.13, 0.15, 1.0),
@@ -755,7 +753,7 @@ impl Theme {
 
     /// Toggle theme
     #[must_use]
-    pub fn toggle(self) -> Self {
+    pub const fn toggle(self) -> Self {
         match self {
             Self::Light => Self::Dark,
             Self::Dark => Self::Light,
@@ -802,19 +800,19 @@ impl ShowcaseDemo {
 
     /// Width
     #[must_use]
-    pub fn width(&self) -> f32 {
+    pub const fn width(&self) -> f32 {
         self.width
     }
 
     /// Height
     #[must_use]
-    pub fn height(&self) -> f32 {
+    pub const fn height(&self) -> f32 {
         self.height
     }
 
     /// Current theme
     #[must_use]
-    pub fn theme(&self) -> Theme {
+    pub const fn theme(&self) -> Theme {
         self.theme
     }
 
@@ -825,7 +823,7 @@ impl ShowcaseDemo {
 
     /// Frame count
     #[must_use]
-    pub fn frame_count(&self) -> u64 {
+    pub const fn frame_count(&self) -> u64 {
         self.frame_timing.frame_count()
     }
 
@@ -846,14 +844,14 @@ impl ShowcaseDemo {
 
     /// Trigger data update with animation
     pub fn trigger_data_update(&mut self) {
-        self.data_seed = self.data_seed.wrapping_mul(1103515245).wrapping_add(12345);
+        self.data_seed = self.data_seed.wrapping_mul(1_103_515_245).wrapping_add(12345);
         let seed = self.data_seed;
 
         // Pseudo-random values
         let values: Vec<f32> = (0..6)
             .map(|i| {
                 let v = ((seed >> (i * 4)) & 0xFF) as f32;
-                20.0 + (v / 255.0) * 80.0
+                (v / 255.0).mul_add(80.0, 20.0)
             })
             .collect();
         self.bar_chart.set_values(&values);
@@ -861,7 +859,7 @@ impl ShowcaseDemo {
         let donut_values: Vec<f32> = (0..5)
             .map(|i| {
                 let v = ((seed >> (i * 5 + 2)) & 0x7F) as f32;
-                5.0 + (v / 127.0) * 40.0
+                (v / 127.0).mul_add(40.0, 5.0)
             })
             .collect();
         self.donut_chart.set_values(&donut_values);
@@ -874,31 +872,31 @@ impl ShowcaseDemo {
 
     /// Get FPS
     #[must_use]
-    pub fn fps(&self) -> u32 {
+    pub const fn fps(&self) -> u32 {
         self.fps_counter.current_fps()
     }
 
     /// Get FPS grade
     #[must_use]
-    pub fn fps_grade(&self) -> &'static str {
+    pub const fn fps_grade(&self) -> &'static str {
         self.fps_counter.grade()
     }
 
     /// Get bar chart ref
     #[must_use]
-    pub fn bar_chart(&self) -> &BarChart {
+    pub const fn bar_chart(&self) -> &BarChart {
         &self.bar_chart
     }
 
     /// Get donut chart ref
     #[must_use]
-    pub fn donut_chart(&self) -> &DonutChart {
+    pub const fn donut_chart(&self) -> &DonutChart {
         &self.donut_chart
     }
 
     /// Get particles ref
     #[must_use]
-    pub fn particles(&self) -> &ParticleSystem {
+    pub const fn particles(&self) -> &ParticleSystem {
         &self.particles
     }
 }
