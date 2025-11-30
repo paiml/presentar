@@ -1174,4 +1174,423 @@ mod tests {
         assert_eq!(cloned.pointer_type, info.pointer_type);
         assert_eq!(cloned.pressure, info.pressure);
     }
+
+    // =========================================================================
+    // Additional Edge Case Tests
+    // =========================================================================
+
+    #[test]
+    fn test_gesture_config_debug() {
+        let config = GestureConfig::default();
+        let debug = format!("{config:?}");
+        assert!(debug.contains("GestureConfig"));
+    }
+
+    #[test]
+    fn test_gesture_config_clone() {
+        let config = GestureConfig {
+            pan_threshold: 25.0,
+            ..Default::default()
+        };
+        let cloned = config.clone();
+        assert_eq!(cloned.pan_threshold, 25.0);
+    }
+
+    #[test]
+    fn test_touch_point_debug() {
+        let point = TouchPoint::new(TouchId::new(1), Point::new(100.0, 200.0), 0.5);
+        let debug = format!("{point:?}");
+        assert!(debug.contains("TouchPoint"));
+    }
+
+    #[test]
+    fn test_touch_point_clone() {
+        let point = TouchPoint::new(TouchId::new(1), Point::new(100.0, 200.0), 0.5);
+        let cloned = point.clone();
+        assert_eq!(cloned.id, point.id);
+        assert_eq!(cloned.start_position, point.start_position);
+    }
+
+    #[test]
+    fn test_touch_point_duration() {
+        let point = TouchPoint::new(TouchId::new(1), Point::new(100.0, 200.0), 0.5);
+        let duration = point.duration();
+        assert!(duration.as_millis() < 100); // Should be very short
+    }
+
+    #[test]
+    fn test_recognized_gesture_debug() {
+        let gesture = RecognizedGesture::Tap {
+            position: Point::new(50.0, 50.0),
+            count: 2,
+        };
+        let debug = format!("{gesture:?}");
+        assert!(debug.contains("Tap"));
+    }
+
+    #[test]
+    fn test_recognized_gesture_clone() {
+        let gesture = RecognizedGesture::Pan {
+            delta: Point::new(10.0, 20.0),
+            velocity: Point::new(100.0, 200.0),
+            state: GestureState::Started,
+        };
+        let cloned = gesture.clone();
+        assert!(matches!(cloned, RecognizedGesture::Pan { .. }));
+    }
+
+    #[test]
+    fn test_recognized_gesture_all_variants() {
+        let gestures = vec![
+            RecognizedGesture::None,
+            RecognizedGesture::Tap {
+                position: Point::ORIGIN,
+                count: 1,
+            },
+            RecognizedGesture::LongPress {
+                position: Point::ORIGIN,
+            },
+            RecognizedGesture::Pan {
+                delta: Point::ORIGIN,
+                velocity: Point::ORIGIN,
+                state: GestureState::Started,
+            },
+            RecognizedGesture::Pinch {
+                scale: 1.0,
+                center: Point::ORIGIN,
+                state: GestureState::Changed,
+            },
+            RecognizedGesture::Rotate {
+                angle: 0.5,
+                center: Point::ORIGIN,
+                state: GestureState::Ended,
+            },
+        ];
+
+        for gesture in gestures {
+            let debug = format!("{gesture:?}");
+            assert!(!debug.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_gesture_recognizer_default() {
+        let recognizer = GestureRecognizer::default();
+        assert_eq!(recognizer.touch_count(), 0);
+        assert_eq!(recognizer.config().pan_threshold, 10.0);
+    }
+
+    #[test]
+    fn test_gesture_recognizer_debug() {
+        let recognizer = GestureRecognizer::new();
+        let debug = format!("{recognizer:?}");
+        assert!(debug.contains("GestureRecognizer"));
+    }
+
+    #[test]
+    fn test_gesture_recognizer_touch_move_unknown_id() {
+        let mut recognizer = GestureRecognizer::new();
+
+        // Move without starting touch
+        let result = recognizer.process(&Event::TouchMove {
+            id: TouchId::new(99),
+            position: Point::new(150.0, 250.0),
+            pressure: 0.5,
+        });
+
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_gesture_recognizer_touch_end_unknown_id() {
+        let mut recognizer = GestureRecognizer::new();
+
+        // End without starting touch
+        let result = recognizer.process(&Event::TouchEnd {
+            id: TouchId::new(99),
+            position: Point::new(100.0, 200.0),
+        });
+
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_gesture_recognizer_pan_end() {
+        let mut recognizer = GestureRecognizer::new();
+
+        recognizer.process(&Event::TouchStart {
+            id: TouchId::new(1),
+            position: Point::new(100.0, 200.0),
+            pressure: 0.5,
+        });
+
+        // Move to start pan
+        recognizer.process(&Event::TouchMove {
+            id: TouchId::new(1),
+            position: Point::new(150.0, 250.0),
+            pressure: 0.5,
+        });
+
+        // End touch
+        let result = recognizer.process(&Event::TouchEnd {
+            id: TouchId::new(1),
+            position: Point::new(150.0, 250.0),
+        });
+
+        assert!(matches!(
+            result,
+            Some(Event::GesturePan {
+                state: GestureState::Ended,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn test_gesture_recognizer_rotate() {
+        let mut recognizer = GestureRecognizer::with_config(GestureConfig {
+            rotate_threshold: 0.01,
+            pinch_threshold: 1.0, // High threshold to prefer rotation
+            ..Default::default()
+        });
+
+        // Start with two fingers
+        recognizer.process(&Event::TouchStart {
+            id: TouchId::new(1),
+            position: Point::new(100.0, 200.0),
+            pressure: 0.5,
+        });
+
+        recognizer.process(&Event::TouchStart {
+            id: TouchId::new(2),
+            position: Point::new(200.0, 200.0),
+            pressure: 0.5,
+        });
+
+        // Rotate (move one finger up, other down, same distance apart)
+        recognizer.process(&Event::TouchMove {
+            id: TouchId::new(1),
+            position: Point::new(100.0, 150.0),
+            pressure: 0.5,
+        });
+
+        let result = recognizer.process(&Event::TouchMove {
+            id: TouchId::new(2),
+            position: Point::new(200.0, 250.0),
+            pressure: 0.5,
+        });
+
+        assert!(matches!(result, Some(Event::GestureRotate { .. })));
+    }
+
+    #[test]
+    fn test_gesture_recognizer_two_finger_end() {
+        let mut recognizer = GestureRecognizer::with_config(GestureConfig {
+            pinch_threshold: 0.01,
+            ..Default::default()
+        });
+
+        // Start pinch
+        recognizer.process(&Event::TouchStart {
+            id: TouchId::new(1),
+            position: Point::new(100.0, 200.0),
+            pressure: 0.5,
+        });
+
+        recognizer.process(&Event::TouchStart {
+            id: TouchId::new(2),
+            position: Point::new(200.0, 200.0),
+            pressure: 0.5,
+        });
+
+        // Move to trigger pinch
+        recognizer.process(&Event::TouchMove {
+            id: TouchId::new(1),
+            position: Point::new(50.0, 200.0),
+            pressure: 0.5,
+        });
+
+        recognizer.process(&Event::TouchMove {
+            id: TouchId::new(2),
+            position: Point::new(250.0, 200.0),
+            pressure: 0.5,
+        });
+
+        // End one finger
+        let result = recognizer.process(&Event::TouchEnd {
+            id: TouchId::new(1),
+            position: Point::new(50.0, 200.0),
+        });
+
+        assert!(matches!(
+            result,
+            Some(Event::GesturePinch {
+                state: GestureState::Ended,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn test_gesture_recognizer_three_touches() {
+        let mut recognizer = GestureRecognizer::new();
+
+        recognizer.process(&Event::TouchStart {
+            id: TouchId::new(1),
+            position: Point::new(100.0, 200.0),
+            pressure: 0.5,
+        });
+
+        recognizer.process(&Event::TouchStart {
+            id: TouchId::new(2),
+            position: Point::new(200.0, 200.0),
+            pressure: 0.5,
+        });
+
+        recognizer.process(&Event::TouchStart {
+            id: TouchId::new(3),
+            position: Point::new(300.0, 200.0),
+            pressure: 0.5,
+        });
+
+        assert_eq!(recognizer.touch_count(), 3);
+
+        // Move with 3 touches should return None (not handled)
+        let result = recognizer.process(&Event::TouchMove {
+            id: TouchId::new(1),
+            position: Point::new(150.0, 250.0),
+            pressure: 0.5,
+        });
+
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_pointer_recognizer_debug() {
+        let recognizer = PointerGestureRecognizer::new();
+        let debug = format!("{recognizer:?}");
+        assert!(debug.contains("PointerGestureRecognizer"));
+    }
+
+    #[test]
+    fn test_pointer_recognizer_default() {
+        let recognizer = PointerGestureRecognizer::default();
+        assert_eq!(recognizer.pointer_count(), 0);
+    }
+
+    #[test]
+    fn test_pointer_recognizer_with_config() {
+        let config = GestureConfig {
+            pan_threshold: 30.0,
+            ..Default::default()
+        };
+        let recognizer = PointerGestureRecognizer::with_config(config);
+        assert_eq!(recognizer.config().pan_threshold, 30.0);
+    }
+
+    #[test]
+    fn test_pointer_recognizer_ignores_non_pointer_events() {
+        let mut recognizer = PointerGestureRecognizer::new();
+
+        let result = recognizer.process(&Event::MouseMove {
+            position: Point::new(100.0, 200.0),
+        });
+
+        assert!(result.is_none());
+        assert_eq!(recognizer.pointer_count(), 0);
+    }
+
+    #[test]
+    fn test_pointer_recognizer_move_unknown_pointer() {
+        let mut recognizer = PointerGestureRecognizer::new();
+
+        let result = recognizer.process(&Event::PointerMove {
+            pointer_id: PointerId::new(99),
+            pointer_type: PointerType::Touch,
+            position: Point::new(150.0, 250.0),
+            pressure: 0.5,
+            is_primary: true,
+        });
+
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_pointer_info_debug() {
+        let info = PointerInfo {
+            id: PointerId::new(1),
+            pointer_type: PointerType::Touch,
+            start_position: Point::new(100.0, 200.0),
+            current_position: Point::new(100.0, 200.0),
+            start_time: Instant::now(),
+            is_primary: true,
+            pressure: 0.5,
+        };
+        let debug = format!("{info:?}");
+        assert!(debug.contains("PointerInfo"));
+    }
+
+    #[test]
+    fn test_pointer_recognizer_first_non_primary_becomes_primary() {
+        let mut recognizer = PointerGestureRecognizer::new();
+
+        // First pointer is not marked as primary, but should become primary
+        recognizer.process(&Event::PointerDown {
+            pointer_id: PointerId::new(1),
+            pointer_type: PointerType::Touch,
+            position: Point::new(100.0, 200.0),
+            pressure: 0.5,
+            is_primary: false,
+            button: None,
+        });
+
+        // Since no primary existed, this should be set as primary
+        assert!(recognizer.primary().is_some());
+    }
+
+    #[test]
+    fn test_gesture_recognizer_below_pan_threshold() {
+        let mut recognizer = GestureRecognizer::new();
+
+        recognizer.process(&Event::TouchStart {
+            id: TouchId::new(1),
+            position: Point::new(100.0, 200.0),
+            pressure: 0.5,
+        });
+
+        // Small move below threshold
+        let result = recognizer.process(&Event::TouchMove {
+            id: TouchId::new(1),
+            position: Point::new(102.0, 202.0), // Only ~2.8px moved
+            pressure: 0.5,
+        });
+
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_gesture_recognizer_below_pinch_threshold() {
+        let mut recognizer = GestureRecognizer::new();
+
+        recognizer.process(&Event::TouchStart {
+            id: TouchId::new(1),
+            position: Point::new(100.0, 200.0),
+            pressure: 0.5,
+        });
+
+        recognizer.process(&Event::TouchStart {
+            id: TouchId::new(2),
+            position: Point::new(200.0, 200.0),
+            pressure: 0.5,
+        });
+
+        // Tiny movement that doesn't trigger pinch/rotate
+        let result = recognizer.process(&Event::TouchMove {
+            id: TouchId::new(1),
+            position: Point::new(99.0, 200.0),
+            pressure: 0.5,
+        });
+
+        assert!(result.is_none());
+    }
 }

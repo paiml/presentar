@@ -1305,4 +1305,424 @@ mod tests {
 
         assert_eq!(composite.description(), "My Composite");
     }
+
+    // =========================================================================
+    // Additional Edge Case Tests
+    // =========================================================================
+
+    #[test]
+    fn test_command_id_debug() {
+        let id = CommandId(42);
+        let debug = format!("{id:?}");
+        assert!(debug.contains("CommandId"));
+        assert!(debug.contains("42"));
+    }
+
+    #[test]
+    fn test_command_id_eq() {
+        let id1 = CommandId(100);
+        let id2 = CommandId(100);
+        let id3 = CommandId(200);
+        assert_eq!(id1, id2);
+        assert_ne!(id1, id3);
+    }
+
+    #[test]
+    fn test_command_id_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(CommandId(1));
+        set.insert(CommandId(2));
+        set.insert(CommandId(1)); // Duplicate
+        assert_eq!(set.len(), 2);
+    }
+
+    #[test]
+    fn test_group_id_debug() {
+        let id = GroupId(99);
+        let debug = format!("{id:?}");
+        assert!(debug.contains("GroupId"));
+    }
+
+    #[test]
+    fn test_group_id_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(GroupId(1));
+        set.insert(GroupId(2));
+        assert_eq!(set.len(), 2);
+    }
+
+    #[test]
+    fn test_checkpoint_id_debug() {
+        let id = CheckpointId(77);
+        let debug = format!("{id:?}");
+        assert!(debug.contains("CheckpointId"));
+    }
+
+    #[test]
+    fn test_checkpoint_id_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(CheckpointId(1));
+        set.insert(CheckpointId(2));
+        assert_eq!(set.len(), 2);
+    }
+
+    #[test]
+    fn test_command_result_debug() {
+        let result = CommandResult::Success;
+        let debug = format!("{result:?}");
+        assert!(debug.contains("Success"));
+
+        let failed = CommandResult::Failed("error".to_string());
+        let debug = format!("{failed:?}");
+        assert!(debug.contains("Failed"));
+    }
+
+    #[test]
+    fn test_command_result_clone() {
+        let result = CommandResult::NeedsConfirmation("confirm?".to_string());
+        let cloned = result.clone();
+        assert_eq!(result, cloned);
+    }
+
+    #[test]
+    fn test_command_result_all_variants() {
+        let variants = vec![
+            CommandResult::Success,
+            CommandResult::Failed("error".to_string()),
+            CommandResult::Cancelled,
+            CommandResult::NeedsConfirmation("confirm".to_string()),
+        ];
+
+        for variant in &variants {
+            let _ = format!("{variant:?}");
+            let cloned = variant.clone();
+            assert_eq!(variant, &cloned);
+        }
+    }
+
+    #[test]
+    fn test_history_config_debug() {
+        let config = HistoryConfig::default();
+        let debug = format!("{config:?}");
+        assert!(debug.contains("HistoryConfig"));
+    }
+
+    #[test]
+    fn test_history_config_clone() {
+        let config = HistoryConfig {
+            max_commands: 500,
+            max_memory: 5 * 1024 * 1024,
+            enable_merging: false,
+            auto_group_interval_ms: 1000,
+        };
+        let cloned = config.clone();
+        assert_eq!(cloned.max_commands, 500);
+        assert!(!cloned.enable_merging);
+    }
+
+    #[test]
+    fn test_checkpoint_debug() {
+        let checkpoint = Checkpoint {
+            id: CheckpointId(1),
+            name: "Test".to_string(),
+            position: 5,
+            timestamp: 1000,
+        };
+        let debug = format!("{checkpoint:?}");
+        assert!(debug.contains("Checkpoint"));
+    }
+
+    #[test]
+    fn test_checkpoint_clone() {
+        let checkpoint = Checkpoint {
+            id: CheckpointId(1),
+            name: "Test".to_string(),
+            position: 5,
+            timestamp: 1000,
+        };
+        let cloned = checkpoint.clone();
+        assert_eq!(cloned.name, "Test");
+        assert_eq!(cloned.position, 5);
+    }
+
+    #[test]
+    fn test_history_event_debug() {
+        let event = HistoryEvent::Cleared;
+        let debug = format!("{event:?}");
+        assert!(debug.contains("Cleared"));
+    }
+
+    #[test]
+    fn test_history_event_clone() {
+        let event = HistoryEvent::Trimmed(10);
+        let cloned = event.clone();
+        assert_eq!(event, cloned);
+    }
+
+    #[test]
+    fn test_memory_limit_trimming() {
+        let config = HistoryConfig {
+            max_commands: 1000,
+            max_memory: 200, // Very small limit
+            ..Default::default()
+        };
+        let mut history = CommandHistory::new(config);
+        let counter = Arc::new(AtomicI32::new(0));
+
+        // Each command takes ~64 bytes by default
+        for i in 0..10 {
+            history.execute(Box::new(IncrementCommand {
+                counter: counter.clone(),
+                amount: i,
+            }));
+        }
+
+        // Should have trimmed some commands due to memory limit
+        assert!(history.undo_count() < 10);
+    }
+
+    #[test]
+    fn test_default_command_methods() {
+        let counter = Arc::new(AtomicI32::new(0));
+        let cmd = IncrementCommand {
+            counter: counter.clone(),
+            amount: 1,
+        };
+
+        // Test default implementations
+        assert!(!cmd.can_merge(&cmd));
+        assert_eq!(cmd.memory_size(), 64);
+        assert!(cmd.metadata().is_none());
+    }
+
+    #[test]
+    fn test_composite_command_memory_size() {
+        let counter = Arc::new(AtomicI32::new(0));
+
+        let composite = CompositeCommand::new("Multi")
+            .with_command(Box::new(IncrementCommand {
+                counter: counter.clone(),
+                amount: 1,
+            }))
+            .with_command(Box::new(IncrementCommand {
+                counter: counter.clone(),
+                amount: 2,
+            }))
+            .build();
+
+        let memory = composite.memory_size();
+        assert!(memory > 64); // Should include both commands
+    }
+
+    #[test]
+    fn test_group_redo() {
+        let mut history = CommandHistory::default();
+        let counter = Arc::new(AtomicI32::new(0));
+
+        let _group = history.begin_group();
+        history.execute(Box::new(IncrementCommand {
+            counter: counter.clone(),
+            amount: 1,
+        }));
+        history.execute(Box::new(IncrementCommand {
+            counter: counter.clone(),
+            amount: 2,
+        }));
+        history.end_group();
+
+        assert_eq!(counter.load(Ordering::SeqCst), 3);
+
+        history.undo();
+        assert_eq!(counter.load(Ordering::SeqCst), 0);
+
+        history.redo();
+        assert_eq!(counter.load(Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn test_checkpoint_position_updates_on_trim() {
+        let config = HistoryConfig {
+            max_commands: 3,
+            ..Default::default()
+        };
+        let mut history = CommandHistory::new(config);
+        let counter = Arc::new(AtomicI32::new(0));
+
+        history.execute(Box::new(IncrementCommand {
+            counter: counter.clone(),
+            amount: 1,
+        }));
+
+        let checkpoint_id = history.create_checkpoint("Early");
+
+        // Add more commands to trigger trim
+        for i in 2..=5 {
+            history.execute(Box::new(IncrementCommand {
+                counter: counter.clone(),
+                amount: i,
+            }));
+        }
+
+        // Checkpoint position should have been adjusted
+        let checkpoint = history.get_checkpoint(checkpoint_id);
+        assert!(checkpoint.is_some());
+    }
+
+    #[test]
+    fn test_multiple_event_listeners() {
+        use std::sync::atomic::AtomicUsize;
+
+        let mut history = CommandHistory::default();
+        let counter = Arc::new(AtomicI32::new(0));
+        let event_count1 = Arc::new(AtomicUsize::new(0));
+        let event_count2 = Arc::new(AtomicUsize::new(0));
+
+        let ec1 = event_count1.clone();
+        history.on_event(Arc::new(move |_| {
+            ec1.fetch_add(1, Ordering::SeqCst);
+        }));
+
+        let ec2 = event_count2.clone();
+        history.on_event(Arc::new(move |_| {
+            ec2.fetch_add(1, Ordering::SeqCst);
+        }));
+
+        history.execute(Box::new(IncrementCommand {
+            counter: counter.clone(),
+            amount: 1,
+        }));
+
+        assert_eq!(event_count1.load(Ordering::SeqCst), 1);
+        assert_eq!(event_count2.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn test_set_value_command_description() {
+        let value = Arc::new(std::sync::RwLock::new(0));
+        let cmd = SetValueCommand::new("Set value", value, 100);
+        assert_eq!(cmd.description(), "Set value");
+    }
+
+    #[test]
+    fn test_undo_without_old_value() {
+        let value = Arc::new(std::sync::RwLock::new(10));
+        let mut cmd = SetValueCommand::new("Set", value.clone(), 42);
+
+        // Try undo without execute first
+        let result = cmd.undo();
+        assert!(result.is_failed());
+    }
+
+    #[test]
+    fn test_empty_composite_command() {
+        let composite = CompositeCommand::new("Empty").build();
+
+        let mut history = CommandHistory::default();
+        let result = history.execute(composite);
+
+        assert!(result.is_success());
+    }
+
+    #[test]
+    fn test_get_nonexistent_checkpoint() {
+        let history = CommandHistory::default();
+        let result = history.get_checkpoint(CheckpointId(999));
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_history_clear_resets_memory() {
+        let mut history = CommandHistory::default();
+        let counter = Arc::new(AtomicI32::new(0));
+
+        history.execute(Box::new(IncrementCommand {
+            counter: counter.clone(),
+            amount: 1,
+        }));
+
+        assert!(history.memory_usage() > 0);
+
+        history.clear();
+        assert_eq!(history.memory_usage(), 0);
+    }
+
+    // Test mergeable command
+    struct MergeableIncrement {
+        counter: Arc<AtomicI32>,
+        total_amount: i32,
+    }
+
+    impl Command for MergeableIncrement {
+        fn execute(&mut self) -> CommandResult {
+            self.counter.fetch_add(self.total_amount, Ordering::SeqCst);
+            CommandResult::Success
+        }
+
+        fn undo(&mut self) -> CommandResult {
+            self.counter.fetch_sub(self.total_amount, Ordering::SeqCst);
+            CommandResult::Success
+        }
+
+        fn description(&self) -> &str {
+            "Mergeable increment"
+        }
+
+        fn can_merge(&self, _other: &dyn Command) -> bool {
+            true
+        }
+
+        fn merge(&mut self, _other: Box<dyn Command>) -> Option<Box<dyn Command>> {
+            // For testing, just add 10 more
+            self.total_amount += 10;
+            None
+        }
+    }
+
+    #[test]
+    fn test_command_merging() {
+        let config = HistoryConfig {
+            enable_merging: true,
+            auto_group_interval_ms: 0, // Disable auto-grouping
+            ..Default::default()
+        };
+        let mut history = CommandHistory::new(config);
+        let counter = Arc::new(AtomicI32::new(0));
+
+        history.execute(Box::new(MergeableIncrement {
+            counter: counter.clone(),
+            total_amount: 5,
+        }));
+
+        history.execute(Box::new(MergeableIncrement {
+            counter: counter.clone(),
+            total_amount: 3,
+        }));
+
+        // Second command should be merged, so only 1 command in history
+        assert_eq!(history.undo_count(), 1);
+    }
+
+    #[test]
+    fn test_redo_clears_on_new_execute() {
+        let mut history = CommandHistory::default();
+        let counter = Arc::new(AtomicI32::new(0));
+
+        history.execute(Box::new(IncrementCommand {
+            counter: counter.clone(),
+            amount: 1,
+        }));
+
+        history.undo();
+        assert_eq!(history.redo_count(), 1);
+
+        history.execute(Box::new(IncrementCommand {
+            counter: counter.clone(),
+            amount: 2,
+        }));
+
+        assert_eq!(history.redo_count(), 0);
+    }
 }
