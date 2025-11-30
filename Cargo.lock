@@ -1227,6 +1227,7 @@ dependencies = [
  "presentar-yaml",
  "proptest",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

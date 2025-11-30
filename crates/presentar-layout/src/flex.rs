@@ -209,4 +209,227 @@ mod tests {
         let result = distribute_flex(&items, &sizes, 100.0);
         assert_eq!(result, vec![50.0, 50.0]);
     }
+
+    // =========================================================================
+    // FlexDirection Tests
+    // =========================================================================
+
+    #[test]
+    fn test_flex_direction_clone() {
+        let dir = FlexDirection::Column;
+        let cloned = dir;
+        assert_eq!(dir, cloned);
+    }
+
+    #[test]
+    fn test_flex_direction_all_variants() {
+        assert_eq!(FlexDirection::Row, FlexDirection::Row);
+        assert_eq!(FlexDirection::RowReverse, FlexDirection::RowReverse);
+        assert_eq!(FlexDirection::Column, FlexDirection::Column);
+        assert_eq!(FlexDirection::ColumnReverse, FlexDirection::ColumnReverse);
+    }
+
+    #[test]
+    fn test_flex_direction_debug() {
+        let dir = FlexDirection::Row;
+        let debug = format!("{:?}", dir);
+        assert!(debug.contains("Row"));
+    }
+
+    // =========================================================================
+    // FlexJustify Tests
+    // =========================================================================
+
+    #[test]
+    fn test_flex_justify_all_variants() {
+        assert_eq!(FlexJustify::Start, FlexJustify::Start);
+        assert_eq!(FlexJustify::End, FlexJustify::End);
+        assert_eq!(FlexJustify::Center, FlexJustify::Center);
+        assert_eq!(FlexJustify::SpaceBetween, FlexJustify::SpaceBetween);
+        assert_eq!(FlexJustify::SpaceAround, FlexJustify::SpaceAround);
+        assert_eq!(FlexJustify::SpaceEvenly, FlexJustify::SpaceEvenly);
+    }
+
+    #[test]
+    fn test_flex_justify_clone() {
+        let justify = FlexJustify::SpaceBetween;
+        let cloned = justify;
+        assert_eq!(justify, cloned);
+    }
+
+    #[test]
+    fn test_flex_justify_debug() {
+        let justify = FlexJustify::Center;
+        let debug = format!("{:?}", justify);
+        assert!(debug.contains("Center"));
+    }
+
+    // =========================================================================
+    // FlexAlign Tests
+    // =========================================================================
+
+    #[test]
+    fn test_flex_align_all_variants() {
+        assert_eq!(FlexAlign::Start, FlexAlign::Start);
+        assert_eq!(FlexAlign::End, FlexAlign::End);
+        assert_eq!(FlexAlign::Center, FlexAlign::Center);
+        assert_eq!(FlexAlign::Stretch, FlexAlign::Stretch);
+        assert_eq!(FlexAlign::Baseline, FlexAlign::Baseline);
+    }
+
+    #[test]
+    fn test_flex_align_clone() {
+        let align = FlexAlign::Stretch;
+        let cloned = align;
+        assert_eq!(align, cloned);
+    }
+
+    #[test]
+    fn test_flex_align_debug() {
+        let align = FlexAlign::Baseline;
+        let debug = format!("{:?}", align);
+        assert!(debug.contains("Baseline"));
+    }
+
+    // =========================================================================
+    // FlexItem Tests
+    // =========================================================================
+
+    #[test]
+    fn test_flex_item_default() {
+        let item = FlexItem::default();
+        assert_eq!(item.grow, 0.0);
+        assert_eq!(item.shrink, 0.0);
+        assert_eq!(item.basis, None);
+        assert_eq!(item.align_self, None);
+    }
+
+    #[test]
+    fn test_flex_item_new() {
+        let item = FlexItem::new();
+        assert_eq!(item.grow, 0.0);
+        assert_eq!(item.shrink, 0.0);
+    }
+
+    #[test]
+    fn test_flex_item_grow_only() {
+        let item = FlexItem::new().grow(2.5);
+        assert_eq!(item.grow, 2.5);
+        assert_eq!(item.shrink, 0.0);
+    }
+
+    #[test]
+    fn test_flex_item_shrink_only() {
+        let item = FlexItem::new().shrink(0.5);
+        assert_eq!(item.shrink, 0.5);
+        assert_eq!(item.grow, 0.0);
+    }
+
+    #[test]
+    fn test_flex_item_basis_only() {
+        let item = FlexItem::new().basis(200.0);
+        assert_eq!(item.basis, Some(200.0));
+    }
+
+    #[test]
+    fn test_flex_item_align_self_only() {
+        let item = FlexItem::new().align_self(FlexAlign::End);
+        assert_eq!(item.align_self, Some(FlexAlign::End));
+    }
+
+    #[test]
+    fn test_flex_item_clone() {
+        let item = FlexItem::new().grow(1.0).shrink(0.5);
+        let cloned = item;
+        assert_eq!(item.grow, cloned.grow);
+        assert_eq!(item.shrink, cloned.shrink);
+    }
+
+    #[test]
+    fn test_flex_item_debug() {
+        let item = FlexItem::new().grow(1.0);
+        let debug = format!("{:?}", item);
+        assert!(debug.contains("FlexItem"));
+    }
+
+    // =========================================================================
+    // distribute_flex Tests
+    // =========================================================================
+
+    #[test]
+    fn test_distribute_flex_no_grow_no_shrink() {
+        let items = vec![FlexItem::new(), FlexItem::new()];
+        let sizes = vec![30.0, 30.0];
+        let result = distribute_flex(&items, &sizes, 100.0);
+        // No grow factor, so sizes remain unchanged
+        assert_eq!(result, vec![30.0, 30.0]);
+    }
+
+    #[test]
+    fn test_distribute_flex_single_item_grow() {
+        let items = vec![FlexItem::new().grow(1.0)];
+        let sizes = vec![50.0];
+        let result = distribute_flex(&items, &sizes, 100.0);
+        assert_eq!(result, vec![100.0]);
+    }
+
+    #[test]
+    fn test_distribute_flex_single_item_shrink() {
+        let items = vec![FlexItem::new().shrink(1.0)];
+        let sizes = vec![150.0];
+        let result = distribute_flex(&items, &sizes, 100.0);
+        assert_eq!(result, vec![100.0]);
+    }
+
+    #[test]
+    fn test_distribute_flex_shrink_uneven() {
+        let items = vec![FlexItem::new().shrink(1.0), FlexItem::new().shrink(3.0)];
+        let sizes = vec![100.0, 100.0];
+        let result = distribute_flex(&items, &sizes, 100.0);
+        // Total: 200, need to shrink by 100
+        // item1: 100 - 100 * 1/4 = 75
+        // item2: 100 - 100 * 3/4 = 25
+        assert_eq!(result, vec![75.0, 25.0]);
+    }
+
+    #[test]
+    fn test_distribute_flex_shrink_to_zero() {
+        let items = vec![FlexItem::new().shrink(1.0)];
+        let sizes = vec![50.0];
+        // Need to shrink more than available
+        let result = distribute_flex(&items, &sizes, 0.0);
+        assert_eq!(result, vec![0.0]); // Can't go below 0
+    }
+
+    #[test]
+    fn test_distribute_flex_mixed_grow() {
+        let items = vec![
+            FlexItem::new().grow(0.0), // Won't grow
+            FlexItem::new().grow(1.0), // Will take all remaining
+        ];
+        let sizes = vec![50.0, 0.0];
+        let result = distribute_flex(&items, &sizes, 100.0);
+        assert_eq!(result, vec![50.0, 50.0]);
+    }
+
+    #[test]
+    fn test_distribute_flex_three_items() {
+        let items = vec![
+            FlexItem::new().grow(1.0),
+            FlexItem::new().grow(2.0),
+            FlexItem::new().grow(1.0),
+        ];
+        let sizes = vec![0.0, 0.0, 0.0];
+        let result = distribute_flex(&items, &sizes, 100.0);
+        assert_eq!(result, vec![25.0, 50.0, 25.0]);
+    }
+
+    #[test]
+    fn test_distribute_flex_near_exact_fit() {
+        let items = vec![FlexItem::new().grow(1.0), FlexItem::new().grow(1.0)];
+        let sizes = vec![49.9995, 50.0005];
+        let result = distribute_flex(&items, &sizes, 100.0);
+        // Should be treated as exact fit (within 0.001 tolerance)
+        assert_eq!(result, vec![49.9995, 50.0005]);
+    }
 }

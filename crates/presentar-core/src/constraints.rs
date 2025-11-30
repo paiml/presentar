@@ -286,4 +286,354 @@ mod tests {
         assert_eq!(deflated.min_width, 0.0);
         assert_eq!(deflated.max_width, 0.0);
     }
+
+    // =========================================================================
+    // Clone and Copy Trait Tests
+    // =========================================================================
+
+    #[test]
+    fn test_constraints_clone() {
+        let c = Constraints::new(10.0, 100.0, 20.0, 200.0);
+        let cloned = c;
+        assert_eq!(c, cloned);
+    }
+
+    #[test]
+    fn test_constraints_copy() {
+        let c = Constraints::new(10.0, 100.0, 20.0, 200.0);
+        let copied = c;
+        // Both should be valid and equal
+        assert_eq!(c.min_width, copied.min_width);
+        assert_eq!(c.max_width, copied.max_width);
+    }
+
+    // =========================================================================
+    // Debug Trait Tests
+    // =========================================================================
+
+    #[test]
+    fn test_constraints_debug() {
+        let c = Constraints::new(10.0, 100.0, 20.0, 200.0);
+        let debug = format!("{:?}", c);
+        assert!(debug.contains("Constraints"));
+        assert!(debug.contains("min_width"));
+        assert!(debug.contains("max_width"));
+    }
+
+    // =========================================================================
+    // PartialEq Tests
+    // =========================================================================
+
+    #[test]
+    fn test_constraints_equality() {
+        let c1 = Constraints::new(10.0, 100.0, 20.0, 200.0);
+        let c2 = Constraints::new(10.0, 100.0, 20.0, 200.0);
+        assert_eq!(c1, c2);
+    }
+
+    #[test]
+    fn test_constraints_inequality_min_width() {
+        let c1 = Constraints::new(10.0, 100.0, 20.0, 200.0);
+        let c2 = Constraints::new(15.0, 100.0, 20.0, 200.0);
+        assert_ne!(c1, c2);
+    }
+
+    #[test]
+    fn test_constraints_inequality_max_width() {
+        let c1 = Constraints::new(10.0, 100.0, 20.0, 200.0);
+        let c2 = Constraints::new(10.0, 150.0, 20.0, 200.0);
+        assert_ne!(c1, c2);
+    }
+
+    #[test]
+    fn test_constraints_inequality_min_height() {
+        let c1 = Constraints::new(10.0, 100.0, 20.0, 200.0);
+        let c2 = Constraints::new(10.0, 100.0, 25.0, 200.0);
+        assert_ne!(c1, c2);
+    }
+
+    #[test]
+    fn test_constraints_inequality_max_height() {
+        let c1 = Constraints::new(10.0, 100.0, 20.0, 200.0);
+        let c2 = Constraints::new(10.0, 100.0, 20.0, 250.0);
+        assert_ne!(c1, c2);
+    }
+
+    // =========================================================================
+    // Serialization Tests
+    // =========================================================================
+
+    #[test]
+    fn test_constraints_serialize() {
+        let c = Constraints::new(10.0, 100.0, 20.0, 200.0);
+        let json = serde_json::to_string(&c).unwrap();
+        assert!(json.contains("min_width"));
+        assert!(json.contains("10"));
+    }
+
+    #[test]
+    fn test_constraints_deserialize() {
+        let json = r#"{"min_width":10.0,"max_width":100.0,"min_height":20.0,"max_height":200.0}"#;
+        let c: Constraints = serde_json::from_str(json).unwrap();
+        assert_eq!(c.min_width, 10.0);
+        assert_eq!(c.max_width, 100.0);
+        assert_eq!(c.min_height, 20.0);
+        assert_eq!(c.max_height, 200.0);
+    }
+
+    #[test]
+    fn test_constraints_roundtrip_serialization() {
+        let original = Constraints::new(15.5, 150.5, 25.5, 250.5);
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: Constraints = serde_json::from_str(&json).unwrap();
+        assert_eq!(original, deserialized);
+    }
+
+    // =========================================================================
+    // Constrain Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_constrain_at_minimum() {
+        let c = Constraints::new(10.0, 100.0, 20.0, 200.0);
+        let size = Size::new(10.0, 20.0);
+        assert_eq!(c.constrain(size), size);
+    }
+
+    #[test]
+    fn test_constrain_at_maximum() {
+        let c = Constraints::new(10.0, 100.0, 20.0, 200.0);
+        let size = Size::new(100.0, 200.0);
+        assert_eq!(c.constrain(size), size);
+    }
+
+    #[test]
+    fn test_constrain_zero_size() {
+        let c = Constraints::new(10.0, 100.0, 20.0, 200.0);
+        let size = Size::new(0.0, 0.0);
+        assert_eq!(c.constrain(size), Size::new(10.0, 20.0));
+    }
+
+    #[test]
+    fn test_constrain_negative_clamped() {
+        let c = Constraints::new(0.0, 100.0, 0.0, 100.0);
+        let size = Size::new(-10.0, -20.0);
+        assert_eq!(c.constrain(size), Size::new(0.0, 0.0));
+    }
+
+    #[test]
+    fn test_constrain_with_zero_constraints() {
+        let c = Constraints::new(0.0, 0.0, 0.0, 0.0);
+        let size = Size::new(100.0, 100.0);
+        assert_eq!(c.constrain(size), Size::new(0.0, 0.0));
+    }
+
+    // =========================================================================
+    // is_tight Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_is_tight_width_only() {
+        let c = Constraints::new(50.0, 50.0, 0.0, 100.0);
+        assert!(!c.is_tight()); // Height is not tight
+    }
+
+    #[test]
+    fn test_is_tight_height_only() {
+        let c = Constraints::new(0.0, 100.0, 50.0, 50.0);
+        assert!(!c.is_tight()); // Width is not tight
+    }
+
+    #[test]
+    fn test_is_tight_zero_size() {
+        let c = Constraints::tight(Size::new(0.0, 0.0));
+        assert!(c.is_tight());
+    }
+
+    // =========================================================================
+    // Bounded Tests
+    // =========================================================================
+
+    #[test]
+    fn test_has_bounded_height_only() {
+        let c = Constraints::new(0.0, f32::INFINITY, 0.0, 100.0);
+        assert!(!c.has_bounded_width());
+        assert!(c.has_bounded_height());
+        assert!(!c.is_bounded());
+    }
+
+    #[test]
+    fn test_has_bounded_width_only() {
+        let c = Constraints::new(0.0, 100.0, 0.0, f32::INFINITY);
+        assert!(c.has_bounded_width());
+        assert!(!c.has_bounded_height());
+        assert!(!c.is_bounded());
+    }
+
+    // =========================================================================
+    // biggest() Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_biggest_with_infinity_width_only() {
+        let c = Constraints::new(50.0, f32::INFINITY, 0.0, 100.0);
+        let biggest = c.biggest();
+        assert_eq!(biggest.width, 50.0); // Falls back to min
+        assert_eq!(biggest.height, 100.0);
+    }
+
+    #[test]
+    fn test_biggest_with_infinity_height_only() {
+        let c = Constraints::new(0.0, 100.0, 50.0, f32::INFINITY);
+        let biggest = c.biggest();
+        assert_eq!(biggest.width, 100.0);
+        assert_eq!(biggest.height, 50.0); // Falls back to min
+    }
+
+    #[test]
+    fn test_biggest_tight_constraints() {
+        let c = Constraints::tight(Size::new(42.0, 24.0));
+        assert_eq!(c.biggest(), Size::new(42.0, 24.0));
+    }
+
+    // =========================================================================
+    // smallest() Tests
+    // =========================================================================
+
+    #[test]
+    fn test_smallest_unbounded() {
+        let c = Constraints::unbounded();
+        assert_eq!(c.smallest(), Size::new(0.0, 0.0));
+    }
+
+    #[test]
+    fn test_smallest_tight() {
+        let c = Constraints::tight(Size::new(42.0, 24.0));
+        assert_eq!(c.smallest(), Size::new(42.0, 24.0));
+    }
+
+    #[test]
+    fn test_smallest_loose() {
+        let c = Constraints::loose(Size::new(100.0, 200.0));
+        assert_eq!(c.smallest(), Size::new(0.0, 0.0));
+    }
+
+    // =========================================================================
+    // with_* Methods Chain Tests
+    // =========================================================================
+
+    #[test]
+    fn test_with_methods_chained() {
+        let c = Constraints::unbounded()
+            .with_min_width(10.0)
+            .with_max_width(100.0)
+            .with_min_height(20.0)
+            .with_max_height(200.0);
+
+        assert_eq!(c.min_width, 10.0);
+        assert_eq!(c.max_width, 100.0);
+        assert_eq!(c.min_height, 20.0);
+        assert_eq!(c.max_height, 200.0);
+    }
+
+    #[test]
+    fn test_with_methods_preserve_other_values() {
+        let c = Constraints::new(10.0, 100.0, 20.0, 200.0);
+
+        let c2 = c.with_min_width(15.0);
+        assert_eq!(c2.max_width, 100.0);
+        assert_eq!(c2.min_height, 20.0);
+        assert_eq!(c2.max_height, 200.0);
+
+        let c3 = c.with_max_width(150.0);
+        assert_eq!(c3.min_width, 10.0);
+        assert_eq!(c3.min_height, 20.0);
+        assert_eq!(c3.max_height, 200.0);
+    }
+
+    // =========================================================================
+    // deflate() Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_deflate_asymmetric() {
+        let c = Constraints::new(20.0, 100.0, 30.0, 150.0);
+        let deflated = c.deflate(10.0, 20.0);
+        assert_eq!(deflated.min_width, 10.0);
+        assert_eq!(deflated.max_width, 90.0);
+        assert_eq!(deflated.min_height, 10.0);
+        assert_eq!(deflated.max_height, 130.0);
+    }
+
+    #[test]
+    fn test_deflate_zero() {
+        let c = Constraints::new(10.0, 100.0, 20.0, 200.0);
+        let deflated = c.deflate(0.0, 0.0);
+        assert_eq!(c, deflated);
+    }
+
+    #[test]
+    fn test_deflate_exact_match() {
+        let c = Constraints::new(10.0, 100.0, 20.0, 200.0);
+        let deflated = c.deflate(10.0, 20.0);
+        assert_eq!(deflated.min_width, 0.0);
+        assert_eq!(deflated.max_width, 90.0);
+        assert_eq!(deflated.min_height, 0.0);
+        assert_eq!(deflated.max_height, 180.0);
+    }
+
+    #[test]
+    fn test_deflate_negative_becomes_zero() {
+        let c = Constraints::new(5.0, 10.0, 5.0, 10.0);
+        let deflated = c.deflate(15.0, 15.0);
+        assert_eq!(deflated.min_width, 0.0);
+        assert_eq!(deflated.max_width, 0.0);
+        assert_eq!(deflated.min_height, 0.0);
+        assert_eq!(deflated.max_height, 0.0);
+    }
+
+    // =========================================================================
+    // Constructor Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_new_with_zero_values() {
+        let c = Constraints::new(0.0, 0.0, 0.0, 0.0);
+        assert_eq!(c.min_width, 0.0);
+        assert_eq!(c.max_width, 0.0);
+        assert!(c.is_tight());
+    }
+
+    #[test]
+    fn test_tight_with_large_values() {
+        let c = Constraints::tight(Size::new(10000.0, 10000.0));
+        assert!(c.is_tight());
+        assert_eq!(c.biggest(), Size::new(10000.0, 10000.0));
+    }
+
+    #[test]
+    fn test_loose_with_zero() {
+        let c = Constraints::loose(Size::new(0.0, 0.0));
+        assert!(c.is_tight()); // min and max are both 0
+        assert_eq!(c.biggest(), Size::new(0.0, 0.0));
+    }
+
+    // =========================================================================
+    // Default Trait Tests
+    // =========================================================================
+
+    #[test]
+    fn test_default_is_unbounded() {
+        let default = Constraints::default();
+        let unbounded = Constraints::unbounded();
+        assert_eq!(default, unbounded);
+    }
+
+    #[test]
+    fn test_default_not_bounded() {
+        let c = Constraints::default();
+        assert!(!c.is_bounded());
+        assert!(!c.has_bounded_width());
+        assert!(!c.has_bounded_height());
+    }
 }
