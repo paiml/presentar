@@ -148,6 +148,15 @@ pub struct WidgetConfig {
     /// Color field
     #[serde(default)]
     pub color: Option<String>,
+    /// Model source (for inference widgets)
+    #[serde(default)]
+    pub model_source: Option<String>,
+    /// Inference engine (for inference widgets, e.g., "ngram-v1", "onnx-simd")
+    #[serde(default)]
+    pub engine: Option<String>,
+    /// Acceleration preference (for inference widgets, e.g., "auto", "simd", "wgpu")
+    #[serde(default)]
+    pub acceleration: Option<String>,
     /// Additional properties
     #[serde(flatten)]
     pub extra: HashMap<String, serde_yaml::Value>,

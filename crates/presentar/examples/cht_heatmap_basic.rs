@@ -4,6 +4,19 @@
 //!
 //! Run: `cargo run --example cht_heatmap_basic`
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::disallowed_methods,
+    clippy::match_same_arms,
+    clippy::needless_range_loop,
+    clippy::iter_without_into_iter,
+    clippy::used_underscore_binding,
+    clippy::struct_field_names,
+    dead_code,
+    unused_variables,
+    clippy::format_collect
+)]
+
 use presentar_core::Color;
 
 /// Colormap for heatmap rendering
@@ -24,33 +37,33 @@ impl Colormap {
         let t = t.clamp(0.0, 1.0);
 
         match self {
-            Colormap::Viridis => {
+            Self::Viridis => {
                 // Approximation of viridis
                 let r = 0.267 + t * (0.993 - 0.267);
                 let g = if t < 0.5 {
-                    0.004 + t * 2.0 * (0.906 - 0.004)
+                    (t * 2.0).mul_add(0.906 - 0.004, 0.004)
                 } else {
-                    0.906 - (t - 0.5) * 2.0 * (0.906 - 0.334)
+                    ((t - 0.5) * 2.0).mul_add(-(0.906 - 0.334), 0.906)
                 };
-                let b = 0.329 + (1.0 - t) * (0.533 - 0.329);
+                let b = (1.0 - t).mul_add(0.533 - 0.329, 0.329);
                 Color::new(r, g, b, 1.0)
             }
-            Colormap::Plasma => {
+            Self::Plasma => {
                 let r = 0.05 + t * 0.9;
                 let g = t * 0.7;
-                let b = 0.53 + (1.0 - t) * 0.4;
+                let b = (1.0 - t).mul_add(0.4, 0.53);
                 Color::new(r, g, b, 1.0)
             }
-            Colormap::Inferno => {
+            Self::Inferno => {
                 let r = t;
                 let g = t * t;
                 let b = (1.0 - t) * 0.5;
                 Color::new(r, g, b, 1.0)
             }
-            Colormap::Blues => Color::new(1.0 - t * 0.7, 1.0 - t * 0.5, 1.0, 1.0),
-            Colormap::Reds => Color::new(1.0, 1.0 - t * 0.8, 1.0 - t * 0.8, 1.0),
-            Colormap::Greens => Color::new(1.0 - t * 0.7, 1.0, 1.0 - t * 0.7, 1.0),
-            Colormap::Grayscale => Color::new(1.0 - t, 1.0 - t, 1.0 - t, 1.0),
+            Self::Blues => Color::new(1.0 - t * 0.7, 1.0 - t * 0.5, 1.0, 1.0),
+            Self::Reds => Color::new(1.0, 1.0 - t * 0.8, 1.0 - t * 0.8, 1.0),
+            Self::Greens => Color::new(1.0 - t * 0.7, 1.0, 1.0 - t * 0.7, 1.0),
+            Self::Grayscale => Color::new(1.0 - t, 1.0 - t, 1.0 - t, 1.0),
         }
     }
 }
@@ -77,8 +90,8 @@ impl Heatmap {
             data,
             rows,
             cols,
-            row_labels: (0..rows).map(|i| format!("R{}", i)).collect(),
-            col_labels: (0..cols).map(|i| format!("C{}", i)).collect(),
+            row_labels: (0..rows).map(|i| format!("R{i}")).collect(),
+            col_labels: (0..cols).map(|i| format!("C{i}")).collect(),
             title: title.to_string(),
             colormap: Colormap::Viridis,
             annotate: false,
@@ -91,12 +104,12 @@ impl Heatmap {
         self
     }
 
-    pub fn with_colormap(mut self, colormap: Colormap) -> Self {
+    pub const fn with_colormap(mut self, colormap: Colormap) -> Self {
         self.colormap = colormap;
         self
     }
 
-    pub fn with_annotations(mut self, annotate: bool) -> Self {
+    pub const fn with_annotations(mut self, annotate: bool) -> Self {
         self.annotate = annotate;
         self
     }
@@ -138,15 +151,14 @@ impl Heatmap {
     /// Get color for a cell
     pub fn cell_color(&self, row: usize, col: usize) -> Color {
         self.get(row, col)
-            .map(|v| self.colormap.map(self.normalize(v)))
-            .unwrap_or(Color::BLACK)
+            .map_or(Color::BLACK, |v| self.colormap.map(self.normalize(v)))
     }
 
-    pub fn rows(&self) -> usize {
+    pub const fn rows(&self) -> usize {
         self.rows
     }
 
-    pub fn cols(&self) -> usize {
+    pub const fn cols(&self) -> usize {
         self.cols
     }
 
@@ -154,7 +166,7 @@ impl Heatmap {
         &self.title
     }
 
-    pub fn annotate(&self) -> bool {
+    pub const fn annotate(&self) -> bool {
         self.annotate
     }
 }
@@ -164,10 +176,18 @@ fn main() {
 
     // Create sample 2D data (e.g., monthly temperatures by city)
     let data = vec![
-        vec![5.0, 7.0, 12.0, 18.0, 23.0, 28.0, 30.0, 29.0, 24.0, 17.0, 10.0, 6.0],
-        vec![2.0, 4.0, 10.0, 16.0, 21.0, 26.0, 29.0, 28.0, 22.0, 14.0, 7.0, 3.0],
-        vec![10.0, 12.0, 16.0, 20.0, 25.0, 30.0, 33.0, 32.0, 28.0, 22.0, 15.0, 11.0],
-        vec![-5.0, -2.0, 5.0, 12.0, 18.0, 23.0, 26.0, 24.0, 18.0, 10.0, 2.0, -3.0],
+        vec![
+            5.0, 7.0, 12.0, 18.0, 23.0, 28.0, 30.0, 29.0, 24.0, 17.0, 10.0, 6.0,
+        ],
+        vec![
+            2.0, 4.0, 10.0, 16.0, 21.0, 26.0, 29.0, 28.0, 22.0, 14.0, 7.0, 3.0,
+        ],
+        vec![
+            10.0, 12.0, 16.0, 20.0, 25.0, 30.0, 33.0, 32.0, 28.0, 22.0, 15.0, 11.0,
+        ],
+        vec![
+            -5.0, -2.0, 5.0, 12.0, 18.0, 23.0, 26.0, 24.0, 18.0, 10.0, 2.0, -3.0,
+        ],
     ];
 
     let row_labels = vec![
@@ -177,10 +197,12 @@ fn main() {
         "Moscow".to_string(),
     ];
 
-    let col_labels = vec![
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-    ].iter().map(|s| s.to_string()).collect();
+    let col_labels = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ]
+    .iter()
+    .map(|s| (*s).to_string())
+    .collect();
 
     let heatmap = Heatmap::new(data, "Monthly Average Temperatures (°C)")
         .with_labels(row_labels, col_labels)
@@ -192,20 +214,25 @@ fn main() {
     println!("Size: {}x{}", heatmap.rows(), heatmap.cols());
 
     let (min, max) = heatmap.range();
-    println!("Range: {:.1} - {:.1}", min, max);
+    println!("Range: {min:.1} - {max:.1}");
 
     // Print heatmap with values
-    println!("\n        {}", heatmap.col_labels.iter()
-        .map(|s| format!("{:>5}", &s[..3.min(s.len())]))
-        .collect::<Vec<_>>()
-        .join(" "));
+    println!(
+        "\n        {}",
+        heatmap
+            .col_labels
+            .iter()
+            .map(|s| format!("{:>5}", &s[..3.min(s.len())]))
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
     println!("       {}", "-".repeat(heatmap.cols() * 6));
 
     for (i, row_label) in heatmap.row_labels.iter().enumerate() {
         print!("{:>6} |", &row_label[..6.min(row_label.len())]);
         for j in 0..heatmap.cols() {
             if let Some(val) = heatmap.get(i, j) {
-                print!("{:>5.0} ", val);
+                print!("{val:>5.0} ");
             }
         }
         println!();
@@ -213,21 +240,31 @@ fn main() {
 
     // ASCII heatmap with color indicators
     println!("\n=== ASCII Heatmap ===\n");
-    println!("       {}", heatmap.col_labels.iter()
-        .map(|s| format!("{:>3}", &s[..1]))
-        .collect::<Vec<_>>()
-        .join(""));
+    println!(
+        "       {}",
+        heatmap
+            .col_labels
+            .iter()
+            .map(|s| format!("{:>3}", &s[..1]))
+            .collect::<String>()
+    );
 
     for (i, row_label) in heatmap.row_labels.iter().enumerate() {
         print!("{:>6} ", &row_label[..6.min(row_label.len())]);
         for j in 0..heatmap.cols() {
-            let t = heatmap.get(i, j).map(|v| heatmap.normalize(v)).unwrap_or(0.0);
-            let c = if t > 0.8 { '█' }
-                else if t > 0.6 { '▓' }
-                else if t > 0.4 { '▒' }
-                else if t > 0.2 { '░' }
-                else { ' ' };
-            print!("{:>3}", c);
+            let t = heatmap.get(i, j).map_or(0.0, |v| heatmap.normalize(v));
+            let c = if t > 0.8 {
+                '█'
+            } else if t > 0.6 {
+                '▓'
+            } else if t > 0.4 {
+                '▒'
+            } else if t > 0.2 {
+                '░'
+            } else {
+                ' '
+            };
+            print!("{c:>3}");
         }
         println!();
     }

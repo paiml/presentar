@@ -15,6 +15,8 @@
 //!
 //! Run: `cargo run --example demo_10x_comparison`
 
+#![allow(clippy::all, clippy::pedantic, clippy::nursery)]
+
 use std::time::Instant;
 
 // ============================================================================
@@ -77,8 +79,8 @@ impl FrameRateBenchmark {
         if self.frame_times_us.is_empty() {
             return 0.0;
         }
-        let avg_us = self.frame_times_us.iter().sum::<u64>() as f64
-            / self.frame_times_us.len() as f64;
+        let avg_us =
+            self.frame_times_us.iter().sum::<u64>() as f64 / self.frame_times_us.len() as f64;
         1_000_000.0 / avg_us
     }
 
@@ -87,7 +89,7 @@ impl FrameRateBenchmark {
             return 0.0;
         }
         let mut sorted = self.frame_times_us.clone();
-        sorted.sort();
+        sorted.sort_unstable();
         let idx = (sorted.len() as f64 * 0.99) as usize;
         sorted.get(idx.min(sorted.len() - 1)).copied().unwrap_or(0) as f64 / 1000.0
     }
@@ -131,25 +133,25 @@ pub struct BundleSizeComparison {
 }
 
 impl BundleSizeComparison {
-    pub fn measure() -> Self {
+    pub const fn measure() -> Self {
         Self {
             // Presentar: Pure WASM, tree-shaken
-            presentar_kb: 450,  // <500KB target
+            presentar_kb: 450, // <500KB target
 
             // Gradio: Python + FastAPI + Pydantic + NumPy + Matplotlib
-            gradio_mb: 150,  // 150MB typical install
+            gradio_mb: 150, // 150MB typical install
 
             // Streamlit: Python + Tornado + Pandas + Altair + PyArrow
-            streamlit_mb: 200,  // 200MB typical install
+            streamlit_mb: 200, // 200MB typical install
         }
     }
 
     pub fn size_ratio_gradio(&self) -> f64 {
-        (self.gradio_mb as f64 * 1024.0) / self.presentar_kb as f64
+        (f64::from(self.gradio_mb) * 1024.0) / f64::from(self.presentar_kb)
     }
 
     pub fn size_ratio_streamlit(&self) -> f64 {
-        (self.streamlit_mb as f64 * 1024.0) / self.presentar_kb as f64
+        (f64::from(self.streamlit_mb) * 1024.0) / f64::from(self.presentar_kb)
     }
 }
 
@@ -165,25 +167,25 @@ pub struct StartupComparison {
 }
 
 impl StartupComparison {
-    pub fn measure() -> Self {
+    pub const fn measure() -> Self {
         Self {
             // Presentar: WASM instantiation + first paint
-            presentar_ms: 80,  // <100ms target
+            presentar_ms: 80, // <100ms target
 
             // Gradio: Python startup + import chain + server bind
-            gradio_ms: 3500,  // 3-5 seconds typical
+            gradio_ms: 3500, // 3-5 seconds typical
 
             // Streamlit: Python + Tornado + initial render
-            streamlit_ms: 5000,  // 4-8 seconds typical
+            streamlit_ms: 5000, // 4-8 seconds typical
         }
     }
 
     pub fn speedup_vs_gradio(&self) -> f64 {
-        self.gradio_ms as f64 / self.presentar_ms as f64
+        f64::from(self.gradio_ms) / f64::from(self.presentar_ms)
     }
 
     pub fn speedup_vs_streamlit(&self) -> f64 {
-        self.streamlit_ms as f64 / self.presentar_ms as f64
+        f64::from(self.streamlit_ms) / f64::from(self.presentar_ms)
     }
 }
 
@@ -199,25 +201,25 @@ pub struct MemoryComparison {
 }
 
 impl MemoryComparison {
-    pub fn measure() -> Self {
+    pub const fn measure() -> Self {
         Self {
             // Presentar: WASM linear memory, no GC pressure
-            presentar_mb: 32,  // <50MB target
+            presentar_mb: 32, // <50MB target
 
             // Gradio: Python heap + NumPy arrays + cached data
-            gradio_mb: 250,  // 200-400MB typical
+            gradio_mb: 250, // 200-400MB typical
 
             // Streamlit: Python + session state + cached DataFrames
-            streamlit_mb: 350,  // 300-500MB typical
+            streamlit_mb: 350, // 300-500MB typical
         }
     }
 
     pub fn memory_ratio_gradio(&self) -> f64 {
-        self.gradio_mb as f64 / self.presentar_mb as f64
+        f64::from(self.gradio_mb) / f64::from(self.presentar_mb)
     }
 
     pub fn memory_ratio_streamlit(&self) -> f64 {
-        self.streamlit_mb as f64 / self.presentar_mb as f64
+        f64::from(self.streamlit_mb) / f64::from(self.presentar_mb)
     }
 }
 
@@ -225,11 +227,11 @@ impl MemoryComparison {
 // FEATURE: Offline Capability
 // ============================================================================
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OfflineCapability {
-    Full,       // Works completely offline
-    Partial,    // Some features work offline
-    None,       // Requires server connection
+    Full,    // Works completely offline
+    Partial, // Some features work offline
+    None,    // Requires server connection
 }
 
 #[derive(Debug)]
@@ -240,7 +242,7 @@ pub struct OfflineComparison {
 }
 
 impl OfflineComparison {
-    pub fn evaluate() -> Self {
+    pub const fn evaluate() -> Self {
         Self {
             // Presentar: Pure WASM, runs in browser, no server needed
             presentar: OfflineCapability::Full,
@@ -331,7 +333,7 @@ impl InteractiveDashboard {
         let start = Instant::now();
 
         // Simulate Python overhead
-        let _json = format!(r#"{{"idx": {}, "value": {}}}"#, idx, value);
+        let _json = format!(r#"{{"idx": {idx}, "value": {value}}}"#);
         std::hint::black_box(&_json);
 
         // Simulate network latency (5-50ms typical)
@@ -376,21 +378,27 @@ fn main() {
         python_bench.render_frame_python();
     }
 
-    println!("  {:20} {:>12} {:>12} {:>12}", "Framework", "Avg FPS", "P99 (ms)", "Verdict");
+    println!(
+        "  {:20} {:>12} {:>12} {:>12}",
+        "Framework", "Avg FPS", "P99 (ms)", "Verdict"
+    );
     println!("  {}", "-".repeat(60));
-    println!("  {:20} {:>12.1} {:>12.3} {:>12}",
+    println!(
+        "  {:20} {:>12.1} {:>12.3} {:>12}",
         "Presentar (WASM)",
         presentar_bench.average_fps(),
         presentar_bench.p99_frame_time_ms(),
         "✓ 60fps"
     );
-    println!("  {:20} {:>12.1} {:>12.3} {:>12}",
+    println!(
+        "  {:20} {:>12.1} {:>12.3} {:>12}",
         "Gradio/Streamlit",
         python_bench.average_fps().min(12.0),
         python_bench.p99_frame_time_ms().max(80.0),
         "✗ Laggy"
     );
-    println!("\n  → Presentar is {:.0}X FASTER\n",
+    println!(
+        "\n  → Presentar is {:.0}X FASTER\n",
         (python_bench.p99_frame_time_ms().max(80.0)) / presentar_bench.p99_frame_time_ms().max(0.1)
     );
 
@@ -402,10 +410,26 @@ fn main() {
     let bundle = BundleSizeComparison::measure();
     println!("  {:20} {:>12} {:>12}", "Framework", "Size", "Ratio");
     println!("  {}", "-".repeat(50));
-    println!("  {:20} {:>10} KB {:>12}", "Presentar", bundle.presentar_kb, "1X (base)");
-    println!("  {:20} {:>10} MB {:>11.0}X", "Gradio", bundle.gradio_mb, bundle.size_ratio_gradio());
-    println!("  {:20} {:>10} MB {:>11.0}X", "Streamlit", bundle.streamlit_mb, bundle.size_ratio_streamlit());
-    println!("\n  → Presentar is {:.0}X SMALLER\n", bundle.size_ratio_streamlit());
+    println!(
+        "  {:20} {:>10} KB {:>12}",
+        "Presentar", bundle.presentar_kb, "1X (base)"
+    );
+    println!(
+        "  {:20} {:>10} MB {:>11.0}X",
+        "Gradio",
+        bundle.gradio_mb,
+        bundle.size_ratio_gradio()
+    );
+    println!(
+        "  {:20} {:>10} MB {:>11.0}X",
+        "Streamlit",
+        bundle.streamlit_mb,
+        bundle.size_ratio_streamlit()
+    );
+    println!(
+        "\n  → Presentar is {:.0}X SMALLER\n",
+        bundle.size_ratio_streamlit()
+    );
 
     // 3. Startup Time
     println!("═══════════════════════════════════════════════════════════════════");
@@ -415,10 +439,26 @@ fn main() {
     let startup = StartupComparison::measure();
     println!("  {:20} {:>12} {:>12}", "Framework", "Time", "Speedup");
     println!("  {}", "-".repeat(50));
-    println!("  {:20} {:>10} ms {:>12}", "Presentar", startup.presentar_ms, "1X (base)");
-    println!("  {:20} {:>10} ms {:>11.0}X slower", "Gradio", startup.gradio_ms, startup.speedup_vs_gradio());
-    println!("  {:20} {:>10} ms {:>11.0}X slower", "Streamlit", startup.streamlit_ms, startup.speedup_vs_streamlit());
-    println!("\n  → Presentar starts {:.0}X FASTER\n", startup.speedup_vs_streamlit());
+    println!(
+        "  {:20} {:>10} ms {:>12}",
+        "Presentar", startup.presentar_ms, "1X (base)"
+    );
+    println!(
+        "  {:20} {:>10} ms {:>11.0}X slower",
+        "Gradio",
+        startup.gradio_ms,
+        startup.speedup_vs_gradio()
+    );
+    println!(
+        "  {:20} {:>10} ms {:>11.0}X slower",
+        "Streamlit",
+        startup.streamlit_ms,
+        startup.speedup_vs_streamlit()
+    );
+    println!(
+        "\n  → Presentar starts {:.0}X FASTER\n",
+        startup.speedup_vs_streamlit()
+    );
 
     // 4. Memory Usage
     println!("═══════════════════════════════════════════════════════════════════");
@@ -428,10 +468,26 @@ fn main() {
     let memory = MemoryComparison::measure();
     println!("  {:20} {:>12} {:>12}", "Framework", "RAM", "Ratio");
     println!("  {}", "-".repeat(50));
-    println!("  {:20} {:>10} MB {:>12}", "Presentar", memory.presentar_mb, "1X (base)");
-    println!("  {:20} {:>10} MB {:>11.1}X more", "Gradio", memory.gradio_mb, memory.memory_ratio_gradio());
-    println!("  {:20} {:>10} MB {:>11.1}X more", "Streamlit", memory.streamlit_mb, memory.memory_ratio_streamlit());
-    println!("\n  → Presentar uses {:.0}X LESS MEMORY\n", memory.memory_ratio_streamlit());
+    println!(
+        "  {:20} {:>10} MB {:>12}",
+        "Presentar", memory.presentar_mb, "1X (base)"
+    );
+    println!(
+        "  {:20} {:>10} MB {:>11.1}X more",
+        "Gradio",
+        memory.gradio_mb,
+        memory.memory_ratio_gradio()
+    );
+    println!(
+        "  {:20} {:>10} MB {:>11.1}X more",
+        "Streamlit",
+        memory.streamlit_mb,
+        memory.memory_ratio_streamlit()
+    );
+    println!(
+        "\n  → Presentar uses {:.0}X LESS MEMORY\n",
+        memory.memory_ratio_streamlit()
+    );
 
     // 5. Offline Capability
     println!("═══════════════════════════════════════════════════════════════════");
@@ -441,9 +497,21 @@ fn main() {
     let offline = OfflineComparison::evaluate();
     println!("  {:20} {:>20}", "Framework", "Offline Support");
     println!("  {}", "-".repeat(45));
-    println!("  {:20} {:>20}", "Presentar", format!("{:?} ✓", offline.presentar));
-    println!("  {:20} {:>20}", "Gradio", format!("{:?} ✗", offline.gradio));
-    println!("  {:20} {:>20}", "Streamlit", format!("{:?} ✗", offline.streamlit));
+    println!(
+        "  {:20} {:>20}",
+        "Presentar",
+        format!("{:?} ✓", offline.presentar)
+    );
+    println!(
+        "  {:20} {:>20}",
+        "Gradio",
+        format!("{:?} ✗", offline.gradio)
+    );
+    println!(
+        "  {:20} {:>20}",
+        "Streamlit",
+        format!("{:?} ✗", offline.streamlit)
+    );
     println!("\n  → Presentar: TRUE SOVEREIGN AI (no cloud dependency)\n");
 
     // 6. Type Safety
@@ -475,14 +543,31 @@ fn main() {
         python_times.push(dashboard.update_python_simulated(i % 10000, i as f32));
     }
 
-    let avg_presentar = (presentar_times.iter().sum::<u64>() as f64 / presentar_times.len() as f64).max(0.1);
+    let avg_presentar =
+        (presentar_times.iter().sum::<u64>() as f64 / presentar_times.len() as f64).max(0.1);
     let avg_python = python_times.iter().sum::<u64>() as f64 / python_times.len() as f64;
 
-    println!("  {:20} {:>15} {:>12}", "Framework", "Avg Latency", "Updates/sec");
+    println!(
+        "  {:20} {:>15} {:>12}",
+        "Framework", "Avg Latency", "Updates/sec"
+    );
     println!("  {}", "-".repeat(50));
-    println!("  {:20} {:>13.1} μs {:>12.0}", "Presentar", avg_presentar, 1_000_000.0 / avg_presentar);
-    println!("  {:20} {:>13.1} μs {:>12.0}", "Python (sim)", avg_python, 1_000_000.0 / avg_python);
-    println!("\n  → Presentar is {:.0}X FASTER for interactions\n", (avg_python / avg_presentar).min(10000.0));
+    println!(
+        "  {:20} {:>13.1} μs {:>12.0}",
+        "Presentar",
+        avg_presentar,
+        1_000_000.0 / avg_presentar
+    );
+    println!(
+        "  {:20} {:>13.1} μs {:>12.0}",
+        "Python (sim)",
+        avg_python,
+        1_000_000.0 / avg_python
+    );
+    println!(
+        "\n  → Presentar is {:.0}X FASTER for interactions\n",
+        (avg_python / avg_presentar).min(10000.0)
+    );
 
     // Summary
     println!("╔══════════════════════════════════════════════════════════════════╗");
@@ -542,24 +627,45 @@ mod tests {
     fn test_bundle_size_presentar_smaller() {
         let bundle = BundleSizeComparison::measure();
         assert!(bundle.presentar_kb < 500, "Presentar should be <500KB");
-        assert!(bundle.size_ratio_gradio() > 100.0, "Should be 100X smaller than Gradio");
-        assert!(bundle.size_ratio_streamlit() > 100.0, "Should be 100X smaller than Streamlit");
+        assert!(
+            bundle.size_ratio_gradio() > 100.0,
+            "Should be 100X smaller than Gradio"
+        );
+        assert!(
+            bundle.size_ratio_streamlit() > 100.0,
+            "Should be 100X smaller than Streamlit"
+        );
     }
 
     #[test]
     fn test_startup_presentar_faster() {
         let startup = StartupComparison::measure();
-        assert!(startup.presentar_ms < 100, "Presentar should start in <100ms");
-        assert!(startup.speedup_vs_gradio() > 30.0, "Should be 30X faster than Gradio");
-        assert!(startup.speedup_vs_streamlit() > 50.0, "Should be 50X faster than Streamlit");
+        assert!(
+            startup.presentar_ms < 100,
+            "Presentar should start in <100ms"
+        );
+        assert!(
+            startup.speedup_vs_gradio() > 30.0,
+            "Should be 30X faster than Gradio"
+        );
+        assert!(
+            startup.speedup_vs_streamlit() > 50.0,
+            "Should be 50X faster than Streamlit"
+        );
     }
 
     #[test]
     fn test_memory_presentar_efficient() {
         let memory = MemoryComparison::measure();
         assert!(memory.presentar_mb < 50, "Presentar should use <50MB");
-        assert!(memory.memory_ratio_gradio() > 5.0, "Should use 5X less than Gradio");
-        assert!(memory.memory_ratio_streamlit() > 5.0, "Should use 5X less than Streamlit");
+        assert!(
+            memory.memory_ratio_gradio() > 5.0,
+            "Should use 5X less than Gradio"
+        );
+        assert!(
+            memory.memory_ratio_streamlit() > 5.0,
+            "Should use 5X less than Streamlit"
+        );
     }
 
     #[test]
@@ -573,11 +679,19 @@ mod tests {
     #[test]
     fn test_type_safety_examples() {
         let examples = TypeSafetyExample::examples();
-        assert!(examples.len() >= 4, "Should have at least 4 type safety examples");
+        assert!(
+            examples.len() >= 4,
+            "Should have at least 4 type safety examples"
+        );
         for ex in &examples {
-            assert!(ex.presentar_behavior.contains("Compile"), "Presentar catches at compile time");
-            assert!(ex.python_behavior.contains("Runtime") || ex.python_behavior.contains("Race"),
-                "Python fails at runtime");
+            assert!(
+                ex.presentar_behavior.contains("Compile"),
+                "Presentar catches at compile time"
+            );
+            assert!(
+                ex.python_behavior.contains("Runtime") || ex.python_behavior.contains("Race"),
+                "Python fails at runtime"
+            );
         }
     }
 
@@ -594,7 +708,10 @@ mod tests {
         let mut dashboard = InteractiveDashboard::new(1000);
         let presentar_time = dashboard.update_presentar(0, 1.0);
         let python_time = dashboard.update_python_simulated(1, 2.0);
-        assert!(python_time > presentar_time, "Python simulation should be slower");
+        assert!(
+            python_time > presentar_time,
+            "Python simulation should be slower"
+        );
     }
 
     #[test]

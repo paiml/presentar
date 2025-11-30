@@ -4,6 +4,16 @@
 //!
 //! Run: `cargo run --example cht_scatter_bubble`
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::disallowed_methods,
+    clippy::or_fun_call,
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    clippy::needless_pass_by_value,
+    unused_variables
+)]
+
 use presentar_core::Color;
 
 /// Data point for bubble chart
@@ -71,10 +81,26 @@ impl BubbleChart {
             return (0.0, 1.0, 0.0, 1.0);
         }
 
-        let min_x = self.points.iter().map(|p| p.x).fold(f32::INFINITY, f32::min);
-        let max_x = self.points.iter().map(|p| p.x).fold(f32::NEG_INFINITY, f32::max);
-        let min_y = self.points.iter().map(|p| p.y).fold(f32::INFINITY, f32::min);
-        let max_y = self.points.iter().map(|p| p.y).fold(f32::NEG_INFINITY, f32::max);
+        let min_x = self
+            .points
+            .iter()
+            .map(|p| p.x)
+            .fold(f32::INFINITY, f32::min);
+        let max_x = self
+            .points
+            .iter()
+            .map(|p| p.x)
+            .fold(f32::NEG_INFINITY, f32::max);
+        let min_y = self
+            .points
+            .iter()
+            .map(|p| p.y)
+            .fold(f32::INFINITY, f32::min);
+        let max_y = self
+            .points
+            .iter()
+            .map(|p| p.y)
+            .fold(f32::NEG_INFINITY, f32::max);
 
         (min_x, max_x, min_y, max_y)
     }
@@ -85,8 +111,16 @@ impl BubbleChart {
             return (0.0, 1.0);
         }
 
-        let min = self.points.iter().map(|p| p.size).fold(f32::INFINITY, f32::min);
-        let max = self.points.iter().map(|p| p.size).fold(f32::NEG_INFINITY, f32::max);
+        let min = self
+            .points
+            .iter()
+            .map(|p| p.size)
+            .fold(f32::INFINITY, f32::min);
+        let max = self
+            .points
+            .iter()
+            .map(|p| p.size)
+            .fold(f32::NEG_INFINITY, f32::max);
 
         (min, max)
     }
@@ -99,25 +133,31 @@ impl BubbleChart {
         }
 
         let t = (size - min_size) / (max_size - min_size);
-        self.min_radius + t * (self.max_radius - self.min_radius)
+        t.mul_add(self.max_radius - self.min_radius, self.min_radius)
     }
 
     /// Transform point to screen coordinates
-    pub fn transform_point(&self, p: &BubblePoint, width: f32, height: f32, padding: f32) -> (f32, f32, f32) {
+    pub fn transform_point(
+        &self,
+        p: &BubblePoint,
+        width: f32,
+        height: f32,
+        padding: f32,
+    ) -> (f32, f32, f32) {
         let (min_x, max_x, min_y, max_y) = self.bounds();
-        let w = width - 2.0 * padding;
-        let h = height - 2.0 * padding;
+        let w = 2.0f32.mul_add(-padding, width);
+        let h = 2.0f32.mul_add(-padding, height);
 
         let x = if (max_x - min_x).abs() < 0.0001 {
             padding + w / 2.0
         } else {
-            padding + (p.x - min_x) / (max_x - min_x) * w
+            ((p.x - min_x) / (max_x - min_x)).mul_add(w, padding)
         };
 
         let y = if (max_y - min_y).abs() < 0.0001 {
             padding + h / 2.0
         } else {
-            padding + h - (p.y - min_y) / (max_y - min_y) * h
+            ((p.y - min_y) / (max_y - min_y)).mul_add(-h, padding + h)
         };
 
         let r = self.size_to_radius(p.size);
@@ -151,14 +191,17 @@ fn main() {
 
     // Print chart info
     let (min_x, max_x, min_y, max_y) = chart.bounds();
-    println!("X range: {:.1} - {:.1}", min_x, max_x);
-    println!("Y range: {:.1} - {:.1}", min_y, max_y);
+    println!("X range: {min_x:.1} - {max_x:.1}");
+    println!("Y range: {min_y:.1} - {max_y:.1}");
 
     let (min_size, max_size) = chart.size_range();
-    println!("Size range: {:.1} - {:.1}", min_size, max_size);
+    println!("Size range: {min_size:.1} - {max_size:.1}");
 
     // Print bubbles
-    println!("\n{:<12} {:>8} {:>8} {:>10} {:>8}", "Country", "X", "Y", "Size", "Radius");
+    println!(
+        "\n{:<12} {:>8} {:>8} {:>10} {:>8}",
+        "Country", "X", "Y", "Size", "Radius"
+    );
     println!("{}", "-".repeat(50));
 
     for point in chart.points() {
@@ -185,7 +228,13 @@ fn main() {
         let iy = y as usize;
 
         if ix < width && iy < height {
-            let c = if r > 30.0 { 'O' } else if r > 20.0 { 'o' } else { '.' };
+            let c = if r > 30.0 {
+                'O'
+            } else if r > 20.0 {
+                'o'
+            } else {
+                '.'
+            };
             grid[iy][ix] = c;
         }
     }

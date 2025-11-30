@@ -4,10 +4,12 @@
 //!
 //! Run: `cargo run --example ald_batch_upload`
 
+#![allow(clippy::all, clippy::pedantic, clippy::nursery)]
+
 use std::collections::HashMap;
 
 /// Upload file status
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UploadStatus {
     Pending,
     Validating,
@@ -28,7 +30,7 @@ pub struct ValidationError {
     pub severity: ErrorSeverity,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorSeverity {
     Warning,
     Error,
@@ -61,7 +63,7 @@ impl UploadFile {
         }
     }
 
-    pub fn with_dimensions(mut self, rows: usize, columns: usize) -> Self {
+    pub const fn with_dimensions(mut self, rows: usize, columns: usize) -> Self {
         self.row_count = Some(rows);
         self.column_count = Some(columns);
         self
@@ -109,7 +111,7 @@ pub struct SchemaColumn {
     pub constraints: Vec<Constraint>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataType {
     String,
     Integer,
@@ -153,13 +155,13 @@ impl BatchUpload {
         self
     }
 
-    pub fn with_max_size(mut self, size: usize) -> Self {
+    pub const fn with_max_size(mut self, size: usize) -> Self {
         self.max_file_size = size;
         self
     }
 
     pub fn with_allowed_types(mut self, types: Vec<&str>) -> Self {
-        self.allowed_types = types.iter().map(|s| s.to_string()).collect();
+        self.allowed_types = types.iter().map(|s| (*s).to_string()).collect();
         self
     }
 
@@ -192,11 +194,11 @@ impl BatchUpload {
     }
 
     pub fn total_errors(&self) -> usize {
-        self.files.iter().map(|f| f.error_count()).sum()
+        self.files.iter().map(UploadFile::error_count).sum()
     }
 
     pub fn total_warnings(&self) -> usize {
-        self.files.iter().map(|f| f.warning_count()).sum()
+        self.files.iter().map(UploadFile::warning_count).sum()
     }
 
     /// Validate a file against schema
@@ -239,10 +241,11 @@ impl BatchUpload {
     /// Check if ready to upload
     pub fn can_upload(&self) -> bool {
         !self.files.is_empty()
-            && self.files.iter().all(|f| f.is_valid())
-            && self.files.iter().all(|f| {
-                f.status == UploadStatus::Valid || f.status == UploadStatus::Pending
-            })
+            && self.files.iter().all(UploadFile::is_valid)
+            && self
+                .files
+                .iter()
+                .all(|f| f.status == UploadStatus::Valid || f.status == UploadStatus::Pending)
     }
 
     /// Get upload progress
@@ -266,7 +269,7 @@ fn format_size(bytes: usize) -> String {
     } else if bytes >= 1_000 {
         format!("{:.1} KB", bytes as f64 / 1_000.0)
     } else {
-        format!("{} B", bytes)
+        format!("{bytes} B")
     }
 }
 
@@ -303,7 +306,7 @@ fn infer_types(columns: &[String], rows: &[Vec<String>]) -> HashMap<String, Data
     for (col_idx, col_name) in columns.iter().enumerate() {
         let values: Vec<&str> = rows
             .iter()
-            .filter_map(|r| r.get(col_idx).map(|s| s.as_str()))
+            .filter_map(|r| r.get(col_idx).map(std::string::String::as_str))
             .collect();
 
         let data_type = if values.iter().all(|v| v.parse::<i64>().is_ok()) {
@@ -353,12 +356,12 @@ fn main() {
         .with_allowed_types(vec!["text/csv", "application/json"]);
 
     // Add files
-    let mut file1 = UploadFile::new("data_2024_01.csv", 2_500_000, "text/csv")
-        .with_dimensions(50000, 12);
+    let mut file1 =
+        UploadFile::new("data_2024_01.csv", 2_500_000, "text/csv").with_dimensions(50000, 12);
     file1.status = UploadStatus::Valid;
 
-    let mut file2 = UploadFile::new("data_2024_02.csv", 3_100_000, "text/csv")
-        .with_dimensions(62000, 12);
+    let mut file2 =
+        UploadFile::new("data_2024_02.csv", 3_100_000, "text/csv").with_dimensions(62000, 12);
     file2.status = UploadStatus::Valid;
 
     let mut file3 = UploadFile::new("invalid_data.xlsx", 1_800_000, "application/vnd.ms-excel")
@@ -389,7 +392,11 @@ fn main() {
     println!("Files: {}", upload.file_count());
     println!("Total size: {}", format_size(upload.total_size()));
     println!("Total rows: {}", upload.total_rows());
-    println!("Valid files: {}/{}", upload.valid_file_count(), upload.file_count());
+    println!(
+        "Valid files: {}/{}",
+        upload.valid_file_count(),
+        upload.file_count()
+    );
     println!("Errors: {}", upload.total_errors());
     println!("Warnings: {}", upload.total_warnings());
     println!("Can upload: {}", upload.can_upload());
@@ -417,8 +424,8 @@ fn main() {
             "{:<25} {:>10} {:>8} {:>8} {} {:<10}",
             &file.name[..file.name.len().min(25)],
             file.size_formatted(),
-            file.row_count.map(|r| r.to_string()).unwrap_or("-".to_string()),
-            file.column_count.map(|c| c.to_string()).unwrap_or("-".to_string()),
+            file.row_count.map_or("-".to_string(), |r| r.to_string()),
+            file.column_count.map_or("-".to_string(), |c| c.to_string()),
             status_icon,
             format!("{:?}", file.status)
         );
@@ -445,16 +452,20 @@ fn main() {
         ],
     );
 
-    println!("Columns: {} | Rows: {}", preview.column_count(), preview.row_count());
+    println!(
+        "Columns: {} | Rows: {}",
+        preview.column_count(),
+        preview.row_count()
+    );
     println!("\nInferred types:");
     for (col, dtype) in &preview.type_inference {
-        println!("  {}: {:?}", col, dtype);
+        println!("  {col}: {dtype:?}");
     }
 
     println!("\nSample data:");
     print!("│");
     for col in &preview.columns {
-        print!(" {:^10} │", col);
+        print!(" {col:^10} │");
     }
     println!();
     println!("├{}┤", "─".repeat(preview.column_count() * 13));
@@ -462,7 +473,7 @@ fn main() {
     for row in &preview.sample_rows {
         print!("│");
         for val in row {
-            print!(" {:^10} │", val);
+            print!(" {val:^10} │");
         }
         println!();
     }
@@ -480,8 +491,7 @@ mod tests {
 
     #[test]
     fn test_upload_file_creation() {
-        let file = UploadFile::new("test.csv", 1000, "text/csv")
-            .with_dimensions(100, 5);
+        let file = UploadFile::new("test.csv", 1000, "text/csv").with_dimensions(100, 5);
 
         assert_eq!(file.name, "test.csv");
         assert_eq!(file.row_count, Some(100));
@@ -507,7 +517,10 @@ mod tests {
     fn test_upload_file_size_formatted() {
         assert_eq!(UploadFile::new("t", 500, "t").size_formatted(), "500 B");
         assert_eq!(UploadFile::new("t", 1500, "t").size_formatted(), "1.5 KB");
-        assert_eq!(UploadFile::new("t", 1_500_000, "t").size_formatted(), "1.5 MB");
+        assert_eq!(
+            UploadFile::new("t", 1_500_000, "t").size_formatted(),
+            "1.5 MB"
+        );
     }
 
     #[test]
@@ -571,8 +584,14 @@ mod tests {
         ];
 
         let preview = UploadPreview::new(columns, rows);
-        assert_eq!(preview.type_inference.get("int_col"), Some(&DataType::Integer));
-        assert_eq!(preview.type_inference.get("str_col"), Some(&DataType::String));
+        assert_eq!(
+            preview.type_inference.get("int_col"),
+            Some(&DataType::Integer)
+        );
+        assert_eq!(
+            preview.type_inference.get("str_col"),
+            Some(&DataType::String)
+        );
     }
 
     #[test]

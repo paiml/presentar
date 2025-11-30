@@ -4,10 +4,20 @@
 //!
 //! Run: `cargo run --example cht_sparkline`
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::disallowed_methods,
+    clippy::needless_range_loop,
+    unused_variables,
+    clippy::too_many_lines,
+    clippy::needless_collect,
+    clippy::struct_field_names
+)]
+
 use presentar_core::Color;
 
 /// Sparkline type
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SparklineType {
     Line,
     Bar,
@@ -39,7 +49,7 @@ impl Sparkline {
         }
     }
 
-    pub fn with_type(mut self, sparkline_type: SparklineType) -> Self {
+    pub const fn with_type(mut self, sparkline_type: SparklineType) -> Self {
         self.sparkline_type = sparkline_type;
         self
     }
@@ -50,17 +60,17 @@ impl Sparkline {
         self
     }
 
-    pub fn with_color(mut self, color: Color) -> Self {
+    pub const fn with_color(mut self, color: Color) -> Self {
         self.color = color;
         self
     }
 
-    pub fn with_min_max_markers(mut self, show: bool) -> Self {
+    pub const fn with_min_max_markers(mut self, show: bool) -> Self {
         self.show_min_max = show;
         self
     }
 
-    pub fn with_last_marker(mut self, show: bool) -> Self {
+    pub const fn with_last_marker(mut self, show: bool) -> Self {
         self.show_last = show;
         self
     }
@@ -70,8 +80,12 @@ impl Sparkline {
         if self.values.is_empty() {
             return (0.0, 1.0);
         }
-        let min = self.values.iter().cloned().fold(f32::INFINITY, f32::min);
-        let max = self.values.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        let min = self.values.iter().copied().fold(f32::INFINITY, f32::min);
+        let max = self
+            .values
+            .iter()
+            .copied()
+            .fold(f32::NEG_INFINITY, f32::max);
         (min, max)
     }
 
@@ -189,8 +203,7 @@ impl Sparkline {
                 let bar_width = (self.width / self.values.len().max(1)).max(1);
                 for (i, &v) in self.values.iter().enumerate() {
                     let x = i * bar_width;
-                    let bar_height =
-                        (self.normalize(v) * self.height as f32).round() as usize;
+                    let bar_height = (self.normalize(v) * self.height as f32).round() as usize;
                     for y in 0..bar_height {
                         let grid_y = self.height - 1 - y;
                         for bx in 0..bar_width.saturating_sub(1) {
@@ -204,8 +217,8 @@ impl Sparkline {
             SparklineType::Area => {
                 for (i, &v) in self.values.iter().enumerate() {
                     let x = (i as f32 * x_step).round() as usize;
-                    let top_y = ((1.0 - self.normalize(v)) * (self.height - 1) as f32).round()
-                        as usize;
+                    let top_y =
+                        ((1.0 - self.normalize(v)) * (self.height - 1) as f32).round() as usize;
                     let x = x.min(self.width - 1);
 
                     for y in top_y..self.height {
@@ -244,15 +257,15 @@ impl Sparkline {
         &self.values
     }
 
-    pub fn sparkline_type(&self) -> SparklineType {
+    pub const fn sparkline_type(&self) -> SparklineType {
         self.sparkline_type
     }
 
-    pub fn width(&self) -> usize {
+    pub const fn width(&self) -> usize {
         self.width
     }
 
-    pub fn height(&self) -> usize {
+    pub const fn height(&self) -> usize {
         self.height
     }
 }
@@ -281,10 +294,7 @@ fn main() {
     println!("{}", cpu_spark.render_ascii());
     let (min, max) = cpu_spark.range();
     let trend = cpu_spark.trend_percentage();
-    println!(
-        "Range: {:.0}-{:.0}% | Trend: {:+.1}%\n",
-        min, max, trend
-    );
+    println!("Range: {min:.0}-{max:.0}% | Trend: {trend:+.1}%\n");
 
     // Memory sparkline
     let mem_spark = Sparkline::new(memory_usage.clone())
@@ -295,10 +305,7 @@ fn main() {
     println!("{}", mem_spark.render_ascii());
     let (min, max) = mem_spark.range();
     let trend = mem_spark.trend_percentage();
-    println!(
-        "Range: {:.0}-{:.0}% | Trend: {:+.1}%\n",
-        min, max, trend
-    );
+    println!("Range: {min:.0}-{max:.0}% | Trend: {trend:+.1}%\n");
 
     // Requests sparkline
     let req_spark = Sparkline::new(requests.clone())
@@ -309,16 +316,25 @@ fn main() {
     println!("{}", req_spark.render_ascii());
     let (min, max) = req_spark.range();
     let trend = req_spark.trend_percentage();
-    println!(
-        "Range: {:.0}-{:.0} | Trend: {:+.1}%\n",
-        min, max, trend
-    );
+    println!("Range: {min:.0}-{max:.0} | Trend: {trend:+.1}%\n");
 
     // Inline sparklines (single line)
     println!("=== Inline Sparklines ===\n");
-    println!("CPU:     {} {:.0}%", Sparkline::new(cpu_usage).render_inline(), 78.0);
-    println!("Memory:  {} {:.0}%", Sparkline::new(memory_usage).render_inline(), 80.0);
-    println!("Reqs:    {} {:.0}", Sparkline::new(requests).render_inline(), 190.0);
+    println!(
+        "CPU:     {} {:.0}%",
+        Sparkline::new(cpu_usage).render_inline(),
+        78.0
+    );
+    println!(
+        "Memory:  {} {:.0}%",
+        Sparkline::new(memory_usage).render_inline(),
+        80.0
+    );
+    println!(
+        "Reqs:    {} {:.0}",
+        Sparkline::new(requests).render_inline(),
+        190.0
+    );
 
     println!("\n=== Acceptance Criteria ===");
     println!("- [x] Renders in minimal space");

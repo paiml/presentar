@@ -458,7 +458,10 @@ fn test_dsh_008_confusion_matrix() {
         .iter()
         .flat_map(|s| &s.widgets)
         .any(|w| w.widget_type == "chart" && w.chart_type.as_deref() == Some("heatmap"));
-    assert!(has_heatmap, "DSH-008 must have heatmap for confusion matrix");
+    assert!(
+        has_heatmap,
+        "DSH-008 must have heatmap for confusion matrix"
+    );
 }
 
 // =============================================================================
@@ -598,6 +601,10 @@ fn test_all_edge_case_examples_exist() {
 
     for file in &required {
         let path = edge_dir.join(file);
-        assert!(path.exists(), "Required edge case example missing: {}", file);
+        assert!(
+            path.exists(),
+            "Required edge case example missing: {}",
+            file
+        );
     }
 }

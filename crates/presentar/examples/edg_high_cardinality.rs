@@ -4,13 +4,19 @@
 //!
 //! Run: `cargo run --example edg_high_cardinality`
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::disallowed_methods,
+    clippy::unreadable_literal
+)]
+
 use std::collections::HashMap;
 
 /// Category aggregation strategy
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AggregationStrategy {
-    TopN(usize),              // Keep top N by count
-    Threshold(f64),           // Keep categories above percentage threshold
+    TopN(usize),                     // Keep top N by count
+    Threshold(f64),                  // Keep categories above percentage threshold
     GroupSmall(usize, &'static str), // Group categories with count < N into "Other"
 }
 
@@ -43,7 +49,7 @@ impl CardinalityHandler {
         self.counts.len()
     }
 
-    pub fn total(&self) -> usize {
+    pub const fn total(&self) -> usize {
         self.total
     }
 
@@ -152,7 +158,7 @@ impl CardinalityHandler {
         }
 
         let mut counts: Vec<usize> = self.counts.values().copied().collect();
-        counts.sort();
+        counts.sort_unstable();
 
         let min_count = *counts.first().unwrap();
         let max_count = *counts.last().unwrap();
@@ -212,7 +218,7 @@ pub struct VirtualizedList<T> {
 }
 
 impl<T> VirtualizedList<T> {
-    pub fn new(items: Vec<T>, visible_count: usize) -> Self {
+    pub const fn new(items: Vec<T>, visible_count: usize) -> Self {
         Self {
             items,
             visible_start: 0,
@@ -241,7 +247,7 @@ impl<T> VirtualizedList<T> {
         self.scroll_to(self.visible_start.saturating_sub(1));
     }
 
-    pub fn current_position(&self) -> (usize, usize) {
+    pub const fn current_position(&self) -> (usize, usize) {
         (self.visible_start, self.visible_start + self.visible_count)
     }
 }
@@ -274,16 +280,13 @@ fn main() {
     // Add 50 "long tail" categories
     for i in 0..50 {
         let count = 100 - i; // Decreasing counts
-        handler.add_count(&format!("Country_{:02}", i), count.max(1));
+        handler.add_count(&format!("Country_{i:02}"), count.max(1));
     }
 
     println!("Original Data:");
     println!("  Total records: {}", handler.total());
     println!("  Cardinality: {}", handler.cardinality());
-    println!(
-        "  High cardinality: {}",
-        handler.is_high_cardinality(10)
-    );
+    println!("  High cardinality: {}", handler.is_high_cardinality(10));
 
     // Distribution stats
     let stats = handler.distribution_stats();
@@ -303,7 +306,12 @@ fn main() {
     println!("  Categories shown: {}", top5.categories.len());
     println!("  Aggregated into 'Other': {}", top5.aggregated_count);
     for (cat, count) in &top5.categories {
-        println!("    {:<20} {:>6} ({:>5.1}%)", cat, count, top5.percentage(*count));
+        println!(
+            "    {:<20} {:>6} ({:>5.1}%)",
+            cat,
+            count,
+            top5.percentage(*count)
+        );
     }
 
     // Threshold
@@ -312,33 +320,43 @@ fn main() {
     println!("  Categories shown: {}", threshold.categories.len());
     println!("  Aggregated into 'Other': {}", threshold.aggregated_count);
     for (cat, count) in &threshold.categories {
-        println!("    {:<20} {:>6} ({:>5.1}%)", cat, count, threshold.percentage(*count));
+        println!(
+            "    {:<20} {:>6} ({:>5.1}%)",
+            cat,
+            count,
+            threshold.percentage(*count)
+        );
     }
 
     // Group small
     println!("\n'Group Small' Strategy (min count = 1000):");
     let grouped = handler.aggregate(AggregationStrategy::GroupSmall(1000, "Remaining"));
     for (cat, count) in &grouped.categories {
-        println!("    {:<20} {:>6} ({:>5.1}%)", cat, count, grouped.percentage(*count));
+        println!(
+            "    {:<20} {:>6} ({:>5.1}%)",
+            cat,
+            count,
+            grouped.percentage(*count)
+        );
     }
 
     // Virtualized list demo
     println!("\n=== Virtualized List ===\n");
-    let all_items: Vec<String> = (0..100).map(|i| format!("Item {}", i)).collect();
+    let all_items: Vec<String> = (0..100).map(|i| format!("Item {i}")).collect();
     let mut list = VirtualizedList::new(all_items, 5);
 
     println!("Total items: {}", list.total_count());
     println!("Visible window: {:?}", list.current_position());
     println!("Visible items:");
     for item in list.visible_items() {
-        println!("  {}", item);
+        println!("  {item}");
     }
 
     list.scroll_to(50);
     println!("\nAfter scroll to 50:");
     println!("Visible window: {:?}", list.current_position());
     for item in list.visible_items() {
-        println!("  {}", item);
+        println!("  {item}");
     }
 
     println!("\n=== Acceptance Criteria ===");

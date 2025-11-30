@@ -90,16 +90,14 @@ impl DonutChart {
         if total <= 0.0 {
             return None;
         }
-        self.segments
-            .get(index)
-            .map(|s| (s.value / total) * 100.0)
+        self.segments.get(index).map(|s| (s.value / total) * 100.0)
     }
 
     /// Calculate point on circle at given angle
     pub fn point_on_circle(&self, angle: f32, radius: f32, center: (f32, f32)) -> (f32, f32) {
         (
-            center.0 + radius * angle.cos(),
-            center.1 + radius * angle.sin(),
+            radius.mul_add(angle.cos(), center.0),
+            radius.mul_add(angle.sin(), center.1),
         )
     }
 
@@ -118,23 +116,20 @@ impl DonutChart {
         let (ix1, iy1) = self.point_on_circle(start_angle, inner_radius, center);
         let (ix2, iy2) = self.point_on_circle(end_angle, inner_radius, center);
 
-        let large_arc = if (end_angle - start_angle) > PI {
-            1
-        } else {
-            0
-        };
+        let large_arc = i32::from((end_angle - start_angle) > PI);
 
         Some(format!(
-            "M {:.2} {:.2} A {:.2} {:.2} 0 {} 1 {:.2} {:.2} L {:.2} {:.2} A {:.2} {:.2} 0 {} 0 {:.2} {:.2} Z",
-            ox1, oy1,
-            outer_radius, outer_radius, large_arc, ox2, oy2,
-            ix2, iy2,
-            inner_radius, inner_radius, large_arc, ix1, iy1
+            "M {ox1:.2} {oy1:.2} A {outer_radius:.2} {outer_radius:.2} 0 {large_arc} 1 {ox2:.2} {oy2:.2} L {ix2:.2} {iy2:.2} A {inner_radius:.2} {inner_radius:.2} 0 {large_arc} 0 {ix1:.2} {iy1:.2} Z"
         ))
     }
 
     /// Get label position for a segment (midpoint of arc)
-    pub fn label_position(&self, index: usize, radius: f32, center: (f32, f32)) -> Option<(f32, f32)> {
+    pub fn label_position(
+        &self,
+        index: usize,
+        radius: f32,
+        center: (f32, f32),
+    ) -> Option<(f32, f32)> {
         let (start, end) = self.segment_angles(index)?;
         let mid_angle = (start + end) / 2.0;
         Some(self.point_on_circle(mid_angle, radius, center))
@@ -148,7 +143,7 @@ impl DonutChart {
         &self.title
     }
 
-    pub fn inner_radius_ratio(&self) -> f32 {
+    pub const fn inner_radius_ratio(&self) -> f32 {
         self.inner_radius_ratio
     }
 
@@ -178,12 +173,14 @@ fn main() {
     println!("Inner radius: {:.0}%", chart.inner_radius_ratio() * 100.0);
 
     if let (Some(label), Some(value)) = (chart.center_label(), chart.center_value()) {
-        println!("Center: {} = {}", label, value);
+        println!("Center: {label} = {value}");
     }
 
     // Print segments
-    println!("\n{:<12} {:>8} {:>8} {:>12} {:>12}",
-        "Segment", "Value", "%", "Start°", "End°");
+    println!(
+        "\n{:<12} {:>8} {:>8} {:>12} {:>12}",
+        "Segment", "Value", "%", "Start°", "End°"
+    );
     println!("{}", "-".repeat(56));
 
     for (i, segment) in chart.segments().iter().enumerate() {
@@ -210,7 +207,7 @@ fn main() {
         for x in 0..size {
             let dx = x as f32 - center.0 as f32;
             let dy = y as f32 - center.1 as f32;
-            let dist = (dx * dx + dy * dy).sqrt();
+            let dist = dx.hypot(dy);
             let angle = dy.atan2(dx);
 
             let c = if dist < inner_r - 0.5 {
@@ -226,12 +223,20 @@ fn main() {
                 for (i, _) in chart.segments().iter().enumerate() {
                     if let Some((start, end)) = chart.segment_angles(i) {
                         let normalized_angle = if angle < -PI / 2.0 {
-                            angle + 2.0 * PI
+                            2.0f32.mul_add(PI, angle)
                         } else {
                             angle
                         };
-                        let norm_start = if start < -PI / 2.0 { start + 2.0 * PI } else { start };
-                        let norm_end = if end < -PI / 2.0 { end + 2.0 * PI } else { end };
+                        let norm_start = if start < -PI / 2.0 {
+                            2.0f32.mul_add(PI, start)
+                        } else {
+                            start
+                        };
+                        let norm_end = if end < -PI / 2.0 {
+                            2.0f32.mul_add(PI, end)
+                        } else {
+                            end
+                        };
 
                         if (norm_start <= normalized_angle && normalized_angle < norm_end)
                             || (norm_start > norm_end
@@ -251,7 +256,7 @@ fn main() {
             } else {
                 ' '
             };
-            print!("{}", c);
+            print!("{c}");
         }
         println!();
     }
@@ -265,7 +270,12 @@ fn main() {
             2 => '░',
             _ => '·',
         };
-        println!("  {} {} ({:.1}%)", c, segment.label, chart.segment_percentage(i).unwrap_or(0.0));
+        println!(
+            "  {} {} ({:.1}%)",
+            c,
+            segment.label,
+            chart.segment_percentage(i).unwrap_or(0.0)
+        );
     }
 
     println!("\n=== Acceptance Criteria ===");

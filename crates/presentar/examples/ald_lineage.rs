@@ -4,21 +4,32 @@
 //!
 //! Run: `cargo run --example ald_lineage`
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::disallowed_methods,
+    clippy::unreadable_literal,
+    clippy::too_many_lines,
+    clippy::needless_pass_by_value,
+    unused_variables,
+    clippy::iter_without_into_iter,
+    clippy::or_fun_call
+)]
+
 use std::collections::HashMap;
 
 /// Transformation type
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TransformationType {
-    Source,          // Original data source
-    Filter,          // Row filtering
-    Map,             // Column transformation
-    Join,            // Merge with another dataset
-    Aggregate,       // Group and aggregate
-    Split,           // Train/test split
-    Sample,          // Random sampling
-    Normalize,       // Normalization/standardization
-    Encode,          // Categorical encoding
-    Custom(String),  // Custom transformation
+    Source,         // Original data source
+    Filter,         // Row filtering
+    Map,            // Column transformation
+    Join,           // Merge with another dataset
+    Aggregate,      // Group and aggregate
+    Split,          // Train/test split
+    Sample,         // Random sampling
+    Normalize,      // Normalization/standardization
+    Encode,         // Categorical encoding
+    Custom(String), // Custom transformation
 }
 
 /// A node in the lineage graph
@@ -59,11 +70,11 @@ impl LineageNode {
     }
 
     pub fn with_inputs(mut self, input_ids: Vec<&str>) -> Self {
-        self.input_ids = input_ids.iter().map(|s| s.to_string()).collect();
+        self.input_ids = input_ids.iter().map(|s| (*s).to_string()).collect();
         self
     }
 
-    pub fn with_output_count(mut self, count: usize) -> Self {
+    pub const fn with_output_count(mut self, count: usize) -> Self {
         self.output_count = Some(count);
         self
     }
@@ -119,18 +130,12 @@ impl LineageGraph {
 
     /// Get all source nodes
     pub fn sources(&self) -> Vec<&LineageNode> {
-        self.nodes
-            .values()
-            .filter(|n| n.is_source())
-            .collect()
+        self.nodes.values().filter(|n| n.is_source()).collect()
     }
 
     /// Get all leaf nodes (outputs)
     pub fn leaves(&self) -> Vec<&LineageNode> {
-        self.nodes
-            .values()
-            .filter(|n| n.is_leaf(self))
-            .collect()
+        self.nodes.values().filter(|n| n.is_leaf(self)).collect()
     }
 
     /// Get upstream dependencies (recursive)
@@ -213,10 +218,10 @@ impl LineageGraph {
 
             // Find nodes that have this as input
             for n in self.nodes.values() {
-                if n.input_ids.contains(&current.to_string()) {
-                    if self.find_path(&n.id, target, visited, path) {
-                        return true;
-                    }
+                if n.input_ids.contains(&current.to_string())
+                    && self.find_path(&n.id, target, visited, path)
+                {
+                    return true;
                 }
             }
 
@@ -228,10 +233,7 @@ impl LineageGraph {
 
     /// Calculate total rows processed
     pub fn total_rows(&self) -> usize {
-        self.sources()
-            .iter()
-            .filter_map(|n| n.output_count)
-            .sum()
+        self.sources().iter().filter_map(|n| n.output_count).sum()
     }
 }
 
@@ -256,11 +258,15 @@ fn main() {
     );
 
     graph.add_node(
-        LineageNode::new("filtered-tweets", "Filtered Tweets", TransformationType::Filter)
-            .with_description("Remove bots and spam")
-            .with_input("raw-tweets")
-            .with_output_count(85000)
-            .with_param("filter", "bot_score < 0.3"),
+        LineageNode::new(
+            "filtered-tweets",
+            "Filtered Tweets",
+            TransformationType::Filter,
+        )
+        .with_description("Remove bots and spam")
+        .with_input("raw-tweets")
+        .with_output_count(85000)
+        .with_param("filter", "bot_score < 0.3"),
     );
 
     graph.add_node(
@@ -332,7 +338,7 @@ fn main() {
             "{:<20} {:<12} {:>10} {:<30}",
             node.id,
             type_str,
-            node.output_count.map(|c| c.to_string()).unwrap_or("-".to_string()),
+            node.output_count.map_or("-".to_string(), |c| c.to_string()),
             &node.description[..node.description.len().min(30)]
         );
     }
@@ -410,11 +416,18 @@ mod tests {
     #[test]
     fn test_lineage_graph_sources() {
         let mut graph = LineageGraph::new("test");
-        graph.add_node(LineageNode::new("src1", "Source 1", TransformationType::Source));
-        graph.add_node(LineageNode::new("src2", "Source 2", TransformationType::Source));
+        graph.add_node(LineageNode::new(
+            "src1",
+            "Source 1",
+            TransformationType::Source,
+        ));
+        graph.add_node(LineageNode::new(
+            "src2",
+            "Source 2",
+            TransformationType::Source,
+        ));
         graph.add_node(
-            LineageNode::new("proc", "Process", TransformationType::Filter)
-                .with_input("src1"),
+            LineageNode::new("proc", "Process", TransformationType::Filter).with_input("src1"),
         );
 
         assert_eq!(graph.sources().len(), 2);
@@ -423,13 +436,16 @@ mod tests {
     #[test]
     fn test_lineage_graph_leaves() {
         let mut graph = LineageGraph::new("test");
-        graph.add_node(LineageNode::new("src", "Source", TransformationType::Source));
+        graph.add_node(LineageNode::new(
+            "src",
+            "Source",
+            TransformationType::Source,
+        ));
         graph.add_node(
             LineageNode::new("mid", "Middle", TransformationType::Filter).with_input("src"),
         );
-        graph.add_node(
-            LineageNode::new("out", "Output", TransformationType::Map).with_input("mid"),
-        );
+        graph
+            .add_node(LineageNode::new("out", "Output", TransformationType::Map).with_input("mid"));
 
         let leaves = graph.leaves();
         assert_eq!(leaves.len(), 1);
@@ -440,12 +456,8 @@ mod tests {
     fn test_upstream() {
         let mut graph = LineageGraph::new("test");
         graph.add_node(LineageNode::new("a", "A", TransformationType::Source));
-        graph.add_node(
-            LineageNode::new("b", "B", TransformationType::Filter).with_input("a"),
-        );
-        graph.add_node(
-            LineageNode::new("c", "C", TransformationType::Map).with_input("b"),
-        );
+        graph.add_node(LineageNode::new("b", "B", TransformationType::Filter).with_input("a"));
+        graph.add_node(LineageNode::new("c", "C", TransformationType::Map).with_input("b"));
 
         let upstream = graph.upstream("c");
         assert_eq!(upstream.len(), 3); // c, b, a
@@ -455,12 +467,8 @@ mod tests {
     fn test_downstream() {
         let mut graph = LineageGraph::new("test");
         graph.add_node(LineageNode::new("a", "A", TransformationType::Source));
-        graph.add_node(
-            LineageNode::new("b", "B", TransformationType::Filter).with_input("a"),
-        );
-        graph.add_node(
-            LineageNode::new("c", "C", TransformationType::Map).with_input("b"),
-        );
+        graph.add_node(LineageNode::new("b", "B", TransformationType::Filter).with_input("a"));
+        graph.add_node(LineageNode::new("c", "C", TransformationType::Map).with_input("b"));
 
         let downstream = graph.downstream("a");
         assert_eq!(downstream.len(), 3); // a, b, c
@@ -470,12 +478,8 @@ mod tests {
     fn test_path_finding() {
         let mut graph = LineageGraph::new("test");
         graph.add_node(LineageNode::new("a", "A", TransformationType::Source));
-        graph.add_node(
-            LineageNode::new("b", "B", TransformationType::Filter).with_input("a"),
-        );
-        graph.add_node(
-            LineageNode::new("c", "C", TransformationType::Map).with_input("b"),
-        );
+        graph.add_node(LineageNode::new("b", "B", TransformationType::Filter).with_input("a"));
+        graph.add_node(LineageNode::new("c", "C", TransformationType::Map).with_input("b"));
 
         let path = graph.path("a", "c").unwrap();
         assert_eq!(path.len(), 3);

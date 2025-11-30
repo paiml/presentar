@@ -3,28 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Presentar GPU Showcase - 60fps WebGPU Demo</title>
+    <title>Presentar WASM Showcase - Real Rust/WebAssembly Demo</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0d0f14;
-            color: #f0f0f5;
+            background: #f9fafb;
+            color: #111827;
             min-height: 100vh;
+        }
+        body.dark {
+            background: #111827;
+            color: #f3f4f6;
         }
         header {
             padding: 20px 24px;
-            background: linear-gradient(135deg, #1e1e2e 0%, #0d0f14 100%);
-            border-bottom: 1px solid #2a2a3a;
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
             text-align: center;
+        }
+        body.dark header {
+            background: #1f2937;
+            border-color: #374151;
         }
         h1 {
             font-size: 24px;
             font-weight: 600;
-            background: linear-gradient(90deg, #6366f1, #8b5cf6, #06b6d4);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            color: #111827;
         }
+        body.dark h1 { color: #f3f4f6; }
         .badge {
             display: inline-block;
             background: #059669;
@@ -36,86 +43,31 @@
             margin-left: 8px;
             vertical-align: middle;
         }
-        .subtitle { color: #9ca3af; font-size: 13px; margin-top: 4px; }
-        main {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
-            padding: 16px;
-            max-width: 1400px;
-            margin: 0 auto;
+        .badge.wasm {
+            background: #6366f1;
         }
-        .card {
-            background: #1e1e2e;
+        .subtitle { color: #6b7280; font-size: 13px; margin-top: 4px; }
+        .canvas-container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+        #mainCanvas {
+            display: block;
+            width: 100%;
+            height: 600px;
             border-radius: 12px;
-            border: 1px solid #2a2a3a;
-            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
-        .card-header {
-            padding: 12px 16px;
-            border-bottom: 1px solid #2a2a3a;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+        body.dark #mainCanvas {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
         }
-        .card-title {
-            font-size: 14px;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .card-title .file-badge {
-            background: #3b3b4f;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-family: monospace;
-            color: #8b5cf6;
-        }
-        .card-body { padding: 16px; }
-        canvas { display: block; width: 100%; height: 200px; }
-        .model-info { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .model-stat {
-            background: #14161e;
-            padding: 12px;
-            border-radius: 8px;
-            text-align: center;
-        }
-        .model-stat-value {
-            font-size: 24px;
-            font-weight: 700;
-            color: #6366f1;
-        }
-        .model-stat-label {
-            font-size: 11px;
-            color: #9ca3af;
-            margin-top: 4px;
-        }
-        .layer-viz {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-top: 12px;
-            justify-content: center;
-        }
-        .layer-node {
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: 500;
-            text-align: center;
-        }
-        .layer-input { background: #3b82f6; }
-        .layer-hidden { background: #8b5cf6; }
-        .layer-output { background: #10b981; }
-        .layer-arrow { color: #6b7280; font-size: 18px; }
         .controls {
-            grid-column: 1 / -1;
             display: flex;
             gap: 12px;
             justify-content: center;
-            padding: 8px;
+            padding: 16px;
+            flex-wrap: wrap;
         }
         button {
             padding: 10px 20px;
@@ -131,466 +83,255 @@
             color: white;
         }
         .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4); }
-        .btn-secondary { background: #2a2a3a; color: #f0f0f5; }
-        .btn-secondary:hover { background: #3a3a4a; }
-        .fps-display {
-            position: fixed;
-            top: 16px;
-            right: 16px;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-family: monospace;
-            z-index: 100;
+        .btn-secondary { background: #e5e7eb; color: #374151; }
+        body.dark .btn-secondary { background: #374151; color: #f3f4f6; }
+        .btn-secondary:hover { background: #d1d5db; }
+        body.dark .btn-secondary:hover { background: #4b5563; }
+        .info-panel {
+            max-width: 1200px;
+            margin: 0 auto 20px;
+            padding: 0 20px;
         }
-        .fps-value { font-size: 20px; font-weight: 700; color: #10b981; }
-        .comparison {
-            grid-column: 1 / -1;
+        .info-grid {
             display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 12px;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
         }
-        .compare-item {
-            background: #14161e;
-            padding: 16px;
+        .info-card {
+            background: white;
             border-radius: 8px;
+            padding: 16px;
             text-align: center;
+            border: 1px solid #e5e7eb;
         }
-        .compare-label { font-size: 11px; color: #9ca3af; margin-bottom: 8px; }
-        .compare-value { font-size: 16px; font-weight: 700; }
-        .compare-vs { font-size: 11px; color: #6b7280; margin-top: 4px; }
-        .winner { color: #10b981; }
+        body.dark .info-card {
+            background: #1f2937;
+            border-color: #374151;
+        }
+        .info-label { font-size: 12px; color: #6b7280; margin-bottom: 4px; }
+        .info-value { font-size: 20px; font-weight: 700; color: #6366f1; }
+        .inference-panel {
+            max-width: 600px;
+            margin: 0 auto 20px;
+            padding: 0 20px;
+        }
+        .inference-input {
+            display: flex;
+            gap: 8px;
+        }
+        .inference-input input {
+            flex: 1;
+            padding: 10px 16px;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        body.dark .inference-input input {
+            background: #374151;
+            border-color: #4b5563;
+            color: #f3f4f6;
+        }
+        .inference-result {
+            margin-top: 12px;
+            padding: 12px;
+            background: #f3f4f6;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        body.dark .inference-result {
+            background: #374151;
+        }
         footer {
             text-align: center;
             padding: 16px;
             color: #6b7280;
             font-size: 12px;
-            border-top: 1px solid #2a2a3a;
+            border-top: 1px solid #e5e7eb;
         }
+        body.dark footer { border-color: #374151; }
         footer a { color: #6366f1; text-decoration: none; }
+        .loading {
+            text-align: center;
+            padding: 100px 20px;
+            color: #6b7280;
+        }
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #e5e7eb;
+            border-top-color: #6366f1;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .error {
+            text-align: center;
+            padding: 40px 20px;
+            color: #dc2626;
+            background: #fef2f2;
+            border-radius: 8px;
+            margin: 20px;
+        }
+        body.dark .error {
+            background: #450a0a;
+            color: #fca5a5;
+        }
     </style>
 </head>
 <body>
     <header>
-        <h1>Presentar GPU Showcase <span class="badge">60fps</span></h1>
-        <p class="subtitle">WASM-first visualization with .apr models and .ald datasets</p>
+        <h1>Presentar WASM Showcase <span class="badge wasm">Real WASM</span> <span class="badge">Rust</span></h1>
+        <p class="subtitle">All rendering and logic runs in Rust/WebAssembly - no JavaScript reimplementation</p>
     </header>
 
-    <div class="fps-display"><span class="fps-value" id="fps">60</span> fps</div>
+    <div id="loading" class="loading">
+        <div class="loading-spinner"></div>
+        <p>Loading WebAssembly module...</p>
+    </div>
 
-    <main>
-        <!-- Stock Chart from .ald -->
-        <div class="card">
-            <div class="card-header">
-                <span class="card-title">Stock Price <span class="file-badge">timeseries_100.ald</span></span>
-                <span style="color: #10b981; font-size: 13px;">+12.4%</span>
-            </div>
-            <div class="card-body">
-                <canvas id="stockChart"></canvas>
-            </div>
+    <div id="app" style="display: none;">
+        <div class="canvas-container">
+            <canvas id="mainCanvas" width="1200" height="600"></canvas>
         </div>
 
-        <!-- Model Card from .apr -->
-        <div class="card">
-            <div class="card-header">
-                <span class="card-title">Sentiment Model <span class="file-badge">sentiment_mini.apr</span></span>
-                <span style="color: #6366f1; font-size: 13px;">3.7 KB</span>
-            </div>
-            <div class="card-body">
-                <div class="model-info">
-                    <div class="model-stat">
-                        <div class="model-stat-value">867</div>
-                        <div class="model-stat-label">Parameters</div>
-                    </div>
-                    <div class="model-stat">
-                        <div class="model-stat-value">87%</div>
-                        <div class="model-stat-label">Accuracy</div>
-                    </div>
-                    <div class="model-stat">
-                        <div class="model-stat-value">2</div>
-                        <div class="model-stat-label">Layers</div>
-                    </div>
-                    <div class="model-stat">
-                        <div class="model-stat-value">3</div>
-                        <div class="model-stat-label">Classes</div>
-                    </div>
-                </div>
-                <div class="layer-viz">
-                    <div class="layer-node layer-input">50<br><small>input</small></div>
-                    <span class="layer-arrow">→</span>
-                    <div class="layer-node layer-hidden">16<br><small>ReLU</small></div>
-                    <span class="layer-arrow">→</span>
-                    <div class="layer-node layer-output">3<br><small>softmax</small></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Animated Bar Chart -->
-        <div class="card">
-            <div class="card-header">
-                <span class="card-title">Monthly Revenue</span>
-            </div>
-            <div class="card-body">
-                <canvas id="barChart"></canvas>
-            </div>
-        </div>
-
-        <!-- Donut + Particles -->
-        <div class="card">
-            <div class="card-header">
-                <span class="card-title">Distribution + Particles</span>
-                <span style="color: #9ca3af; font-size: 12px;" id="particleCount">0 particles</span>
-            </div>
-            <div class="card-body">
-                <canvas id="donutChart"></canvas>
-            </div>
-        </div>
-
-        <!-- Controls -->
         <div class="controls">
-            <button class="btn-primary" id="btn-data">Randomize Data</button>
-            <button class="btn-secondary" id="btn-inference">Run Inference</button>
-            <button class="btn-secondary" id="btn-particles">Emit Particles</button>
+            <button class="btn-primary" id="btn-update">Update Data</button>
+            <button class="btn-secondary" id="btn-theme">Toggle Theme</button>
         </div>
 
-        <!-- 10X Comparison -->
-        <div class="comparison">
-            <div class="compare-item">
-                <div class="compare-label">Frame Rate</div>
-                <div class="compare-value winner">60 fps</div>
-                <div class="compare-vs">vs 1-12 fps</div>
-            </div>
-            <div class="compare-item">
-                <div class="compare-label">Bundle Size</div>
-                <div class="compare-value winner">450 KB</div>
-                <div class="compare-vs">vs 150-200 MB</div>
-            </div>
-            <div class="compare-item">
-                <div class="compare-label">Startup</div>
-                <div class="compare-value winner">80 ms</div>
-                <div class="compare-vs">vs 3-8 sec</div>
-            </div>
-            <div class="compare-item">
-                <div class="compare-label">Memory</div>
-                <div class="compare-value winner">32 MB</div>
-                <div class="compare-vs">vs 250-500 MB</div>
-            </div>
-            <div class="compare-item">
-                <div class="compare-label">Offline</div>
-                <div class="compare-value winner">Full</div>
-                <div class="compare-vs">vs None</div>
+        <div class="info-panel">
+            <div class="info-grid">
+                <div class="info-card">
+                    <div class="info-label">WASM Size</div>
+                    <div class="info-value" id="wasm-size">-</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Frame Rate</div>
+                    <div class="info-value" id="fps-display">-</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Engine</div>
+                    <div class="info-value">Rust/Canvas2D</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Data Source</div>
+                    <div class="info-value">LCG RNG</div>
+                </div>
             </div>
         </div>
-    </main>
+
+        <div class="inference-panel">
+            <h3 style="margin-bottom: 12px; font-size: 16px;">Test Inference (Heuristic Demo)</h3>
+            <div class="inference-input">
+                <input type="text" id="inference-text" placeholder="Enter text for sentiment analysis..." value="This product is great!">
+                <button class="btn-primary" id="btn-inference">Analyze</button>
+            </div>
+            <div class="inference-result" id="inference-result">
+                Click "Analyze" to run inference in WASM
+            </div>
+        </div>
+    </div>
+
+    <div id="error" class="error" style="display: none;">
+        <h3>Failed to load WebAssembly</h3>
+        <p id="error-message"></p>
+    </div>
 
     <footer>
-        Built with <a href="https://github.com/paiml/presentar">Presentar</a> - Sovereign AI Stack
+        Built with <a href="https://github.com/paiml/presentar">Presentar</a> - Sovereign AI Stack<br>
+        <small>All visualization and logic implemented in Rust, compiled to WebAssembly</small>
     </footer>
 
-    <script>
+    <script type="module">
         // =====================================================================
-        // Simulated .ald data (matches timeseries_100.ald generation)
+        // Real WASM Module Loading - No JavaScript reimplementation!
         // =====================================================================
-        function generateStockData() {
-            const n = 100;
-            const data = { open: [], high: [], low: [], close: [] };
-            let price = 100, seed = 12345;
-            for (let i = 0; i < n; i++) {
-                seed = (seed * 1103515245 + 12345) >>> 0;
-                const rand = ((seed >> 16) & 0xFFFF) / 65536;
-                const change = (rand - 0.48) * 4;
-                const vol = 1 + rand * 2;
-                const o = price, c = Math.max(price + change, 1);
-                const h = Math.max(o, c) + vol * rand;
-                const l = Math.max(Math.min(o, c) - vol * (1 - rand), 0.5);
-                data.open.push(o); data.high.push(h);
-                data.low.push(l); data.close.push(c);
-                price = c;
-                if (i % 20 === 19) price *= rand > 0.5 ? 1.05 : 0.97;
-            }
-            return data;
-        }
+        import init, { ShowcaseDemo, init as wasmInit } from './pkg/presentar.js';
 
-        const stockData = generateStockData();
-        const colors = ['#6366f1', '#10b981', '#f59e0b', '#f43f5e', '#06b6d4', '#8b5cf6'];
+        const loadingEl = document.getElementById('loading');
+        const appEl = document.getElementById('app');
+        const errorEl = document.getElementById('error');
 
-        // =====================================================================
-        // Stock Chart (Candlestick-style from .ald)
-        // =====================================================================
-        const stockCanvas = document.getElementById('stockChart');
-        const stockCtx = stockCanvas.getContext('2d');
-        stockCanvas.width = stockCanvas.offsetWidth * 2;
-        stockCanvas.height = 400;
+        async function main() {
+            try {
+                // Initialize WASM module
+                const wasm = await init();
 
-        function drawStockChart() {
-            const w = stockCanvas.width, h = stockCanvas.height;
-            const padding = 40;
-            stockCtx.clearRect(0, 0, w, h);
+                // Get WASM binary size
+                const wasmSize = wasm.memory.buffer.byteLength;
+                document.getElementById('wasm-size').textContent =
+                    (wasmSize / 1024).toFixed(0) + ' KB';
 
-            const minPrice = Math.min(...stockData.low) * 0.98;
-            const maxPrice = Math.max(...stockData.high) * 1.02;
-            const priceRange = maxPrice - minPrice;
-            const barWidth = (w - padding * 2) / stockData.close.length;
+                // Initialize panic hook for better errors
+                wasmInit();
 
-            // Grid
-            stockCtx.strokeStyle = '#2a2a3a';
-            stockCtx.lineWidth = 1;
-            for (let i = 0; i <= 4; i++) {
-                const y = padding + (h - padding * 2) * i / 4;
-                stockCtx.beginPath();
-                stockCtx.moveTo(padding, y);
-                stockCtx.lineTo(w - padding, y);
-                stockCtx.stroke();
-                const price = maxPrice - (priceRange * i / 4);
-                stockCtx.fillStyle = '#6b7280';
-                stockCtx.font = '20px -apple-system';
-                stockCtx.fillText(price.toFixed(0), 4, y + 6);
-            }
+                // Create the showcase demo attached to our canvas
+                const demo = new ShowcaseDemo('mainCanvas');
 
-            // Candlesticks
-            stockData.close.forEach((close, i) => {
-                const open = stockData.open[i];
-                const high = stockData.high[i];
-                const low = stockData.low[i];
-                const x = padding + i * barWidth + barWidth / 2;
-                const yHigh = padding + (1 - (high - minPrice) / priceRange) * (h - padding * 2);
-                const yLow = padding + (1 - (low - minPrice) / priceRange) * (h - padding * 2);
-                const yOpen = padding + (1 - (open - minPrice) / priceRange) * (h - padding * 2);
-                const yClose = padding + (1 - (close - minPrice) / priceRange) * (h - padding * 2);
+                // Hide loading, show app
+                loadingEl.style.display = 'none';
+                appEl.style.display = 'block';
 
-                const isUp = close >= open;
-                stockCtx.strokeStyle = isUp ? '#10b981' : '#f43f5e';
-                stockCtx.fillStyle = isUp ? '#10b981' : '#f43f5e';
+                // Animation loop - all rendering happens in Rust!
+                let lastFpsUpdate = 0;
+                function animate(timestamp) {
+                    // Update state in Rust
+                    demo.update(timestamp);
 
-                // Wick
-                stockCtx.beginPath();
-                stockCtx.moveTo(x, yHigh);
-                stockCtx.lineTo(x, yLow);
-                stockCtx.lineWidth = 2;
-                stockCtx.stroke();
+                    // Render in Rust
+                    demo.render();
 
-                // Body
-                const bodyTop = Math.min(yOpen, yClose);
-                const bodyHeight = Math.max(Math.abs(yOpen - yClose), 2);
-                stockCtx.fillRect(x - barWidth * 0.3, bodyTop, barWidth * 0.6, bodyHeight);
-            });
+                    // Update FPS display periodically
+                    if (timestamp - lastFpsUpdate > 500) {
+                        document.getElementById('fps-display').textContent =
+                            demo.get_fps() + ' fps';
+                        lastFpsUpdate = timestamp;
+                    }
 
-            // Current price line
-            const lastClose = stockData.close[stockData.close.length - 1];
-            const yLast = padding + (1 - (lastClose - minPrice) / priceRange) * (h - padding * 2);
-            stockCtx.strokeStyle = '#6366f1';
-            stockCtx.setLineDash([8, 4]);
-            stockCtx.beginPath();
-            stockCtx.moveTo(padding, yLast);
-            stockCtx.lineTo(w - padding, yLast);
-            stockCtx.stroke();
-            stockCtx.setLineDash([]);
-            stockCtx.fillStyle = '#6366f1';
-            stockCtx.fillRect(w - padding, yLast - 12, 50, 24);
-            stockCtx.fillStyle = 'white';
-            stockCtx.font = 'bold 18px -apple-system';
-            stockCtx.fillText(lastClose.toFixed(1), w - padding + 4, yLast + 6);
-        }
+                    requestAnimationFrame(animate);
+                }
 
-        // =====================================================================
-        // Bar Chart (Animated)
-        // =====================================================================
-        const barCanvas = document.getElementById('barChart');
-        const barCtx = barCanvas.getContext('2d');
-        barCanvas.width = barCanvas.offsetWidth * 2;
-        barCanvas.height = 400;
+                // Start animation loop
+                requestAnimationFrame(animate);
 
-        let barValues = [65, 85, 45, 95, 55, 75];
-        let barTargets = [...barValues];
+                // Button handlers - call Rust methods
+                document.getElementById('btn-update').onclick = () => {
+                    demo.trigger_update();
+                };
 
-        function drawBarChart() {
-            const w = barCanvas.width, h = barCanvas.height;
-            const padding = 40;
-            barCtx.clearRect(0, 0, w, h);
+                document.getElementById('btn-theme').onclick = () => {
+                    demo.toggle_theme();
+                    document.body.classList.toggle('dark');
+                };
 
-            const maxVal = Math.max(...barValues, 1);
-            const barWidth = (w - padding * 2) / barValues.length - 16;
+                document.getElementById('btn-inference').onclick = () => {
+                    const text = document.getElementById('inference-text').value;
+                    // This calls Rust code!
+                    const result = demo.run_inference(text);
+                    document.getElementById('inference-result').textContent = result;
+                };
 
-            barValues.forEach((val, i) => {
-                const x = padding + i * (barWidth + 16) + 8;
-                const barHeight = (val / maxVal) * (h - padding * 2 - 30);
-                const y = h - padding - barHeight;
+                // Also run inference on Enter key
+                document.getElementById('inference-text').onkeydown = (e) => {
+                    if (e.key === 'Enter') {
+                        document.getElementById('btn-inference').click();
+                    }
+                };
 
-                // Bar
-                barCtx.fillStyle = colors[i % colors.length];
-                barCtx.beginPath();
-                barCtx.roundRect(x, y, barWidth, barHeight, [8, 8, 0, 0]);
-                barCtx.fill();
+                console.log('Presentar WASM Showcase loaded successfully!');
+                console.log('All rendering is performed by Rust/WebAssembly.');
 
-                // Value
-                barCtx.fillStyle = '#f0f0f5';
-                barCtx.font = 'bold 22px -apple-system';
-                barCtx.textAlign = 'center';
-                barCtx.fillText(Math.round(val) + '%', x + barWidth / 2, y - 8);
-
-                // Label
-                barCtx.fillStyle = '#9ca3af';
-                barCtx.font = '18px -apple-system';
-                barCtx.fillText(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'][i], x + barWidth / 2, h - 12);
-            });
-            barCtx.textAlign = 'left';
-        }
-
-        // =====================================================================
-        // Donut Chart + Particles
-        // =====================================================================
-        const donutCanvas = document.getElementById('donutChart');
-        const donutCtx = donutCanvas.getContext('2d');
-        donutCanvas.width = donutCanvas.offsetWidth * 2;
-        donutCanvas.height = 400;
-
-        let donutValues = [35, 25, 20, 12, 8];
-        let donutRotation = 0;
-        let particles = [];
-
-        class Particle {
-            constructor(x, y, color) {
-                this.x = x; this.y = y;
-                this.vx = (Math.random() - 0.5) * 200;
-                this.vy = (Math.random() - 0.5) * 200 - 100;
-                this.size = 4 + Math.random() * 8;
-                this.color = color;
-                this.life = 1;
-            }
-            update(dt) {
-                this.x += this.vx * dt;
-                this.y += this.vy * dt;
-                this.vy += 300 * dt;
-                this.life -= dt * 0.8;
+            } catch (err) {
+                console.error('Failed to load WASM:', err);
+                loadingEl.style.display = 'none';
+                errorEl.style.display = 'block';
+                document.getElementById('error-message').textContent = err.message || String(err);
             }
         }
 
-        function drawDonutChart() {
-            const w = donutCanvas.width, h = donutCanvas.height;
-            donutCtx.clearRect(0, 0, w, h);
-
-            const cx = w / 2, cy = h / 2, r = 140, innerR = 85;
-            const total = donutValues.reduce((a, b) => a + b, 0);
-
-            let angle = donutRotation;
-            donutValues.forEach((val, i) => {
-                const sweep = (val / total) * Math.PI * 2;
-                donutCtx.fillStyle = colors[i % colors.length];
-                donutCtx.beginPath();
-                donutCtx.arc(cx, cy, r, angle, angle + sweep);
-                donutCtx.arc(cx, cy, innerR, angle + sweep, angle, true);
-                donutCtx.closePath();
-                donutCtx.fill();
-                angle += sweep;
-            });
-
-            // Center text
-            donutCtx.fillStyle = '#f0f0f5';
-            donutCtx.font = 'bold 36px -apple-system';
-            donutCtx.textAlign = 'center';
-            donutCtx.fillText(total.toFixed(0), cx, cy + 12);
-            donutCtx.font = '18px -apple-system';
-            donutCtx.fillStyle = '#9ca3af';
-            donutCtx.fillText('Total', cx, cy + 38);
-            donutCtx.textAlign = 'left';
-
-            // Particles
-            particles.forEach(p => {
-                donutCtx.globalAlpha = p.life;
-                donutCtx.fillStyle = p.color;
-                donutCtx.beginPath();
-                donutCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                donutCtx.fill();
-            });
-            donutCtx.globalAlpha = 1;
-
-            document.getElementById('particleCount').textContent = particles.length + ' particles';
-        }
-
-        // =====================================================================
-        // Inference Animation
-        // =====================================================================
-        let inferenceAnim = null;
-        function runInference() {
-            const texts = ['Great product!', 'Terrible service', 'It was okay'];
-            const results = ['Positive 94%', 'Negative 89%', 'Neutral 76%'];
-            const resultColors = ['#10b981', '#f43f5e', '#f59e0b'];
-            let idx = 0;
-
-            if (inferenceAnim) clearInterval(inferenceAnim);
-            inferenceAnim = setInterval(() => {
-                if (idx >= texts.length) { clearInterval(inferenceAnim); return; }
-                // Flash the model card
-                const card = document.querySelector('.card:nth-child(2)');
-                card.style.boxShadow = `0 0 20px ${resultColors[idx]}`;
-                setTimeout(() => card.style.boxShadow = '', 300);
-                idx++;
-            }, 500);
-        }
-
-        // =====================================================================
-        // Animation Loop
-        // =====================================================================
-        let lastTime = 0, frameCount = 0, fpsTime = 0;
-
-        function animate(time) {
-            const dt = Math.min((time - lastTime) / 1000, 0.05);
-            lastTime = time;
-            frameCount++;
-
-            // FPS
-            fpsTime += dt;
-            if (fpsTime >= 0.5) {
-                document.getElementById('fps').textContent = Math.round(frameCount / fpsTime);
-                frameCount = 0; fpsTime = 0;
-            }
-
-            // Animate bars
-            barValues = barValues.map((v, i) => v + (barTargets[i] - v) * 0.08);
-
-            // Rotate donut
-            donutRotation += dt * 0.2;
-
-            // Update particles
-            particles.forEach(p => p.update(dt));
-            particles = particles.filter(p => p.life > 0);
-
-            // Draw
-            drawStockChart();
-            drawBarChart();
-            drawDonutChart();
-
-            requestAnimationFrame(animate);
-        }
-
-        // =====================================================================
-        // Event Handlers
-        // =====================================================================
-        document.getElementById('btn-data').onclick = () => {
-            barTargets = barTargets.map(() => 20 + Math.random() * 80);
-            donutValues = donutValues.map(() => 5 + Math.random() * 40);
-        };
-
-        document.getElementById('btn-inference').onclick = runInference;
-
-        document.getElementById('btn-particles').onclick = () => {
-            const cx = donutCanvas.width / 2, cy = donutCanvas.height / 2;
-            for (let i = 0; i < 30; i++) {
-                particles.push(new Particle(cx, cy, colors[Math.floor(Math.random() * colors.length)]));
-            }
-        };
-
-        donutCanvas.onclick = (e) => {
-            const rect = donutCanvas.getBoundingClientRect();
-            const x = (e.clientX - rect.left) * 2;
-            const y = (e.clientY - rect.top) * 2;
-            for (let i = 0; i < 20; i++) {
-                particles.push(new Particle(x, y, colors[Math.floor(Math.random() * colors.length)]));
-            }
-        };
-
-        // Start
-        requestAnimationFrame(animate);
+        main();
     </script>
 </body>
 </html>

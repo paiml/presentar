@@ -1810,9 +1810,7 @@ mod tests {
     fn test_cache_invalidate_multiple_tags_same_entry() {
         let mut cache: DataCache<String, String> = DataCache::default();
 
-        let options = CacheOptions::new()
-            .with_tag("tag1")
-            .with_tag("tag2");
+        let options = CacheOptions::new().with_tag("tag1").with_tag("tag2");
         cache.insert("key".to_string(), "value".to_string(), options);
 
         // Invalidate by first tag

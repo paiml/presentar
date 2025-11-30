@@ -4,6 +4,13 @@
 //!
 //! Run: `cargo run --example apr_version_history`
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::disallowed_methods,
+    clippy::struct_field_names,
+    clippy::too_many_lines
+)]
+
 use std::collections::HashMap;
 
 /// Model version identifier
@@ -15,8 +22,12 @@ pub struct VersionId {
 }
 
 impl VersionId {
-    pub fn new(major: u32, minor: u32, patch: u32) -> Self {
-        Self { major, minor, patch }
+    pub const fn new(major: u32, minor: u32, patch: u32) -> Self {
+        Self {
+            major,
+            minor,
+            patch,
+        }
     }
 
     pub fn parse(s: &str) -> Option<Self> {
@@ -54,7 +65,7 @@ impl PartialOrd for VersionId {
 }
 
 /// Version status
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VersionStatus {
     Development,
     Staging,
@@ -92,12 +103,12 @@ impl ModelVersion {
         }
     }
 
-    pub fn with_status(mut self, status: VersionStatus) -> Self {
+    pub const fn with_status(mut self, status: VersionStatus) -> Self {
         self.status = status;
         self
     }
 
-    pub fn with_parent(mut self, parent: VersionId) -> Self {
+    pub const fn with_parent(mut self, parent: VersionId) -> Self {
         self.parent_version = Some(parent);
         self
     }
@@ -161,7 +172,10 @@ impl VersionHistory {
     }
 
     pub fn by_status(&self, status: VersionStatus) -> Vec<&ModelVersion> {
-        self.versions.iter().filter(|v| v.status == status).collect()
+        self.versions
+            .iter()
+            .filter(|v| v.status == status)
+            .collect()
     }
 
     pub fn by_tag(&self, tag: &str) -> Vec<&ModelVersion> {
@@ -191,11 +205,8 @@ impl VersionHistory {
         let mut metric_changes = Vec::new();
 
         // Collect all metric names from both versions
-        let all_metrics: std::collections::HashSet<_> = ver1
-            .metrics
-            .keys()
-            .chain(ver2.metrics.keys())
-            .collect();
+        let all_metrics: std::collections::HashSet<_> =
+            ver1.metrics.keys().chain(ver2.metrics.keys()).collect();
 
         for metric in all_metrics {
             let val1 = ver1.get_metric(metric);
@@ -376,8 +387,7 @@ fn main() {
             };
             let pct = change
                 .change_percent
-                .map(|p| format!("{:+.1}%", p))
-                .unwrap_or_else(|| "N/A".to_string());
+                .map_or_else(|| "N/A".to_string(), |p| format!("{p:+.1}%"));
 
             println!(
                 "  {}: {:.2} → {:.2} ({} {})",
@@ -490,12 +500,10 @@ mod tests {
     fn test_version_comparison() {
         let mut history = VersionHistory::new("test");
         history.add_version(
-            ModelVersion::new(VersionId::new(1, 0, 0), "a", "v1")
-                .with_metric("accuracy", 0.80),
+            ModelVersion::new(VersionId::new(1, 0, 0), "a", "v1").with_metric("accuracy", 0.80),
         );
         history.add_version(
-            ModelVersion::new(VersionId::new(2, 0, 0), "b", "v2")
-                .with_metric("accuracy", 0.90),
+            ModelVersion::new(VersionId::new(2, 0, 0), "b", "v2").with_metric("accuracy", 0.90),
         );
 
         let comparison = history

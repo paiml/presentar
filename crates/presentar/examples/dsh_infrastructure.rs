@@ -4,6 +4,13 @@
 //!
 //! Run: `cargo run --example dsh_infrastructure`
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::disallowed_methods,
+    clippy::struct_field_names,
+    clippy::too_many_lines
+)]
+
 use std::collections::HashMap;
 
 /// Server/node status
@@ -27,7 +34,7 @@ pub struct ResourceUsage {
 }
 
 impl ResourceUsage {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             cpu_percent: 0.0,
             memory_percent: 0.0,
@@ -76,7 +83,7 @@ pub struct Node {
     pub uptime_hours: f32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NodeType {
     Server,
     Container,
@@ -104,12 +111,12 @@ impl Node {
         self
     }
 
-    pub fn with_status(mut self, status: NodeStatus) -> Self {
+    pub const fn with_status(mut self, status: NodeStatus) -> Self {
         self.status = status;
         self
     }
 
-    pub fn with_uptime(mut self, hours: f32) -> Self {
+    pub const fn with_uptime(mut self, hours: f32) -> Self {
         self.uptime_hours = hours;
         self
     }
@@ -120,7 +127,7 @@ impl Node {
     }
 
     /// Check if node needs attention
-    pub fn needs_attention(&self) -> bool {
+    pub const fn needs_attention(&self) -> bool {
         matches!(self.status, NodeStatus::Warning | NodeStatus::Critical)
     }
 }
@@ -443,10 +450,10 @@ mod tests {
 
     #[test]
     fn test_node_needs_attention() {
-        let healthy_node = Node::new("1", "test", NodeType::Server, "us-east-1")
-            .with_status(NodeStatus::Healthy);
-        let warning_node = Node::new("2", "test", NodeType::Server, "us-east-1")
-            .with_status(NodeStatus::Warning);
+        let healthy_node =
+            Node::new("1", "test", NodeType::Server, "us-east-1").with_status(NodeStatus::Healthy);
+        let warning_node =
+            Node::new("2", "test", NodeType::Server, "us-east-1").with_status(NodeStatus::Warning);
 
         assert!(!healthy_node.needs_attention());
         assert!(warning_node.needs_attention());
@@ -455,9 +462,12 @@ mod tests {
     #[test]
     fn test_dashboard_status_counts() {
         let mut dashboard = InfrastructureDashboard::new("Test");
-        dashboard.add_node(Node::new("1", "a", NodeType::Server, "us").with_status(NodeStatus::Healthy));
-        dashboard.add_node(Node::new("2", "b", NodeType::Server, "us").with_status(NodeStatus::Healthy));
-        dashboard.add_node(Node::new("3", "c", NodeType::Server, "us").with_status(NodeStatus::Warning));
+        dashboard
+            .add_node(Node::new("1", "a", NodeType::Server, "us").with_status(NodeStatus::Healthy));
+        dashboard
+            .add_node(Node::new("2", "b", NodeType::Server, "us").with_status(NodeStatus::Healthy));
+        dashboard
+            .add_node(Node::new("3", "c", NodeType::Server, "us").with_status(NodeStatus::Warning));
 
         let counts = dashboard.status_counts();
         assert_eq!(counts.get(&NodeStatus::Healthy), Some(&2));
@@ -467,8 +477,10 @@ mod tests {
     #[test]
     fn test_dashboard_health_score() {
         let mut dashboard = InfrastructureDashboard::new("Test");
-        dashboard.add_node(Node::new("1", "a", NodeType::Server, "us").with_status(NodeStatus::Healthy));
-        dashboard.add_node(Node::new("2", "b", NodeType::Server, "us").with_status(NodeStatus::Warning));
+        dashboard
+            .add_node(Node::new("1", "a", NodeType::Server, "us").with_status(NodeStatus::Healthy));
+        dashboard
+            .add_node(Node::new("2", "b", NodeType::Server, "us").with_status(NodeStatus::Warning));
 
         // 1 healthy out of 2 = 50%
         assert!((dashboard.health_score() - 50.0).abs() < 0.01);
@@ -477,20 +489,24 @@ mod tests {
     #[test]
     fn test_dashboard_average_utilization() {
         let mut dashboard = InfrastructureDashboard::new("Test");
-        dashboard.add_node(Node::new("1", "a", NodeType::Server, "us").with_resources(ResourceUsage {
-            cpu_percent: 40.0,
-            memory_percent: 60.0,
-            disk_percent: 20.0,
-            network_in_mbps: 100.0,
-            network_out_mbps: 100.0,
-        }));
-        dashboard.add_node(Node::new("2", "b", NodeType::Server, "us").with_resources(ResourceUsage {
-            cpu_percent: 60.0,
-            memory_percent: 80.0,
-            disk_percent: 40.0,
-            network_in_mbps: 100.0,
-            network_out_mbps: 100.0,
-        }));
+        dashboard.add_node(Node::new("1", "a", NodeType::Server, "us").with_resources(
+            ResourceUsage {
+                cpu_percent: 40.0,
+                memory_percent: 60.0,
+                disk_percent: 20.0,
+                network_in_mbps: 100.0,
+                network_out_mbps: 100.0,
+            },
+        ));
+        dashboard.add_node(Node::new("2", "b", NodeType::Server, "us").with_resources(
+            ResourceUsage {
+                cpu_percent: 60.0,
+                memory_percent: 80.0,
+                disk_percent: 40.0,
+                network_in_mbps: 100.0,
+                network_out_mbps: 100.0,
+            },
+        ));
 
         let avg = dashboard.average_utilization();
         assert!((avg.cpu_percent - 50.0).abs() < 0.01);

@@ -2,6 +2,8 @@
 //!
 //! Run with: `cargo run --example hello_world`
 
+#![allow(clippy::unwrap_used, clippy::disallowed_methods)]
+
 use presentar::widgets::{row::MainAxisAlignment, Button, Column, Text};
 use presentar::{Color, Constraints, RecordingCanvas, Rect, Size, Widget};
 

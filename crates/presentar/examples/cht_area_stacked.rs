@@ -53,7 +53,7 @@ impl StackedAreaChart {
 
     /// Get number of data points (x-axis length)
     pub fn data_points(&self) -> usize {
-        self.series.first().map(|s| s.values.len()).unwrap_or(0)
+        self.series.first().map_or(0, |s| s.values.len())
     }
 
     /// Calculate stacked values at each x position
@@ -83,11 +83,10 @@ impl StackedAreaChart {
         let stacked = self.stacked_values();
         stacked
             .last()
-            .map(|s| s.iter().cloned().fold(0.0f32, f32::max))
-            .unwrap_or(1.0)
+            .map_or(1.0, |s| s.iter().copied().fold(0.0f32, f32::max))
     }
 
-    /// Get value at position (series_idx, x_idx) - unstacked
+    /// Get value at position (`series_idx`, `x_idx`) - unstacked
     pub fn get_value(&self, series_idx: usize, x_idx: usize) -> Option<f32> {
         self.series
             .get(series_idx)
@@ -160,7 +159,7 @@ fn main() {
         .with_x_labels(
             ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
                 .iter()
-                .map(|s| s.to_string())
+                .map(|s| (*s).to_string())
                 .collect(),
         )
         .with_y_label("Revenue ($K)");
@@ -196,7 +195,7 @@ fn main() {
         print!("{:<12}", series.name);
         for (j, &val) in series.values.iter().enumerate() {
             let stacked = chart.get_stacked_value(i, j).unwrap_or(0.0);
-            print!(" {:>5.0}({:>5.0})", val, stacked);
+            print!(" {val:>5.0}({stacked:>5.0})");
         }
         println!();
     }
@@ -209,7 +208,7 @@ fn main() {
 
     for level in (0..height).rev() {
         let threshold = (level as f32 / height as f32) * max_val;
-        print!("{:>6.0} |", threshold);
+        print!("{threshold:>6.0} |");
 
         for x in 0..chart.data_points() {
             let mut c = ' ';
@@ -224,14 +223,14 @@ fn main() {
                     break;
                 }
             }
-            print!("  {}  ", c);
+            print!("  {c}  ");
         }
         println!();
     }
     println!("       +{}", "-".repeat(chart.data_points() * 5));
     print!("        ");
     for label in chart.x_labels() {
-        print!("{:^5}", label);
+        print!("{label:^5}");
     }
     println!();
 
@@ -241,7 +240,7 @@ fn main() {
     for (i, series) in chart.series().iter().enumerate() {
         print!("{:<12}", series.name);
         for &pct in &pcts[i] {
-            print!(" {:>5.1}%", pct);
+            print!(" {pct:>5.1}%");
         }
         println!();
     }

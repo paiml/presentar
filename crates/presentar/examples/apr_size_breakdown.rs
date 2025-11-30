@@ -22,7 +22,7 @@ pub struct ModelSizeBreakdown {
 }
 
 impl ModelSizeBreakdown {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             components: Vec::new(),
         }
@@ -64,7 +64,7 @@ impl ModelSizeBreakdown {
             .collect()
     }
 
-    /// Get pie chart slices (start_angle, end_angle, color)
+    /// Get pie chart slices (`start_angle`, `end_angle`, color)
     pub fn pie_slices(&self) -> Vec<(f32, f32, Color)> {
         let total = self.total_params() as f32;
         if total == 0.0 {
@@ -92,7 +92,7 @@ impl ModelSizeBreakdown {
         } else if bytes >= 1024 {
             format!("{:.2} KB", bytes as f32 / 1024.0)
         } else {
-            format!("{} B", bytes)
+            format!("{bytes} B")
         }
     }
 
@@ -105,7 +105,7 @@ impl ModelSizeBreakdown {
         } else if count >= 1_000 {
             format!("{:.2}K", count as f32 / 1_000.0)
         } else {
-            format!("{}", count)
+            format!("{count}")
         }
     }
 }
@@ -122,11 +122,7 @@ fn main() {
     let mut breakdown = ModelSizeBreakdown::new();
 
     // Example: ResNet-50 style breakdown
-    breakdown.add_component(
-        "conv1",
-        64 * 3 * 7 * 7,
-        Color::new(0.4, 0.6, 0.9, 1.0),
-    );
+    breakdown.add_component("conv1", 64 * 3 * 7 * 7, Color::new(0.4, 0.6, 0.9, 1.0));
     breakdown.add_component(
         "layer1",
         64 * 64 * 3 * 3 * 6,
@@ -161,7 +157,10 @@ fn main() {
     println!();
 
     // Breakdown table
-    println!("{:<15} {:>12} {:>12} {:>8}", "Layer", "Params", "Memory", "%");
+    println!(
+        "{:<15} {:>12} {:>12} {:>8}",
+        "Layer", "Params", "Memory", "%"
+    );
     println!("{}", "-".repeat(50));
 
     let percentages = breakdown.percentages();
@@ -198,7 +197,7 @@ fn main() {
 
     // Verify sum
     let total_pct: f32 = percentages.iter().map(|(_, p)| p).sum();
-    println!("\nSum of percentages: {:.1}%", total_pct);
+    println!("\nSum of percentages: {total_pct:.1}%");
 
     println!("\n=== Acceptance Criteria ===");
     println!("- [x] Pie chart sums to total params");
@@ -267,10 +266,7 @@ mod tests {
     fn test_format_memory() {
         assert_eq!(ModelSizeBreakdown::format_memory(500), "500 B");
         assert_eq!(ModelSizeBreakdown::format_memory(1536), "1.50 KB");
-        assert_eq!(
-            ModelSizeBreakdown::format_memory(1_572_864),
-            "1.50 MB"
-        );
+        assert_eq!(ModelSizeBreakdown::format_memory(1_572_864), "1.50 MB");
     }
 
     #[test]

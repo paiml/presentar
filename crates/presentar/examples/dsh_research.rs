@@ -4,10 +4,16 @@
 //!
 //! Run: `cargo run --example dsh_research`
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::disallowed_methods,
+    clippy::too_many_lines
+)]
+
 use std::collections::HashMap;
 
 /// Experiment status
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExperimentStatus {
     Queued,
     Running,
@@ -43,7 +49,7 @@ impl Experiment {
         }
     }
 
-    pub fn with_status(mut self, status: ExperimentStatus) -> Self {
+    pub const fn with_status(mut self, status: ExperimentStatus) -> Self {
         self.status = status;
         self
     }
@@ -63,7 +69,7 @@ impl Experiment {
         self
     }
 
-    pub fn with_duration(mut self, secs: f32) -> Self {
+    pub const fn with_duration(mut self, secs: f32) -> Self {
         self.duration_secs = Some(secs);
         self
     }
@@ -74,7 +80,7 @@ impl Experiment {
     }
 
     /// Check if experiment is better than another based on a metric (higher is better)
-    pub fn is_better_than(&self, other: &Experiment, metric: &str, higher_is_better: bool) -> bool {
+    pub fn is_better_than(&self, other: &Self, metric: &str, higher_is_better: bool) -> bool {
         match (self.get_metric(metric), other.get_metric(metric)) {
             (Some(a), Some(b)) => {
                 if higher_is_better {
@@ -140,8 +146,12 @@ impl ResearchDashboard {
         }
 
         completed.into_iter().max_by(|a, b| {
-            let val_a = a.get_metric(&self.primary_metric).unwrap_or(f32::NEG_INFINITY);
-            let val_b = b.get_metric(&self.primary_metric).unwrap_or(f32::NEG_INFINITY);
+            let val_a = a
+                .get_metric(&self.primary_metric)
+                .unwrap_or(f32::NEG_INFINITY);
+            let val_b = b
+                .get_metric(&self.primary_metric)
+                .unwrap_or(f32::NEG_INFINITY);
 
             if self.higher_is_better {
                 val_a.partial_cmp(&val_b).unwrap()
@@ -163,8 +173,8 @@ impl ResearchDashboard {
             return None;
         }
 
-        let min = values.iter().cloned().fold(f32::INFINITY, f32::min);
-        let max = values.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        let min = values.iter().copied().fold(f32::INFINITY, f32::min);
+        let max = values.iter().copied().fold(f32::NEG_INFINITY, f32::max);
         let mean = values.iter().sum::<f32>() / values.len() as f32;
         let variance = values.iter().map(|v| (v - mean).powi(2)).sum::<f32>() / values.len() as f32;
 
@@ -432,9 +442,11 @@ mod tests {
     #[test]
     fn test_dashboard_by_status() {
         let mut dashboard = ResearchDashboard::new("Test", "score", true);
-        dashboard.add_experiment(Experiment::new("1", "a").with_status(ExperimentStatus::Completed));
+        dashboard
+            .add_experiment(Experiment::new("1", "a").with_status(ExperimentStatus::Completed));
         dashboard.add_experiment(Experiment::new("2", "b").with_status(ExperimentStatus::Running));
-        dashboard.add_experiment(Experiment::new("3", "c").with_status(ExperimentStatus::Completed));
+        dashboard
+            .add_experiment(Experiment::new("3", "c").with_status(ExperimentStatus::Completed));
 
         assert_eq!(dashboard.by_status(ExperimentStatus::Completed).len(), 2);
         assert_eq!(dashboard.by_status(ExperimentStatus::Running).len(), 1);
@@ -473,7 +485,8 @@ mod tests {
     #[test]
     fn test_completion_rate() {
         let mut dashboard = ResearchDashboard::new("Test", "score", true);
-        dashboard.add_experiment(Experiment::new("1", "a").with_status(ExperimentStatus::Completed));
+        dashboard
+            .add_experiment(Experiment::new("1", "a").with_status(ExperimentStatus::Completed));
         dashboard.add_experiment(Experiment::new("2", "b").with_status(ExperimentStatus::Failed));
 
         assert!((dashboard.completion_rate() - 50.0).abs() < 0.01);

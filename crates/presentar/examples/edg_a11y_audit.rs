@@ -4,6 +4,13 @@
 //!
 //! Run: `cargo run --example edg_a11y_audit`
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::disallowed_methods,
+    clippy::missing_panics_doc,
+    unused_variables
+)]
+
 use presentar_core::Color;
 
 /// WCAG 2.1 AA contrast ratio requirements
@@ -34,7 +41,7 @@ pub fn relative_luminance(color: &Color) -> f32 {
     let g = linearize(color.g);
     let b = linearize(color.b);
 
-    0.2126 * r + 0.7152 * g + 0.0722 * b
+    0.0722f32.mul_add(b, 0.2126f32.mul_add(r, 0.7152 * g))
 }
 
 /// Calculate contrast ratio between two colors
@@ -55,20 +62,14 @@ pub struct A11yAudit {
 }
 
 impl A11yAudit {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             results: Vec::new(),
         }
     }
 
     /// Check text color contrast
-    pub fn check_text_contrast(
-        &mut self,
-        name: &str,
-        fg: &Color,
-        bg: &Color,
-        is_large_text: bool,
-    ) {
+    pub fn check_text_contrast(&mut self, name: &str, fg: &Color, bg: &Color, is_large_text: bool) {
         let ratio = contrast_ratio(fg, bg);
         let required = if is_large_text {
             WCAG_AA_LARGE_TEXT
@@ -79,10 +80,7 @@ impl A11yAudit {
         self.results.push(A11yCheckResult {
             check_name: name.to_string(),
             passed: ratio >= required,
-            details: format!(
-                "Contrast ratio: {:.2}:1 (required: {:.1}:1)",
-                ratio, required
-            ),
+            details: format!("Contrast ratio: {ratio:.2}:1 (required: {required:.1}:1)"),
             wcag_criterion: "1.4.3 Contrast (Minimum)".to_string(),
         });
     }
@@ -95,8 +93,7 @@ impl A11yAudit {
             check_name: name.to_string(),
             passed: ratio >= WCAG_AA_UI_COMPONENTS,
             details: format!(
-                "Contrast ratio: {:.2}:1 (required: {:.1}:1)",
-                ratio, WCAG_AA_UI_COMPONENTS
+                "Contrast ratio: {ratio:.2}:1 (required: {WCAG_AA_UI_COMPONENTS:.1}:1)"
             ),
             wcag_criterion: "1.4.11 Non-text Contrast".to_string(),
         });
@@ -204,11 +201,15 @@ fn main() {
     audit.check_aria_label("Button", true);
 
     // Print results
-    println!("{:<30} {:<8} {}", "Check", "Status", "Details");
+    println!("{:<30} {:<8} Details", "Check", "Status");
     println!("{}", "=".repeat(80));
 
     for result in audit.results() {
-        let status = if result.passed { "✓ PASS" } else { "✗ FAIL" };
+        let status = if result.passed {
+            "✓ PASS"
+        } else {
+            "✗ FAIL"
+        };
         println!("{:<30} {:<8} {}", result.check_name, status, result.details);
     }
 

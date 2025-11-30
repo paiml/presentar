@@ -3,6 +3,22 @@
 //! Run with: `cargo run --example visual_demo -p presentar`
 //! Then open: `demo_output.svg` in your browser
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::disallowed_methods,
+    clippy::match_same_arms,
+    clippy::needless_range_loop,
+    clippy::if_same_then_else,
+    clippy::too_many_lines,
+    clippy::or_fun_call,
+    clippy::format_push_string,
+    clippy::many_single_char_names,
+    clippy::cast_possible_wrap,
+    clippy::struct_field_names,
+    clippy::println_empty_string,
+    unused_variables
+)]
+
 use presentar::widgets::{
     row::MainAxisAlignment, Chart, Column, DataSeries, ProgressBar, Row, Text,
 };
@@ -16,8 +32,7 @@ fn to_svg(commands: &[DrawCommand], width: f32, height: f32) -> String {
     svg.push_str(r#"<?xml version="1.0" encoding="UTF-8"?>"#);
     svg.push('\n');
     svg.push_str(&format!(
-        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{}" height="{}" viewBox="0 0 {} {}">"#,
-        width, height, width, height
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">"#
     ));
     svg.push('\n');
     svg.push_str("  <rect width=\"100%\" height=\"100%\" fill=\"#f8fafc\"/>\n");
@@ -77,7 +92,7 @@ fn to_svg(commands: &[DrawCommand], width: f32, height: f32) -> String {
                     _ => "normal",
                 };
                 // Adjust y position for baseline
-                let y = position.y + style.size * 0.85;
+                let y = style.size.mul_add(0.85, position.y);
                 svg.push_str(&format!(
                     r#"  <text x="{:.1}" y="{:.1}" font-size="{:.1}" font-weight="{}" fill="{}">{}</text>
 "#,
@@ -244,11 +259,11 @@ fn main() {
     file.write_all(svg.as_bytes()).expect("write file");
 
     println!("Generated {} draw commands", canvas.command_count());
-    println!("\n✅ SVG output saved to: {}", output_path);
+    println!("\n✅ SVG output saved to: {output_path}");
     println!("\n📂 Open in browser:");
-    println!("   firefox {} &", output_path);
-    println!("   google-chrome {} &", output_path);
-    println!("   xdg-open {}", output_path);
+    println!("   firefox {output_path} &");
+    println!("   google-chrome {output_path} &");
+    println!("   xdg-open {output_path}");
 
     println!("\n=== Visual Demo Complete ===");
 }

@@ -5,7 +5,7 @@
 //! Run: `cargo run --example edg_rtl`
 
 /// Text direction
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextDirection {
     LeftToRight,
     RightToLeft,
@@ -79,13 +79,13 @@ pub struct BiDiProcessor {
 }
 
 impl BiDiProcessor {
-    pub fn new(direction: TextDirection) -> Self {
+    pub const fn new(direction: TextDirection) -> Self {
         Self {
             base_direction: direction,
         }
     }
 
-    pub fn auto() -> Self {
+    pub const fn auto() -> Self {
         Self {
             base_direction: TextDirection::Auto,
         }
@@ -96,11 +96,7 @@ impl BiDiProcessor {
         let mut segments = Vec::new();
         let mut current_text = String::new();
         let mut current_dir = self.base_direction;
-        let mut level = if self.base_direction == TextDirection::RightToLeft {
-            1
-        } else {
-            0
-        };
+        let mut level = u8::from(self.base_direction == TextDirection::RightToLeft);
 
         for c in text.chars() {
             let char_dir = if is_rtl_char(c) {
@@ -176,7 +172,7 @@ pub struct RtlTextBox {
     pub alignment: TextAlignment,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextAlignment {
     Start, // Start of text direction
     End,   // End of text direction
@@ -196,12 +192,12 @@ impl RtlTextBox {
         }
     }
 
-    pub fn with_direction(mut self, direction: TextDirection) -> Self {
+    pub const fn with_direction(mut self, direction: TextDirection) -> Self {
         self.direction = direction;
         self
     }
 
-    pub fn with_alignment(mut self, alignment: TextAlignment) -> Self {
+    pub const fn with_alignment(mut self, alignment: TextAlignment) -> Self {
         self.alignment = alignment;
         self
     }
@@ -264,12 +260,7 @@ fn main() {
 
     for (name, text) in &test_texts {
         let dir = detect_direction(text);
-        println!(
-            "{:<15} {:<15} {:<30}",
-            name,
-            format!("{:?}", dir),
-            text
-        );
+        println!("{:<15} {:<15} {:<30}", name, format!("{:?}", dir), text);
     }
 
     // Test BiDi processing
@@ -279,7 +270,7 @@ fn main() {
     let processor = BiDiProcessor::auto();
     let segments = processor.process(bidi_text);
 
-    println!("Input: {}", bidi_text);
+    println!("Input: {bidi_text}");
     println!("Segments:");
     for (i, seg) in segments.iter().enumerate() {
         println!(
@@ -295,14 +286,44 @@ fn main() {
     let arabic_box = RtlTextBox::new("مرحبا", 20);
 
     println!("English (LTR):");
-    println!("  Start:  [{}]", english_box.clone().with_alignment(TextAlignment::Start).render());
-    println!("  End:    [{}]", english_box.clone().with_alignment(TextAlignment::End).render());
-    println!("  Center: [{}]", english_box.with_alignment(TextAlignment::Center).render());
+    println!(
+        "  Start:  [{}]",
+        english_box
+            .clone()
+            .with_alignment(TextAlignment::Start)
+            .render()
+    );
+    println!(
+        "  End:    [{}]",
+        english_box
+            .clone()
+            .with_alignment(TextAlignment::End)
+            .render()
+    );
+    println!(
+        "  Center: [{}]",
+        english_box.with_alignment(TextAlignment::Center).render()
+    );
 
     println!("\nArabic (RTL):");
-    println!("  Start:  [{}]", arabic_box.clone().with_alignment(TextAlignment::Start).render());
-    println!("  End:    [{}]", arabic_box.clone().with_alignment(TextAlignment::End).render());
-    println!("  Center: [{}]", arabic_box.with_alignment(TextAlignment::Center).render());
+    println!(
+        "  Start:  [{}]",
+        arabic_box
+            .clone()
+            .with_alignment(TextAlignment::Start)
+            .render()
+    );
+    println!(
+        "  End:    [{}]",
+        arabic_box
+            .clone()
+            .with_alignment(TextAlignment::End)
+            .render()
+    );
+    println!(
+        "  Center: [{}]",
+        arabic_box.with_alignment(TextAlignment::Center).render()
+    );
 
     // UI element mirroring
     println!("\n=== UI Mirroring Example ===\n");
@@ -321,12 +342,12 @@ fn main() {
 
     println!("LTR Layout:");
     for line in &ltr_layout {
-        println!("  {}", line);
+        println!("  {line}");
     }
 
     println!("\nRTL Layout (Mirrored):");
     for line in &rtl_layout {
-        println!("  {}", line);
+        println!("  {line}");
     }
 
     println!("\n=== Acceptance Criteria ===");
@@ -420,8 +441,7 @@ mod tests {
 
     #[test]
     fn test_text_box_center() {
-        let text_box = RtlTextBox::new("Hi", 10)
-            .with_alignment(TextAlignment::Center);
+        let text_box = RtlTextBox::new("Hi", 10).with_alignment(TextAlignment::Center);
         assert_eq!(text_box.render(), "    Hi    ");
     }
 

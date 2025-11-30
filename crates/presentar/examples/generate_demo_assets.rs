@@ -48,10 +48,19 @@ pub fn generate_sentiment_model() -> AprModel {
     });
 
     // Metadata
-    model.metadata.insert("task".to_string(), "sentiment".to_string());
-    model.metadata.insert("classes".to_string(), "negative,neutral,positive".to_string());
-    model.metadata.insert("input_dim".to_string(), "50".to_string());
-    model.metadata.insert("accuracy".to_string(), "0.87".to_string());
+    model
+        .metadata
+        .insert("task".to_string(), "sentiment".to_string());
+    model.metadata.insert(
+        "classes".to_string(),
+        "negative,neutral,positive".to_string(),
+    );
+    model
+        .metadata
+        .insert("input_dim".to_string(), "50".to_string());
+    model
+        .metadata
+        .insert("accuracy".to_string(), "0.87".to_string());
 
     model
 }
@@ -336,11 +345,19 @@ fn main() {
     // Summary
     println!("  ════════════════════════════════════════════════════════════════");
     println!("  Summary:");
-    println!("    sentiment_mini.apr: {} bytes ({} params)",
-        model_bytes.len(), model.param_count());
-    println!("    timeseries_100.ald: {} bytes (5 tensors × 100 rows)",
-        dataset_bytes.len());
-    println!("    Total: {} bytes", model_bytes.len() + dataset_bytes.len());
+    println!(
+        "    sentiment_mini.apr: {} bytes ({} params)",
+        model_bytes.len(),
+        model.param_count()
+    );
+    println!(
+        "    timeseries_100.ald: {} bytes (5 tensors × 100 rows)",
+        dataset_bytes.len()
+    );
+    println!(
+        "    Total: {} bytes",
+        model_bytes.len() + dataset_bytes.len()
+    );
     println!();
     println!("  Tests: 18 passed ✓");
 }

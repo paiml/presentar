@@ -74,7 +74,7 @@ fn main() {
     for (name, source) in &manifest.data {
         println!("   - {} ({}): {}", name, source.format, source.source);
         if let Some(refresh) = &source.refresh {
-            println!("     Refresh: {}", refresh);
+            println!("     Refresh: {refresh}");
         }
     }
 
@@ -137,7 +137,7 @@ fn main() {
     for expr_str in expressions {
         let expr = parser.parse(expr_str).expect("valid expression");
         let result = executor.execute(&expr, &ctx).expect("execute");
-        println!("   {} = {:?}", expr_str, result);
+        println!("   {expr_str} = {result:?}");
     }
 
     // Serialize back to YAML

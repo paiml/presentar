@@ -2,6 +2,16 @@
 //!
 //! Run with: `cargo run --example dashboard`
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::disallowed_methods,
+    unused_variables,
+    clippy::iter_without_into_iter,
+    clippy::cast_possible_wrap,
+    dead_code,
+    clippy::too_many_lines
+)]
+
 use presentar::widgets::{
     row::MainAxisAlignment, Chart, Column, DataSeries, ProgressBar, Row, Text,
 };
@@ -136,8 +146,8 @@ fn main() {
             _ => {}
         }
     }
-    println!("  - Rect commands: {}", rect_count);
-    println!("  - Text commands: {}", text_count);
+    println!("  - Rect commands: {rect_count}");
+    println!("  - Text commands: {text_count}");
 
     println!("\n=== Dashboard Example Complete ===");
 }

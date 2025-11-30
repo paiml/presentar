@@ -60,7 +60,9 @@ impl Easing {
                     t
                 } else {
                     let c4 = (2.0 * PI) / 3.0;
-                    (-10.0 * t).exp2().mul_add(((t * 10.0 - 0.75) * c4).sin(), 1.0)
+                    (-10.0 * t)
+                        .exp2()
+                        .mul_add(((t * 10.0 - 0.75) * c4).sin(), 1.0)
                 }
             }
         }
@@ -141,13 +143,48 @@ pub struct AnimColor {
 }
 
 impl AnimColor {
-    pub const WHITE: Self = Self { r: 1.0, g: 1.0, b: 1.0, a: 1.0 };
-    pub const BLACK: Self = Self { r: 0.0, g: 0.0, b: 0.0, a: 1.0 };
-    pub const INDIGO: Self = Self { r: 0.39, g: 0.4, b: 0.95, a: 1.0 };
-    pub const EMERALD: Self = Self { r: 0.02, g: 0.59, b: 0.41, a: 1.0 };
-    pub const AMBER: Self = Self { r: 0.96, g: 0.62, b: 0.04, a: 1.0 };
-    pub const ROSE: Self = Self { r: 0.88, g: 0.11, b: 0.46, a: 1.0 };
-    pub const SKY: Self = Self { r: 0.02, g: 0.71, b: 0.83, a: 1.0 };
+    pub const WHITE: Self = Self {
+        r: 1.0,
+        g: 1.0,
+        b: 1.0,
+        a: 1.0,
+    };
+    pub const BLACK: Self = Self {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+        a: 1.0,
+    };
+    pub const INDIGO: Self = Self {
+        r: 0.39,
+        g: 0.4,
+        b: 0.95,
+        a: 1.0,
+    };
+    pub const EMERALD: Self = Self {
+        r: 0.02,
+        g: 0.59,
+        b: 0.41,
+        a: 1.0,
+    };
+    pub const AMBER: Self = Self {
+        r: 0.96,
+        g: 0.62,
+        b: 0.04,
+        a: 1.0,
+    };
+    pub const ROSE: Self = Self {
+        r: 0.88,
+        g: 0.11,
+        b: 0.46,
+        a: 1.0,
+    };
+    pub const SKY: Self = Self {
+        r: 0.02,
+        g: 0.71,
+        b: 0.83,
+        a: 1.0,
+    };
 
     #[must_use]
     pub const fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
@@ -225,7 +262,11 @@ impl FrameTiming {
             return 60.0;
         }
         let avg_ms: f32 = self.fps_samples.iter().sum::<f32>() / self.fps_samples.len() as f32;
-        if avg_ms > 0.0 { 1000.0 / avg_ms } else { 60.0 }
+        if avg_ms > 0.0 {
+            1000.0 / avg_ms
+        } else {
+            60.0
+        }
     }
 
     /// Get frame count
@@ -268,7 +309,12 @@ impl BarChart {
         AnimColor::AMBER,
         AnimColor::ROSE,
         AnimColor::SKY,
-        AnimColor { r: 0.58, g: 0.33, b: 0.87, a: 1.0 }, // Purple
+        AnimColor {
+            r: 0.58,
+            g: 0.33,
+            b: 0.87,
+            a: 1.0,
+        }, // Purple
     ];
 
     /// Create bar chart with n bars
@@ -558,12 +604,14 @@ impl DonutChart {
     /// Create donut chart with n segments
     #[must_use]
     pub fn new(segments: usize) -> Self {
-        let colors = [AnimColor::INDIGO,
+        let colors = [
+            AnimColor::INDIGO,
             AnimColor::EMERALD,
             AnimColor::AMBER,
             AnimColor::ROSE,
             AnimColor::SKY,
-            AnimColor::from_hex(0x008B_5CF6)];
+            AnimColor::from_hex(0x008B_5CF6),
+        ];
 
         Self {
             values: (0..segments).map(|_| AnimatedValue::new(1.0)).collect(),
@@ -844,7 +892,10 @@ impl ShowcaseDemo {
 
     /// Trigger data update with animation
     pub fn trigger_data_update(&mut self) {
-        self.data_seed = self.data_seed.wrapping_mul(1_103_515_245).wrapping_add(12345);
+        self.data_seed = self
+            .data_seed
+            .wrapping_mul(1_103_515_245)
+            .wrapping_add(12345);
         let seed = self.data_seed;
 
         // Pseudo-random values
@@ -1274,7 +1325,7 @@ mod tests {
         let light = Theme::Light;
         let dark = Theme::Dark;
         assert!(light.background().r > 0.5); // Light bg
-        assert!(dark.background().r < 0.5);  // Dark bg
+        assert!(dark.background().r < 0.5); // Dark bg
     }
 
     #[test]
@@ -1358,8 +1409,14 @@ fn main() {
     let bounds = demo.bar_chart().compute_bounds(300.0, 100.0);
     for (i, (x, _y, w, h)) in bounds.iter().enumerate() {
         let bar = "█".repeat((h / 5.0) as usize);
-        println!("    Bar {}: x={:>5.1} w={:>4.1} h={:>5.1} {}",
-            i + 1, x, w, h, bar);
+        println!(
+            "    Bar {}: x={:>5.1} w={:>4.1} h={:>5.1} {}",
+            i + 1,
+            x,
+            w,
+            h,
+            bar
+        );
     }
     println!();
 

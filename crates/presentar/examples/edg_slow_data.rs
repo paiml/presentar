@@ -4,10 +4,12 @@
 //!
 //! Run: `cargo run --example edg_slow_data`
 
+#![allow(clippy::all, clippy::pedantic, clippy::nursery)]
+
 use std::time::{Duration, Instant};
 
 /// Data loading state
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LoadingState<T> {
     Initial,
     Loading { started: Instant },
@@ -18,39 +20,39 @@ pub enum LoadingState<T> {
 }
 
 impl<T: Clone> LoadingState<T> {
-    pub fn is_loading(&self) -> bool {
-        matches!(self, LoadingState::Loading { .. })
+    pub const fn is_loading(&self) -> bool {
+        matches!(self, Self::Loading { .. })
     }
 
-    pub fn is_loaded(&self) -> bool {
-        matches!(self, LoadingState::Loaded(_) | LoadingState::Stale { .. })
+    pub const fn is_loaded(&self) -> bool {
+        matches!(self, Self::Loaded(_) | Self::Stale { .. })
     }
 
-    pub fn is_error(&self) -> bool {
-        matches!(self, LoadingState::Error(_) | LoadingState::Timeout)
+    pub const fn is_error(&self) -> bool {
+        matches!(self, Self::Error(_) | Self::Timeout)
     }
 
-    pub fn get_data(&self) -> Option<&T> {
+    pub const fn get_data(&self) -> Option<&T> {
         match self {
-            LoadingState::Loaded(data) => Some(data),
-            LoadingState::Stale { data, .. } => Some(data),
+            Self::Loaded(data) => Some(data),
+            Self::Stale { data, .. } => Some(data),
             _ => None,
         }
     }
 
     /// Check if loading has exceeded timeout
     pub fn check_timeout(&mut self, timeout: Duration) {
-        if let LoadingState::Loading { started } = self {
+        if let Self::Loading { started } = self {
             if started.elapsed() > timeout {
-                *self = LoadingState::Timeout;
+                *self = Self::Timeout;
             }
         }
     }
 
     /// Mark data as stale
     pub fn mark_stale(&mut self, age_secs: u64) {
-        if let LoadingState::Loaded(data) = self {
-            *self = LoadingState::Stale {
+        if let Self::Loaded(data) = self {
+            *self = Self::Stale {
                 data: data.clone(),
                 age_secs,
             };
@@ -59,42 +61,42 @@ impl<T: Clone> LoadingState<T> {
 }
 
 /// Data freshness indicator
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataFreshness {
-    Fresh,           // < 1 minute old
-    Recent,          // 1-5 minutes old
-    Stale,           // 5-15 minutes old
-    VeryStale,       // > 15 minutes old
+    Fresh,     // < 1 minute old
+    Recent,    // 1-5 minutes old
+    Stale,     // 5-15 minutes old
+    VeryStale, // > 15 minutes old
     Unknown,
 }
 
 impl DataFreshness {
-    pub fn from_age_secs(age: u64) -> Self {
+    pub const fn from_age_secs(age: u64) -> Self {
         match age {
-            0..=60 => DataFreshness::Fresh,
-            61..=300 => DataFreshness::Recent,
-            301..=900 => DataFreshness::Stale,
-            _ => DataFreshness::VeryStale,
+            0..=60 => Self::Fresh,
+            61..=300 => Self::Recent,
+            301..=900 => Self::Stale,
+            _ => Self::VeryStale,
         }
     }
 
-    pub fn display_text(&self) -> &'static str {
+    pub const fn display_text(&self) -> &'static str {
         match self {
-            DataFreshness::Fresh => "Live",
-            DataFreshness::Recent => "Updated recently",
-            DataFreshness::Stale => "May be outdated",
-            DataFreshness::VeryStale => "Data is stale",
-            DataFreshness::Unknown => "Unknown",
+            Self::Fresh => "Live",
+            Self::Recent => "Updated recently",
+            Self::Stale => "May be outdated",
+            Self::VeryStale => "Data is stale",
+            Self::Unknown => "Unknown",
         }
     }
 
-    pub fn icon(&self) -> &'static str {
+    pub const fn icon(&self) -> &'static str {
         match self {
-            DataFreshness::Fresh => "●",
-            DataFreshness::Recent => "◐",
-            DataFreshness::Stale => "○",
-            DataFreshness::VeryStale => "✗",
-            DataFreshness::Unknown => "?",
+            Self::Fresh => "●",
+            Self::Recent => "◐",
+            Self::Stale => "○",
+            Self::VeryStale => "✗",
+            Self::Unknown => "?",
         }
     }
 }
@@ -128,7 +130,7 @@ impl RetryConfig {
     }
 
     /// Check if should retry
-    pub fn should_retry(&self, attempt: u32) -> bool {
+    pub const fn should_retry(&self, attempt: u32) -> bool {
         attempt < self.max_retries
     }
 }
@@ -154,12 +156,12 @@ impl<T: Clone> DataLoader<T> {
         }
     }
 
-    pub fn with_retry_config(mut self, config: RetryConfig) -> Self {
+    pub const fn with_retry_config(mut self, config: RetryConfig) -> Self {
         self.retry_config = config;
         self
     }
 
-    pub fn state(&self) -> &LoadingState<T> {
+    pub const fn state(&self) -> &LoadingState<T> {
         &self.state
     }
 
@@ -189,7 +191,7 @@ impl<T: Clone> DataLoader<T> {
         self.state.check_timeout(self.timeout);
     }
 
-    pub fn current_attempt(&self) -> u32 {
+    pub const fn current_attempt(&self) -> u32 {
         self.current_attempt
     }
 
@@ -207,7 +209,7 @@ pub struct Placeholder {
 }
 
 impl Placeholder {
-    pub fn new(width: usize, height: usize) -> Self {
+    pub const fn new(width: usize, height: usize) -> Self {
         Self {
             width,
             height,
@@ -248,14 +250,25 @@ fn main() {
 
     let states: Vec<(&str, LoadingState<String>)> = vec![
         ("Initial", LoadingState::Initial),
-        ("Loading", LoadingState::Loading { started: Instant::now() }),
+        (
+            "Loading",
+            LoadingState::Loading {
+                started: Instant::now(),
+            },
+        ),
         ("Loaded", LoadingState::Loaded("Data content".to_string())),
-        ("Error", LoadingState::Error("Connection failed".to_string())),
+        (
+            "Error",
+            LoadingState::Error("Connection failed".to_string()),
+        ),
         ("Timeout", LoadingState::Timeout),
-        ("Stale", LoadingState::Stale {
-            data: "Old data".to_string(),
-            age_secs: 600,
-        }),
+        (
+            "Stale",
+            LoadingState::Stale {
+                data: "Old data".to_string(),
+                age_secs: 600,
+            },
+        ),
     ];
 
     for (name, state) in &states {
@@ -268,7 +281,8 @@ fn main() {
             LoadingState::Stale { .. } => "◐",
         };
 
-        println!("{} {:<12} loaded={:<5} error={:<5}",
+        println!(
+            "{} {:<12} loaded={:<5} error={:<5}",
             icon,
             name,
             state.is_loaded(),
@@ -440,6 +454,12 @@ mod tests {
         let mut state = LoadingState::Loaded(42);
         state.mark_stale(600);
 
-        assert!(matches!(state, LoadingState::Stale { data: 42, age_secs: 600 }));
+        assert!(matches!(
+            state,
+            LoadingState::Stale {
+                data: 42,
+                age_secs: 600
+            }
+        ));
     }
 }

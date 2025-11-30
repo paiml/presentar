@@ -4,6 +4,16 @@
 //!
 //! Run: `cargo run --example edg_numeric`
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::disallowed_methods,
+    clippy::or_fun_call,
+    clippy::too_many_lines,
+    clippy::iter_without_into_iter,
+    clippy::struct_field_names,
+    clippy::unreadable_literal
+)]
+
 /// Numeric value with handling for edge cases
 #[derive(Debug, Clone, Copy)]
 pub enum NumericValue {
@@ -18,44 +28,44 @@ pub enum NumericValue {
 impl NumericValue {
     pub fn from_f64(value: f64) -> Self {
         if value.is_nan() {
-            NumericValue::NaN
+            Self::NaN
         } else if value.is_infinite() {
             if value.is_sign_positive() {
-                NumericValue::Infinity
+                Self::Infinity
             } else {
-                NumericValue::NegInfinity
+                Self::NegInfinity
             }
         } else if value == 0.0 {
             if value.is_sign_negative() {
-                NumericValue::NegZero
+                Self::NegZero
             } else {
-                NumericValue::Zero
+                Self::Zero
             }
         } else {
-            NumericValue::Normal(value)
+            Self::Normal(value)
         }
     }
 
-    pub fn is_finite(&self) -> bool {
-        matches!(self, NumericValue::Normal(_) | NumericValue::Zero | NumericValue::NegZero)
+    pub const fn is_finite(&self) -> bool {
+        matches!(self, Self::Normal(_) | Self::Zero | Self::NegZero)
     }
 
-    pub fn is_nan(&self) -> bool {
-        matches!(self, NumericValue::NaN)
+    pub const fn is_nan(&self) -> bool {
+        matches!(self, Self::NaN)
     }
 
-    pub fn is_zero(&self) -> bool {
-        matches!(self, NumericValue::Zero | NumericValue::NegZero)
+    pub const fn is_zero(&self) -> bool {
+        matches!(self, Self::Zero | Self::NegZero)
     }
 
-    pub fn to_f64(&self) -> f64 {
+    pub const fn to_f64(&self) -> f64 {
         match self {
-            NumericValue::Normal(v) => *v,
-            NumericValue::Infinity => f64::INFINITY,
-            NumericValue::NegInfinity => f64::NEG_INFINITY,
-            NumericValue::NaN => f64::NAN,
-            NumericValue::Zero => 0.0,
-            NumericValue::NegZero => -0.0,
+            Self::Normal(v) => *v,
+            Self::Infinity => f64::INFINITY,
+            Self::NegInfinity => f64::NEG_INFINITY,
+            Self::NaN => f64::NAN,
+            Self::Zero => 0.0,
+            Self::NegZero => -0.0,
         }
     }
 }
@@ -122,7 +132,7 @@ impl NumericFormatter {
         Self::default()
     }
 
-    pub fn with_precision(mut self, precision: usize) -> Self {
+    pub const fn with_precision(mut self, precision: usize) -> Self {
         self.precision = precision;
         self
     }
@@ -139,11 +149,10 @@ impl NumericFormatter {
             NumericValue::NaN => self.nan_display.clone(),
             NumericValue::Infinity => self.inf_display.clone(),
             NumericValue::NegInfinity => self.neg_inf_display.clone(),
-            NumericValue::Zero | NumericValue::NegZero => {
-                self.zero_display
-                    .clone()
-                    .unwrap_or_else(|| format!("{:.prec$}", 0.0, prec = self.precision))
-            }
+            NumericValue::Zero | NumericValue::NegZero => self
+                .zero_display
+                .clone()
+                .unwrap_or_else(|| format!("{:.prec$}", 0.0, prec = self.precision)),
             NumericValue::Normal(v) => {
                 let formatted = format!("{:.prec$}", v, prec = self.precision);
                 if self.use_thousands_sep {
@@ -161,7 +170,7 @@ impl NumericFormatter {
         let dec_part = parts.get(1);
 
         let negative = int_part.starts_with('-');
-        let digits: Vec<char> = int_part.chars().filter(|c| c.is_ascii_digit()).collect();
+        let digits: Vec<char> = int_part.chars().filter(char::is_ascii_digit).collect();
 
         if digits.is_empty() {
             return s.to_string();
@@ -176,13 +185,13 @@ impl NumericFormatter {
         }
 
         let result = if negative {
-            format!("-{}", result)
+            format!("-{result}")
         } else {
             result
         };
 
         match dec_part {
-            Some(d) => format!("{}.{}", result, d),
+            Some(d) => format!("{result}.{d}"),
             None => result,
         }
     }
@@ -233,7 +242,7 @@ pub struct NumericRange {
 }
 
 impl NumericRange {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             min: None,
             max: None,
@@ -300,7 +309,10 @@ fn main() {
         ("Epsilon", f64::EPSILON),
     ];
 
-    println!("{:<15} {:>20} {:>15} {:>10}", "Type", "Value", "Formatted", "SI");
+    println!(
+        "{:<15} {:>20} {:>15} {:>10}",
+        "Type", "Value", "Formatted", "SI"
+    );
     println!("{}", "-".repeat(65));
 
     for (name, value) in &test_values {
@@ -310,7 +322,7 @@ fn main() {
             if value.is_nan() {
                 "NaN".to_string()
             } else {
-                format!("{:.6e}", value)
+                format!("{value:.6e}")
             },
             formatter.format(*value),
             formatter.format_si(*value)
@@ -357,8 +369,7 @@ fn main() {
             "{} / {} = {}",
             part,
             whole,
-            pct.map(|p| formatter.format_percentage(p))
-                .unwrap_or_else(|| "--".to_string())
+            pct.map_or_else(|| "--".to_string(), |p| formatter.format_percentage(p))
         );
     }
 
@@ -379,7 +390,7 @@ fn main() {
         println!(
             "  {} -> {}",
             formatter.format(v),
-            normalized.map(|n| format!("{:.3}", n)).unwrap_or("N/A".to_string())
+            normalized.map_or("N/A".to_string(), |n| format!("{n:.3}"))
         );
     }
 
@@ -396,10 +407,22 @@ mod tests {
 
     #[test]
     fn test_numeric_value_from_f64() {
-        assert!(matches!(NumericValue::from_f64(42.0), NumericValue::Normal(_)));
-        assert!(matches!(NumericValue::from_f64(f64::NAN), NumericValue::NaN));
-        assert!(matches!(NumericValue::from_f64(f64::INFINITY), NumericValue::Infinity));
-        assert!(matches!(NumericValue::from_f64(f64::NEG_INFINITY), NumericValue::NegInfinity));
+        assert!(matches!(
+            NumericValue::from_f64(42.0),
+            NumericValue::Normal(_)
+        ));
+        assert!(matches!(
+            NumericValue::from_f64(f64::NAN),
+            NumericValue::NaN
+        ));
+        assert!(matches!(
+            NumericValue::from_f64(f64::INFINITY),
+            NumericValue::Infinity
+        ));
+        assert!(matches!(
+            NumericValue::from_f64(f64::NEG_INFINITY),
+            NumericValue::NegInfinity
+        ));
         assert!(matches!(NumericValue::from_f64(0.0), NumericValue::Zero));
     }
 

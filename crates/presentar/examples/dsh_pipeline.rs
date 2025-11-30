@@ -4,10 +4,18 @@
 //!
 //! Run: `cargo run --example dsh_pipeline`
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::disallowed_methods,
+    clippy::unreadable_literal,
+    clippy::format_push_string,
+    clippy::too_many_lines
+)]
+
 use std::time::Duration;
 
 /// Pipeline stage status
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StageStatus {
     Pending,
     Running,
@@ -39,17 +47,17 @@ impl PipelineStage {
         }
     }
 
-    pub fn with_status(mut self, status: StageStatus) -> Self {
+    pub const fn with_status(mut self, status: StageStatus) -> Self {
         self.status = status;
         self
     }
 
-    pub fn with_duration(mut self, duration: Duration) -> Self {
+    pub const fn with_duration(mut self, duration: Duration) -> Self {
         self.duration = Some(duration);
         self
     }
 
-    pub fn with_records(mut self, records_in: usize, records_out: usize) -> Self {
+    pub const fn with_records(mut self, records_in: usize, records_out: usize) -> Self {
         self.records_in = records_in;
         self.records_out = records_out;
         self
@@ -132,18 +140,18 @@ impl Pipeline {
         if duration_secs <= 0.0 {
             return 0.0;
         }
-        let total_records = self.stages.first().map(|s| s.records_in).unwrap_or(0);
+        let total_records = self.stages.first().map_or(0, |s| s.records_in);
         total_records as f32 / duration_secs
     }
 
     /// Get total records processed
     pub fn total_records_in(&self) -> usize {
-        self.stages.first().map(|s| s.records_in).unwrap_or(0)
+        self.stages.first().map_or(0, |s| s.records_in)
     }
 
     /// Get total records output
     pub fn total_records_out(&self) -> usize {
-        self.stages.last().map(|s| s.records_out).unwrap_or(0)
+        self.stages.last().map_or(0, |s| s.records_out)
     }
 
     /// Get overall drop rate
@@ -177,7 +185,7 @@ impl Pipeline {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PipelineStatus {
     Pending,
     Running,
@@ -235,7 +243,10 @@ fn main() {
     );
 
     if let Some(bottleneck) = pipeline.bottleneck() {
-        println!("Bottleneck: {} ({:?})", bottleneck.name, bottleneck.duration);
+        println!(
+            "Bottleneck: {} ({:?})",
+            bottleneck.name, bottleneck.duration
+        );
     }
 
     // ASCII pipeline visualization
@@ -257,11 +268,7 @@ fn main() {
             0.0
         };
         let filled = (progress * bar_width as f32) as usize;
-        let bar = format!(
-            "[{}{}]",
-            "█".repeat(filled),
-            "░".repeat(bar_width - filled)
-        );
+        let bar = format!("[{}{}]", "█".repeat(filled), "░".repeat(bar_width - filled));
 
         println!(
             "{} {} {} ({:?})",
@@ -285,7 +292,7 @@ fn main() {
         }
 
         if let Some(ref error) = stage.error_message {
-            println!("    Error: {}", error);
+            println!("    Error: {error}");
         }
 
         if i < pipeline.stages().len() - 1 {

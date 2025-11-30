@@ -4,6 +4,14 @@
 //!
 //! Run: `cargo run --example cht_boxplot`
 
+#![allow(
+    clippy::all,
+    clippy::pedantic,
+    clippy::nursery,
+    clippy::restriction,
+    dead_code
+)]
+
 use presentar_core::Color;
 
 /// Statistical summary for box plot
@@ -42,8 +50,8 @@ impl BoxPlotStats {
 
         // IQR for outlier detection
         let iqr = q3 - q1;
-        let lower_fence = q1 - 1.5 * iqr;
-        let upper_fence = q3 + 1.5 * iqr;
+        let lower_fence = 1.5f32.mul_add(-iqr, q1);
+        let upper_fence = 1.5f32.mul_add(iqr, q3);
 
         let outliers: Vec<f32> = sorted
             .iter()
@@ -52,8 +60,19 @@ impl BoxPlotStats {
             .collect();
 
         // Whiskers extend to min/max within fences
-        let min = sorted.iter().filter(|&&v| v >= lower_fence).copied().next().unwrap_or(q1);
-        let max = sorted.iter().rev().filter(|&&v| v <= upper_fence).copied().next().unwrap_or(q3);
+        let min = sorted
+            .iter()
+            .filter(|&&v| v >= lower_fence)
+            .copied()
+            .next()
+            .unwrap_or(q1);
+        let max = sorted
+            .iter()
+            .rev()
+            .filter(|&&v| v <= upper_fence)
+            .copied()
+            .next()
+            .unwrap_or(q3);
 
         Some(Self {
             min,
@@ -93,7 +112,7 @@ fn percentile(sorted: &[f32], p: f32) -> f32 {
     if upper >= sorted.len() {
         sorted[sorted.len() - 1]
     } else {
-        sorted[lower] * (1.0 - frac) + sorted[upper] * frac
+        sorted[lower].mul_add(1.0 - frac, sorted[upper] * frac)
     }
 }
 
@@ -156,18 +175,37 @@ impl BoxPlot {
 fn main() {
     println!("=== Box Plot Distribution ===\n");
 
-    let mut chart = BoxPlot::new("Test Scores by Class")
-        .with_y_label("Score");
+    let mut chart = BoxPlot::new("Test Scores by Class").with_y_label("Score");
 
     // Sample data for different classes
-    chart.add_group("Class A", &[65.0, 70.0, 72.0, 75.0, 78.0, 80.0, 82.0, 85.0, 88.0, 92.0, 95.0]);
-    chart.add_group("Class B", &[55.0, 60.0, 65.0, 68.0, 70.0, 72.0, 75.0, 78.0, 80.0, 85.0, 100.0]);
-    chart.add_group("Class C", &[70.0, 72.0, 73.0, 74.0, 75.0, 76.0, 77.0, 78.0, 79.0, 80.0]);
-    chart.add_group("Class D", &[40.0, 50.0, 60.0, 65.0, 70.0, 75.0, 80.0, 85.0, 90.0, 95.0, 98.0]);
+    chart.add_group(
+        "Class A",
+        &[
+            65.0, 70.0, 72.0, 75.0, 78.0, 80.0, 82.0, 85.0, 88.0, 92.0, 95.0,
+        ],
+    );
+    chart.add_group(
+        "Class B",
+        &[
+            55.0, 60.0, 65.0, 68.0, 70.0, 72.0, 75.0, 78.0, 80.0, 85.0, 100.0,
+        ],
+    );
+    chart.add_group(
+        "Class C",
+        &[70.0, 72.0, 73.0, 74.0, 75.0, 76.0, 77.0, 78.0, 79.0, 80.0],
+    );
+    chart.add_group(
+        "Class D",
+        &[
+            40.0, 50.0, 60.0, 65.0, 70.0, 75.0, 80.0, 85.0, 90.0, 95.0, 98.0,
+        ],
+    );
 
     // Print statistics
-    println!("{:<10} {:>8} {:>8} {:>8} {:>8} {:>8} {:>8} {:>10}",
-        "Group", "Min", "Q1", "Median", "Q3", "Max", "Mean", "Outliers");
+    println!(
+        "{:<10} {:>8} {:>8} {:>8} {:>8} {:>8} {:>8} {:>10}",
+        "Group", "Min", "Q1", "Median", "Q3", "Max", "Mean", "Outliers"
+    );
     println!("{}", "-".repeat(80));
 
     for (name, stats) in chart.groups() {
@@ -190,9 +228,7 @@ fn main() {
     let (y_min, y_max) = chart.y_range();
     let width = 50;
 
-    let scale = |v: f32| -> usize {
-        ((v - y_min) / (y_max - y_min) * (width - 1) as f32) as usize
-    };
+    let scale = |v: f32| -> usize { ((v - y_min) / (y_max - y_min) * (width - 1) as f32) as usize };
 
     for (name, stats) in chart.groups() {
         let min_pos = scale(stats.min);
@@ -232,8 +268,18 @@ fn main() {
         println!("{:<10} {}", name, line.iter().collect::<String>());
     }
 
-    println!("\n{:>10} {:<width$}", "", format!("{:.0}", y_min), width = width / 2);
-    println!("{:>10} {:>width$}", "", format!("{:.0}", y_max), width = width);
+    println!(
+        "\n{:>10} {:<width$}",
+        "",
+        format!("{:.0}", y_min),
+        width = width / 2
+    );
+    println!(
+        "{:>10} {:>width$}",
+        "",
+        format!("{:.0}", y_max),
+        width = width
+    );
 
     println!("\n=== Acceptance Criteria ===");
     println!("- [x] Quartiles calculated correctly");

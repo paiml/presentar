@@ -17,6 +17,9 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 wgpu = { workspace = true }
 bytemuck = { workspace = true }
+rmp-serde = "1.3"
+bincode = "1.3"
+zstd = "0.13"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = { workspace = true }
@@ -28,6 +31,9 @@ getrandom = { workspace = true }
 
 [dev-dependencies]
 presentar-test = { workspace = true }
+sha2 = "0.10"
+hex = "0.4"
+regex = "1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 proptest = { workspace = true }

@@ -1397,7 +1397,7 @@ mod tests {
         let mut eased = EasedValue::new(0.0, 100.0, 1.0);
         eased.update(0.5);
         eased.update(-0.2); // Negative dt (shouldn't happen but handle gracefully)
-        // elapsed should not exceed duration and value should stay in valid range
+                            // elapsed should not exceed duration and value should stay in valid range
         assert!(eased.elapsed <= eased.duration);
         // value() clamps progress to [0, 1], so value is always in [from, to] range
         assert!(eased.value() >= 0.0 && eased.value() <= 100.0);
@@ -1542,7 +1542,7 @@ mod tests {
         track.add_keyframe(Keyframe::new(1.0, 100.0));
 
         track.update(2.5); // 2.5 seconds on 1 second loop
-        // Should be at 0.5 normalized time
+                           // Should be at 0.5 normalized time
         let val = track.value().unwrap();
         assert!(val > 40.0 && val < 60.0);
     }
@@ -1696,7 +1696,10 @@ mod tests {
 
     #[test]
     fn test_interpolate_point_negative() {
-        let from = Point { x: -100.0, y: -100.0 };
+        let from = Point {
+            x: -100.0,
+            y: -100.0,
+        };
         let to = Point { x: 100.0, y: 100.0 };
         let result = Point::interpolate(&from, &to, 0.5);
         assert!((result.x - 0.0).abs() < 0.001);

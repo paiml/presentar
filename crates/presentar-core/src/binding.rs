@@ -1710,8 +1710,12 @@ mod tests {
         let c1 = count1.clone();
         let c2 = count2.clone();
 
-        cell.subscribe(move |v| { c1.store(*v, Ordering::SeqCst); });
-        cell.subscribe(move |v| { c2.store(*v * 2, Ordering::SeqCst); });
+        cell.subscribe(move |v| {
+            c1.store(*v, Ordering::SeqCst);
+        });
+        cell.subscribe(move |v| {
+            c2.store(*v * 2, Ordering::SeqCst);
+        });
 
         cell.set(10);
         assert_eq!(count1.load(Ordering::SeqCst), 10);
@@ -1759,9 +1763,7 @@ mod tests {
         let counter = Arc::new(AtomicI32::new(0));
         let counter_clone = counter.clone();
 
-        let computed = Computed::new(move || {
-            counter_clone.fetch_add(1, Ordering::SeqCst) + 1
-        });
+        let computed = Computed::new(move || counter_clone.fetch_add(1, Ordering::SeqCst) + 1);
 
         assert_eq!(computed.get(), 1);
         assert_eq!(computed.get(), 1); // Cached

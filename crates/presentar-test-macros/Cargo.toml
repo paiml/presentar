@@ -1,9 +1,12 @@
 [package]
 name = "presentar-test-macros"
-version = "0.1.0"
-edition = "2021"
 description = "Proc macros for Presentar testing framework"
-license = "MIT"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
 
 [lib]
 proc-macro = true

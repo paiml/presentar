@@ -171,6 +171,13 @@ pub enum Transform {
         /// Field to calculate percent change
         field: String,
     },
+    /// Model suggestion: `suggest(prefix, count)` - for N-gram/autocomplete models
+    Suggest {
+        /// Input prefix to get suggestions for
+        prefix: String,
+        /// Maximum number of suggestions to return
+        count: usize,
+    },
 }
 
 /// Aggregation operations for group_by.
@@ -459,6 +466,21 @@ impl ExpressionParser {
                 "pct_change" => Ok(Transform::PercentChange {
                     field: args_str.to_string(),
                 }),
+                "suggest" => {
+                    let parts: Vec<&str> = args_str.split(',').map(str::trim).collect();
+                    if parts.len() < 2 {
+                        return Err(ExpressionError::InvalidArgument(
+                            "suggest requires prefix, count".to_string(),
+                        ));
+                    }
+                    let count = parts[1].parse().map_err(|_| {
+                        ExpressionError::InvalidArgument("suggest count".to_string())
+                    })?;
+                    Ok(Transform::Suggest {
+                        prefix: parts[0].to_string(),
+                        count,
+                    })
+                }
                 _ => Err(ExpressionError::UnknownTransform(name.to_string())),
             }
         } else {

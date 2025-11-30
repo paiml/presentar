@@ -10,7 +10,7 @@
   <a href="https://crates.io/crates/presentar"><img src="https://img.shields.io/crates/v/presentar.svg" alt="Crates.io"></a>
   <a href="https://docs.rs/presentar"><img src="https://docs.rs/presentar/badge.svg" alt="Documentation"></a>
   <a href="https://github.com/paiml/presentar/actions/workflows/ci.yml"><img src="https://github.com/paiml/presentar/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://img.shields.io/badge/coverage-88%25-brightgreen"><img src="https://img.shields.io/badge/coverage-88%25-brightgreen" alt="Coverage"></a>
+  <a href="https://img.shields.io/badge/coverage-91%25-brightgreen"><img src="https://img.shields.io/badge/coverage-91%25-brightgreen" alt="Coverage"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
 </p>
 
@@ -67,6 +67,26 @@ widgets:
       - type: Button
         label: "Click"
 ```
+
+## Showcase Demo: Shell Autocomplete
+
+Real-time shell command autocomplete powered by a trained N-gram model. **Zero infrastructure** - runs entirely in the browser via WASM.
+
+```bash
+make serve
+# Open http://localhost:8080/shell-autocomplete.html
+```
+
+| Metric | Value |
+|--------|-------|
+| Bundle Size | 574 KB |
+| Inference Latency | <1ms |
+| Cold Start | <100ms |
+| Server Required | None |
+
+**10X faster than Streamlit/Gradio** with zero Python dependencies.
+
+See [docs/specifications/showcase-demo-aprender-shell-apr.md](docs/specifications/showcase-demo-aprender-shell-apr.md) for full specification.
 
 ## Architecture
 

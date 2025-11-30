@@ -4,8 +4,10 @@
 //!
 //! Run: `cargo run --example dsh_alerts`
 
+#![allow(clippy::all, clippy::pedantic, clippy::nursery, dead_code)]
+
 use std::collections::VecDeque;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// Alert severity level
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
@@ -17,7 +19,7 @@ pub enum AlertSeverity {
 }
 
 /// Alert status
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlertStatus {
     Active,
     Acknowledged,
@@ -40,7 +42,13 @@ pub struct Alert {
 }
 
 impl Alert {
-    pub fn new(id: &str, title: &str, message: &str, severity: AlertSeverity, source: &str) -> Self {
+    pub fn new(
+        id: &str,
+        title: &str,
+        message: &str,
+        severity: AlertSeverity,
+        source: &str,
+    ) -> Self {
         Self {
             id: id.to_string(),
             title: title.to_string(),
@@ -54,7 +62,7 @@ impl Alert {
         }
     }
 
-    pub fn with_timestamp(mut self, timestamp_ms: u64) -> Self {
+    pub const fn with_timestamp(mut self, timestamp_ms: u64) -> Self {
         self.timestamp_ms = timestamp_ms;
         self
     }
@@ -76,11 +84,14 @@ impl Alert {
     /// Check if alert needs immediate attention
     pub fn needs_attention(&self) -> bool {
         self.status == AlertStatus::Active
-            && matches!(self.severity, AlertSeverity::Error | AlertSeverity::Critical)
+            && matches!(
+                self.severity,
+                AlertSeverity::Error | AlertSeverity::Critical
+            )
     }
 
     /// Get time since alert was created (in ms)
-    pub fn age(&self, current_time_ms: u64) -> u64 {
+    pub const fn age(&self, current_time_ms: u64) -> u64 {
         current_time_ms.saturating_sub(self.timestamp_ms)
     }
 }
@@ -110,13 +121,13 @@ impl AlertRule {
         }
     }
 
-    pub fn with_cooldown(mut self, secs: u64) -> Self {
+    pub const fn with_cooldown(mut self, secs: u64) -> Self {
         self.cooldown_secs = secs;
         self
     }
 
     /// Check if rule can trigger based on cooldown
-    pub fn can_trigger(&self, current_time_ms: u64) -> bool {
+    pub const fn can_trigger(&self, current_time_ms: u64) -> bool {
         if !self.enabled {
             return false;
         }
@@ -159,7 +170,7 @@ impl AlertDashboard {
         self.rules.push(rule);
     }
 
-    pub fn alerts(&self) -> &VecDeque<Alert> {
+    pub const fn alerts(&self) -> &VecDeque<Alert> {
         &self.alerts
     }
 
@@ -179,7 +190,10 @@ impl AlertDashboard {
 
     /// Get alerts by severity
     pub fn by_severity(&self, severity: AlertSeverity) -> Vec<&Alert> {
-        self.alerts.iter().filter(|a| a.severity == severity).collect()
+        self.alerts
+            .iter()
+            .filter(|a| a.severity == severity)
+            .collect()
     }
 
     /// Get active alerts sorted by severity (critical first)
@@ -202,15 +216,12 @@ impl AlertDashboard {
     /// Get overall alert level
     pub fn overall_level(&self) -> AlertSeverity {
         let active = self.active_sorted();
-        active
-            .first()
-            .map(|a| a.severity)
-            .unwrap_or(AlertSeverity::Info)
+        active.first().map_or(AlertSeverity::Info, |a| a.severity)
     }
 
     /// Acknowledge all active alerts
     pub fn acknowledge_all(&mut self, user: &str) {
-        for alert in self.alerts.iter_mut() {
+        for alert in &mut self.alerts {
             if alert.status == AlertStatus::Active {
                 alert.acknowledge(user);
             }
@@ -253,7 +264,7 @@ pub struct SeverityCounts {
 }
 
 impl SeverityCounts {
-    pub fn total(&self) -> usize {
+    pub const fn total(&self) -> usize {
         self.info + self.warning + self.error + self.critical
     }
 }
@@ -411,7 +422,7 @@ fn main() {
             alert.source
         );
         if let Some(ref user) = alert.acknowledged_by {
-            println!("   Acknowledged by: {}", user);
+            println!("   Acknowledged by: {user}");
         }
     }
 
@@ -473,8 +484,7 @@ mod tests {
 
     #[test]
     fn test_alert_rule_cooldown() {
-        let rule = AlertRule::new("1", "Test", "x > 10", AlertSeverity::Warning)
-            .with_cooldown(60);
+        let rule = AlertRule::new("1", "Test", "x > 10", AlertSeverity::Warning).with_cooldown(60);
 
         assert!(rule.can_trigger(0));
 
@@ -528,7 +538,10 @@ mod tests {
 
         dashboard.acknowledge_all("admin");
 
-        assert!(dashboard.alerts.iter().all(|a| a.status == AlertStatus::Acknowledged));
+        assert!(dashboard
+            .alerts
+            .iter()
+            .all(|a| a.status == AlertStatus::Acknowledged));
     }
 
     #[test]

@@ -369,6 +369,7 @@ impl ExpressionExecutor {
                 self.apply_moving_avg(value, field, *window)
             }
             Transform::PercentChange { field } => self.apply_pct_change(value, field),
+            Transform::Suggest { prefix, count } => self.apply_suggest(value, prefix, *count),
         }
     }
 
@@ -1211,6 +1212,60 @@ impl ExpressionExecutor {
             .collect();
 
         Ok(Value::Array(result))
+    }
+
+    /// Apply suggestion transform for N-gram/autocomplete models.
+    ///
+    /// The input `value` should be a model object with a `model_type` field.
+    /// This is a stub implementation - actual model inference is handled by
+    /// the runtime layer which injects results into the context.
+    ///
+    /// In production, the runtime loads the .apr model and provides suggestions
+    /// through a callback or pre-computed context value.
+    #[allow(clippy::unnecessary_wraps)] // Returns Result for API consistency with other transforms
+    fn apply_suggest(
+        &self,
+        value: &Value,
+        prefix: &str,
+        count: usize,
+    ) -> Result<Value, ExecutionError> {
+        // Check if value is a model object with pre-computed suggestions
+        if let Some(obj) = value.as_object() {
+            // If the model has pre-computed suggestions for this prefix, use them
+            if let Some(suggestions) = obj.get("_suggestions") {
+                if let Some(arr) = suggestions.as_array() {
+                    return Ok(Value::Array(arr.iter().take(count).cloned().collect()));
+                }
+            }
+
+            // If this is a model reference, return placeholder suggestions
+            // The runtime layer should populate _suggestions before execution
+            if obj.contains_key("model_type") || obj.contains_key("source") {
+                // Return empty array - runtime should inject actual suggestions
+                return Ok(Value::Array(vec![]));
+            }
+        }
+
+        // For testing/demo: if value is an array of suggestion objects, filter by prefix
+        if let Some(arr) = value.as_array() {
+            let filtered: Vec<Value> = arr
+                .iter()
+                .filter(|item| {
+                    if let Some(obj) = item.as_object() {
+                        if let Some(text) = obj.get("text").and_then(|v| v.as_str()) {
+                            return text.starts_with(prefix);
+                        }
+                    }
+                    false
+                })
+                .take(count)
+                .cloned()
+                .collect();
+            return Ok(Value::Array(filtered));
+        }
+
+        // Fallback: return empty suggestions
+        Ok(Value::Array(vec![]))
     }
 }
 
@@ -2336,5 +2391,123 @@ mod tests {
 
         // Alice has orders 1 (50) and 3 (25) = 75
         assert_eq!(result.as_number(), Some(75.0));
+    }
+
+    // ===== Suggest Transform Tests =====
+
+    #[test]
+    fn test_execute_suggest_with_array() {
+        let mut ctx = DataContext::new();
+
+        // Create suggestion data (simulating pre-computed suggestions)
+        let suggestions = Value::Array(vec![
+            {
+                let mut obj = HashMap::new();
+                obj.insert("text".to_string(), Value::String("git status".to_string()));
+                obj.insert("score".to_string(), Value::Number(0.15));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("text".to_string(), Value::String("git commit".to_string()));
+                obj.insert("score".to_string(), Value::Number(0.12));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("text".to_string(), Value::String("cargo build".to_string()));
+                obj.insert("score".to_string(), Value::Number(0.10));
+                Value::Object(obj)
+            },
+        ]);
+        ctx.insert("suggestions", suggestions);
+
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        // Filter suggestions starting with "git"
+        let expr = parser.parse("{{ suggestions | suggest(git, 5) }}").unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2); // Only git status and git commit
+    }
+
+    #[test]
+    fn test_execute_suggest_with_model_object() {
+        let mut ctx = DataContext::new();
+
+        // Create a model object with pre-computed suggestions
+        let mut model = HashMap::new();
+        model.insert(
+            "model_type".to_string(),
+            Value::String("ngram_lm".to_string()),
+        );
+        model.insert(
+            "source".to_string(),
+            Value::String("./model.apr".to_string()),
+        );
+        model.insert(
+            "_suggestions".to_string(),
+            Value::Array(vec![
+                {
+                    let mut obj = HashMap::new();
+                    obj.insert("text".to_string(), Value::String("git status".to_string()));
+                    obj.insert("score".to_string(), Value::Number(0.15));
+                    Value::Object(obj)
+                },
+                {
+                    let mut obj = HashMap::new();
+                    obj.insert("text".to_string(), Value::String("git commit".to_string()));
+                    obj.insert("score".to_string(), Value::Number(0.12));
+                    Value::Object(obj)
+                },
+            ]),
+        );
+        ctx.insert("model", Value::Object(model));
+
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser.parse("{{ model | suggest(git, 5) }}").unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2); // Pre-computed suggestions
+    }
+
+    #[test]
+    fn test_execute_suggest_empty_model() {
+        let mut ctx = DataContext::new();
+
+        // Model without pre-computed suggestions
+        let mut model = HashMap::new();
+        model.insert(
+            "model_type".to_string(),
+            Value::String("ngram_lm".to_string()),
+        );
+        ctx.insert("model", Value::Object(model));
+
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser.parse("{{ model | suggest(git, 5) }}").unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        let arr = result.as_array().unwrap();
+        assert!(arr.is_empty()); // No suggestions when not pre-computed
+    }
+
+    #[test]
+    fn test_parse_suggest() {
+        let parser = ExpressionParser::new();
+        let expr = parser.parse("{{ model | suggest(git, 8) }}").unwrap();
+
+        assert_eq!(expr.source, "model");
+        assert_eq!(expr.transforms.len(), 1);
+        assert!(matches!(
+            &expr.transforms[0],
+            Transform::Suggest { prefix, count } if prefix == "git" && *count == 8
+        ));
     }
 }

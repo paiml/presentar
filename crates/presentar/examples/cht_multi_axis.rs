@@ -4,10 +4,16 @@
 //!
 //! Run: `cargo run --example cht_multi_axis`
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::disallowed_methods,
+    clippy::too_many_lines
+)]
+
 use presentar_core::Color;
 
 /// Axis side for multi-axis charts
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AxisSide {
     Left,
     Right,
@@ -24,7 +30,7 @@ pub struct MultiAxisSeries {
 }
 
 /// Type of series rendering
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SeriesType {
     Line,
     Bar,
@@ -120,8 +126,8 @@ impl MultiAxisChart {
             return (0.0, 1.0);
         }
 
-        let min = values.iter().cloned().fold(f32::INFINITY, f32::min);
-        let max = values.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        let min = values.iter().copied().fold(f32::INFINITY, f32::min);
+        let max = values.iter().copied().fold(f32::NEG_INFINITY, f32::max);
 
         // Add some padding
         let padding = (max - min) * 0.1;
@@ -140,7 +146,7 @@ impl MultiAxisChart {
 
     /// Get number of data points
     pub fn data_points(&self) -> usize {
-        self.series.first().map(|s| s.values.len()).unwrap_or(0)
+        self.series.first().map_or(0, |s| s.values.len())
     }
 
     /// Calculate correlation between left and right axis data
@@ -202,11 +208,11 @@ impl MultiAxisChart {
         &self.title
     }
 
-    pub fn left_axis(&self) -> &AxisConfig {
+    pub const fn left_axis(&self) -> &AxisConfig {
         &self.left_axis
     }
 
-    pub fn right_axis(&self) -> &AxisConfig {
+    pub const fn right_axis(&self) -> &AxisConfig {
         &self.right_axis
     }
 
@@ -222,7 +228,7 @@ fn main() {
         .with_x_labels(
             ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
                 .iter()
-                .map(|s| s.to_string())
+                .map(|s| (*s).to_string())
                 .collect(),
         )
         .with_left_axis("Revenue ($K)", Color::new(0.3, 0.6, 0.9, 1.0))
@@ -252,27 +258,44 @@ fn main() {
 
     let (left_min, left_max) = chart.axis_range(AxisSide::Left);
     let (right_min, right_max) = chart.axis_range(AxisSide::Right);
-    println!("Left axis ({}): {:.0} - {:.0}", chart.left_axis().label, left_min, left_max);
-    println!("Right axis ({}): {:.0} - {:.0}", chart.right_axis().label, right_min, right_max);
+    println!(
+        "Left axis ({}): {:.0} - {:.0}",
+        chart.left_axis().label,
+        left_min,
+        left_max
+    );
+    println!(
+        "Right axis ({}): {:.0} - {:.0}",
+        chart.right_axis().label,
+        right_min,
+        right_max
+    );
 
     if let Some(corr) = chart.correlation() {
-        println!("Correlation: {:.3}", corr);
+        println!("Correlation: {corr:.3}");
     }
 
     // Print data table
-    println!("\n{:<6} {:>10} {:>10}", "", chart.left_axis().label, chart.right_axis().label);
+    println!(
+        "\n{:<6} {:>10} {:>10}",
+        "",
+        chart.left_axis().label,
+        chart.right_axis().label
+    );
     println!("{}", "-".repeat(30));
 
     for (i, label) in chart.x_labels().iter().enumerate() {
-        let left_val = chart.series_for_axis(AxisSide::Left)
+        let left_val = chart
+            .series_for_axis(AxisSide::Left)
             .first()
             .and_then(|s| s.values.get(i))
             .unwrap_or(&0.0);
-        let right_val = chart.series_for_axis(AxisSide::Right)
+        let right_val = chart
+            .series_for_axis(AxisSide::Right)
             .first()
             .and_then(|s| s.values.get(i))
             .unwrap_or(&0.0);
-        println!("{:<6} {:>10.1} {:>10.0}", label, left_val, right_val);
+        println!("{label:<6} {left_val:>10.1} {right_val:>10.0}");
     }
 
     // ASCII dual-axis chart
@@ -281,7 +304,8 @@ fn main() {
     let width = 40;
 
     // Y-axis labels (left and right)
-    println!("{:>8} {:^width$} {:>8}",
+    println!(
+        "{:>8} {:^width$} {:>8}",
         format!("{:.0}", left_max),
         "",
         format!("{:.0}", right_max),
@@ -293,26 +317,34 @@ fn main() {
         let left_val = left_min + level * (left_max - left_min);
         let right_val = right_min + level * (right_max - right_min);
 
-        print!("{:>7} |", if row == height / 2 { format!("{:.0}", left_val) } else { String::new() });
+        print!(
+            "{:>7} |",
+            if row == height / 2 {
+                format!("{left_val:.0}")
+            } else {
+                String::new()
+            }
+        );
 
         // Draw bars and line
         for x in 0..chart.data_points() {
             let col_width = width / chart.data_points();
 
             // Get normalized values
-            let line_val = chart.series_for_axis(AxisSide::Left)
+            let line_val = chart
+                .series_for_axis(AxisSide::Left)
                 .first()
                 .and_then(|s| s.values.get(x))
-                .map(|&v| chart.normalize(v, AxisSide::Left))
-                .unwrap_or(0.0);
+                .map_or(0.0, |&v| chart.normalize(v, AxisSide::Left));
 
-            let bar_val = chart.series_for_axis(AxisSide::Right)
+            let bar_val = chart
+                .series_for_axis(AxisSide::Right)
                 .first()
                 .and_then(|s| s.values.get(x))
-                .map(|&v| chart.normalize(v, AxisSide::Right))
-                .unwrap_or(0.0);
+                .map_or(0.0, |&v| chart.normalize(v, AxisSide::Right));
 
-            let is_line_level = (line_val * (height - 1) as f32).round() as usize == height - 1 - row;
+            let is_line_level =
+                (line_val * (height - 1) as f32).round() as usize == height - 1 - row;
             let is_bar_level = bar_val >= level;
 
             for _ in 0..col_width {
@@ -323,11 +355,18 @@ fn main() {
                 } else {
                     ' '
                 };
-                print!("{}", c);
+                print!("{c}");
             }
         }
 
-        println!("| {}", if row == height / 2 { format!("{:.0}", right_val) } else { String::new() });
+        println!(
+            "| {}",
+            if row == height / 2 {
+                format!("{right_val:.0}")
+            } else {
+                String::new()
+            }
+        );
     }
 
     // X-axis
@@ -342,9 +381,16 @@ fn main() {
     println!();
 
     // Legend
-    println!("\nLegend: ● {} (left)  ░ {} (right)",
-        chart.series_for_axis(AxisSide::Left).first().map(|s| s.name.as_str()).unwrap_or(""),
-        chart.series_for_axis(AxisSide::Right).first().map(|s| s.name.as_str()).unwrap_or("")
+    println!(
+        "\nLegend: ● {} (left)  ░ {} (right)",
+        chart
+            .series_for_axis(AxisSide::Left)
+            .first()
+            .map_or("", |s| s.name.as_str()),
+        chart
+            .series_for_axis(AxisSide::Right)
+            .first()
+            .map_or("", |s| s.name.as_str())
     );
 
     println!("\n=== Acceptance Criteria ===");
@@ -368,7 +414,13 @@ mod tests {
     #[test]
     fn test_axis_range() {
         let mut chart = MultiAxisChart::new("Test");
-        chart.add_series("A", vec![10.0, 20.0, 30.0], Color::RED, AxisSide::Left, SeriesType::Line);
+        chart.add_series(
+            "A",
+            vec![10.0, 20.0, 30.0],
+            Color::RED,
+            AxisSide::Left,
+            SeriesType::Line,
+        );
 
         let (min, max) = chart.axis_range(AxisSide::Left);
         assert!(min < 10.0); // With padding
@@ -378,7 +430,13 @@ mod tests {
     #[test]
     fn test_normalize() {
         let mut chart = MultiAxisChart::new("Test");
-        chart.add_series("A", vec![0.0, 100.0], Color::RED, AxisSide::Left, SeriesType::Line);
+        chart.add_series(
+            "A",
+            vec![0.0, 100.0],
+            Color::RED,
+            AxisSide::Left,
+            SeriesType::Line,
+        );
 
         // Account for padding in normalization
         let norm_0 = chart.normalize(0.0, AxisSide::Left);
@@ -392,8 +450,20 @@ mod tests {
     #[test]
     fn test_correlation_positive() {
         let mut chart = MultiAxisChart::new("Test");
-        chart.add_series("Left", vec![1.0, 2.0, 3.0, 4.0, 5.0], Color::RED, AxisSide::Left, SeriesType::Line);
-        chart.add_series("Right", vec![10.0, 20.0, 30.0, 40.0, 50.0], Color::BLUE, AxisSide::Right, SeriesType::Line);
+        chart.add_series(
+            "Left",
+            vec![1.0, 2.0, 3.0, 4.0, 5.0],
+            Color::RED,
+            AxisSide::Left,
+            SeriesType::Line,
+        );
+        chart.add_series(
+            "Right",
+            vec![10.0, 20.0, 30.0, 40.0, 50.0],
+            Color::BLUE,
+            AxisSide::Right,
+            SeriesType::Line,
+        );
 
         let corr = chart.correlation().unwrap();
         assert!((corr - 1.0).abs() < 0.01); // Perfect positive correlation
@@ -402,8 +472,20 @@ mod tests {
     #[test]
     fn test_correlation_negative() {
         let mut chart = MultiAxisChart::new("Test");
-        chart.add_series("Left", vec![1.0, 2.0, 3.0, 4.0, 5.0], Color::RED, AxisSide::Left, SeriesType::Line);
-        chart.add_series("Right", vec![50.0, 40.0, 30.0, 20.0, 10.0], Color::BLUE, AxisSide::Right, SeriesType::Line);
+        chart.add_series(
+            "Left",
+            vec![1.0, 2.0, 3.0, 4.0, 5.0],
+            Color::RED,
+            AxisSide::Left,
+            SeriesType::Line,
+        );
+        chart.add_series(
+            "Right",
+            vec![50.0, 40.0, 30.0, 20.0, 10.0],
+            Color::BLUE,
+            AxisSide::Right,
+            SeriesType::Line,
+        );
 
         let corr = chart.correlation().unwrap();
         assert!((corr - (-1.0)).abs() < 0.01); // Perfect negative correlation
@@ -412,9 +494,27 @@ mod tests {
     #[test]
     fn test_series_for_axis() {
         let mut chart = MultiAxisChart::new("Test");
-        chart.add_series("Left1", vec![1.0], Color::RED, AxisSide::Left, SeriesType::Line);
-        chart.add_series("Left2", vec![2.0], Color::BLUE, AxisSide::Left, SeriesType::Line);
-        chart.add_series("Right1", vec![3.0], Color::GREEN, AxisSide::Right, SeriesType::Bar);
+        chart.add_series(
+            "Left1",
+            vec![1.0],
+            Color::RED,
+            AxisSide::Left,
+            SeriesType::Line,
+        );
+        chart.add_series(
+            "Left2",
+            vec![2.0],
+            Color::BLUE,
+            AxisSide::Left,
+            SeriesType::Line,
+        );
+        chart.add_series(
+            "Right1",
+            vec![3.0],
+            Color::GREEN,
+            AxisSide::Right,
+            SeriesType::Bar,
+        );
 
         assert_eq!(chart.series_for_axis(AxisSide::Left).len(), 2);
         assert_eq!(chart.series_for_axis(AxisSide::Right).len(), 1);
@@ -433,8 +533,20 @@ mod tests {
     #[test]
     fn test_correlation_mismatched_lengths() {
         let mut chart = MultiAxisChart::new("Test");
-        chart.add_series("Left", vec![1.0, 2.0], Color::RED, AxisSide::Left, SeriesType::Line);
-        chart.add_series("Right", vec![1.0, 2.0, 3.0], Color::BLUE, AxisSide::Right, SeriesType::Line);
+        chart.add_series(
+            "Left",
+            vec![1.0, 2.0],
+            Color::RED,
+            AxisSide::Left,
+            SeriesType::Line,
+        );
+        chart.add_series(
+            "Right",
+            vec![1.0, 2.0, 3.0],
+            Color::BLUE,
+            AxisSide::Right,
+            SeriesType::Line,
+        );
 
         assert!(chart.correlation().is_none());
     }

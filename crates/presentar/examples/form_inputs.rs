@@ -89,8 +89,8 @@ fn main() {
             _ => {}
         }
     }
-    println!("  - Rect commands: {}", rect_count);
-    println!("  - Text commands: {}", text_count);
+    println!("  - Rect commands: {rect_count}");
+    println!("  - Text commands: {text_count}");
 
     println!("\n=== Form Inputs Example Complete ===");
 }

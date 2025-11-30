@@ -4,6 +4,17 @@
 //!
 //! Run: `cargo run --example ald_correlation_heatmap`
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::disallowed_methods,
+    clippy::needless_range_loop,
+    clippy::too_many_lines,
+    clippy::or_fun_call,
+    clippy::unreadable_literal,
+    clippy::many_single_char_names,
+    clippy::needless_pass_by_value
+)]
+
 use presentar_core::Color;
 
 /// Correlation matrix for dataset columns
@@ -146,15 +157,15 @@ fn main() {
     // Print matrix
     print!("{:>10}", "");
     for name in &matrix.column_names {
-        print!("{:>10}", name);
+        print!("{name:>10}");
     }
     println!();
 
     for (i, name) in matrix.column_names.iter().enumerate() {
-        print!("{:>10}", name);
+        print!("{name:>10}");
         for j in 0..matrix.values.len() {
             let val = matrix.get(i, j);
-            print!("{:>10.3}", val);
+            print!("{val:>10.3}");
         }
         println!();
     }
@@ -174,7 +185,7 @@ fn main() {
         } else {
             "weak"
         };
-        println!("{} <-> {}: {:.3} ({})", a, b, corr, strength);
+        println!("{a} <-> {b}: {corr:.3} ({strength})");
     }
 
     // ASCII heatmap
@@ -194,7 +205,7 @@ fn main() {
             } else {
                 '▓'
             };
-            print!("{} ", char);
+            print!("{char} ");
         }
         println!();
     }
@@ -241,10 +252,8 @@ mod tests {
         let x: Vec<f32> = (0..50).map(|i| i as f32).collect();
         let y: Vec<f32> = x.iter().map(|v| v * v).collect();
 
-        let matrix = CorrelationMatrix::from_columns(
-            vec!["x".to_string(), "y".to_string()],
-            vec![x, y],
-        );
+        let matrix =
+            CorrelationMatrix::from_columns(vec!["x".to_string(), "y".to_string()], vec![x, y]);
 
         assert!(matrix.diagonal_is_one());
     }
@@ -254,10 +263,8 @@ mod tests {
         let x: Vec<f32> = (0..50).map(|i| i as f32).collect();
         let y: Vec<f32> = x.iter().map(|v| v * 2.0).collect();
 
-        let matrix = CorrelationMatrix::from_columns(
-            vec!["x".to_string(), "y".to_string()],
-            vec![x, y],
-        );
+        let matrix =
+            CorrelationMatrix::from_columns(vec!["x".to_string(), "y".to_string()], vec![x, y]);
 
         assert!(matrix.is_symmetric());
     }

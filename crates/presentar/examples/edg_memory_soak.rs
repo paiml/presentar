@@ -139,7 +139,7 @@ impl SoakTest {
     }
 
     /// Get total frames
-    pub fn total_frames(&self) -> u64 {
+    pub const fn total_frames(&self) -> u64 {
         self.frame_count
     }
 
@@ -152,7 +152,7 @@ impl SoakTest {
             peak_memory_mb: self.peak_memory as f32 / (1024.0 * 1024.0),
             memory_stable: self.memory_is_stable(),
             fps_stable: self.fps_is_stable(),
-            max_gc_pause_ms: self.gc_pauses.iter().cloned().fold(0.0, f32::max),
+            max_gc_pause_ms: self.gc_pauses.iter().copied().fold(0.0, f32::max),
             gc_pauses_ok: self.gc_pauses_acceptable(),
         }
     }
@@ -171,7 +171,7 @@ pub struct SoakTestReport {
 }
 
 impl SoakTestReport {
-    pub fn all_passed(&self) -> bool {
+    pub const fn all_passed(&self) -> bool {
         self.memory_stable && self.fps_stable && self.gc_pauses_ok
     }
 }
@@ -186,7 +186,7 @@ fn main() {
     };
 
     println!("=== Memory Leak Soak Test ===");
-    println!("Duration: {} seconds\n", duration_secs);
+    println!("Duration: {duration_secs} seconds\n");
 
     let mut test = SoakTest::new(duration_secs);
 
@@ -216,7 +216,7 @@ fn main() {
         }
 
         // Record stats
-        let memory = allocations.iter().map(|v| v.len()).sum::<usize>();
+        let memory = allocations.iter().map(std::vec::Vec::len).sum::<usize>();
         test.record_frame(frame_time.max(1.0));
         test.record_memory(memory);
 
@@ -271,9 +271,18 @@ fn main() {
     }
 
     println!("\n=== Acceptance Criteria ===");
-    println!("- [{}] Memory stable over test duration", if report.memory_stable { "x" } else { " " });
-    println!("- [{}] No frame rate degradation", if report.fps_stable { "x" } else { " " });
-    println!("- [{}] GC pauses <16ms", if report.gc_pauses_ok { "x" } else { " " });
+    println!(
+        "- [{}] Memory stable over test duration",
+        if report.memory_stable { "x" } else { " " }
+    );
+    println!(
+        "- [{}] No frame rate degradation",
+        if report.fps_stable { "x" } else { " " }
+    );
+    println!(
+        "- [{}] GC pauses <16ms",
+        if report.gc_pauses_ok { "x" } else { " " }
+    );
     println!("- [x] 15-point checklist complete");
 }
 

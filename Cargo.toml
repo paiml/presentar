@@ -24,13 +24,13 @@ rust-version = "1.75"
 trueno = "0.7.3"
 trueno-viz = "0.1.1"
 
-# Internal crates
-presentar-core = { path = "crates/presentar-core" }
-presentar-widgets = { path = "crates/presentar-widgets" }
-presentar-layout = { path = "crates/presentar-layout" }
-presentar-yaml = { path = "crates/presentar-yaml" }
-presentar-test = { path = "crates/presentar-test" }
-presentar-test-macros = { path = "crates/presentar-test-macros" }
+# Internal crates (version + path for crates.io publishing)
+presentar-core = { version = "0.1.0", path = "crates/presentar-core" }
+presentar-widgets = { version = "0.1.0", path = "crates/presentar-widgets" }
+presentar-layout = { version = "0.1.0", path = "crates/presentar-layout" }
+presentar-yaml = { version = "0.1.0", path = "crates/presentar-yaml" }
+presentar-test = { version = "0.1.0", path = "crates/presentar-test" }
+presentar-test-macros = { version = "0.1.0", path = "crates/presentar-test-macros" }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }

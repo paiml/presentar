@@ -31,27 +31,27 @@ pub enum LayerType {
 impl LayerType {
     pub fn color(&self) -> Color {
         match self {
-            LayerType::Input => Color::new(0.4, 0.6, 0.9, 1.0),    // Blue
-            LayerType::Dense => Color::new(0.5, 0.8, 0.5, 1.0),    // Green
-            LayerType::Conv2D => Color::new(0.9, 0.6, 0.3, 1.0),   // Orange
-            LayerType::MaxPool => Color::new(0.8, 0.4, 0.8, 1.0),  // Purple
-            LayerType::Dropout => Color::new(0.6, 0.6, 0.6, 1.0),  // Gray
-            LayerType::BatchNorm => Color::new(0.3, 0.7, 0.9, 1.0), // Cyan
-            LayerType::Activation => Color::new(0.9, 0.9, 0.4, 1.0), // Yellow
-            LayerType::Output => Color::new(0.9, 0.4, 0.4, 1.0),   // Red
+            Self::Input => Color::new(0.4, 0.6, 0.9, 1.0),  // Blue
+            Self::Dense => Color::new(0.5, 0.8, 0.5, 1.0),  // Green
+            Self::Conv2D => Color::new(0.9, 0.6, 0.3, 1.0), // Orange
+            Self::MaxPool => Color::new(0.8, 0.4, 0.8, 1.0), // Purple
+            Self::Dropout => Color::new(0.6, 0.6, 0.6, 1.0), // Gray
+            Self::BatchNorm => Color::new(0.3, 0.7, 0.9, 1.0), // Cyan
+            Self::Activation => Color::new(0.9, 0.9, 0.4, 1.0), // Yellow
+            Self::Output => Color::new(0.9, 0.4, 0.4, 1.0), // Red
         }
     }
 
-    pub fn label(&self) -> &'static str {
+    pub const fn label(&self) -> &'static str {
         match self {
-            LayerType::Input => "Input",
-            LayerType::Dense => "Dense",
-            LayerType::Conv2D => "Conv2D",
-            LayerType::MaxPool => "MaxPool",
-            LayerType::Dropout => "Dropout",
-            LayerType::BatchNorm => "BatchNorm",
-            LayerType::Activation => "Activation",
-            LayerType::Output => "Output",
+            Self::Input => "Input",
+            Self::Dense => "Dense",
+            Self::Conv2D => "Conv2D",
+            Self::MaxPool => "MaxPool",
+            Self::Dropout => "Dropout",
+            Self::BatchNorm => "BatchNorm",
+            Self::Activation => "Activation",
+            Self::Output => "Output",
         }
     }
 }
@@ -65,7 +65,7 @@ pub struct ArchitectureDiagram {
 }
 
 impl ArchitectureDiagram {
-    pub fn new(layers: Vec<Layer>) -> Self {
+    pub const fn new(layers: Vec<Layer>) -> Self {
         Self {
             layers,
             width: 800.0,
@@ -77,13 +77,13 @@ impl ArchitectureDiagram {
     /// Calculate the bounding box for a layer
     pub fn layer_bounds(&self, index: usize) -> Rect {
         let n = self.layers.len() as f32;
-        let available_width = self.width - 2.0 * self.padding;
+        let available_width = 2.0f32.mul_add(-self.padding, self.width);
         let layer_width = (available_width / n).min(100.0);
         let spacing = (available_width - layer_width * n) / (n + 1.0);
 
-        let x = self.padding + spacing + index as f32 * (layer_width + spacing);
+        let x = (index as f32).mul_add(layer_width + spacing, self.padding + spacing);
         let y = self.padding;
-        let height = self.height - 2.0 * self.padding;
+        let height = 2.0f32.mul_add(-self.padding, self.height);
 
         Rect::new(x, y, layer_width, height)
     }
@@ -169,7 +169,10 @@ fn main() {
             layer.name,
             layer.layer_type.label()
         );
-        println!("  Shape: {:?} -> {:?}", layer.input_shape, layer.output_shape);
+        println!(
+            "  Shape: {:?} -> {:?}",
+            layer.input_shape, layer.output_shape
+        );
         println!("  Params: {}", layer.param_count);
         println!(
             "  Bounds: ({:.1}, {:.1}, {:.1}x{:.1})",

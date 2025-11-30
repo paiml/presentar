@@ -4,6 +4,8 @@
 //!
 //! Run: `cargo run --example edg_theme_switching`
 
+#![allow(clippy::unwrap_used, clippy::disallowed_methods)]
+
 use presentar_core::Color;
 use std::collections::HashMap;
 
@@ -54,17 +56,17 @@ impl Theme {
         self.colors.get(&role).copied().unwrap_or(Color::BLACK)
     }
 
-    pub fn with_border_radius(mut self, radius: f32) -> Self {
+    pub const fn with_border_radius(mut self, radius: f32) -> Self {
         self.border_radius = radius;
         self
     }
 
-    pub fn with_spacing(mut self, unit: f32) -> Self {
+    pub const fn with_spacing(mut self, unit: f32) -> Self {
         self.spacing_unit = unit;
         self
     }
 
-    pub fn with_font_scale(mut self, scale: f32) -> Self {
+    pub const fn with_font_scale(mut self, scale: f32) -> Self {
         self.font_scale = scale;
         self
     }
@@ -154,7 +156,7 @@ impl ThemeManager {
             self.current_theme = name.to_string();
             Ok(())
         } else {
-            Err(format!("Theme '{}' not found", name))
+            Err(format!("Theme '{name}' not found"))
         }
     }
 
@@ -163,10 +165,13 @@ impl ThemeManager {
     }
 
     pub fn available_themes(&self) -> Vec<&str> {
-        self.themes.keys().map(|s| s.as_str()).collect()
+        self.themes
+            .keys()
+            .map(std::string::String::as_str)
+            .collect()
     }
 
-    pub fn transition_duration(&self) -> u32 {
+    pub const fn transition_duration(&self) -> u32 {
         self.transition_duration_ms
     }
 
@@ -178,10 +183,10 @@ impl ThemeManager {
     pub fn interpolate_color(from: Color, to: Color, t: f32) -> Color {
         let t = t.clamp(0.0, 1.0);
         Color::new(
-            from.r + (to.r - from.r) * t,
-            from.g + (to.g - from.g) * t,
-            from.b + (to.b - from.b) * t,
-            from.a + (to.a - from.a) * t,
+            (to.r - from.r).mul_add(t, from.r),
+            (to.g - from.g).mul_add(t, from.g),
+            (to.b - from.b).mul_add(t, from.b),
+            (to.a - from.a).mul_add(t, from.a),
         )
     }
 
@@ -225,10 +230,7 @@ impl ThemedComponent {
 
         format!(
             "[{}] bg=({:.2},{:.2},{:.2}) text=({:.2},{:.2},{:.2}) primary=({:.2},{:.2},{:.2})",
-            self.name,
-            bg.r, bg.g, bg.b,
-            text.r, text.g, text.b,
-            primary.r, primary.g, primary.b
+            self.name, bg.r, bg.g, bg.b, text.r, text.g, text.b, primary.r, primary.g, primary.b
         )
     }
 }
@@ -296,8 +298,12 @@ fn main() {
         println!(
             "  {:.0}%: bg=({:.2},{:.2},{:.2}) text=({:.2},{:.2},{:.2})",
             progress * 100.0,
-            bg.r, bg.g, bg.b,
-            text.r, text.g, text.b
+            bg.r,
+            bg.g,
+            bg.b,
+            text.r,
+            text.g,
+            text.b
         );
     }
 
@@ -320,30 +326,30 @@ fn main() {
         };
 
         println!("{} Theme:", theme.name);
+        println!("┌{}┐", border_char.to_string().repeat(30));
         println!(
-            "┌{}┐",
-            border_char.to_string().repeat(30)
+            "│{:<30}│",
+            format!("{bg_char}  Title Bar")
+                .chars()
+                .take(30)
+                .collect::<String>()
+        );
+        println!("├{}┤", border_char.to_string().repeat(30));
+        println!(
+            "│{:<30}│",
+            format!("{bg_char}  Content Area")
+                .chars()
+                .take(30)
+                .collect::<String>()
         );
         println!(
             "│{:<30}│",
-            format!("{}  Title Bar", bg_char).chars().take(30).collect::<String>()
+            format!("{bg_char}  [Button] [Action]")
+                .chars()
+                .take(30)
+                .collect::<String>()
         );
-        println!(
-            "├{}┤",
-            border_char.to_string().repeat(30)
-        );
-        println!(
-            "│{:<30}│",
-            format!("{}  Content Area", bg_char).chars().take(30).collect::<String>()
-        );
-        println!(
-            "│{:<30}│",
-            format!("{}  [Button] [Action]", bg_char).chars().take(30).collect::<String>()
-        );
-        println!(
-            "└{}┘\n",
-            border_char.to_string().repeat(30)
-        );
+        println!("└{}┘\n", border_char.to_string().repeat(30));
     }
 
     println!("=== Acceptance Criteria ===");

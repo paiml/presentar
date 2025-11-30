@@ -4,11 +4,13 @@
 //!
 //! Run: `cargo run --example dsh_performance`
 
+#![allow(clippy::unwrap_used, clippy::disallowed_methods, dead_code)]
+
 use std::collections::VecDeque;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// System metric types
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MetricType {
     Cpu,
     Memory,
@@ -50,7 +52,7 @@ impl Metric {
         }
     }
 
-    pub fn with_thresholds(mut self, warning: f32, critical: f32) -> Self {
+    pub const fn with_thresholds(mut self, warning: f32, critical: f32) -> Self {
         self.threshold_warning = Some(warning);
         self.threshold_critical = Some(critical);
         self
@@ -60,7 +62,10 @@ impl Metric {
         if self.values.len() >= self.max_points {
             self.values.pop_front();
         }
-        self.values.push_back(MetricPoint { timestamp_ms, value });
+        self.values.push_back(MetricPoint {
+            timestamp_ms,
+            value,
+        });
     }
 
     pub fn current(&self) -> Option<f32> {
@@ -89,9 +94,8 @@ impl Metric {
     }
 
     pub fn status(&self) -> MetricStatus {
-        let current = match self.current() {
-            Some(v) => v,
-            None => return MetricStatus::Unknown,
+        let Some(current) = self.current() else {
+            return MetricStatus::Unknown;
         };
 
         if let Some(critical) = self.threshold_critical {
@@ -109,7 +113,7 @@ impl Metric {
 }
 
 /// Status of a metric
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MetricStatus {
     Normal,
     Warning,
@@ -158,11 +162,11 @@ impl PerformanceDashboard {
 
     /// Get overall system health
     pub fn health(&self) -> SystemHealth {
-        let statuses: Vec<_> = self.metrics.iter().map(|m| m.status()).collect();
+        let statuses: Vec<_> = self.metrics.iter().map(Metric::status).collect();
 
-        if statuses.iter().any(|s| *s == MetricStatus::Critical) {
+        if statuses.contains(&MetricStatus::Critical) {
             SystemHealth::Critical
-        } else if statuses.iter().any(|s| *s == MetricStatus::Warning) {
+        } else if statuses.contains(&MetricStatus::Warning) {
             SystemHealth::Degraded
         } else if statuses.iter().all(|s| *s == MetricStatus::Normal) {
             SystemHealth::Healthy
@@ -200,7 +204,7 @@ impl PerformanceDashboard {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SystemHealth {
     Healthy,
     Degraded,
@@ -223,12 +227,9 @@ fn main() {
     let mut dashboard = PerformanceDashboard::new("System Monitor", 1000);
 
     // Add metrics
-    dashboard.add_metric(
-        Metric::new("CPU", MetricType::Cpu, "%", 60).with_thresholds(70.0, 90.0),
-    );
-    dashboard.add_metric(
-        Metric::new("Memory", MetricType::Memory, "%", 60).with_thresholds(80.0, 95.0),
-    );
+    dashboard.add_metric(Metric::new("CPU", MetricType::Cpu, "%", 60).with_thresholds(70.0, 90.0));
+    dashboard
+        .add_metric(Metric::new("Memory", MetricType::Memory, "%", 60).with_thresholds(80.0, 95.0));
     dashboard.add_metric(
         Metric::new("Disk I/O", MetricType::Disk, "MB/s", 60).with_thresholds(100.0, 150.0),
     );
@@ -244,11 +245,26 @@ fn main() {
         let t = i as u64 * 1000;
         let wave = ((i as f32 * 0.3).sin() + 1.0) / 2.0;
 
-        dashboard.get_metric_mut("CPU").unwrap().push(t, 45.0 + wave * 30.0);
-        dashboard.get_metric_mut("Memory").unwrap().push(t, 60.0 + wave * 20.0);
-        dashboard.get_metric_mut("Disk I/O").unwrap().push(t, 30.0 + wave * 50.0);
-        dashboard.get_metric_mut("Network").unwrap().push(t, 200.0 + wave * 400.0);
-        dashboard.get_metric_mut("Latency").unwrap().push(t, 20.0 + wave * 60.0);
+        dashboard
+            .get_metric_mut("CPU")
+            .unwrap()
+            .push(t, 45.0 + wave * 30.0);
+        dashboard
+            .get_metric_mut("Memory")
+            .unwrap()
+            .push(t, 60.0 + wave * 20.0);
+        dashboard
+            .get_metric_mut("Disk I/O")
+            .unwrap()
+            .push(t, 30.0 + wave * 50.0);
+        dashboard
+            .get_metric_mut("Network")
+            .unwrap()
+            .push(t, 200.0 + wave * 400.0);
+        dashboard
+            .get_metric_mut("Latency")
+            .unwrap()
+            .push(t, 20.0 + wave * 60.0);
     }
 
     // Print dashboard
@@ -364,8 +380,7 @@ mod tests {
 
     #[test]
     fn test_metric_status_normal() {
-        let mut metric = Metric::new("Test", MetricType::Cpu, "%", 10)
-            .with_thresholds(70.0, 90.0);
+        let mut metric = Metric::new("Test", MetricType::Cpu, "%", 10).with_thresholds(70.0, 90.0);
         metric.push(0, 50.0);
 
         assert_eq!(metric.status(), MetricStatus::Normal);
@@ -373,8 +388,7 @@ mod tests {
 
     #[test]
     fn test_metric_status_warning() {
-        let mut metric = Metric::new("Test", MetricType::Cpu, "%", 10)
-            .with_thresholds(70.0, 90.0);
+        let mut metric = Metric::new("Test", MetricType::Cpu, "%", 10).with_thresholds(70.0, 90.0);
         metric.push(0, 75.0);
 
         assert_eq!(metric.status(), MetricStatus::Warning);
@@ -382,8 +396,7 @@ mod tests {
 
     #[test]
     fn test_metric_status_critical() {
-        let mut metric = Metric::new("Test", MetricType::Cpu, "%", 10)
-            .with_thresholds(70.0, 90.0);
+        let mut metric = Metric::new("Test", MetricType::Cpu, "%", 10).with_thresholds(70.0, 90.0);
         metric.push(0, 95.0);
 
         assert_eq!(metric.status(), MetricStatus::Critical);
@@ -392,12 +405,10 @@ mod tests {
     #[test]
     fn test_dashboard_health() {
         let mut dashboard = PerformanceDashboard::new("Test", 1000);
-        dashboard.add_metric(
-            Metric::new("A", MetricType::Cpu, "%", 10).with_thresholds(70.0, 90.0)
-        );
-        dashboard.add_metric(
-            Metric::new("B", MetricType::Memory, "%", 10).with_thresholds(80.0, 95.0)
-        );
+        dashboard
+            .add_metric(Metric::new("A", MetricType::Cpu, "%", 10).with_thresholds(70.0, 90.0));
+        dashboard
+            .add_metric(Metric::new("B", MetricType::Memory, "%", 10).with_thresholds(80.0, 95.0));
 
         dashboard.get_metric_mut("A").unwrap().push(0, 50.0);
         dashboard.get_metric_mut("B").unwrap().push(0, 60.0);
@@ -409,10 +420,10 @@ mod tests {
     fn test_dashboard_summary() {
         let mut dashboard = PerformanceDashboard::new("Test", 1000);
         dashboard.add_metric(
-            Metric::new("Normal", MetricType::Cpu, "%", 10).with_thresholds(70.0, 90.0)
+            Metric::new("Normal", MetricType::Cpu, "%", 10).with_thresholds(70.0, 90.0),
         );
         dashboard.add_metric(
-            Metric::new("Warning", MetricType::Memory, "%", 10).with_thresholds(70.0, 90.0)
+            Metric::new("Warning", MetricType::Memory, "%", 10).with_thresholds(70.0, 90.0),
         );
 
         dashboard.get_metric_mut("Normal").unwrap().push(0, 50.0);

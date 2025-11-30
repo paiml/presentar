@@ -1934,10 +1934,8 @@ mod tests {
 
     #[test]
     fn test_linear_extrapolate_left() {
-        let interp = LinearInterpolator::from_points(&[
-            Point2D::new(0.0, 0.0),
-            Point2D::new(10.0, 10.0),
-        ]);
+        let interp =
+            LinearInterpolator::from_points(&[Point2D::new(0.0, 0.0), Point2D::new(10.0, 10.0)]);
         // Extrapolate before first point
         let y = interp.interpolate(-5.0);
         assert!((y - (-5.0)).abs() < 1e-10);
@@ -1945,10 +1943,8 @@ mod tests {
 
     #[test]
     fn test_linear_extrapolate_right() {
-        let interp = LinearInterpolator::from_points(&[
-            Point2D::new(0.0, 0.0),
-            Point2D::new(10.0, 10.0),
-        ]);
+        let interp =
+            LinearInterpolator::from_points(&[Point2D::new(0.0, 0.0), Point2D::new(10.0, 10.0)]);
         // Extrapolate after last point
         let y = interp.interpolate(15.0);
         assert!((y - 15.0).abs() < 1e-10);
@@ -1967,18 +1963,14 @@ mod tests {
 
     #[test]
     fn test_linear_points_getter() {
-        let interp = LinearInterpolator::from_points(&[
-            Point2D::new(0.0, 0.0),
-            Point2D::new(1.0, 1.0),
-        ]);
+        let interp =
+            LinearInterpolator::from_points(&[Point2D::new(0.0, 0.0), Point2D::new(1.0, 1.0)]);
         assert_eq!(interp.points().len(), 2);
     }
 
     #[test]
     fn test_linear_sample_single_point() {
-        let interp = LinearInterpolator::from_points(&[
-            Point2D::new(0.0, 5.0),
-        ]);
+        let interp = LinearInterpolator::from_points(&[Point2D::new(0.0, 5.0)]);
         let samples = interp.sample(0.0, 10.0, 5);
         // Single point always returns that y
         for s in &samples {
@@ -1988,10 +1980,8 @@ mod tests {
 
     #[test]
     fn test_linear_sample_too_few() {
-        let interp = LinearInterpolator::from_points(&[
-            Point2D::new(0.0, 0.0),
-            Point2D::new(10.0, 10.0),
-        ]);
+        let interp =
+            LinearInterpolator::from_points(&[Point2D::new(0.0, 0.0), Point2D::new(10.0, 10.0)]);
         let samples = interp.sample(0.0, 10.0, 1);
         assert!(samples.is_empty());
     }
@@ -2066,20 +2056,14 @@ mod tests {
 
     #[test]
     fn test_catmull_rom_points_getter() {
-        let points = vec![
-            Point2D::new(0.0, 0.0),
-            Point2D::new(1.0, 1.0),
-        ];
+        let points = vec![Point2D::new(0.0, 0.0), Point2D::new(1.0, 1.0)];
         let cr = CatmullRom::from_points(&points);
         assert_eq!(cr.points().len(), 2);
     }
 
     #[test]
     fn test_catmull_rom_to_path_two_points() {
-        let points = vec![
-            Point2D::new(0.0, 0.0),
-            Point2D::new(1.0, 1.0),
-        ];
+        let points = vec![Point2D::new(0.0, 0.0), Point2D::new(1.0, 1.0)];
         let cr = CatmullRom::from_points(&points);
         let path = cr.to_path(10);
         assert_eq!(path.len(), 2); // Just returns points for 2-point input

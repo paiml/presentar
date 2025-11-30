@@ -4,6 +4,8 @@
 //!
 //! Run: `cargo run --example edg_unicode`
 
+#![allow(clippy::all, clippy::pedantic, clippy::nursery)]
+
 /// Text measurement utilities
 pub struct TextMetrics;
 
@@ -90,7 +92,7 @@ impl TextMetrics {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Alignment {
     Left,
     Right,
@@ -174,11 +176,13 @@ fn main() {
         ("Emoji", "Hello 👋 World 🌍"),
         ("Mixed", "Hello 世界 🌍"),
         ("Combined", "e\u{0301}"), // é as e + combining acute
-        ("ZWJ Emoji", "👨‍👩‍👧‍👦"), // Family emoji with ZWJ
+        ("ZWJ Emoji", "👨‍👩‍👧‍👦"),       // Family emoji with ZWJ
     ];
 
-    println!("{:<15} {:>6} {:>6} {:>8} {:<20}",
-        "Type", "Chars", "Graph", "Width", "Text");
+    println!(
+        "{:<15} {:>6} {:>6} {:>8} {:<20}",
+        "Type", "Chars", "Graph", "Width", "Text"
+    );
     println!("{}", "-".repeat(60));
 
     for (name, text) in &test_strings {
@@ -199,7 +203,7 @@ fn main() {
 
     for (name, text) in &long_texts {
         let label = UnicodeLabel::new(text);
-        println!("{}: {}", name, text);
+        println!("{name}: {text}");
         println!("  Original width: {}", label.visual_width);
         println!("  Truncated(10): '{}'", label.truncated(10));
         println!("  Truncated(20): '{}'", label.truncated(20));
@@ -220,7 +224,7 @@ fn main() {
 
     // Table rendering test
     println!("\n=== Unicode Table Rendering ===\n");
-    let headers = vec!["Name", "Country", "Status"];
+    let headers = ["Name", "Country", "Status"];
     let rows = vec![
         vec!["Alice", "USA 🇺🇸", "Active"],
         vec!["田中太郎", "Japan 🇯🇵", "Pending"],
@@ -236,13 +240,19 @@ fn main() {
         print!(" {} │", TextMetrics::pad_to_width(h, *w, Alignment::Left));
     }
     println!();
-    println!("├{}┤", "─".repeat(col_widths.iter().sum::<usize>() + col_widths.len() * 3 - 1));
+    println!(
+        "├{}┤",
+        "─".repeat(col_widths.iter().sum::<usize>() + col_widths.len() * 3 - 1)
+    );
 
     // Rows
     for row in &rows {
         print!("│");
         for (cell, w) in row.iter().zip(&col_widths) {
-            print!(" {} │", TextMetrics::pad_to_width(cell, *w, Alignment::Left));
+            print!(
+                " {} │",
+                TextMetrics::pad_to_width(cell, *w, Alignment::Left)
+            );
         }
         println!();
     }
@@ -291,10 +301,7 @@ mod tests {
 
     #[test]
     fn test_pad_left() {
-        assert_eq!(
-            TextMetrics::pad_to_width("Hi", 5, Alignment::Left),
-            "Hi   "
-        );
+        assert_eq!(TextMetrics::pad_to_width("Hi", 5, Alignment::Left), "Hi   ");
     }
 
     #[test]

@@ -1126,10 +1126,32 @@ mod tests {
     #[test]
     fn test_key_letters() {
         let letters = [
-            Key::A, Key::B, Key::C, Key::D, Key::E, Key::F, Key::G, Key::H,
-            Key::I, Key::J, Key::K, Key::L, Key::M, Key::N, Key::O, Key::P,
-            Key::Q, Key::R, Key::S, Key::T, Key::U, Key::V, Key::W, Key::X,
-            Key::Y, Key::Z,
+            Key::A,
+            Key::B,
+            Key::C,
+            Key::D,
+            Key::E,
+            Key::F,
+            Key::G,
+            Key::H,
+            Key::I,
+            Key::J,
+            Key::K,
+            Key::L,
+            Key::M,
+            Key::N,
+            Key::O,
+            Key::P,
+            Key::Q,
+            Key::R,
+            Key::S,
+            Key::T,
+            Key::U,
+            Key::V,
+            Key::W,
+            Key::X,
+            Key::Y,
+            Key::Z,
         ];
         for key in &letters {
             let event = Event::KeyDown { key: *key };
@@ -1140,8 +1162,16 @@ mod tests {
     #[test]
     fn test_key_numbers() {
         let numbers = [
-            Key::Num0, Key::Num1, Key::Num2, Key::Num3, Key::Num4,
-            Key::Num5, Key::Num6, Key::Num7, Key::Num8, Key::Num9,
+            Key::Num0,
+            Key::Num1,
+            Key::Num2,
+            Key::Num3,
+            Key::Num4,
+            Key::Num5,
+            Key::Num6,
+            Key::Num7,
+            Key::Num8,
+            Key::Num9,
         ];
         for key in &numbers {
             let event = Event::KeyDown { key: *key };
@@ -1152,8 +1182,18 @@ mod tests {
     #[test]
     fn test_key_function_keys() {
         let function_keys = [
-            Key::F1, Key::F2, Key::F3, Key::F4, Key::F5, Key::F6,
-            Key::F7, Key::F8, Key::F9, Key::F10, Key::F11, Key::F12,
+            Key::F1,
+            Key::F2,
+            Key::F3,
+            Key::F4,
+            Key::F5,
+            Key::F6,
+            Key::F7,
+            Key::F8,
+            Key::F9,
+            Key::F10,
+            Key::F11,
+            Key::F12,
         ];
         for key in &function_keys {
             let event = Event::KeyDown { key: *key };
@@ -1164,9 +1204,17 @@ mod tests {
     #[test]
     fn test_key_control_keys() {
         let control_keys = [
-            Key::Enter, Key::Escape, Key::Backspace, Key::Tab,
-            Key::Space, Key::Delete, Key::Insert, Key::Home,
-            Key::End, Key::PageUp, Key::PageDown,
+            Key::Enter,
+            Key::Escape,
+            Key::Backspace,
+            Key::Tab,
+            Key::Space,
+            Key::Delete,
+            Key::Insert,
+            Key::Home,
+            Key::End,
+            Key::PageUp,
+            Key::PageDown,
         ];
         for key in &control_keys {
             let event = Event::KeyDown { key: *key };
@@ -1186,10 +1234,14 @@ mod tests {
     #[test]
     fn test_key_modifiers() {
         let modifiers = [
-            Key::ShiftLeft, Key::ShiftRight,
-            Key::ControlLeft, Key::ControlRight,
-            Key::AltLeft, Key::AltRight,
-            Key::MetaLeft, Key::MetaRight,
+            Key::ShiftLeft,
+            Key::ShiftRight,
+            Key::ControlLeft,
+            Key::ControlRight,
+            Key::AltLeft,
+            Key::AltRight,
+            Key::MetaLeft,
+            Key::MetaRight,
         ];
         for key in &modifiers {
             let event = Event::KeyDown { key: *key };
@@ -1200,9 +1252,17 @@ mod tests {
     #[test]
     fn test_key_punctuation() {
         let punctuation = [
-            Key::Minus, Key::Equal, Key::BracketLeft, Key::BracketRight,
-            Key::Backslash, Key::Semicolon, Key::Quote, Key::Grave,
-            Key::Comma, Key::Period, Key::Slash,
+            Key::Minus,
+            Key::Equal,
+            Key::BracketLeft,
+            Key::BracketRight,
+            Key::Backslash,
+            Key::Semicolon,
+            Key::Quote,
+            Key::Grave,
+            Key::Comma,
+            Key::Period,
+            Key::Slash,
         ];
         for key in &punctuation {
             let event = Event::KeyDown { key: *key };
@@ -1320,18 +1380,34 @@ mod tests {
     #[test]
     fn test_all_event_serialization() {
         let events = vec![
-            Event::MouseMove { position: Point::new(1.0, 2.0) },
-            Event::MouseDown { position: Point::new(1.0, 2.0), button: MouseButton::Left },
-            Event::MouseUp { position: Point::new(1.0, 2.0), button: MouseButton::Right },
-            Event::Scroll { delta_x: 1.0, delta_y: -1.0 },
+            Event::MouseMove {
+                position: Point::new(1.0, 2.0),
+            },
+            Event::MouseDown {
+                position: Point::new(1.0, 2.0),
+                button: MouseButton::Left,
+            },
+            Event::MouseUp {
+                position: Point::new(1.0, 2.0),
+                button: MouseButton::Right,
+            },
+            Event::Scroll {
+                delta_x: 1.0,
+                delta_y: -1.0,
+            },
             Event::KeyDown { key: Key::A },
             Event::KeyUp { key: Key::B },
-            Event::TextInput { text: "test".to_string() },
+            Event::TextInput {
+                text: "test".to_string(),
+            },
             Event::FocusIn,
             Event::FocusOut,
             Event::MouseEnter,
             Event::MouseLeave,
-            Event::Resize { width: 800.0, height: 600.0 },
+            Event::Resize {
+                width: 800.0,
+                height: 600.0,
+            },
         ];
 
         for event in events {
@@ -1344,9 +1420,20 @@ mod tests {
     #[test]
     fn test_touch_events_serialization() {
         let events = vec![
-            Event::TouchStart { id: TouchId(1), position: Point::new(10.0, 20.0), pressure: 0.5 },
-            Event::TouchMove { id: TouchId(1), position: Point::new(15.0, 25.0), pressure: 0.6 },
-            Event::TouchEnd { id: TouchId(1), position: Point::new(20.0, 30.0) },
+            Event::TouchStart {
+                id: TouchId(1),
+                position: Point::new(10.0, 20.0),
+                pressure: 0.5,
+            },
+            Event::TouchMove {
+                id: TouchId(1),
+                position: Point::new(15.0, 25.0),
+                pressure: 0.6,
+            },
+            Event::TouchEnd {
+                id: TouchId(1),
+                position: Point::new(20.0, 30.0),
+            },
             Event::TouchCancel { id: TouchId(1) },
         ];
 
@@ -1360,11 +1447,28 @@ mod tests {
     #[test]
     fn test_gesture_events_serialization() {
         let events = vec![
-            Event::GesturePinch { scale: 1.5, center: Point::new(100.0, 100.0), state: GestureState::Started },
-            Event::GestureRotate { angle: 0.5, center: Point::new(100.0, 100.0), state: GestureState::Changed },
-            Event::GesturePan { delta: Point::new(10.0, 5.0), velocity: Point::new(50.0, 25.0), state: GestureState::Ended },
-            Event::GestureLongPress { position: Point::new(50.0, 50.0) },
-            Event::GestureTap { position: Point::new(50.0, 50.0), count: 2 },
+            Event::GesturePinch {
+                scale: 1.5,
+                center: Point::new(100.0, 100.0),
+                state: GestureState::Started,
+            },
+            Event::GestureRotate {
+                angle: 0.5,
+                center: Point::new(100.0, 100.0),
+                state: GestureState::Changed,
+            },
+            Event::GesturePan {
+                delta: Point::new(10.0, 5.0),
+                velocity: Point::new(50.0, 25.0),
+                state: GestureState::Ended,
+            },
+            Event::GestureLongPress {
+                position: Point::new(50.0, 50.0),
+            },
+            Event::GestureTap {
+                position: Point::new(50.0, 50.0),
+                count: 2,
+            },
         ];
 
         for event in events {
@@ -1399,9 +1503,17 @@ mod tests {
                 is_primary: false,
                 button: None,
             },
-            Event::PointerCancel { pointer_id: PointerId(1) },
-            Event::PointerEnter { pointer_id: PointerId(2), pointer_type: PointerType::Mouse },
-            Event::PointerLeave { pointer_id: PointerId(2), pointer_type: PointerType::Touch },
+            Event::PointerCancel {
+                pointer_id: PointerId(1),
+            },
+            Event::PointerEnter {
+                pointer_id: PointerId(2),
+                pointer_type: PointerType::Mouse,
+            },
+            Event::PointerLeave {
+                pointer_id: PointerId(2),
+                pointer_type: PointerType::Touch,
+            },
         ];
 
         for event in events {

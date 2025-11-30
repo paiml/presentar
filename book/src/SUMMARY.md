@@ -98,6 +98,7 @@
 
 - [Hello World](./examples/hello-world.md)
 - [Counter App](./examples/counter-app.md)
+- [Shell Autocomplete (Showcase)](./examples/shell-autocomplete.md)
 - [Dashboard](./examples/dashboard.md)
 - [Charts](./examples/charts.md)
 - [Edge Cases](./examples/edge-cases.md)

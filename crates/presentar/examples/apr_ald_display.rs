@@ -1,6 +1,6 @@
 //! Demo: Display .apr model and .ald dataset files
 //!
-//! Run with: cargo run --example apr_ald_display
+//! Run with: cargo run --example `apr_ald_display`
 
 use presentar_widgets::{load_ald_as_card, load_apr_as_card, AldDatasetExt, AprModelExt};
 use presentar_yaml::formats::{AldDataset, AprModel, ModelLayer, Tensor};
@@ -74,7 +74,7 @@ fn create_sample_model() -> AprModel {
         layer_type: "dense".to_string(),
         parameters: vec![
             Tensor::from_f32("weights", vec![256, 10], &vec![0.0; 256 * 10]),
-            Tensor::from_f32("bias", vec![10], &vec![0.0; 10]),
+            Tensor::from_f32("bias", vec![10], &[0.0; 10]),
         ],
     });
 

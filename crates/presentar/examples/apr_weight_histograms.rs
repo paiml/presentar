@@ -4,6 +4,14 @@
 //!
 //! Run: `cargo run --example apr_weight_histograms`
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::disallowed_methods,
+    clippy::too_many_lines,
+    clippy::cast_possible_wrap,
+    clippy::format_collect
+)]
+
 use std::collections::HashMap;
 
 /// Histogram bin for weight distribution
@@ -41,12 +49,12 @@ impl WeightHistogram {
             };
         }
 
-        let min_val = weights.iter().cloned().fold(f32::INFINITY, f32::min);
-        let max_val = weights.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        let min_val = weights.iter().copied().fold(f32::INFINITY, f32::min);
+        let max_val = weights.iter().copied().fold(f32::NEG_INFINITY, f32::max);
         let mean: f32 = weights.iter().sum::<f32>() / weights.len() as f32;
 
-        let variance: f32 = weights.iter().map(|w| (w - mean).powi(2)).sum::<f32>()
-            / weights.len() as f32;
+        let variance: f32 =
+            weights.iter().map(|w| (w - mean).powi(2)).sum::<f32>() / weights.len() as f32;
         let std_dev = variance.sqrt();
 
         let bin_width = (max_val - min_val) / num_bins as f32;
@@ -60,8 +68,8 @@ impl WeightHistogram {
 
         let bins: Vec<HistogramBin> = (0..num_bins)
             .map(|i| HistogramBin {
-                min: min_val + i as f32 * bin_width,
-                max: min_val + (i + 1) as f32 * bin_width,
+                min: (i as f32).mul_add(bin_width, min_val),
+                max: ((i + 1) as f32).mul_add(bin_width, min_val),
                 count: bin_counts[i],
             })
             .collect();
@@ -206,7 +214,7 @@ fn main() {
                 let bar_len = (h * 40.0) as usize;
                 let bar: String = "█".repeat(bar_len);
                 if i % 5 == 0 {
-                    println!("  {:3} | {}", i, bar);
+                    println!("  {i:3} | {bar}");
                 }
             }
             println!();
@@ -218,8 +226,8 @@ fn main() {
     let exploding = analyzer.has_exploding_weights(10.0);
 
     println!("=== Weight Health ===");
-    println!("Vanishing weights: {:?}", vanishing);
-    println!("Exploding weights: {:?}", exploding);
+    println!("Vanishing weights: {vanishing:?}");
+    println!("Exploding weights: {exploding:?}");
 
     println!("\n=== Acceptance Criteria ===");
     println!("- [x] Histogram bins correct");
@@ -270,7 +278,9 @@ mod tests {
         analyzer.add_layer("normal", &normal, 20);
 
         // Very small weights (near zero with tiny variance)
-        let small: Vec<f32> = (0..1000).map(|i| 0.0001 + (i % 10) as f32 * 0.00001).collect();
+        let small: Vec<f32> = (0..1000)
+            .map(|i| 0.0001 + (i % 10) as f32 * 0.00001)
+            .collect();
         analyzer.add_layer("small", &small, 20);
 
         let vanishing = analyzer.has_vanishing_weights(0.01);
