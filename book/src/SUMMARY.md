@@ -108,6 +108,7 @@
 # Development Guide
 
 - [Contributing](./development/contributing.md)
+- [CLI Reference](./development/cli-reference.md)
 - [EXTREME TDD](./development/extreme-tdd.md)
 - [RED-GREEN-REFACTOR](./development/red-green-refactor.md)
 - [Testing Strategy](./development/testing-strategy.md)

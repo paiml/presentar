@@ -12,7 +12,47 @@ MINOR - New features (backward compatible)
 PATCH - Bug fixes (backward compatible)
 ```
 
-## v0.1.0 (Current)
+## v0.2.0 (Current - In Development)
+
+### Added
+
+| Feature | Description |
+|---------|-------------|
+| CLI tool | `presentar serve`, `bundle`, `deploy`, `score`, `gate` commands |
+| WebGPU rendering | GPU-accelerated primitive rendering via WGSL shaders |
+| Browser router | SPA routing with history API integration |
+| Canvas2D fallback | Software rendering for non-WebGPU browsers |
+| Hot reload | Live reload during development with WebSocket |
+| Chart primitives | Interpolation, Bezier curves, arc geometry, histogram binning |
+| Test fixtures | TAR-based fixture loading for integration tests |
+| BDD testing | `describe()`, `expect()`, `TestContext` for behavior specs |
+| Virtualization | Scroll virtualization for large lists (60fps at 100k items) |
+| Undo/Redo | Command-pattern history with merge and branch support |
+| Clipboard | Cross-platform clipboard with format negotiation |
+| Gestures | Touch gesture recognition (tap, swipe, pinch, pan) |
+| Animations | Keyframe animations with easing functions |
+| Keyboard shortcuts | Platform-aware shortcut registration |
+| Data binding | Two-way reactive bindings with validation |
+| Grid layout | CSS Grid-like layout with auto-placement |
+
+### Improved
+
+| Area | Enhancement |
+|------|-------------|
+| Coverage | 88.79% line coverage, 92.86% function coverage |
+| Tests | 2,700+ tests across workspace |
+| Lint | All clippy warnings resolved with targeted allows |
+| YAML | Expression executor with aggregations and transforms |
+| Quality | Grade system (F-A) with configurable gates |
+
+### Architecture
+
+- WebGPU instanced rendering pipeline
+- Browser event loop integration
+- LocalStorage state persistence
+- WebSocket real-time communication
+
+## v0.1.0
 
 ### Added
 
