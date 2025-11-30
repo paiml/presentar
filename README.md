@@ -1,8 +1,6 @@
-<p align="center">
-  <img src=".github/presentar-hero.svg" alt="Presentar" width="800">
-</p>
+![Presentar](.github/presentar-hero.svg)
 
-<h1 align="center">Presentar</h1>
+# Presentar
 
 <p align="center">
   <b>WASM-first visualization and rapid application framework for the Sovereign AI Stack.</b>
