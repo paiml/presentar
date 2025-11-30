@@ -407,9 +407,7 @@ mod tests {
 
     #[test]
     fn test_harness_assert_text() {
-        let widget = MockWidget::new()
-            .with_test_id("label")
-            .with_name("Welcome");
+        let widget = MockWidget::new().with_test_id("label").with_name("Welcome");
         let harness = Harness::new(widget);
         harness.assert_text("[data-testid='label']", "Welcome");
     }
@@ -417,9 +415,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Expected text")]
     fn test_harness_assert_text_fails() {
-        let widget = MockWidget::new()
-            .with_test_id("label")
-            .with_name("Hello");
+        let widget = MockWidget::new().with_test_id("label").with_name("Hello");
         let harness = Harness::new(widget);
         harness.assert_text("[data-testid='label']", "Goodbye");
     }

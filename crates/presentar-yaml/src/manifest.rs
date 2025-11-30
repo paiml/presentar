@@ -371,7 +371,10 @@ interactions:
         let interaction = &manifest.interactions[0];
         assert_eq!(interaction.trigger, "table.row.click");
         assert_eq!(interaction.action, "navigate");
-        assert_eq!(interaction.target, Some("/details/{{ row.id }}".to_string()));
+        assert_eq!(
+            interaction.target,
+            Some("/details/{{ row.id }}".to_string())
+        );
     }
 
     #[test]

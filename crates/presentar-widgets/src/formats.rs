@@ -265,7 +265,11 @@ mod tests {
         let mut model = AprModel::new("Classifier");
         model.layers.push(ModelLayer {
             layer_type: "conv2d".to_string(),
-            parameters: vec![Tensor::from_f32("kernel", vec![3, 3, 64, 128], &[0.0; 73728])],
+            parameters: vec![Tensor::from_f32(
+                "kernel",
+                vec![3, 3, 64, 128],
+                &[0.0; 73728],
+            )],
         });
         model
             .metadata
