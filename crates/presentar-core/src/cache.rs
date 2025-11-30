@@ -998,4 +998,858 @@ mod tests {
         cache.tick(500);
         assert_eq!(cache.timestamp(), 1500);
     }
+
+    // ========== Additional CacheKey tests ==========
+
+    #[test]
+    fn test_cache_key_empty_string() {
+        let key = CacheKey::from_str("");
+        assert_eq!(key.as_u64(), 0);
+    }
+
+    #[test]
+    fn test_cache_key_unicode() {
+        let key1 = CacheKey::from_str("日本語");
+        let key2 = CacheKey::from_str("日本語");
+        let key3 = CacheKey::from_str("中文");
+        assert_eq!(key1, key2);
+        assert_ne!(key1, key3);
+    }
+
+    #[test]
+    fn test_cache_key_long_string() {
+        let long_str: String = "a".repeat(10000);
+        let key = CacheKey::from_str(&long_str);
+        assert!(key.as_u64() > 0);
+    }
+
+    #[test]
+    fn test_cache_key_from_str_trait() {
+        let key: CacheKey = "test".into();
+        assert_eq!(key, CacheKey::from_str("test"));
+    }
+
+    #[test]
+    fn test_cache_key_hash_distribution() {
+        // Different short strings should produce different hashes
+        let keys: Vec<CacheKey> = (0..100)
+            .map(|i| CacheKey::from_str(&format!("key{i}")))
+            .collect();
+        let unique: std::collections::HashSet<_> = keys.iter().map(|k| k.as_u64()).collect();
+        assert_eq!(unique.len(), 100);
+    }
+
+    #[test]
+    fn test_cache_key_special_chars() {
+        let key = CacheKey::from_str("!@#$%^&*()_+-=[]{}|;':\",./<>?");
+        assert!(key.as_u64() > 0);
+    }
+
+    #[test]
+    fn test_cache_key_whitespace() {
+        let key1 = CacheKey::from_str("  ");
+        let key2 = CacheKey::from_str("\t\n");
+        assert_ne!(key1, key2);
+    }
+
+    #[test]
+    fn test_cache_key_debug() {
+        let key = CacheKey::from_str("test");
+        let debug = format!("{key:?}");
+        assert!(debug.contains("CacheKey"));
+    }
+
+    #[test]
+    fn test_cache_key_clone() {
+        let key1 = CacheKey::from_str("test");
+        let key2 = key1;
+        assert_eq!(key1, key2);
+    }
+
+    // ========== Additional CacheMetadata tests ==========
+
+    #[test]
+    fn test_cache_metadata_boundary_fresh() {
+        let meta = CacheMetadata {
+            created_at: 0,
+            last_accessed: 0,
+            ttl_ms: 100,
+            stale_ms: 50,
+            access_count: 0,
+            size_bytes: 0,
+            tags: vec![],
+        };
+        // Exactly at ttl boundary should still be fresh
+        assert_eq!(meta.state(100), CacheState::Fresh);
+    }
+
+    #[test]
+    fn test_cache_metadata_boundary_stale() {
+        let meta = CacheMetadata {
+            created_at: 0,
+            last_accessed: 0,
+            ttl_ms: 100,
+            stale_ms: 50,
+            access_count: 0,
+            size_bytes: 0,
+            tags: vec![],
+        };
+        // At ttl+1 should be stale
+        assert_eq!(meta.state(101), CacheState::Stale);
+        // At ttl+stale boundary should still be stale
+        assert_eq!(meta.state(150), CacheState::Stale);
+    }
+
+    #[test]
+    fn test_cache_metadata_zero_ttl() {
+        let meta = CacheMetadata {
+            created_at: 0,
+            last_accessed: 0,
+            ttl_ms: 0,
+            stale_ms: 0,
+            access_count: 0,
+            size_bytes: 0,
+            tags: vec![],
+        };
+        assert_eq!(meta.state(0), CacheState::Fresh);
+        assert_eq!(meta.state(1), CacheState::Expired);
+    }
+
+    #[test]
+    fn test_cache_metadata_zero_stale() {
+        let meta = CacheMetadata {
+            created_at: 0,
+            last_accessed: 0,
+            ttl_ms: 100,
+            stale_ms: 0,
+            access_count: 0,
+            size_bytes: 0,
+            tags: vec![],
+        };
+        assert_eq!(meta.state(100), CacheState::Fresh);
+        assert_eq!(meta.state(101), CacheState::Expired);
+    }
+
+    #[test]
+    fn test_cache_metadata_large_ttl() {
+        let meta = CacheMetadata {
+            created_at: 0,
+            last_accessed: 0,
+            ttl_ms: u64::MAX / 2,
+            stale_ms: 1000,
+            access_count: 0,
+            size_bytes: 0,
+            tags: vec![],
+        };
+        assert_eq!(meta.state(1_000_000), CacheState::Fresh);
+    }
+
+    #[test]
+    fn test_cache_metadata_created_in_future() {
+        let meta = CacheMetadata {
+            created_at: 1000,
+            last_accessed: 1000,
+            ttl_ms: 100,
+            stale_ms: 50,
+            access_count: 0,
+            size_bytes: 0,
+            tags: vec![],
+        };
+        // now < created_at, saturating_sub gives 0
+        assert_eq!(meta.state(500), CacheState::Fresh);
+    }
+
+    #[test]
+    fn test_cache_metadata_with_tags() {
+        let meta = CacheMetadata {
+            created_at: 0,
+            last_accessed: 0,
+            ttl_ms: 100,
+            stale_ms: 50,
+            access_count: 5,
+            size_bytes: 1024,
+            tags: vec!["user".to_string(), "profile".to_string()],
+        };
+        assert_eq!(meta.tags.len(), 2);
+        assert_eq!(meta.access_count, 5);
+        assert_eq!(meta.size_bytes, 1024);
+    }
+
+    #[test]
+    fn test_cache_metadata_clone() {
+        let meta = CacheMetadata {
+            created_at: 100,
+            last_accessed: 200,
+            ttl_ms: 1000,
+            stale_ms: 500,
+            access_count: 10,
+            size_bytes: 256,
+            tags: vec!["test".to_string()],
+        };
+        let cloned = meta.clone();
+        assert_eq!(cloned.created_at, 100);
+        assert_eq!(cloned.tags, vec!["test"]);
+    }
+
+    // ========== Additional CacheState tests ==========
+
+    #[test]
+    fn test_cache_state_debug() {
+        assert_eq!(format!("{:?}", CacheState::Fresh), "Fresh");
+        assert_eq!(format!("{:?}", CacheState::Stale), "Stale");
+        assert_eq!(format!("{:?}", CacheState::Expired), "Expired");
+    }
+
+    #[test]
+    fn test_cache_state_clone() {
+        let state = CacheState::Fresh;
+        let cloned = state;
+        assert_eq!(state, cloned);
+    }
+
+    // ========== Additional CacheConfig tests ==========
+
+    #[test]
+    fn test_cache_config_custom() {
+        let config = CacheConfig {
+            max_entries: 500,
+            max_memory: 10 * 1024 * 1024,
+            default_ttl_ms: 60_000,
+            default_stale_ms: 10_000,
+            enable_lru: false,
+            cleanup_interval_ms: 30_000,
+        };
+        assert_eq!(config.max_entries, 500);
+        assert!(!config.enable_lru);
+    }
+
+    #[test]
+    fn test_cache_config_clone() {
+        let config = CacheConfig::default();
+        let cloned = config.clone();
+        assert_eq!(cloned.max_entries, 1000);
+    }
+
+    // ========== Additional CacheOptions tests ==========
+
+    #[test]
+    fn test_cache_options_default() {
+        let options = CacheOptions::default();
+        assert!(options.ttl.is_none());
+        assert!(options.stale.is_none());
+        assert!(options.tags.is_empty());
+        assert_eq!(options.priority, 0);
+    }
+
+    #[test]
+    fn test_cache_options_multiple_tags() {
+        let options = CacheOptions::new()
+            .with_tag("user")
+            .with_tag("profile")
+            .with_tag("admin");
+        assert_eq!(options.tags.len(), 3);
+    }
+
+    #[test]
+    fn test_cache_options_zero_duration() {
+        let options = CacheOptions::new()
+            .with_ttl(Duration::ZERO)
+            .with_stale(Duration::ZERO);
+        assert_eq!(options.ttl, Some(Duration::ZERO));
+        assert_eq!(options.stale, Some(Duration::ZERO));
+    }
+
+    #[test]
+    fn test_cache_options_max_priority() {
+        let options = CacheOptions::new().with_priority(255);
+        assert_eq!(options.priority, 255);
+    }
+
+    #[test]
+    fn test_cache_options_clone() {
+        let options = CacheOptions::new()
+            .with_ttl(Duration::from_secs(60))
+            .with_tag("test");
+        let cloned = options.clone();
+        assert_eq!(cloned.ttl, Some(Duration::from_secs(60)));
+        assert_eq!(cloned.tags, vec!["test"]);
+    }
+
+    // ========== Additional CacheEvent tests ==========
+
+    #[test]
+    fn test_cache_event_all_variants() {
+        let key = CacheKey::from_str("test");
+        let events = vec![
+            CacheEvent::Added(key),
+            CacheEvent::Hit(key),
+            CacheEvent::Miss(key),
+            CacheEvent::Evicted(key),
+            CacheEvent::Invalidated(key),
+            CacheEvent::TagInvalidated("user".to_string(), 5),
+            CacheEvent::Cleared,
+        ];
+        for event in events {
+            let _ = format!("{event:?}");
+        }
+    }
+
+    #[test]
+    fn test_cache_event_clone() {
+        let event = CacheEvent::TagInvalidated("test".to_string(), 10);
+        let cloned = event.clone();
+        if let CacheEvent::TagInvalidated(tag, count) = cloned {
+            assert_eq!(tag, "test");
+            assert_eq!(count, 10);
+        } else {
+            panic!("Clone failed");
+        }
+    }
+
+    // ========== Additional DataCache tests ==========
+
+    #[test]
+    fn test_cache_lru_disabled() {
+        let config = CacheConfig {
+            max_entries: 3,
+            enable_lru: false,
+            ..Default::default()
+        };
+        let mut cache: DataCache<String, i32> = DataCache::new(config);
+
+        cache.insert_default("key1".to_string(), 1);
+        cache.insert_default("key2".to_string(), 2);
+        cache.insert_default("key3".to_string(), 3);
+        cache.insert_default("key4".to_string(), 4);
+
+        // Should evict something (random eviction)
+        assert_eq!(cache.len(), 3);
+    }
+
+    #[test]
+    fn test_cache_get_with_state_fresh() {
+        let mut cache: DataCache<String, String> = DataCache::default();
+        cache.insert_default("key".to_string(), "value".to_string());
+
+        let result = cache.get_with_state(&"key".to_string());
+        assert!(result.is_some());
+        let (value, state) = result.unwrap();
+        assert_eq!(value, "value");
+        assert_eq!(state, CacheState::Fresh);
+    }
+
+    #[test]
+    fn test_cache_get_with_state_miss() {
+        let mut cache: DataCache<String, String> = DataCache::default();
+        let result = cache.get_with_state(&"missing".to_string());
+        assert!(result.is_none());
+        assert_eq!(cache.stats().misses, 1);
+    }
+
+    #[test]
+    fn test_cache_multiple_removes() {
+        let mut cache: DataCache<String, String> = DataCache::default();
+        cache.insert_default("key".to_string(), "value".to_string());
+
+        let removed1 = cache.remove(&"key".to_string());
+        let removed2 = cache.remove(&"key".to_string());
+
+        assert_eq!(removed1, Some("value".to_string()));
+        assert_eq!(removed2, None);
+    }
+
+    #[test]
+    fn test_cache_invalidate_nonexistent_tag() {
+        let mut cache: DataCache<String, String> = DataCache::default();
+        cache.insert_default("key".to_string(), "value".to_string());
+
+        let count = cache.invalidate_tag("nonexistent");
+        assert_eq!(count, 0);
+        assert!(cache.contains(&"key".to_string()));
+    }
+
+    #[test]
+    fn test_cache_clear_empty() {
+        let mut cache: DataCache<String, String> = DataCache::default();
+        cache.clear();
+        assert!(cache.is_empty());
+    }
+
+    #[test]
+    fn test_cache_memory_accounting() {
+        let mut cache: DataCache<String, String> = DataCache::default();
+
+        cache.insert_default("key1".to_string(), "12345".to_string()); // 5 bytes
+        assert_eq!(cache.memory_usage(), 5);
+
+        cache.insert_default("key2".to_string(), "12345678".to_string()); // 8 bytes
+        assert_eq!(cache.memory_usage(), 13);
+
+        cache.remove(&"key1".to_string());
+        assert_eq!(cache.memory_usage(), 8);
+
+        cache.clear();
+        assert_eq!(cache.memory_usage(), 0);
+    }
+
+    #[test]
+    fn test_cache_replace_updates_memory() {
+        let mut cache: DataCache<String, String> = DataCache::default();
+
+        cache.insert_default("key".to_string(), "12345".to_string()); // 5 bytes
+        assert_eq!(cache.memory_usage(), 5);
+
+        cache.insert_default("key".to_string(), "12345678901234567890".to_string()); // 20 bytes
+        assert_eq!(cache.memory_usage(), 20);
+    }
+
+    #[test]
+    fn test_cache_lru_order_updates_on_get() {
+        let config = CacheConfig {
+            max_entries: 2,
+            enable_lru: true,
+            ..Default::default()
+        };
+        let mut cache: DataCache<String, i32> = DataCache::new(config);
+
+        cache.insert_default("key1".to_string(), 1);
+        cache.insert_default("key2".to_string(), 2);
+
+        // Access key1 to move it to end of LRU
+        cache.get(&"key1".to_string());
+
+        // Insert key3, should evict key2 (least recently used)
+        cache.insert_default("key3".to_string(), 3);
+
+        assert!(cache.contains(&"key1".to_string()));
+        assert!(!cache.contains(&"key2".to_string()));
+        assert!(cache.contains(&"key3".to_string()));
+    }
+
+    #[test]
+    fn test_cache_access_count_increments() {
+        let config = CacheConfig {
+            default_ttl_ms: 10000,
+            ..Default::default()
+        };
+        let mut cache: DataCache<String, String> = DataCache::new(config);
+        cache.insert_default("key".to_string(), "value".to_string());
+
+        for _ in 0..10 {
+            cache.get(&"key".to_string());
+        }
+
+        assert_eq!(cache.stats().hits, 10);
+    }
+
+    #[test]
+    fn test_cache_cleanup_triggered_by_tick() {
+        let config = CacheConfig {
+            cleanup_interval_ms: 50,
+            default_ttl_ms: 25,
+            default_stale_ms: 0,
+            ..Default::default()
+        };
+        let mut cache: DataCache<String, String> = DataCache::new(config);
+
+        cache.insert_default("key".to_string(), "value".to_string());
+        assert_eq!(cache.len(), 1);
+
+        // Tick past TTL but not cleanup interval
+        cache.tick(30);
+        // Entry exists but expired
+        assert!(cache.get(&"key".to_string()).is_none());
+        // Entry still in storage until cleanup
+        assert_eq!(cache.entries.len(), 1);
+
+        // Tick past cleanup interval
+        cache.tick(30);
+        // Now entry should be cleaned up
+        assert_eq!(cache.entries.len(), 0);
+    }
+
+    #[test]
+    fn test_cache_multiple_listeners() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let mut cache: DataCache<String, String> = DataCache::default();
+        let count1 = Arc::new(AtomicUsize::new(0));
+        let count2 = Arc::new(AtomicUsize::new(0));
+
+        let c1 = count1.clone();
+        cache.on_event(Arc::new(move |_| {
+            c1.fetch_add(1, Ordering::SeqCst);
+        }));
+
+        let c2 = count2.clone();
+        cache.on_event(Arc::new(move |_| {
+            c2.fetch_add(1, Ordering::SeqCst);
+        }));
+
+        cache.clear();
+
+        assert_eq!(count1.load(Ordering::SeqCst), 1);
+        assert_eq!(count2.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn test_cache_eviction_updates_stats() {
+        let config = CacheConfig {
+            max_entries: 2,
+            ..Default::default()
+        };
+        let mut cache: DataCache<String, i32> = DataCache::new(config);
+
+        cache.insert_default("key1".to_string(), 1);
+        cache.insert_default("key2".to_string(), 2);
+        cache.insert_default("key3".to_string(), 3);
+
+        assert_eq!(cache.stats().evictions, 1);
+    }
+
+    #[test]
+    fn test_cache_contains_expired_entry() {
+        let config = CacheConfig {
+            default_ttl_ms: 50,
+            default_stale_ms: 0,
+            ..Default::default()
+        };
+        let mut cache: DataCache<String, String> = DataCache::new(config);
+
+        cache.insert_default("key".to_string(), "value".to_string());
+        assert!(cache.contains(&"key".to_string()));
+
+        cache.set_timestamp(100);
+        assert!(!cache.contains(&"key".to_string()));
+    }
+
+    #[test]
+    fn test_cache_stats_current_entries() {
+        let mut cache: DataCache<String, i32> = DataCache::default();
+
+        cache.insert_default("k1".to_string(), 1);
+        assert_eq!(cache.stats().current_entries, 1);
+
+        cache.insert_default("k2".to_string(), 2);
+        assert_eq!(cache.stats().current_entries, 2);
+
+        cache.remove(&"k1".to_string());
+        assert_eq!(cache.stats().current_entries, 1);
+    }
+
+    #[test]
+    fn test_cache_integer_keys() {
+        let mut cache: DataCache<u64, String> = DataCache::default();
+
+        cache.insert_default(1, "one".to_string());
+        cache.insert_default(2, "two".to_string());
+
+        assert_eq!(cache.get(&1), Some(&"one".to_string()));
+        assert_eq!(cache.get(&2), Some(&"two".to_string()));
+    }
+
+    #[test]
+    fn test_cache_with_custom_stale() {
+        let config = CacheConfig {
+            default_ttl_ms: 1000,
+            default_stale_ms: 500,
+            ..Default::default()
+        };
+        let mut cache: DataCache<String, String> = DataCache::new(config);
+
+        let options = CacheOptions::new().with_stale(Duration::from_millis(100));
+        cache.insert("key".to_string(), "value".to_string(), options);
+
+        // At ttl+50, should be stale (custom stale is 100)
+        cache.set_timestamp(1050);
+        let result = cache.get_with_state(&"key".to_string());
+        assert!(result.is_some());
+        let (_, state) = result.unwrap();
+        assert_eq!(state, CacheState::Stale);
+
+        // At ttl+150, should be expired
+        cache.set_timestamp(1150);
+        assert!(cache.get_with_state(&"key".to_string()).is_none());
+    }
+
+    // ========== Additional CacheStats tests ==========
+
+    #[test]
+    fn test_cache_stats_hit_rate_all_hits() {
+        let mut stats = CacheStats::default();
+        stats.hits = 100;
+        stats.misses = 0;
+        assert_eq!(stats.hit_rate(), 1.0);
+    }
+
+    #[test]
+    fn test_cache_stats_hit_rate_all_misses() {
+        let mut stats = CacheStats::default();
+        stats.hits = 0;
+        stats.misses = 100;
+        assert_eq!(stats.hit_rate(), 0.0);
+    }
+
+    #[test]
+    fn test_cache_stats_hit_rate_half() {
+        let mut stats = CacheStats::default();
+        stats.hits = 50;
+        stats.misses = 50;
+        assert!((stats.hit_rate() - 0.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_cache_stats_debug() {
+        let stats = CacheStats::default();
+        let debug = format!("{stats:?}");
+        assert!(debug.contains("hits"));
+        assert!(debug.contains("misses"));
+    }
+
+    #[test]
+    fn test_cache_stats_clone() {
+        let mut stats = CacheStats::default();
+        stats.hits = 42;
+        stats.evictions = 5;
+        let cloned = stats.clone();
+        assert_eq!(cloned.hits, 42);
+        assert_eq!(cloned.evictions, 5);
+    }
+
+    // ========== Additional CacheSize tests ==========
+
+    #[test]
+    fn test_cache_size_unit() {
+        let unit = ();
+        assert_eq!(unit.cache_size(), 0);
+    }
+
+    #[test]
+    fn test_cache_size_i64() {
+        let n: i64 = 42;
+        assert_eq!(n.cache_size(), 8);
+    }
+
+    #[test]
+    fn test_cache_size_f32() {
+        let n: f32 = 3.14;
+        assert_eq!(n.cache_size(), 4);
+    }
+
+    #[test]
+    fn test_cache_size_f64() {
+        let n: f64 = 3.14159;
+        assert_eq!(n.cache_size(), 8);
+    }
+
+    #[test]
+    fn test_cache_size_box() {
+        let b: Box<i32> = Box::new(42);
+        assert_eq!(b.cache_size(), 4);
+    }
+
+    #[test]
+    fn test_cache_size_empty_string() {
+        let s = String::new();
+        assert_eq!(s.cache_size(), 0);
+    }
+
+    #[test]
+    fn test_cache_size_empty_vec() {
+        let v: Vec<u8> = Vec::new();
+        assert_eq!(v.cache_size(), 0);
+    }
+
+    #[test]
+    fn test_cache_size_vec_of_structs() {
+        #[derive(Clone)]
+        struct Data {
+            _a: i32,
+            _b: i32,
+        }
+        let v: Vec<Data> = vec![Data { _a: 1, _b: 2 }, Data { _a: 3, _b: 4 }];
+        // 2 * size_of::<Data>() = 2 * 8 = 16
+        assert_eq!(v.cache_size(), 16);
+    }
+
+    // ========== Additional CacheBuilder tests ==========
+
+    #[test]
+    fn test_cache_builder_default_options() {
+        let (value, options) = CacheBuilder::new(42i32).build();
+        assert_eq!(value, 42);
+        assert!(options.ttl.is_none());
+        assert!(options.tags.is_empty());
+    }
+
+    #[test]
+    fn test_cache_builder_multiple_tags() {
+        let (_, options) = CacheBuilder::new("test".to_string())
+            .tag("a")
+            .tag("b")
+            .tag("c")
+            .build();
+        assert_eq!(options.tags, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn test_cache_builder_chaining() {
+        let (value, options) = CacheBuilder::new(vec![1, 2, 3])
+            .ttl(Duration::from_secs(120))
+            .stale(Duration::from_secs(60))
+            .tag("numbers")
+            .priority(10)
+            .build();
+
+        assert_eq!(value, vec![1, 2, 3]);
+        assert_eq!(options.ttl, Some(Duration::from_secs(120)));
+        assert_eq!(options.stale, Some(Duration::from_secs(60)));
+        assert_eq!(options.tags, vec!["numbers"]);
+        assert_eq!(options.priority, 10);
+    }
+
+    #[test]
+    fn test_cache_builder_with_cache() {
+        let mut cache: DataCache<String, String> = DataCache::default();
+        let (value, options) = CacheBuilder::new("cached_value".to_string())
+            .ttl(Duration::from_secs(300))
+            .tag("test")
+            .build();
+
+        cache.insert("key".to_string(), value, options);
+        assert!(cache.contains(&"key".to_string()));
+    }
+
+    // ========== Edge case and stress tests ==========
+
+    #[test]
+    fn test_cache_rapid_insert_remove() {
+        let mut cache: DataCache<i32, i32> = DataCache::default();
+
+        for i in 0..1000 {
+            cache.insert_default(i, i);
+            if i % 2 == 0 {
+                cache.remove(&i);
+            }
+        }
+
+        assert_eq!(cache.len(), 500);
+    }
+
+    #[test]
+    fn test_cache_same_key_multiple_times() {
+        let mut cache: DataCache<String, i32> = DataCache::default();
+
+        for i in 0..100 {
+            cache.insert_default("key".to_string(), i);
+        }
+
+        assert_eq!(cache.len(), 1);
+        assert_eq!(cache.get(&"key".to_string()), Some(&99));
+    }
+
+    #[test]
+    fn test_cache_evict_all() {
+        let config = CacheConfig {
+            max_entries: 5,
+            ..Default::default()
+        };
+        let mut cache: DataCache<i32, i32> = DataCache::new(config);
+
+        // Insert more than max_entries
+        for i in 0..10 {
+            cache.insert_default(i, i);
+        }
+
+        assert_eq!(cache.len(), 5);
+        assert!(cache.stats().evictions >= 5);
+    }
+
+    #[test]
+    fn test_cache_memory_eviction_large_item() {
+        let config = CacheConfig {
+            max_memory: 100,
+            ..Default::default()
+        };
+        let mut cache: DataCache<String, String> = DataCache::new(config);
+
+        // Insert item larger than max_memory
+        cache.insert_default("key".to_string(), "a".repeat(200));
+
+        // Should either not insert or evict everything
+        assert!(cache.memory_usage() <= 200);
+    }
+
+    #[test]
+    fn test_cache_get_updates_lru_order() {
+        let config = CacheConfig {
+            max_entries: 3,
+            enable_lru: true,
+            ..Default::default()
+        };
+        let mut cache: DataCache<String, i32> = DataCache::new(config);
+
+        cache.insert_default("a".to_string(), 1);
+        cache.insert_default("b".to_string(), 2);
+        cache.insert_default("c".to_string(), 3);
+
+        // Access a, then b
+        cache.get(&"a".to_string());
+        cache.get(&"b".to_string());
+
+        // Insert d, should evict c (least recently used)
+        cache.insert_default("d".to_string(), 4);
+
+        assert!(cache.contains(&"a".to_string()));
+        assert!(cache.contains(&"b".to_string()));
+        assert!(!cache.contains(&"c".to_string()));
+        assert!(cache.contains(&"d".to_string()));
+    }
+
+    #[test]
+    fn test_cache_invalidate_multiple_tags_same_entry() {
+        let mut cache: DataCache<String, String> = DataCache::default();
+
+        let options = CacheOptions::new()
+            .with_tag("tag1")
+            .with_tag("tag2");
+        cache.insert("key".to_string(), "value".to_string(), options);
+
+        // Invalidate by first tag
+        let count1 = cache.invalidate_tag("tag1");
+        assert_eq!(count1, 1);
+
+        // Second invalidation should find nothing
+        let count2 = cache.invalidate_tag("tag2");
+        assert_eq!(count2, 0);
+    }
+
+    #[test]
+    fn test_cache_tick_zero() {
+        let mut cache: DataCache<String, String> = DataCache::default();
+        cache.tick(0);
+        assert_eq!(cache.timestamp(), 0);
+    }
+
+    #[test]
+    fn test_cache_tick_large_values() {
+        let mut cache: DataCache<String, String> = DataCache::default();
+        cache.set_timestamp(u64::MAX / 2);
+        cache.tick(1000);
+        assert_eq!(cache.timestamp(), u64::MAX / 2 + 1000);
+    }
+
+    #[test]
+    fn test_cache_remove_nonexistent() {
+        let mut cache: DataCache<String, String> = DataCache::default();
+        let result = cache.remove(&"nonexistent".to_string());
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_string_cache_type_alias() {
+        let mut cache: StringCache<i32> = StringCache::default();
+        cache.insert_default("key".to_string(), 42);
+        assert_eq!(cache.get(&"key".to_string()), Some(&42));
+    }
 }
