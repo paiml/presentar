@@ -1,6 +1,29 @@
 # Model Card Display
 
-Visualize ML model metadata and metrics.
+Visualize ML model metadata and metrics from `.apr` (Aprender) model files.
+
+## Quick Start
+
+```bash
+# Run the demo
+cargo run -p presentar --example apr_ald_display
+```
+
+## Loading .apr Files
+
+```rust
+use presentar_widgets::{load_apr_as_card, AprModelExt};
+use presentar_yaml::formats::AprModel;
+
+// Load from bytes
+let model_card = load_apr_as_card(&apr_bytes)?;
+println!("Model: {}", model_card.get_name());
+println!("Params: {:?}", model_card.get_parameters());
+
+// Or use extension trait
+let model = AprModel::load(&apr_bytes)?;
+let card = model.to_model_card();
+```
 
 ## Model Card Standard
 

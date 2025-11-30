@@ -2,6 +2,29 @@
 
 Tabular data display with sorting and filtering.
 
+## Quick Start
+
+```bash
+# Run the demo
+cargo run -p presentar --example apr_ald_display
+```
+
+## Loading .ald Files
+
+```rust
+use presentar_widgets::{load_ald_as_card, AldDatasetExt};
+use presentar_yaml::formats::AldDataset;
+
+// Load from bytes
+let data_card = load_ald_as_card(&ald_bytes, "my_dataset")?;
+println!("Dataset: {}", data_card.get_name());
+println!("Columns: {}", data_card.column_count());
+
+// Or use extension trait
+let dataset = AldDataset::load(&ald_bytes)?;
+let card = dataset.to_data_card("custom_name");
+```
+
 ## Basic Table
 
 ```yaml
