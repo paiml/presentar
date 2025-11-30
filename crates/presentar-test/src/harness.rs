@@ -381,4 +381,286 @@ mod tests {
         let harness = Harness::new(widget);
         harness.assert_count("[data-testid='item']", 3);
     }
+
+    // =========================================================================
+    // assert_not_exists Tests
+    // =========================================================================
+
+    #[test]
+    fn test_harness_assert_not_exists() {
+        let widget = MockWidget::new().with_test_id("root");
+        let harness = Harness::new(widget);
+        harness.assert_not_exists("[data-testid='nonexistent']");
+    }
+
+    #[test]
+    #[should_panic(expected = "Expected widget matching")]
+    fn test_harness_assert_not_exists_fails() {
+        let widget = MockWidget::new().with_test_id("root");
+        let harness = Harness::new(widget);
+        harness.assert_not_exists("[data-testid='root']");
+    }
+
+    // =========================================================================
+    // assert_text Tests
+    // =========================================================================
+
+    #[test]
+    fn test_harness_assert_text() {
+        let widget = MockWidget::new()
+            .with_test_id("label")
+            .with_name("Welcome");
+        let harness = Harness::new(widget);
+        harness.assert_text("[data-testid='label']", "Welcome");
+    }
+
+    #[test]
+    #[should_panic(expected = "Expected text")]
+    fn test_harness_assert_text_fails() {
+        let widget = MockWidget::new()
+            .with_test_id("label")
+            .with_name("Hello");
+        let harness = Harness::new(widget);
+        harness.assert_text("[data-testid='label']", "Goodbye");
+    }
+
+    #[test]
+    fn test_harness_assert_text_contains() {
+        let widget = MockWidget::new()
+            .with_test_id("message")
+            .with_name("Welcome to the app");
+        let harness = Harness::new(widget);
+        harness.assert_text_contains("[data-testid='message']", "Welcome");
+        harness.assert_text_contains("[data-testid='message']", "app");
+    }
+
+    #[test]
+    #[should_panic(expected = "Expected text")]
+    fn test_harness_assert_text_contains_fails() {
+        let widget = MockWidget::new()
+            .with_test_id("message")
+            .with_name("Hello World");
+        let harness = Harness::new(widget);
+        harness.assert_text_contains("[data-testid='message']", "Goodbye");
+    }
+
+    // =========================================================================
+    // Viewport Tests
+    // =========================================================================
+
+    #[test]
+    fn test_harness_viewport() {
+        let widget = MockWidget::new();
+        let harness = Harness::new(widget).viewport(1920.0, 1080.0);
+        assert_eq!(harness.viewport.width, 1920.0);
+        assert_eq!(harness.viewport.height, 1080.0);
+    }
+
+    #[test]
+    fn test_harness_default_viewport() {
+        let widget = MockWidget::new();
+        let harness = Harness::new(widget);
+        assert_eq!(harness.viewport.width, 1280.0);
+        assert_eq!(harness.viewport.height, 720.0);
+    }
+
+    // =========================================================================
+    // Event Simulation Tests
+    // =========================================================================
+
+    #[test]
+    fn test_harness_click() {
+        let widget = MockWidget::new().with_test_id("button");
+        let mut harness = Harness::new(widget);
+        // Should not panic
+        harness.click("[data-testid='button']");
+    }
+
+    #[test]
+    fn test_harness_click_nonexistent() {
+        let widget = MockWidget::new();
+        let mut harness = Harness::new(widget);
+        // Should not panic for nonexistent widget
+        harness.click("[data-testid='nonexistent']");
+    }
+
+    #[test]
+    fn test_harness_type_text() {
+        let widget = MockWidget::new().with_test_id("input");
+        let mut harness = Harness::new(widget);
+        // Should not panic
+        harness.type_text("[data-testid='input']", "Hello World");
+    }
+
+    #[test]
+    fn test_harness_type_text_nonexistent() {
+        let widget = MockWidget::new();
+        let mut harness = Harness::new(widget);
+        // Should not panic for nonexistent widget
+        harness.type_text("[data-testid='nonexistent']", "Hello");
+    }
+
+    #[test]
+    fn test_harness_press_key() {
+        let widget = MockWidget::new();
+        let mut harness = Harness::new(widget);
+        // Should not panic
+        harness.press_key(Key::Enter);
+        harness.press_key(Key::Escape);
+        harness.press_key(Key::Tab);
+    }
+
+    #[test]
+    fn test_harness_scroll() {
+        let widget = MockWidget::new().with_test_id("list");
+        let mut harness = Harness::new(widget);
+        // Should not panic
+        harness.scroll("[data-testid='list']", 100.0);
+        harness.scroll("[data-testid='list']", -50.0);
+    }
+
+    #[test]
+    fn test_harness_scroll_nonexistent() {
+        let widget = MockWidget::new();
+        let mut harness = Harness::new(widget);
+        // Should not panic for nonexistent widget
+        harness.scroll("[data-testid='nonexistent']", 100.0);
+    }
+
+    // =========================================================================
+    // Query Tests
+    // =========================================================================
+
+    #[test]
+    fn test_harness_query_returns_widget() {
+        let widget = MockWidget::new().with_test_id("root").with_name("Root");
+        let harness = Harness::new(widget);
+        let result = harness.query("[data-testid='root']");
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().accessible_name(), Some("Root"));
+    }
+
+    #[test]
+    fn test_harness_query_returns_none() {
+        let widget = MockWidget::new();
+        let harness = Harness::new(widget);
+        let result = harness.query("[data-testid='missing']");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_harness_query_nested() {
+        let widget = MockWidget::new().with_child(
+            MockWidget::new()
+                .with_test_id("nested")
+                .with_name("Nested Widget"),
+        );
+        let harness = Harness::new(widget);
+        let result = harness.query("[data-testid='nested']");
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().accessible_name(), Some("Nested Widget"));
+    }
+
+    #[test]
+    fn test_harness_query_all_empty() {
+        let widget = MockWidget::new();
+        let harness = Harness::new(widget);
+        let results = harness.query_all("[data-testid='missing']");
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_harness_query_all_nested() {
+        let widget = MockWidget::new()
+            .with_child(
+                MockWidget::new()
+                    .with_test_id("item")
+                    .with_child(MockWidget::new().with_test_id("item")),
+            )
+            .with_child(MockWidget::new().with_test_id("item"));
+
+        let harness = Harness::new(widget);
+        let results = harness.query_all("[data-testid='item']");
+        assert_eq!(results.len(), 3);
+    }
+
+    // =========================================================================
+    // Tick Test
+    // =========================================================================
+
+    #[test]
+    fn test_harness_tick() {
+        let widget = MockWidget::new();
+        let mut harness = Harness::new(widget);
+        // Should not panic
+        harness.tick(100);
+        harness.tick(1000);
+    }
+
+    // =========================================================================
+    // Text Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_harness_text_empty() {
+        let widget = MockWidget::new().with_test_id("empty");
+        let harness = Harness::new(widget);
+        assert_eq!(harness.text("[data-testid='empty']"), "");
+    }
+
+    #[test]
+    fn test_harness_text_nonexistent() {
+        let widget = MockWidget::new();
+        let harness = Harness::new(widget);
+        assert_eq!(harness.text("[data-testid='missing']"), "");
+    }
+
+    // =========================================================================
+    // Method Chaining Tests
+    // =========================================================================
+
+    #[test]
+    fn test_harness_method_chaining() {
+        let widget = MockWidget::new()
+            .with_test_id("form")
+            .with_child(MockWidget::new().with_test_id("input"))
+            .with_child(MockWidget::new().with_test_id("submit"));
+
+        let mut harness = Harness::new(widget);
+
+        // Chain multiple operations
+        harness
+            .click("[data-testid='input']")
+            .type_text("[data-testid='input']", "user@example.com")
+            .press_key(Key::Tab)
+            .click("[data-testid='submit']");
+
+        // Assertions also chain
+        harness
+            .assert_exists("[data-testid='form']")
+            .assert_exists("[data-testid='input']")
+            .assert_exists("[data-testid='submit']");
+    }
+
+    // =========================================================================
+    // assert_count Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_harness_assert_count_zero() {
+        let widget = MockWidget::new();
+        let harness = Harness::new(widget);
+        harness.assert_count("[data-testid='missing']", 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "Expected")]
+    fn test_harness_assert_count_fails() {
+        let widget = MockWidget::new()
+            .with_child(MockWidget::new().with_test_id("item"))
+            .with_child(MockWidget::new().with_test_id("item"));
+
+        let harness = Harness::new(widget);
+        harness.assert_count("[data-testid='item']", 5);
+    }
 }

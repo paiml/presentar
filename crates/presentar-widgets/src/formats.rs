@@ -185,7 +185,7 @@ pub fn load_ald_as_card(data: &[u8], name: &str) -> Result<DataCard, presentar_y
 #[cfg(test)]
 mod tests {
     use super::*;
-    use presentar_yaml::formats::{ModelLayer, Tensor};
+    use presentar_yaml::formats::{DType, ModelLayer, Tensor};
 
     #[test]
     fn test_apr_to_model_card() {
@@ -254,5 +254,272 @@ mod tests {
         let card = load_ald_as_card(&bytes, "test_data").unwrap();
 
         assert_eq!(card.get_name(), "test_data");
+    }
+
+    // =========================================================================
+    // ModelCard Metadata Tests
+    // =========================================================================
+
+    #[test]
+    fn test_apr_model_with_all_metrics() {
+        let mut model = AprModel::new("Classifier");
+        model.layers.push(ModelLayer {
+            layer_type: "conv2d".to_string(),
+            parameters: vec![Tensor::from_f32("kernel", vec![3, 3, 64, 128], &[0.0; 73728])],
+        });
+        model
+            .metadata
+            .insert("accuracy".to_string(), "0.972".to_string());
+        model
+            .metadata
+            .insert("loss".to_string(), "0.083".to_string());
+        model
+            .metadata
+            .insert("f1_score".to_string(), "0.968".to_string());
+
+        let card = model.to_model_card();
+
+        assert_eq!(card.get_name(), "Classifier");
+        assert_eq!(card.get_parameters(), Some(73728));
+    }
+
+    #[test]
+    fn test_apr_model_with_task_and_dataset() {
+        let mut model = AprModel::new("BERT");
+        model
+            .metadata
+            .insert("task".to_string(), "text-classification".to_string());
+        model
+            .metadata
+            .insert("dataset".to_string(), "IMDB".to_string());
+        model
+            .metadata
+            .insert("author".to_string(), "research-team".to_string());
+
+        let card = model.to_model_card();
+
+        assert_eq!(card.get_task(), Some("text-classification"));
+        assert_eq!(card.get_dataset(), Some("IMDB"));
+        assert_eq!(card.get_author(), Some("research-team"));
+    }
+
+    #[test]
+    fn test_apr_model_with_custom_metadata() {
+        let mut model = AprModel::new("CustomModel");
+        model
+            .metadata
+            .insert("training_time".to_string(), "2h30m".to_string());
+        model
+            .metadata
+            .insert("epochs".to_string(), "50".to_string());
+        model
+            .metadata
+            .insert("learning_rate".to_string(), "0.001".to_string());
+
+        let card = model.to_model_card();
+
+        // Custom metadata is added as metadata entries
+        assert_eq!(card.get_name(), "CustomModel");
+    }
+
+    #[test]
+    fn test_apr_model_multiple_layers() {
+        let mut model = AprModel::new("DeepNet");
+        model.layers.push(ModelLayer {
+            layer_type: "dense".to_string(),
+            parameters: vec![
+                Tensor::from_f32("w1", vec![784, 256], &[0.0; 200704]),
+                Tensor::from_f32("b1", vec![256], &[0.0; 256]),
+            ],
+        });
+        model.layers.push(ModelLayer {
+            layer_type: "relu".to_string(),
+            parameters: vec![],
+        });
+        model.layers.push(ModelLayer {
+            layer_type: "dense".to_string(),
+            parameters: vec![
+                Tensor::from_f32("w2", vec![256, 10], &[0.0; 2560]),
+                Tensor::from_f32("b2", vec![10], &[0.0; 10]),
+            ],
+        });
+
+        let card = model.to_model_card();
+
+        // 200704 + 256 + 2560 + 10 = 203530
+        assert_eq!(card.get_parameters(), Some(203530));
+    }
+
+    #[test]
+    fn test_apr_model_empty_layers() {
+        let model = AprModel::new("EmptyModel");
+
+        let card = model.to_model_card();
+
+        assert_eq!(card.get_name(), "EmptyModel");
+        assert_eq!(card.get_parameters(), Some(0));
+    }
+
+    #[test]
+    fn test_apr_model_invalid_metric_values() {
+        let mut model = AprModel::new("BadMetrics");
+        model
+            .metadata
+            .insert("accuracy".to_string(), "not-a-number".to_string());
+        model
+            .metadata
+            .insert("loss".to_string(), "invalid".to_string());
+
+        // Should not panic, just skip invalid metrics
+        let card = model.to_model_card();
+        assert_eq!(card.get_name(), "BadMetrics");
+    }
+
+    // =========================================================================
+    // DataCard Tests
+    // =========================================================================
+
+    #[test]
+    fn test_ald_empty_dataset() {
+        let dataset = AldDataset::new();
+        let card = dataset.to_data_card("empty");
+
+        assert_eq!(card.get_name(), "empty");
+        assert_eq!(card.column_count(), 0);
+    }
+
+    #[test]
+    fn test_ald_multiple_tensors() {
+        let mut dataset = AldDataset::new();
+        dataset.add_tensor(Tensor::from_f32("train_x", vec![1000, 784], &[0.0; 784000]));
+        dataset.add_tensor(Tensor::from_f32("train_y", vec![1000], &[0.0; 1000]));
+        dataset.add_tensor(Tensor::from_f32("test_x", vec![100, 784], &[0.0; 78400]));
+        dataset.add_tensor(Tensor::from_f32("test_y", vec![100], &[0.0; 100]));
+
+        let card = dataset.to_data_card("mnist");
+
+        assert_eq!(card.get_name(), "mnist");
+        assert_eq!(card.column_count(), 4);
+    }
+
+    #[test]
+    fn test_ald_different_dtypes() {
+        let mut dataset = AldDataset::new();
+
+        // Test float32 dtype (only one available via from_f32)
+        dataset.add_tensor(Tensor::from_f32("float32_tensor", vec![10], &[0.0; 10]));
+        dataset.add_tensor(Tensor::from_f32("float32_tensor2", vec![5, 2], &[0.0; 10]));
+
+        // Use Tensor::new for other dtypes
+        dataset.add_tensor(Tensor::new(
+            "float64_tensor",
+            DType::F64,
+            vec![10],
+            vec![0u8; 80],
+        ));
+        dataset.add_tensor(Tensor::new(
+            "int32_tensor",
+            DType::I32,
+            vec![10],
+            vec![0u8; 40],
+        ));
+        dataset.add_tensor(Tensor::new(
+            "uint8_tensor",
+            DType::U8,
+            vec![10],
+            vec![0u8; 10],
+        ));
+
+        let card = dataset.to_data_card("multi_dtype");
+
+        assert_eq!(card.column_count(), 5);
+    }
+
+    // =========================================================================
+    // format_bytes Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_format_bytes_boundaries() {
+        // Exact boundaries
+        assert_eq!(format_bytes(0), "0 B");
+        assert_eq!(format_bytes(1023), "1023 B");
+        assert_eq!(format_bytes(1024), "1.0 KB");
+        assert_eq!(format_bytes(1024 * 1024 - 1), "1024.0 KB");
+        assert_eq!(format_bytes(1024 * 1024), "1.0 MB");
+        assert_eq!(format_bytes(1024 * 1024 * 1024 - 1), "1024.0 MB");
+        assert_eq!(format_bytes(1024 * 1024 * 1024), "1.0 GB");
+    }
+
+    #[test]
+    fn test_format_bytes_large_values() {
+        // 10 GB
+        assert_eq!(format_bytes(10 * 1024 * 1024 * 1024), "10.0 GB");
+        // 100 GB
+        assert_eq!(format_bytes(100 * 1024 * 1024 * 1024), "100.0 GB");
+    }
+
+    #[test]
+    fn test_format_bytes_fractional() {
+        // 1.5 KB = 1536 bytes
+        assert_eq!(format_bytes(1536), "1.5 KB");
+        // 2.5 MB
+        assert_eq!(format_bytes(2621440), "2.5 MB");
+        // 3.25 GB
+        assert_eq!(format_bytes(3489660928), "3.2 GB");
+    }
+
+    // =========================================================================
+    // Error Handling Tests
+    // =========================================================================
+
+    #[test]
+    fn test_load_apr_invalid_data() {
+        let invalid_data = b"not a valid apr file";
+        let result = load_apr_as_card(invalid_data);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_load_ald_invalid_data() {
+        let invalid_data = b"not a valid ald file";
+        let result = load_ald_as_card(invalid_data, "test");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_load_apr_empty_data() {
+        let empty_data = b"";
+        let result = load_apr_as_card(empty_data);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_load_ald_empty_data() {
+        let empty_data = b"";
+        let result = load_ald_as_card(empty_data, "test");
+        assert!(result.is_err());
+    }
+
+    // =========================================================================
+    // Tags Test
+    // =========================================================================
+
+    #[test]
+    fn test_model_card_has_sovereign_ai_tag() {
+        let model = AprModel::new("SovereignModel");
+        let card = model.to_model_card();
+
+        assert!(card.get_tags().contains(&"sovereign-ai".to_string()));
+        assert!(card.get_tags().contains(&"apr".to_string()));
+    }
+
+    #[test]
+    fn test_data_card_has_sovereign_ai_tag() {
+        let dataset = AldDataset::new();
+        let card = dataset.to_data_card("SovereignData");
+
+        assert!(card.get_tags().contains(&"sovereign-ai".to_string()));
+        assert!(card.get_tags().contains(&"ald".to_string()));
     }
 }

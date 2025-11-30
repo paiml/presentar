@@ -302,4 +302,449 @@ layout:
         let model = &manifest.models["classifier"];
         assert_eq!(model.format, "apr");
     }
+
+    // =========================================================================
+    // Theme Config Tests
+    // =========================================================================
+
+    #[test]
+    fn test_theme_preset() {
+        let yaml = r#"
+presentar: "0.1"
+name: "test"
+version: "1.0.0"
+layout:
+  type: "app"
+theme:
+  preset: "dark"
+"#;
+
+        let manifest = Manifest::from_yaml(yaml).unwrap();
+        assert!(manifest.theme.is_some());
+        let theme = manifest.theme.unwrap();
+        assert_eq!(theme.preset, Some("dark".to_string()));
+    }
+
+    #[test]
+    fn test_theme_custom_colors() {
+        let yaml = r##"
+presentar: "0.1"
+name: "test"
+version: "1.0.0"
+layout:
+  type: "app"
+theme:
+  preset: "light"
+  colors:
+    primary: "#6366f1"
+    danger: "#ef4444"
+    success: "#10b981"
+"##;
+
+        let manifest = Manifest::from_yaml(yaml).unwrap();
+        let theme = manifest.theme.unwrap();
+        assert_eq!(theme.colors.get("primary"), Some(&"#6366f1".to_string()));
+        assert_eq!(theme.colors.get("danger"), Some(&"#ef4444".to_string()));
+        assert_eq!(theme.colors.get("success"), Some(&"#10b981".to_string()));
+    }
+
+    // =========================================================================
+    // Interaction Tests
+    // =========================================================================
+
+    #[test]
+    fn test_interaction_navigate() {
+        let yaml = r#"
+presentar: "0.1"
+name: "test"
+version: "1.0.0"
+layout:
+  type: "app"
+interactions:
+  - trigger: "table.row.click"
+    action: "navigate"
+    target: "/details/{{ row.id }}"
+"#;
+
+        let manifest = Manifest::from_yaml(yaml).unwrap();
+        assert_eq!(manifest.interactions.len(), 1);
+        let interaction = &manifest.interactions[0];
+        assert_eq!(interaction.trigger, "table.row.click");
+        assert_eq!(interaction.action, "navigate");
+        assert_eq!(interaction.target, Some("/details/{{ row.id }}".to_string()));
+    }
+
+    #[test]
+    fn test_interaction_tooltip() {
+        let yaml = r#"
+presentar: "0.1"
+name: "test"
+version: "1.0.0"
+layout:
+  type: "app"
+interactions:
+  - trigger: "chart.point.hover"
+    action: "tooltip"
+    content: "Value: {{ point.value }}"
+"#;
+
+        let manifest = Manifest::from_yaml(yaml).unwrap();
+        let interaction = &manifest.interactions[0];
+        assert_eq!(interaction.action, "tooltip");
+        assert_eq!(
+            interaction.content,
+            Some("Value: {{ point.value }}".to_string())
+        );
+    }
+
+    #[test]
+    fn test_interaction_script() {
+        let yaml = r#"
+presentar: "0.1"
+name: "test"
+version: "1.0.0"
+layout:
+  type: "app"
+interactions:
+  - trigger: "button.click"
+    action: "custom"
+    script: |
+      let x = state.count + 1
+      set_state("count", x)
+"#;
+
+        let manifest = Manifest::from_yaml(yaml).unwrap();
+        let interaction = &manifest.interactions[0];
+        assert_eq!(interaction.action, "custom");
+        assert!(interaction.script.is_some());
+        assert!(interaction.script.as_ref().unwrap().contains("set_state"));
+    }
+
+    // =========================================================================
+    // Score Tests
+    // =========================================================================
+
+    #[test]
+    fn test_score_metadata() {
+        let yaml = r#"
+presentar: "0.1"
+name: "test"
+version: "1.0.0"
+score:
+  grade: "A"
+  value: 92.3
+  coverage: 94.1
+layout:
+  type: "app"
+"#;
+
+        let manifest = Manifest::from_yaml(yaml).unwrap();
+        assert!(manifest.score.is_some());
+        let score = manifest.score.unwrap();
+        assert_eq!(score.grade, "A");
+        assert!((score.value - 92.3).abs() < 0.01);
+        assert_eq!(score.coverage, Some(94.1));
+    }
+
+    #[test]
+    fn test_score_without_coverage() {
+        let yaml = r#"
+presentar: "0.1"
+name: "test"
+version: "1.0.0"
+score:
+  grade: "B+"
+  value: 82.0
+layout:
+  type: "app"
+"#;
+
+        let manifest = Manifest::from_yaml(yaml).unwrap();
+        let score = manifest.score.unwrap();
+        assert_eq!(score.grade, "B+");
+        assert_eq!(score.coverage, None);
+    }
+
+    // =========================================================================
+    // Default Value Tests
+    // =========================================================================
+
+    #[test]
+    fn test_default_columns() {
+        let yaml = r#"
+presentar: "0.1"
+name: "test"
+version: "1.0.0"
+layout:
+  type: "dashboard"
+"#;
+
+        let manifest = Manifest::from_yaml(yaml).unwrap();
+        assert_eq!(manifest.layout.columns, 12); // Default value
+    }
+
+    #[test]
+    fn test_default_gap() {
+        let yaml = r#"
+presentar: "0.1"
+name: "test"
+version: "1.0.0"
+layout:
+  type: "dashboard"
+"#;
+
+        let manifest = Manifest::from_yaml(yaml).unwrap();
+        assert_eq!(manifest.layout.gap, 16); // Default value
+    }
+
+    #[test]
+    fn test_default_data_format() {
+        let yaml = r#"
+presentar: "0.1"
+name: "test"
+version: "1.0.0"
+data:
+  test_data:
+    source: "file://data.csv"
+layout:
+  type: "app"
+"#;
+
+        let manifest = Manifest::from_yaml(yaml).unwrap();
+        let ds = &manifest.data["test_data"];
+        assert_eq!(ds.format, "ald"); // Default format
+    }
+
+    #[test]
+    fn test_default_model_format() {
+        let yaml = r#"
+presentar: "0.1"
+name: "test"
+version: "1.0.0"
+models:
+  test_model:
+    source: "file://model.bin"
+layout:
+  type: "app"
+"#;
+
+        let manifest = Manifest::from_yaml(yaml).unwrap();
+        let model = &manifest.models["test_model"];
+        assert_eq!(model.format, "apr"); // Default format
+    }
+
+    // =========================================================================
+    // Widget Config Tests
+    // =========================================================================
+
+    #[test]
+    fn test_chart_widget_config() {
+        let yaml = r#"
+presentar: "0.1"
+name: "test"
+version: "1.0.0"
+layout:
+  type: "dashboard"
+  sections:
+    - id: "chart-section"
+      widgets:
+        - type: "chart"
+          chart_type: "line"
+          data: "{{ data.transactions }}"
+          x: "timestamp"
+          y: "amount"
+          color: "{{ predictions.fraud }}"
+"#;
+
+        let manifest = Manifest::from_yaml(yaml).unwrap();
+        let widget = &manifest.layout.sections[0].widgets[0];
+        assert_eq!(widget.widget_type, "chart");
+        assert_eq!(widget.chart_type, Some("line".to_string()));
+        assert_eq!(widget.x, Some("timestamp".to_string()));
+        assert_eq!(widget.y, Some("amount".to_string()));
+        assert!(widget.color.is_some());
+    }
+
+    #[test]
+    fn test_widget_extra_properties() {
+        let yaml = r#"
+presentar: "0.1"
+name: "test"
+version: "1.0.0"
+layout:
+  type: "app"
+  sections:
+    - id: "main"
+      widgets:
+        - type: "data-table"
+          data: "{{ data.items }}"
+          pagination: 50
+          sortable: true
+          filterable: true
+"#;
+
+        let manifest = Manifest::from_yaml(yaml).unwrap();
+        let widget = &manifest.layout.sections[0].widgets[0];
+        assert_eq!(widget.widget_type, "data-table");
+        assert!(widget.extra.contains_key("pagination"));
+        assert!(widget.extra.contains_key("sortable"));
+        assert!(widget.extra.contains_key("filterable"));
+    }
+
+    // =========================================================================
+    // Multiple Sections Tests
+    // =========================================================================
+
+    #[test]
+    fn test_multiple_sections() {
+        let yaml = r#"
+presentar: "0.1"
+name: "dashboard"
+version: "1.0.0"
+layout:
+  type: "dashboard"
+  columns: 12
+  sections:
+    - id: "header"
+      span: [1, 12]
+    - id: "sidebar"
+      span: [1, 3]
+    - id: "main"
+      span: [4, 12]
+    - id: "footer"
+      span: [1, 12]
+"#;
+
+        let manifest = Manifest::from_yaml(yaml).unwrap();
+        assert_eq!(manifest.layout.sections.len(), 4);
+        assert_eq!(manifest.layout.sections[0].id, "header");
+        assert_eq!(manifest.layout.sections[1].span, Some([1, 3]));
+        assert_eq!(manifest.layout.sections[2].span, Some([4, 12]));
+    }
+
+    // =========================================================================
+    // Error Cases
+    // =========================================================================
+
+    #[test]
+    fn test_missing_required_fields() {
+        let yaml = r#"
+presentar: "0.1"
+name: "test"
+"#;
+
+        let result = Manifest::from_yaml(yaml);
+        assert!(result.is_err()); // Missing version and layout
+    }
+
+    #[test]
+    fn test_invalid_yaml() {
+        let yaml = "this is not valid yaml: [}";
+        let result = Manifest::from_yaml(yaml);
+        assert!(result.is_err());
+    }
+
+    // =========================================================================
+    // Full Integration Test
+    // =========================================================================
+
+    #[test]
+    fn test_complex_manifest() {
+        let yaml = r##"
+presentar: "0.1"
+name: "fraud-detection-dashboard"
+version: "1.0.0"
+description: "Real-time fraud detection monitoring"
+
+score:
+  grade: "A"
+  value: 92.3
+  coverage: 94.1
+
+data:
+  transactions:
+    source: "pacha://datasets/transactions:latest"
+    format: "ald"
+    refresh: "5m"
+  predictions:
+    source: "./predictions.ald"
+
+models:
+  fraud_detector:
+    source: "pacha://models/fraud-detector:1.2.0"
+
+layout:
+  type: "dashboard"
+  columns: 12
+  gap: 16
+  sections:
+    - id: "header"
+      span: [1, 12]
+      widgets:
+        - type: "text"
+          content: "Fraud Detection Dashboard"
+          style: "heading-1"
+        - type: "model-card"
+          id: "model-info"
+
+    - id: "metrics"
+      span: [1, 4]
+      widgets:
+        - type: "metric"
+          data: "{{ data.transactions | count | rate(1m) }}"
+
+    - id: "chart"
+      span: [5, 12]
+      widgets:
+        - type: "chart"
+          chart_type: "line"
+          data: "{{ data.transactions }}"
+          x: "timestamp"
+          y: "amount"
+
+interactions:
+  - trigger: "chart.point.hover"
+    action: "tooltip"
+    content: "Amount: {{ point.amount }}"
+
+theme:
+  preset: "dark"
+  colors:
+    primary: "#6366f1"
+    danger: "#ef4444"
+"##;
+
+        let manifest = Manifest::from_yaml(yaml).unwrap();
+
+        // Basic info
+        assert_eq!(manifest.name, "fraud-detection-dashboard");
+        assert_eq!(manifest.version, "1.0.0");
+        assert!(!manifest.description.is_empty());
+
+        // Score
+        assert!(manifest.score.is_some());
+
+        // Data sources
+        assert_eq!(manifest.data.len(), 2);
+        assert!(manifest.data.contains_key("transactions"));
+        assert!(manifest.data.contains_key("predictions"));
+
+        // Models
+        assert_eq!(manifest.models.len(), 1);
+        assert!(manifest.models.contains_key("fraud_detector"));
+
+        // Layout
+        assert_eq!(manifest.layout.layout_type, "dashboard");
+        assert_eq!(manifest.layout.columns, 12);
+        assert_eq!(manifest.layout.sections.len(), 3);
+
+        // Interactions
+        assert_eq!(manifest.interactions.len(), 1);
+
+        // Theme
+        assert!(manifest.theme.is_some());
+        let theme = manifest.theme.unwrap();
+        assert_eq!(theme.preset, Some("dark".to_string()));
+        assert_eq!(theme.colors.len(), 2);
+    }
 }
