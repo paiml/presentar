@@ -209,6 +209,7 @@ impl Harness {
         }
     }
 
+    #[allow(unknown_lints)]
     #[allow(clippy::only_used_in_recursion, clippy::self_only_used_in_recursion)]
     fn find_widget<'a>(
         &'a self,
@@ -228,6 +229,7 @@ impl Harness {
         None
     }
 
+    #[allow(unknown_lints)]
     #[allow(clippy::only_used_in_recursion, clippy::self_only_used_in_recursion)]
     fn find_all_widgets<'a>(
         &'a self,
