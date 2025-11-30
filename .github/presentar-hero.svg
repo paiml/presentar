@@ -1,218 +1,78 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 600">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300">
   <defs>
-    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#0d1117"/>
-      <stop offset="100%" style="stop-color:#161b22"/>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
     </linearGradient>
-    <linearGradient id="wasmGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#654ff0"/>
-      <stop offset="100%" style="stop-color:#8b5cf6"/>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#06b6d4"/>
+      <stop offset="50%" stop-color="#8b5cf6"/>
+      <stop offset="100%" stop-color="#ec4899"/>
     </linearGradient>
-    <linearGradient id="widgetGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#0891b2"/>
-      <stop offset="100%" style="stop-color:#06b6d4"/>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.3"/>
+      <stop offset="50%" stop-color="#8b5cf6" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#ec4899" stop-opacity="0.3"/>
     </linearGradient>
-    <linearGradient id="yamlGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#059669"/>
-      <stop offset="100%" style="stop-color:#10b981"/>
-    </linearGradient>
-    <linearGradient id="gpuGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#dc2626"/>
-      <stop offset="100%" style="stop-color:#f43f5e"/>
-    </linearGradient>
-    <linearGradient id="qualityGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#d97706"/>
-      <stop offset="100%" style="stop-color:#f59e0b"/>
-    </linearGradient>
-    <linearGradient id="stackGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#1e3a5f"/>
-      <stop offset="100%" style="stop-color:#2563eb"/>
-    </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="2" dy="4" stdDeviation="4" flood-opacity="0.3"/>
-    </filter>
-    <filter id="glow">
-      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-      <feMerge>
-        <feMergeNode in="coloredBlur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
   </defs>
 
   <!-- Background -->
-  <rect width="1200" height="600" fill="url(#bgGrad)"/>
+  <rect width="800" height="300" fill="url(#bg)"/>
+
+  <!-- Decorative circles -->
+  <circle cx="650" cy="80" r="120" fill="url(#glow)" opacity="0.5"/>
+  <circle cx="150" cy="220" r="80" fill="url(#glow)" opacity="0.4"/>
+
+  <!-- Grid pattern hint -->
+  <g stroke="#334155" stroke-width="0.5" opacity="0.3">
+    <line x1="0" y1="75" x2="800" y2="75"/>
+    <line x1="0" y1="150" x2="800" y2="150"/>
+    <line x1="0" y1="225" x2="800" y2="225"/>
+    <line x1="200" y1="0" x2="200" y2="300"/>
+    <line x1="400" y1="0" x2="400" y2="300"/>
+    <line x1="600" y1="0" x2="600" y2="300"/>
+  </g>
+
+  <!-- Accent bar -->
+  <rect x="0" y="0" width="800" height="4" fill="url(#accent)"/>
+
+  <!-- Logo/Icon area - stylized widget stack -->
+  <g transform="translate(80, 100)">
+    <!-- Stacked rectangles representing widgets -->
+    <rect x="0" y="60" width="90" height="50" rx="6" fill="#0ea5e9" opacity="0.9"/>
+    <rect x="15" y="40" width="90" height="50" rx="6" fill="#8b5cf6" opacity="0.9"/>
+    <rect x="30" y="20" width="90" height="50" rx="6" fill="#ec4899" opacity="0.9"/>
+
+    <!-- Small chart icon on top card -->
+    <g transform="translate(45, 30)">
+      <rect x="0" y="20" width="8" height="15" fill="#ffffff" opacity="0.8"/>
+      <rect x="12" y="10" width="8" height="25" fill="#ffffff" opacity="0.8"/>
+      <rect x="24" y="15" width="8" height="20" fill="#ffffff" opacity="0.8"/>
+      <rect x="36" y="5" width="8" height="30" fill="#ffffff" opacity="0.8"/>
+    </g>
+  </g>
 
   <!-- Title -->
-  <text x="600" y="45" text-anchor="middle" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif" font-size="32" font-weight="bold">Presentar</text>
-  <text x="600" y="72" text-anchor="middle" fill="#8b949e" font-family="system-ui, -apple-system, sans-serif" font-size="14">WASM-First Visualization Framework for the Sovereign AI Stack</text>
+  <text x="240" y="130" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif" font-size="48" font-weight="700">presentar</text>
 
-  <!-- Layer Architecture (Left) -->
-  <g transform="translate(50, 100)">
-    <text x="130" y="0" text-anchor="middle" fill="#58a6ff" font-family="system-ui, sans-serif" font-size="16" font-weight="bold">Architecture Layers</text>
+  <!-- Tagline -->
+  <text x="240" y="165" fill="#94a3b8" font-family="system-ui, -apple-system, sans-serif" font-size="18">WASM-first visualization framework</text>
 
-    <!-- Layer 9 -->
-    <rect x="0" y="25" width="260" height="45" rx="6" fill="url(#yamlGrad)" filter="url(#shadow)"/>
-    <text x="20" y="45" fill="#ffffff" font-family="monospace" font-size="11" font-weight="bold">L9</text>
-    <text x="50" y="45" fill="#ffffff" font-family="system-ui, sans-serif" font-size="12" font-weight="bold">App Runtime</text>
-    <text x="130" y="60" text-anchor="middle" fill="#ffffffcc" font-family="monospace" font-size="10">YAML parser, .apr/.ald loaders, Pacha</text>
+  <!-- Feature pills -->
+  <g transform="translate(240, 190)">
+    <rect x="0" y="0" width="85" height="28" rx="14" fill="#0ea5e9" opacity="0.2"/>
+    <text x="42" y="19" text-anchor="middle" fill="#0ea5e9" font-family="system-ui, sans-serif" font-size="12" font-weight="500">60fps GPU</text>
 
-    <!-- Layer 8 -->
-    <rect x="0" y="80" width="260" height="45" rx="6" fill="url(#widgetGrad)" filter="url(#shadow)"/>
-    <text x="20" y="100" fill="#ffffff" font-family="monospace" font-size="11" font-weight="bold">L8</text>
-    <text x="50" y="100" fill="#ffffff" font-family="system-ui, sans-serif" font-size="12" font-weight="bold">Presentar</text>
-    <text x="130" y="115" text-anchor="middle" fill="#ffffffcc" font-family="monospace" font-size="10">Widget tree, layout, events, state</text>
+    <rect x="95" y="0" width="95" height="28" rx="14" fill="#8b5cf6" opacity="0.2"/>
+    <text x="142" y="19" text-anchor="middle" fill="#a78bfa" font-family="system-ui, sans-serif" font-size="12" font-weight="500">24 Widgets</text>
 
-    <!-- Layer 7 -->
-    <rect x="0" y="135" width="260" height="45" rx="6" fill="url(#gpuGrad)" filter="url(#shadow)"/>
-    <text x="20" y="155" fill="#ffffff" font-family="monospace" font-size="11" font-weight="bold">L7</text>
-    <text x="50" y="155" fill="#ffffff" font-family="system-ui, sans-serif" font-size="12" font-weight="bold">Trueno-Viz</text>
-    <text x="130" y="170" text-anchor="middle" fill="#ffffffcc" font-family="monospace" font-size="10">GPU primitives, WGSL shaders</text>
+    <rect x="200" y="0" width="90" height="28" rx="14" fill="#ec4899" opacity="0.2"/>
+    <text x="245" y="19" text-anchor="middle" fill="#f472b6" font-family="system-ui, sans-serif" font-size="12" font-weight="500">Pure Rust</text>
 
-    <!-- Layer 6 -->
-    <rect x="0" y="190" width="260" height="45" rx="6" fill="url(#wasmGrad)" filter="url(#shadow)"/>
-    <text x="20" y="210" fill="#ffffff" font-family="monospace" font-size="11" font-weight="bold">L6</text>
-    <text x="50" y="210" fill="#ffffff" font-family="system-ui, sans-serif" font-size="12" font-weight="bold">Trueno</text>
-    <text x="130" y="225" text-anchor="middle" fill="#ffffffcc" font-family="monospace" font-size="10">SIMD/GPU tensor ops</text>
-
-    <!-- Data Flow Arrow -->
-    <text x="130" y="260" text-anchor="middle" fill="#6e7681" font-family="system-ui, sans-serif" font-size="11">Event → State → Widget → Draw</text>
+    <rect x="300" y="0" width="105" height="28" rx="14" fill="#10b981" opacity="0.2"/>
+    <text x="352" y="19" text-anchor="middle" fill="#34d399" font-family="system-ui, sans-serif" font-size="12" font-weight="500">WCAG 2.1 AA</text>
   </g>
 
-  <!-- Widget Library (Center) -->
-  <g transform="translate(350, 100)">
-    <text x="140" y="0" text-anchor="middle" fill="#06b6d4" font-family="system-ui, sans-serif" font-size="16" font-weight="bold">24 Built-in Widgets</text>
-
-    <rect x="0" y="20" width="280" height="230" rx="8" fill="#21262d" filter="url(#shadow)"/>
-
-    <!-- Layout Widgets -->
-    <text x="15" y="42" fill="#58a6ff" font-family="system-ui, sans-serif" font-size="11" font-weight="bold">Layout</text>
-    <text x="15" y="58" fill="#8b949e" font-family="monospace" font-size="10">Row • Column • Stack • Container • Grid</text>
-
-    <!-- Input Widgets -->
-    <text x="15" y="80" fill="#58a6ff" font-family="system-ui, sans-serif" font-size="11" font-weight="bold">Input</text>
-    <text x="15" y="96" fill="#8b949e" font-family="monospace" font-size="10">Button • TextInput • Select • Slider</text>
-    <text x="15" y="112" fill="#8b949e" font-family="monospace" font-size="10">Checkbox • Toggle • RadioGroup</text>
-
-    <!-- Data Widgets -->
-    <text x="15" y="134" fill="#58a6ff" font-family="system-ui, sans-serif" font-size="11" font-weight="bold">Data Visualization</text>
-    <text x="15" y="150" fill="#8b949e" font-family="monospace" font-size="10">Chart (6 types) • DataTable • List</text>
-    <text x="15" y="166" fill="#8b949e" font-family="monospace" font-size="10">ProgressBar • ModelCard • DataCard</text>
-
-    <!-- Navigation/Feedback -->
-    <text x="15" y="188" fill="#58a6ff" font-family="system-ui, sans-serif" font-size="11" font-weight="bold">Navigation &amp; Feedback</text>
-    <text x="15" y="204" fill="#8b949e" font-family="monospace" font-size="10">Tabs • Menu • Modal • Tooltip</text>
-
-    <!-- Media -->
-    <text x="15" y="226" fill="#58a6ff" font-family="system-ui, sans-serif" font-size="11" font-weight="bold">Media</text>
-    <text x="15" y="242" fill="#8b949e" font-family="monospace" font-size="10">Text • Image</text>
-  </g>
-
-  <!-- Expression Language (Top Right) -->
-  <g transform="translate(670, 100)">
-    <text x="130" y="0" text-anchor="middle" fill="#10b981" font-family="system-ui, sans-serif" font-size="16" font-weight="bold">Expression Language</text>
-
-    <rect x="0" y="20" width="260" height="120" rx="8" fill="url(#yamlGrad)" filter="url(#shadow)" opacity="0.9"/>
-    <text x="130" y="45" text-anchor="middle" fill="#ffffff" font-family="monospace" font-size="12">{{ source | transform | transform }}</text>
-
-    <text x="15" y="70" fill="#ffffffdd" font-family="monospace" font-size="10">filter • select • sort • limit • count</text>
-    <text x="15" y="85" fill="#ffffffdd" font-family="monospace" font-size="10">sum • mean • min • max • group_by</text>
-    <text x="15" y="100" fill="#ffffffdd" font-family="monospace" font-size="10">map • reduce • pivot • rank • cumsum</text>
-    <text x="15" y="115" fill="#ffffffdd" font-family="monospace" font-size="10">moving_avg • pct_change • join</text>
-
-    <text x="130" y="135" text-anchor="middle" fill="#ffffffaa" font-family="system-ui, sans-serif" font-size="10">28 transforms • All execute client-side in WASM</text>
-  </g>
-
-  <!-- Performance (Top Right) -->
-  <g transform="translate(960, 100)">
-    <text x="100" y="0" text-anchor="middle" fill="#f43f5e" font-family="system-ui, sans-serif" font-size="16" font-weight="bold">Performance</text>
-
-    <rect x="0" y="20" width="200" height="120" rx="8" fill="url(#gpuGrad)" filter="url(#shadow)"/>
-
-    <text x="100" y="50" text-anchor="middle" fill="#ffffff" font-family="system-ui, sans-serif" font-size="24" font-weight="bold">60fps</text>
-    <text x="100" y="70" text-anchor="middle" fill="#ffffffcc" font-family="system-ui, sans-serif" font-size="12">GPU-accelerated rendering</text>
-
-    <text x="20" y="95" fill="#ffffffdd" font-family="monospace" font-size="10">WebGPU + WGSL shaders</text>
-    <text x="20" y="110" fill="#ffffffdd" font-family="monospace" font-size="10">&lt;16ms frame time</text>
-    <text x="20" y="125" fill="#ffffffdd" font-family="monospace" font-size="10">&lt;500KB bundle size</text>
-  </g>
-
-  <!-- Testing (Bottom Left) -->
-  <g transform="translate(50, 400)">
-    <rect x="0" y="0" width="340" height="140" rx="10" fill="url(#widgetGrad)" filter="url(#shadow)"/>
-    <text x="170" y="28" text-anchor="middle" fill="#ffffff" font-family="system-ui, sans-serif" font-size="15" font-weight="bold">Zero-Dependency Testing</text>
-    <text x="170" y="48" text-anchor="middle" fill="#ffffffcc" font-family="system-ui, sans-serif" font-size="12">Pure Rust + WASM only</text>
-
-    <text x="20" y="75" fill="#ffffffdd" font-family="monospace" font-size="11">#[presentar_test] attribute macro</text>
-    <text x="20" y="93" fill="#ffffffdd" font-family="monospace" font-size="11">CSS-like selectors for widget queries</text>
-    <text x="20" y="111" fill="#ffffffdd" font-family="monospace" font-size="11">Visual regression with Snapshot::assert</text>
-    <text x="20" y="129" fill="#ffffffdd" font-family="monospace" font-size="11">BDD: describe() • expect() • TestContext</text>
-
-    <!-- Badge -->
-    <rect x="245" y="65" width="80" height="45" rx="6" fill="#ffffff22"/>
-    <text x="285" y="85" text-anchor="middle" fill="#ffffff" font-family="system-ui, sans-serif" font-size="11" font-weight="bold">2,700+</text>
-    <text x="285" y="100" text-anchor="middle" fill="#ffffffaa" font-family="monospace" font-size="9">tests</text>
-  </g>
-
-  <!-- Quality System (Bottom Center) -->
-  <g transform="translate(410, 400)">
-    <rect x="0" y="0" width="340" height="140" rx="10" fill="url(#qualityGrad)" filter="url(#shadow)"/>
-    <text x="170" y="28" text-anchor="middle" fill="#ffffff" font-family="system-ui, sans-serif" font-size="15" font-weight="bold">Quality Scoring System</text>
-    <text x="170" y="48" text-anchor="middle" fill="#ffffffcc" font-family="system-ui, sans-serif" font-size="12">Toyota Production System Principles</text>
-
-    <g transform="translate(20, 60)">
-      <rect x="0" y="0" width="60" height="35" rx="4" fill="#238636"/>
-      <text x="30" y="15" text-anchor="middle" fill="#ffffff" font-family="system-ui, sans-serif" font-size="18" font-weight="bold">A</text>
-      <text x="30" y="28" text-anchor="middle" fill="#ffffffaa" font-family="monospace" font-size="8">90-100</text>
-    </g>
-    <g transform="translate(70, 60)">
-      <rect x="0" y="0" width="60" height="35" rx="4" fill="#3fb950"/>
-      <text x="30" y="15" text-anchor="middle" fill="#ffffff" font-family="system-ui, sans-serif" font-size="18" font-weight="bold">B</text>
-      <text x="30" y="28" text-anchor="middle" fill="#ffffffaa" font-family="monospace" font-size="8">75-89</text>
-    </g>
-    <g transform="translate(140, 60)">
-      <rect x="0" y="0" width="60" height="35" rx="4" fill="#d29922"/>
-      <text x="30" y="15" text-anchor="middle" fill="#ffffff" font-family="system-ui, sans-serif" font-size="18" font-weight="bold">C</text>
-      <text x="30" y="28" text-anchor="middle" fill="#ffffffaa" font-family="monospace" font-size="8">60-74</text>
-    </g>
-    <g transform="translate(210, 60)">
-      <rect x="0" y="0" width="60" height="35" rx="4" fill="#da3633"/>
-      <text x="30" y="15" text-anchor="middle" fill="#ffffff" font-family="system-ui, sans-serif" font-size="18" font-weight="bold">F</text>
-      <text x="30" y="28" text-anchor="middle" fill="#ffffffaa" font-family="monospace" font-size="8">&lt;60</text>
-    </g>
-
-    <text x="20" y="115" fill="#ffffffdd" font-family="monospace" font-size="10">Structural • Performance • Accessibility</text>
-    <text x="20" y="130" fill="#ffffffdd" font-family="monospace" font-size="10">Data Quality • Documentation • Consistency</text>
-  </g>
-
-  <!-- Accessibility (Bottom Right) -->
-  <g transform="translate(770, 400)">
-    <rect x="0" y="0" width="380" height="140" rx="10" fill="url(#stackGrad)" filter="url(#shadow)"/>
-    <text x="190" y="28" text-anchor="middle" fill="#ffffff" font-family="system-ui, sans-serif" font-size="15" font-weight="bold">Built-in Accessibility</text>
-    <text x="190" y="48" text-anchor="middle" fill="#ffffffcc" font-family="system-ui, sans-serif" font-size="12">WCAG 2.1 AA Compliance</text>
-
-    <g transform="translate(20, 60)">
-      <rect x="0" y="0" width="105" height="65" rx="6" fill="#ffffff15"/>
-      <text x="52" y="22" text-anchor="middle" fill="#ffffff" font-family="system-ui, sans-serif" font-size="12" font-weight="bold">A11yChecker</text>
-      <text x="52" y="38" text-anchor="middle" fill="#ffffffaa" font-family="monospace" font-size="9">Automated</text>
-      <text x="52" y="52" text-anchor="middle" fill="#ffffffaa" font-family="monospace" font-size="9">validation</text>
-    </g>
-
-    <g transform="translate(135, 60)">
-      <rect x="0" y="0" width="105" height="65" rx="6" fill="#ffffff15"/>
-      <text x="52" y="22" text-anchor="middle" fill="#ffffff" font-family="system-ui, sans-serif" font-size="12" font-weight="bold">ARIA</text>
-      <text x="52" y="38" text-anchor="middle" fill="#ffffffaa" font-family="monospace" font-size="9">roles, labels</text>
-      <text x="52" y="52" text-anchor="middle" fill="#ffffffaa" font-family="monospace" font-size="9">live regions</text>
-    </g>
-
-    <g transform="translate(250, 60)">
-      <rect x="0" y="0" width="110" height="65" rx="6" fill="#ffffff15"/>
-      <text x="55" y="22" text-anchor="middle" fill="#ffffff" font-family="system-ui, sans-serif" font-size="12" font-weight="bold">Keyboard</text>
-      <text x="55" y="38" text-anchor="middle" fill="#ffffffaa" font-family="monospace" font-size="9">Focus mgmt</text>
-      <text x="55" y="52" text-anchor="middle" fill="#ffffffaa" font-family="monospace" font-size="9">44px targets</text>
-    </g>
-  </g>
-
-  <!-- Footer -->
-  <text x="600" y="575" text-anchor="middle" fill="#484f58" font-family="system-ui, sans-serif" font-size="11">presentar v0.2 • Sovereign AI Stack • Pure Rust • wasm32-unknown-unknown</text>
+  <!-- Bottom accent -->
+  <rect x="0" y="296" width="800" height="4" fill="url(#accent)"/>
 </svg>
