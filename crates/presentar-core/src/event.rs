@@ -1096,4 +1096,338 @@ mod tests {
             assert_eq!(event, deserialized);
         }
     }
+
+    // ========== Additional edge case tests ==========
+
+    #[test]
+    fn test_mouse_button_all_variants() {
+        let buttons = [
+            MouseButton::Left,
+            MouseButton::Right,
+            MouseButton::Middle,
+            MouseButton::Button4,
+            MouseButton::Button5,
+        ];
+        for button in &buttons {
+            let event = Event::MouseDown {
+                position: Point::ORIGIN,
+                button: *button,
+            };
+            assert!(event.is_mouse());
+        }
+    }
+
+    #[test]
+    fn test_mouse_button_debug() {
+        assert_eq!(format!("{:?}", MouseButton::Left), "Left");
+        assert_eq!(format!("{:?}", MouseButton::Middle), "Middle");
+    }
+
+    #[test]
+    fn test_key_letters() {
+        let letters = [
+            Key::A, Key::B, Key::C, Key::D, Key::E, Key::F, Key::G, Key::H,
+            Key::I, Key::J, Key::K, Key::L, Key::M, Key::N, Key::O, Key::P,
+            Key::Q, Key::R, Key::S, Key::T, Key::U, Key::V, Key::W, Key::X,
+            Key::Y, Key::Z,
+        ];
+        for key in &letters {
+            let event = Event::KeyDown { key: *key };
+            assert!(event.is_keyboard());
+        }
+    }
+
+    #[test]
+    fn test_key_numbers() {
+        let numbers = [
+            Key::Num0, Key::Num1, Key::Num2, Key::Num3, Key::Num4,
+            Key::Num5, Key::Num6, Key::Num7, Key::Num8, Key::Num9,
+        ];
+        for key in &numbers {
+            let event = Event::KeyDown { key: *key };
+            assert!(event.is_keyboard());
+        }
+    }
+
+    #[test]
+    fn test_key_function_keys() {
+        let function_keys = [
+            Key::F1, Key::F2, Key::F3, Key::F4, Key::F5, Key::F6,
+            Key::F7, Key::F8, Key::F9, Key::F10, Key::F11, Key::F12,
+        ];
+        for key in &function_keys {
+            let event = Event::KeyDown { key: *key };
+            assert!(event.is_keyboard());
+        }
+    }
+
+    #[test]
+    fn test_key_control_keys() {
+        let control_keys = [
+            Key::Enter, Key::Escape, Key::Backspace, Key::Tab,
+            Key::Space, Key::Delete, Key::Insert, Key::Home,
+            Key::End, Key::PageUp, Key::PageDown,
+        ];
+        for key in &control_keys {
+            let event = Event::KeyDown { key: *key };
+            assert!(event.is_keyboard());
+        }
+    }
+
+    #[test]
+    fn test_key_arrow_keys() {
+        let arrows = [Key::Up, Key::Down, Key::Left, Key::Right];
+        for key in &arrows {
+            let event = Event::KeyDown { key: *key };
+            assert!(event.is_keyboard());
+        }
+    }
+
+    #[test]
+    fn test_key_modifiers() {
+        let modifiers = [
+            Key::ShiftLeft, Key::ShiftRight,
+            Key::ControlLeft, Key::ControlRight,
+            Key::AltLeft, Key::AltRight,
+            Key::MetaLeft, Key::MetaRight,
+        ];
+        for key in &modifiers {
+            let event = Event::KeyDown { key: *key };
+            assert!(event.is_keyboard());
+        }
+    }
+
+    #[test]
+    fn test_key_punctuation() {
+        let punctuation = [
+            Key::Minus, Key::Equal, Key::BracketLeft, Key::BracketRight,
+            Key::Backslash, Key::Semicolon, Key::Quote, Key::Grave,
+            Key::Comma, Key::Period, Key::Slash,
+        ];
+        for key in &punctuation {
+            let event = Event::KeyDown { key: *key };
+            assert!(event.is_keyboard());
+        }
+    }
+
+    #[test]
+    fn test_key_debug() {
+        assert_eq!(format!("{:?}", Key::Enter), "Enter");
+        assert_eq!(format!("{:?}", Key::F1), "F1");
+    }
+
+    #[test]
+    fn test_touch_id_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(TouchId::new(1));
+        set.insert(TouchId::new(2));
+        set.insert(TouchId::new(1)); // Duplicate
+        assert_eq!(set.len(), 2);
+    }
+
+    #[test]
+    fn test_pointer_id_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(PointerId::new(1));
+        set.insert(PointerId::new(2));
+        set.insert(PointerId::new(1)); // Duplicate
+        assert_eq!(set.len(), 2);
+    }
+
+    #[test]
+    fn test_pointer_type_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(PointerType::Mouse);
+        set.insert(PointerType::Touch);
+        set.insert(PointerType::Pen);
+        set.insert(PointerType::Mouse); // Duplicate
+        assert_eq!(set.len(), 3);
+    }
+
+    #[test]
+    fn test_gesture_state_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(GestureState::Started);
+        set.insert(GestureState::Changed);
+        set.insert(GestureState::Ended);
+        set.insert(GestureState::Cancelled);
+        assert_eq!(set.len(), 4);
+    }
+
+    #[test]
+    fn test_event_debug() {
+        let event = Event::FocusIn;
+        let debug = format!("{event:?}");
+        assert!(debug.contains("FocusIn"));
+    }
+
+    #[test]
+    fn test_event_clone() {
+        let event = Event::MouseMove {
+            position: Point::new(100.0, 200.0),
+        };
+        let cloned = event.clone();
+        assert_eq!(event, cloned);
+    }
+
+    #[test]
+    fn test_text_input_event() {
+        let event = Event::TextInput {
+            text: "Hello, 世界!".to_string(),
+        };
+        assert!(event.is_keyboard());
+        assert!(!event.is_mouse());
+        assert!(event.position().is_none());
+    }
+
+    #[test]
+    fn test_scroll_event_deltas() {
+        let event = Event::Scroll {
+            delta_x: -10.5,
+            delta_y: 20.3,
+        };
+        assert!(!event.is_mouse());
+        assert!(!event.is_touch());
+        assert!(!event.is_pointer());
+    }
+
+    #[test]
+    fn test_resize_event() {
+        let event = Event::Resize {
+            width: 1920.0,
+            height: 1080.0,
+        };
+        assert!(!event.is_mouse());
+        assert!(event.position().is_none());
+    }
+
+    #[test]
+    fn test_gesture_pan_no_position() {
+        let event = Event::GesturePan {
+            delta: Point::new(50.0, 30.0),
+            velocity: Point::new(200.0, 150.0),
+            state: GestureState::Changed,
+        };
+        assert!(event.is_gesture());
+        // GesturePan has delta/velocity, not position
+        assert!(event.position().is_none());
+    }
+
+    #[test]
+    fn test_all_event_serialization() {
+        let events = vec![
+            Event::MouseMove { position: Point::new(1.0, 2.0) },
+            Event::MouseDown { position: Point::new(1.0, 2.0), button: MouseButton::Left },
+            Event::MouseUp { position: Point::new(1.0, 2.0), button: MouseButton::Right },
+            Event::Scroll { delta_x: 1.0, delta_y: -1.0 },
+            Event::KeyDown { key: Key::A },
+            Event::KeyUp { key: Key::B },
+            Event::TextInput { text: "test".to_string() },
+            Event::FocusIn,
+            Event::FocusOut,
+            Event::MouseEnter,
+            Event::MouseLeave,
+            Event::Resize { width: 800.0, height: 600.0 },
+        ];
+
+        for event in events {
+            let json = serde_json::to_string(&event).unwrap();
+            let deserialized: Event = serde_json::from_str(&json).unwrap();
+            assert_eq!(event, deserialized);
+        }
+    }
+
+    #[test]
+    fn test_touch_events_serialization() {
+        let events = vec![
+            Event::TouchStart { id: TouchId(1), position: Point::new(10.0, 20.0), pressure: 0.5 },
+            Event::TouchMove { id: TouchId(1), position: Point::new(15.0, 25.0), pressure: 0.6 },
+            Event::TouchEnd { id: TouchId(1), position: Point::new(20.0, 30.0) },
+            Event::TouchCancel { id: TouchId(1) },
+        ];
+
+        for event in events {
+            let json = serde_json::to_string(&event).unwrap();
+            let deserialized: Event = serde_json::from_str(&json).unwrap();
+            assert_eq!(event, deserialized);
+        }
+    }
+
+    #[test]
+    fn test_gesture_events_serialization() {
+        let events = vec![
+            Event::GesturePinch { scale: 1.5, center: Point::new(100.0, 100.0), state: GestureState::Started },
+            Event::GestureRotate { angle: 0.5, center: Point::new(100.0, 100.0), state: GestureState::Changed },
+            Event::GesturePan { delta: Point::new(10.0, 5.0), velocity: Point::new(50.0, 25.0), state: GestureState::Ended },
+            Event::GestureLongPress { position: Point::new(50.0, 50.0) },
+            Event::GestureTap { position: Point::new(50.0, 50.0), count: 2 },
+        ];
+
+        for event in events {
+            let json = serde_json::to_string(&event).unwrap();
+            let deserialized: Event = serde_json::from_str(&json).unwrap();
+            assert_eq!(event, deserialized);
+        }
+    }
+
+    #[test]
+    fn test_pointer_events_serialization() {
+        let events = vec![
+            Event::PointerDown {
+                pointer_id: PointerId(1),
+                pointer_type: PointerType::Mouse,
+                position: Point::new(10.0, 20.0),
+                pressure: 0.5,
+                is_primary: true,
+                button: Some(MouseButton::Left),
+            },
+            Event::PointerMove {
+                pointer_id: PointerId(1),
+                pointer_type: PointerType::Touch,
+                position: Point::new(15.0, 25.0),
+                pressure: 0.6,
+                is_primary: true,
+            },
+            Event::PointerUp {
+                pointer_id: PointerId(1),
+                pointer_type: PointerType::Pen,
+                position: Point::new(20.0, 30.0),
+                is_primary: false,
+                button: None,
+            },
+            Event::PointerCancel { pointer_id: PointerId(1) },
+            Event::PointerEnter { pointer_id: PointerId(2), pointer_type: PointerType::Mouse },
+            Event::PointerLeave { pointer_id: PointerId(2), pointer_type: PointerType::Touch },
+        ];
+
+        for event in events {
+            let json = serde_json::to_string(&event).unwrap();
+            let deserialized: Event = serde_json::from_str(&json).unwrap();
+            assert_eq!(event, deserialized);
+        }
+    }
+
+    #[test]
+    fn test_key_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(Key::A);
+        set.insert(Key::B);
+        set.insert(Key::A); // Duplicate
+        assert_eq!(set.len(), 2);
+    }
+
+    #[test]
+    fn test_mouse_button_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(MouseButton::Left);
+        set.insert(MouseButton::Right);
+        set.insert(MouseButton::Left); // Duplicate
+        assert_eq!(set.len(), 2);
+    }
 }

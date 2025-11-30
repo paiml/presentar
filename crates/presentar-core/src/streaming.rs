@@ -1384,4 +1384,341 @@ mod tests {
         assert_eq!(buffer.last_seq("sub1"), 2);
         assert_eq!(buffer.last_seq("sub2"), 1);
     }
+
+    // =========================================================================
+    // Additional Edge Case Tests
+    // =========================================================================
+
+    #[test]
+    fn test_connection_state_debug() {
+        assert_eq!(format!("{:?}", ConnectionState::Connected), "Connected");
+        assert_eq!(format!("{:?}", ConnectionState::Failed), "Failed");
+    }
+
+    #[test]
+    fn test_connection_state_clone() {
+        let state = ConnectionState::Reconnecting;
+        let cloned = state;
+        assert_eq!(state, cloned);
+    }
+
+    #[test]
+    fn test_stream_message_debug() {
+        let msg = StreamMessage::ping(12345);
+        let debug = format!("{msg:?}");
+        assert!(debug.contains("Ping"));
+    }
+
+    #[test]
+    fn test_stream_message_clone() {
+        let msg = StreamMessage::data("sub1", serde_json::json!({"x": 1}), 5);
+        let cloned = msg.clone();
+        assert_eq!(msg, cloned);
+    }
+
+    #[test]
+    fn test_stream_subscription_clone() {
+        let sub = StreamSubscription::with_id("sub1", "metrics")
+            .with_interval(1000)
+            .with_transform("rate()");
+        let cloned = sub.clone();
+        assert_eq!(cloned.id, "sub1");
+        assert_eq!(cloned.source, "metrics");
+        assert_eq!(cloned.transform, Some("rate()".to_string()));
+    }
+
+    #[test]
+    fn test_stream_subscription_debug() {
+        let sub = StreamSubscription::new("test");
+        let debug = format!("{sub:?}");
+        assert!(debug.contains("StreamSubscription"));
+    }
+
+    #[test]
+    fn test_stream_subscription_hash_consistency() {
+        // Same source should produce same hash
+        let sub1 = StreamSubscription::new("metrics/cpu");
+        let sub2 = StreamSubscription::new("metrics/cpu");
+        assert_eq!(sub1.id, sub2.id);
+    }
+
+    #[test]
+    fn test_stream_subscription_hash_different() {
+        let sub1 = StreamSubscription::new("metrics/cpu");
+        let sub2 = StreamSubscription::new("metrics/memory");
+        assert_ne!(sub1.id, sub2.id);
+    }
+
+    #[test]
+    fn test_stream_config_debug() {
+        let config = StreamConfig::default();
+        let debug = format!("{config:?}");
+        assert!(debug.contains("StreamConfig"));
+    }
+
+    #[test]
+    fn test_stream_config_clone() {
+        let config = StreamConfig::new("ws://test")
+            .with_buffer_size(2048)
+            .with_heartbeat(Duration::from_secs(60));
+        let cloned = config.clone();
+        assert_eq!(cloned.url, "ws://test");
+        assert_eq!(cloned.buffer_size, 2048);
+    }
+
+    #[test]
+    fn test_stream_config_with_reconnect() {
+        let reconnect = ReconnectConfig {
+            enabled: false,
+            max_attempts: Some(5),
+            ..Default::default()
+        };
+        let config = StreamConfig::new("ws://x").with_reconnect(reconnect);
+        assert!(!config.reconnect.enabled);
+        assert_eq!(config.reconnect.max_attempts, Some(5));
+    }
+
+    #[test]
+    fn test_reconnect_config_debug() {
+        let config = ReconnectConfig::default();
+        let debug = format!("{config:?}");
+        assert!(debug.contains("ReconnectConfig"));
+    }
+
+    #[test]
+    fn test_reconnect_config_clone() {
+        let config = ReconnectConfig {
+            max_attempts: Some(10),
+            ..Default::default()
+        };
+        let cloned = config.clone();
+        assert_eq!(cloned.max_attempts, Some(10));
+    }
+
+    #[test]
+    fn test_reconnect_delay_large_attempt() {
+        let config = ReconnectConfig::default();
+        // Large attempt number should be capped by max(20)
+        let delay = config.delay_for_attempt(100);
+        assert!(delay <= config.max_delay);
+    }
+
+    #[test]
+    fn test_data_stream_default() {
+        let stream = DataStream::default();
+        assert_eq!(stream.state(), ConnectionState::Disconnected);
+        assert_eq!(stream.subscription_count(), 0);
+    }
+
+    #[test]
+    fn test_data_stream_set_state() {
+        let stream = DataStream::default();
+        stream.set_state(ConnectionState::Connected);
+        assert_eq!(stream.state(), ConnectionState::Connected);
+        stream.set_state(ConnectionState::Failed);
+        assert_eq!(stream.state(), ConnectionState::Failed);
+    }
+
+    #[test]
+    fn test_data_stream_send() {
+        let stream = DataStream::default();
+        stream.send(StreamMessage::ping(100));
+        stream.send(StreamMessage::ping(200));
+
+        let outbox = stream.take_outbox();
+        assert_eq!(outbox.len(), 2);
+    }
+
+    #[test]
+    fn test_data_stream_get_nonexistent_subscription() {
+        let stream = DataStream::default();
+        assert!(stream.get_subscription("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_data_stream_get_nonexistent_data() {
+        let stream = DataStream::default();
+        assert!(stream.get_data("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_data_stream_subscriptions_list() {
+        let stream = DataStream::default();
+        stream.subscribe(StreamSubscription::with_id("sub1", "a"));
+        stream.subscribe(StreamSubscription::with_id("sub2", "b"));
+
+        let subs = stream.subscriptions();
+        assert_eq!(subs.len(), 2);
+    }
+
+    #[test]
+    fn test_data_stream_handle_pong() {
+        let stream = DataStream::default();
+        let response = stream.handle_message(StreamMessage::pong(12345));
+        assert!(response.is_none());
+    }
+
+    #[test]
+    fn test_data_stream_handle_subscribe() {
+        let stream = DataStream::default();
+        // Subscribe messages from server side are ignored
+        let response = stream.handle_message(StreamMessage::subscribe("sub1", "metrics"));
+        assert!(response.is_none());
+    }
+
+    #[test]
+    fn test_data_stream_handle_error_no_id() {
+        let stream = DataStream::default();
+        // Error without ID doesn't affect any subscription
+        let response = stream.handle_message(StreamMessage::error("general error"));
+        assert!(response.is_none());
+    }
+
+    #[test]
+    fn test_data_stream_handle_error_unknown_id() {
+        let stream = DataStream::default();
+        // Error for unknown subscription
+        let response = stream.handle_message(StreamMessage::error_for("unknown", "error"));
+        assert!(response.is_none());
+    }
+
+    #[test]
+    fn test_data_stream_handle_data_unknown_subscription() {
+        let stream = DataStream::default();
+        // Data for unknown subscription still gets cached
+        stream.handle_message(StreamMessage::data("unknown", serde_json::json!(42), 1));
+        assert_eq!(stream.get_data("unknown"), Some(serde_json::json!(42)));
+    }
+
+    #[test]
+    fn test_rate_limiter_debug() {
+        let limiter = RateLimiter::new(10, Duration::from_secs(1));
+        let debug = format!("{limiter:?}");
+        assert!(debug.contains("RateLimiter"));
+    }
+
+    #[test]
+    fn test_rate_limiter_at_boundary() {
+        let mut limiter = RateLimiter::new(3, Duration::from_millis(100));
+
+        // All at time 0
+        assert!(limiter.check(0));
+        assert!(limiter.check(0));
+        assert!(limiter.check(0));
+        assert!(!limiter.check(0)); // Over limit at same time
+
+        // Exactly at window boundary - should keep messages
+        assert!(!limiter.check(100)); // At boundary, old ones still valid
+
+        // Past window boundary
+        assert!(limiter.check(101)); // Window expired
+    }
+
+    #[test]
+    fn test_message_buffer_debug() {
+        let buffer = MessageBuffer::new();
+        let debug = format!("{buffer:?}");
+        assert!(debug.contains("MessageBuffer"));
+    }
+
+    #[test]
+    fn test_message_buffer_old_message() {
+        let mut buffer = MessageBuffer::new();
+
+        // Process messages 1, 2, 3 in order
+        buffer.process("sub1", 1, serde_json::json!(1));
+        buffer.process("sub1", 2, serde_json::json!(2));
+        buffer.process("sub1", 3, serde_json::json!(3));
+
+        // Old message (seq 1 when we're at 3) should be ignored
+        let old = buffer.process("sub1", 1, serde_json::json!("old"));
+        assert!(old.is_none());
+        assert_eq!(buffer.last_seq("sub1"), 3);
+    }
+
+    #[test]
+    fn test_message_buffer_large_gap() {
+        let mut buffer = MessageBuffer::new();
+
+        buffer.process("sub1", 1, serde_json::json!(1));
+        // Skip many sequence numbers
+        buffer.process("sub1", 100, serde_json::json!(100)); // Buffered
+
+        assert_eq!(buffer.last_seq("sub1"), 1);
+        assert_eq!(buffer.pending_count("sub1"), 1);
+    }
+
+    #[test]
+    fn test_message_buffer_nonexistent_subscription() {
+        let buffer = MessageBuffer::new();
+        assert_eq!(buffer.last_seq("nonexistent"), 0);
+        assert_eq!(buffer.pending_count("nonexistent"), 0);
+    }
+
+    #[test]
+    fn test_stream_message_serialize_all_variants() {
+        let messages = vec![
+            StreamMessage::subscribe("s1", "source"),
+            StreamMessage::subscribe_with_transform("s2", "source", "rate()"),
+            StreamMessage::unsubscribe("s1"),
+            StreamMessage::data("s1", serde_json::json!({"x": 1}), 5),
+            StreamMessage::error("msg"),
+            StreamMessage::error_for("s1", "msg"),
+            StreamMessage::ack("s1"),
+            StreamMessage::ping(1000),
+            StreamMessage::pong(1000),
+        ];
+
+        for msg in messages {
+            let json = serde_json::to_string(&msg).unwrap();
+            let parsed: StreamMessage = serde_json::from_str(&json).unwrap();
+            assert_eq!(msg, parsed);
+        }
+    }
+
+    #[test]
+    fn test_stream_subscription_empty_source() {
+        let sub = StreamSubscription::new("");
+        assert!(sub.id.starts_with("sub_"));
+        assert_eq!(sub.source, "");
+    }
+
+    #[test]
+    fn test_stream_subscription_unicode_source() {
+        let sub = StreamSubscription::new("数据/指标");
+        assert!(sub.id.starts_with("sub_"));
+        assert_eq!(sub.source, "数据/指标");
+    }
+
+    #[test]
+    fn test_data_stream_multiple_data_updates() {
+        let stream = DataStream::default();
+        stream.subscribe(StreamSubscription::with_id("sub1", "x"));
+
+        // Multiple updates should update cache
+        stream.handle_message(StreamMessage::data("sub1", serde_json::json!(1), 1));
+        assert_eq!(stream.get_data("sub1"), Some(serde_json::json!(1)));
+
+        stream.handle_message(StreamMessage::data("sub1", serde_json::json!(2), 2));
+        assert_eq!(stream.get_data("sub1"), Some(serde_json::json!(2)));
+
+        let sub = stream.get_subscription("sub1").unwrap();
+        assert_eq!(sub.last_seq, 2);
+        assert_eq!(sub.error_count, 0);
+    }
+
+    #[test]
+    fn test_reconnect_infinite_attempts() {
+        let config = ReconnectConfig {
+            enabled: true,
+            max_attempts: None,
+            ..Default::default()
+        };
+
+        // Should always reconnect with infinite attempts
+        assert!(config.should_reconnect(0));
+        assert!(config.should_reconnect(100));
+        assert!(config.should_reconnect(1000));
+        assert!(config.should_reconnect(u32::MAX - 1));
+    }
 }
