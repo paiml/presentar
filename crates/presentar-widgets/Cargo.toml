@@ -17,6 +17,7 @@ layout-widgets = []    # Column, Row, Stack, Container, Tabs
 
 [dependencies]
 presentar-core = { workspace = true }
+presentar-yaml = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]

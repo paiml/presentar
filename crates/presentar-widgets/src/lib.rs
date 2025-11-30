@@ -1,6 +1,7 @@
 //! Widget implementations for Presentar UI framework.
 
 pub mod button;
+pub mod formats;
 pub mod chart;
 pub mod checkbox;
 pub mod column;
@@ -54,3 +55,6 @@ pub use text::Text;
 pub use text_input::{TextChanged, TextInput, TextSubmitted};
 pub use toggle::{Toggle, ToggleChanged};
 pub use tooltip::{Tooltip, TooltipPlacement};
+
+// File format conversions
+pub use formats::{load_ald_as_card, load_apr_as_card, AldDatasetExt, AprModelExt};

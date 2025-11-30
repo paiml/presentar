@@ -1224,6 +1224,7 @@ version = "0.1.0"
 dependencies = [
  "criterion",
  "presentar-core",
+ "presentar-yaml",
  "proptest",
  "serde",
 ]
