@@ -1003,4 +1003,524 @@ mod tests {
     fn test_grid_auto_flow_default() {
         assert_eq!(GridAutoFlow::default(), GridAutoFlow::Row);
     }
+
+    #[test]
+    fn test_grid_auto_flow_all_variants() {
+        assert_eq!(GridAutoFlow::Row, GridAutoFlow::Row);
+        assert_eq!(GridAutoFlow::Column, GridAutoFlow::Column);
+        assert_eq!(GridAutoFlow::RowDense, GridAutoFlow::RowDense);
+        assert_eq!(GridAutoFlow::ColumnDense, GridAutoFlow::ColumnDense);
+    }
+
+    #[test]
+    fn test_grid_auto_flow_clone() {
+        let flow = GridAutoFlow::ColumnDense;
+        let cloned = flow;
+        assert_eq!(flow, cloned);
+    }
+
+    #[test]
+    fn test_grid_auto_flow_debug() {
+        let flow = GridAutoFlow::RowDense;
+        let debug = format!("{:?}", flow);
+        assert!(debug.contains("RowDense"));
+    }
+
+    // =========================================================================
+    // TrackSize Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_track_size_auto_const() {
+        assert_eq!(TrackSize::AUTO, TrackSize::Auto);
+    }
+
+    #[test]
+    fn test_track_size_min_content() {
+        let size = TrackSize::MinContent;
+        assert_eq!(size, TrackSize::MinContent);
+    }
+
+    #[test]
+    fn test_track_size_max_content() {
+        let size = TrackSize::MaxContent;
+        assert_eq!(size, TrackSize::MaxContent);
+    }
+
+    #[test]
+    fn test_track_size_clone() {
+        let size = TrackSize::Fr(2.5);
+        let cloned = size;
+        assert_eq!(size, cloned);
+    }
+
+    #[test]
+    fn test_track_size_debug() {
+        let size = TrackSize::Px(100.0);
+        let debug = format!("{:?}", size);
+        assert!(debug.contains("Px"));
+        assert!(debug.contains("100"));
+    }
+
+    #[test]
+    fn test_track_size_serialize() {
+        let size = TrackSize::Fr(1.5);
+        let json = serde_json::to_string(&size).unwrap();
+        assert!(json.contains("Fr"));
+    }
+
+    #[test]
+    fn test_track_size_deserialize() {
+        let json = r#"{"Px":200.0}"#;
+        let size: TrackSize = serde_json::from_str(json).unwrap();
+        assert_eq!(size, TrackSize::Px(200.0));
+    }
+
+    // =========================================================================
+    // GridTemplate Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_grid_template_with_column_gap() {
+        let template = GridTemplate::new().with_column_gap(20.0);
+        assert_eq!(template.column_gap, 20.0);
+        assert_eq!(template.row_gap, 0.0);
+    }
+
+    #[test]
+    fn test_grid_template_with_row_gap() {
+        let template = GridTemplate::new().with_row_gap(15.0);
+        assert_eq!(template.row_gap, 15.0);
+        assert_eq!(template.column_gap, 0.0);
+    }
+
+    #[test]
+    fn test_grid_template_column_count() {
+        let template =
+            GridTemplate::columns([TrackSize::fr(1.0), TrackSize::fr(1.0), TrackSize::fr(1.0)]);
+        assert_eq!(template.column_count(), 3);
+    }
+
+    #[test]
+    fn test_grid_template_row_count() {
+        let template = GridTemplate::new().with_rows([TrackSize::px(50.0), TrackSize::px(100.0)]);
+        assert_eq!(template.row_count(), 2);
+    }
+
+    #[test]
+    fn test_grid_template_empty_counts() {
+        let template = GridTemplate::new();
+        assert_eq!(template.column_count(), 0);
+        assert_eq!(template.row_count(), 0);
+    }
+
+    #[test]
+    fn test_grid_template_default() {
+        let template = GridTemplate::default();
+        assert!(template.columns.is_empty());
+        assert!(template.areas.is_empty());
+    }
+
+    #[test]
+    fn test_grid_template_clone() {
+        let template = GridTemplate::twelve_column().with_area("header", GridArea::cell(0, 0));
+        let cloned = template.clone();
+        assert_eq!(cloned.columns.len(), 12);
+        assert!(cloned.areas.contains_key("header"));
+    }
+
+    #[test]
+    fn test_grid_template_serialize() {
+        let template = GridTemplate::columns([TrackSize::px(100.0)]);
+        let json = serde_json::to_string(&template).unwrap();
+        assert!(json.contains("columns"));
+    }
+
+    // =========================================================================
+    // GridArea Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_grid_area_span_counts_zero() {
+        let area = GridArea::new(5, 5, 5, 5); // Same start and end
+        assert_eq!(area.row_span_count(), 0);
+        assert_eq!(area.col_span_count(), 0);
+    }
+
+    #[test]
+    fn test_grid_area_span_counts_saturating() {
+        let area = GridArea::new(10, 10, 5, 5); // End before start
+        assert_eq!(area.row_span_count(), 0);
+        assert_eq!(area.col_span_count(), 0);
+    }
+
+    #[test]
+    fn test_grid_area_clone() {
+        let area = GridArea::new(1, 2, 3, 4);
+        let cloned = area;
+        assert_eq!(area, cloned);
+    }
+
+    #[test]
+    fn test_grid_area_debug() {
+        let area = GridArea::cell(0, 0);
+        let debug = format!("{:?}", area);
+        assert!(debug.contains("GridArea"));
+    }
+
+    #[test]
+    fn test_grid_area_serialize() {
+        let area = GridArea::new(0, 0, 2, 4);
+        let json = serde_json::to_string(&area).unwrap();
+        assert!(json.contains("row_start"));
+    }
+
+    #[test]
+    fn test_grid_area_deserialize() {
+        let json = r#"{"row_start":1,"row_end":3,"col_start":0,"col_end":2}"#;
+        let area: GridArea = serde_json::from_str(json).unwrap();
+        assert_eq!(area.row_start, 1);
+        assert_eq!(area.col_end, 2);
+    }
+
+    // =========================================================================
+    // GridItem Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_grid_item_default() {
+        let item = GridItem::default();
+        assert_eq!(item.column_start, 0);
+        assert_eq!(item.row_start, 0);
+        assert!(item.area.is_none());
+    }
+
+    #[test]
+    fn test_grid_item_justify_self() {
+        let item = GridItem::new().justify_self(GridAlign::End);
+        assert_eq!(item.justify_self, Some(GridAlign::End));
+    }
+
+    #[test]
+    fn test_grid_item_align_self() {
+        let item = GridItem::new().align_self(GridAlign::Stretch);
+        assert_eq!(item.align_self, Some(GridAlign::Stretch));
+    }
+
+    #[test]
+    fn test_grid_item_effective_row_span() {
+        let item = GridItem::new().span_rows(3);
+        assert_eq!(item.effective_row_span(), 3);
+
+        let mut item2 = GridItem::new();
+        item2.row_start = 1;
+        item2.row_end = 5;
+        assert_eq!(item2.effective_row_span(), 4);
+    }
+
+    #[test]
+    fn test_grid_item_effective_span_minimum() {
+        let mut item = GridItem::new();
+        item.column_span = 0; // Edge case
+        assert_eq!(item.effective_column_span(), 1); // Min 1
+
+        item.row_span = 0;
+        assert_eq!(item.effective_row_span(), 1); // Min 1
+    }
+
+    #[test]
+    fn test_grid_item_clone() {
+        let item = GridItem::new().column(2).row(3).span_columns(2);
+        let cloned = item.clone();
+        assert_eq!(cloned.column_start, 2);
+        assert_eq!(cloned.row_start, 3);
+    }
+
+    #[test]
+    fn test_grid_item_serialize() {
+        let item = GridItem::new().column(1).row(1);
+        let json = serde_json::to_string(&item).unwrap();
+        assert!(json.contains("column_start"));
+    }
+
+    // =========================================================================
+    // GridAlign Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_grid_align_all_variants() {
+        assert_eq!(GridAlign::Start, GridAlign::Start);
+        assert_eq!(GridAlign::End, GridAlign::End);
+        assert_eq!(GridAlign::Center, GridAlign::Center);
+        assert_eq!(GridAlign::Stretch, GridAlign::Stretch);
+    }
+
+    #[test]
+    fn test_grid_align_clone() {
+        let align = GridAlign::Stretch;
+        let cloned = align;
+        assert_eq!(align, cloned);
+    }
+
+    #[test]
+    fn test_grid_align_debug() {
+        let align = GridAlign::Start;
+        let debug = format!("{:?}", align);
+        assert!(debug.contains("Start"));
+    }
+
+    #[test]
+    fn test_grid_align_serialize() {
+        let align = GridAlign::End;
+        let json = serde_json::to_string(&align).unwrap();
+        assert!(json.contains("End"));
+    }
+
+    // =========================================================================
+    // GridLayout Tests
+    // =========================================================================
+
+    #[test]
+    fn test_grid_layout_default() {
+        let layout = GridLayout::default();
+        assert!(layout.columns.is_empty());
+        assert!(layout.rows.is_empty());
+        assert_eq!(layout.width, 0.0);
+        assert_eq!(layout.height, 0.0);
+    }
+
+    #[test]
+    fn test_grid_layout_area_bounds_out_of_range() {
+        let layout = GridLayout {
+            columns: vec![(0.0, 100.0)],
+            rows: vec![(0.0, 50.0)],
+            width: 100.0,
+            height: 50.0,
+        };
+
+        // Out of range area
+        let bounds = layout.area_bounds(&GridArea::cell(10, 10));
+        assert!(bounds.is_none());
+    }
+
+    #[test]
+    fn test_grid_layout_area_bounds_partial_out_of_range() {
+        let layout = GridLayout {
+            columns: vec![(0.0, 100.0), (100.0, 100.0)],
+            rows: vec![(0.0, 50.0)],
+            width: 200.0,
+            height: 50.0,
+        };
+
+        // Area extends beyond grid - should clamp
+        let bounds = layout.area_bounds(&GridArea::new(0, 0, 5, 5));
+        assert!(bounds.is_some());
+        let (_, _, w, _) = bounds.unwrap();
+        assert_eq!(w, 200.0); // Clamped to available columns
+    }
+
+    #[test]
+    fn test_grid_layout_item_bounds() {
+        let layout = GridLayout {
+            columns: vec![(0.0, 100.0), (100.0, 100.0)],
+            rows: vec![(0.0, 50.0), (50.0, 50.0)],
+            width: 200.0,
+            height: 100.0,
+        };
+
+        let item = GridItem::new().span_columns(2);
+        let bounds = layout.item_bounds(&item, 0, 0);
+        assert!(bounds.is_some());
+        let (x, y, w, h) = bounds.unwrap();
+        assert_eq!(x, 0.0);
+        assert_eq!(y, 0.0);
+        assert_eq!(w, 200.0);
+        assert_eq!(h, 50.0);
+    }
+
+    #[test]
+    fn test_grid_layout_clone() {
+        let layout = GridLayout {
+            columns: vec![(0.0, 100.0)],
+            rows: vec![(0.0, 50.0)],
+            width: 100.0,
+            height: 50.0,
+        };
+        let cloned = layout.clone();
+        assert_eq!(cloned.width, 100.0);
+    }
+
+    #[test]
+    fn test_grid_layout_debug() {
+        let layout = GridLayout::default();
+        let debug = format!("{:?}", layout);
+        assert!(debug.contains("GridLayout"));
+    }
+
+    // =========================================================================
+    // compute_track_sizes Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_compute_track_sizes_all_fr() {
+        let tracks = vec![TrackSize::Fr(1.0), TrackSize::Fr(2.0), TrackSize::Fr(1.0)];
+        let result = compute_track_sizes(&tracks, 400.0, 0.0, &[]);
+
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].1, 100.0); // 1/4
+        assert_eq!(result[1].1, 200.0); // 2/4
+        assert_eq!(result[2].1, 100.0); // 1/4
+    }
+
+    #[test]
+    fn test_compute_track_sizes_zero_fr() {
+        let tracks = vec![TrackSize::Fr(0.0), TrackSize::Fr(1.0)];
+        let result = compute_track_sizes(&tracks, 200.0, 0.0, &[]);
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].1, 0.0);
+        assert_eq!(result[1].1, 200.0);
+    }
+
+    #[test]
+    fn test_compute_track_sizes_insufficient_space() {
+        let tracks = vec![TrackSize::Px(300.0), TrackSize::Fr(1.0)];
+        let result = compute_track_sizes(&tracks, 200.0, 0.0, &[]);
+
+        // Fixed takes precedence, fr gets 0
+        assert_eq!(result[0].1, 300.0);
+        assert_eq!(result[1].1, 0.0);
+    }
+
+    #[test]
+    fn test_compute_track_sizes_large_gap() {
+        let tracks = vec![TrackSize::Fr(1.0), TrackSize::Fr(1.0)];
+        let result = compute_track_sizes(&tracks, 100.0, 200.0, &[]);
+
+        // Gap is larger than available space - tracks get 0
+        assert!(result[0].1 <= 0.0);
+    }
+
+    #[test]
+    fn test_compute_track_sizes_min_content() {
+        let tracks = vec![TrackSize::MinContent, TrackSize::Fr(1.0)];
+        let content = vec![60.0, 0.0];
+        let result = compute_track_sizes(&tracks, 200.0, 0.0, &content);
+
+        assert_eq!(result[0].1, 60.0);
+        assert_eq!(result[1].1, 140.0);
+    }
+
+    #[test]
+    fn test_compute_track_sizes_max_content() {
+        let tracks = vec![TrackSize::MaxContent, TrackSize::Fr(1.0)];
+        let content = vec![80.0];
+        let result = compute_track_sizes(&tracks, 200.0, 0.0, &content);
+
+        assert_eq!(result[0].1, 80.0);
+        assert_eq!(result[1].1, 120.0);
+    }
+
+    // =========================================================================
+    // compute_grid_layout Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_compute_grid_layout_empty_template() {
+        let template = GridTemplate::new();
+        let layout = compute_grid_layout(&template, 200.0, 100.0, &[]);
+
+        assert!(layout.columns.is_empty());
+        assert_eq!(layout.width, 0.0);
+    }
+
+    #[test]
+    fn test_compute_grid_layout_auto_rows() {
+        let template = GridTemplate::columns([TrackSize::fr(1.0), TrackSize::fr(1.0)]);
+        let children = vec![(50.0, 30.0), (50.0, 30.0), (50.0, 30.0), (50.0, 30.0)];
+        let layout = compute_grid_layout(&template, 200.0, 200.0, &children);
+
+        // 4 items in 2 columns = 2 rows
+        assert_eq!(layout.rows.len(), 2);
+    }
+
+    #[test]
+    fn test_compute_grid_layout_with_gaps() {
+        let template = GridTemplate::columns([TrackSize::fr(1.0), TrackSize::fr(1.0)])
+            .with_rows([TrackSize::px(50.0)])
+            .with_gap(10.0);
+        let layout = compute_grid_layout(&template, 210.0, 50.0, &[]);
+
+        // Total width should account for gap
+        let col1_end = layout.columns[0].0 + layout.columns[0].1;
+        let col2_start = layout.columns[1].0;
+        assert!((col2_start - col1_end - 10.0).abs() < 0.01);
+    }
+
+    // =========================================================================
+    // auto_place_items Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_auto_place_items_empty() {
+        let template = GridTemplate::columns([TrackSize::fr(1.0)]);
+        let placements = auto_place_items(&template, &[], GridAutoFlow::Row);
+        assert!(placements.is_empty());
+    }
+
+    #[test]
+    fn test_auto_place_items_single_column() {
+        let template = GridTemplate::columns([TrackSize::fr(1.0)]);
+        let items = vec![GridItem::new(), GridItem::new(), GridItem::new()];
+        let placements = auto_place_items(&template, &items, GridAutoFlow::Row);
+
+        assert_eq!(placements[0], (0, 0));
+        assert_eq!(placements[1], (1, 0));
+        assert_eq!(placements[2], (2, 0));
+    }
+
+    #[test]
+    fn test_auto_place_items_span_exceeds_grid() {
+        let template = GridTemplate::columns([TrackSize::fr(1.0), TrackSize::fr(1.0)]);
+        let items = vec![GridItem::new().span_columns(5)]; // Spans more than available
+        let placements = auto_place_items(&template, &items, GridAutoFlow::Row);
+
+        // Should still place somewhere
+        assert_eq!(placements.len(), 1);
+    }
+
+    #[test]
+    fn test_auto_place_items_row_span() {
+        let template = GridTemplate::columns([TrackSize::fr(1.0), TrackSize::fr(1.0)]);
+        let items = vec![
+            GridItem::new().span_rows(2),
+            GridItem::new(),
+            GridItem::new(),
+        ];
+        let placements = auto_place_items(&template, &items, GridAutoFlow::Row);
+
+        // First item spans 2 rows, second should go to column 1
+        assert_eq!(placements[0], (0, 0));
+        assert_eq!(placements[1], (0, 1));
+    }
+
+    #[test]
+    fn test_auto_place_items_missing_area() {
+        let template = GridTemplate::columns([TrackSize::fr(1.0)]);
+        let items = vec![GridItem::new().in_area("nonexistent")];
+        let placements = auto_place_items(&template, &items, GridAutoFlow::Row);
+
+        // Should fall back to auto-placement
+        assert_eq!(placements[0], (0, 0));
+    }
+
+    #[test]
+    fn test_auto_place_items_column_dense() {
+        let template = GridTemplate::columns([TrackSize::fr(1.0), TrackSize::fr(1.0)]);
+        let items = vec![GridItem::new(), GridItem::new()];
+        let placements = auto_place_items(&template, &items, GridAutoFlow::ColumnDense);
+
+        // ColumnDense should fill columns first
+        assert_eq!(placements.len(), 2);
+    }
 }

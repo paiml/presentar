@@ -1073,4 +1073,706 @@ mod tests {
         form.validate();
         assert!(form.is_valid());
     }
+
+    // =========================================================================
+    // ValidationResult Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_validation_result_clone() {
+        let result = ValidationResult::Invalid("error".to_string());
+        let cloned = result.clone();
+        assert_eq!(result, cloned);
+    }
+
+    #[test]
+    fn test_validation_result_debug() {
+        let result = ValidationResult::Valid;
+        let debug = format!("{:?}", result);
+        assert!(debug.contains("Valid"));
+    }
+
+    #[test]
+    fn test_validation_result_partial_eq() {
+        assert_eq!(ValidationResult::Valid, ValidationResult::Valid);
+        assert_eq!(ValidationResult::Pending, ValidationResult::Pending);
+        assert_ne!(ValidationResult::Valid, ValidationResult::Pending);
+        assert_ne!(
+            ValidationResult::Invalid("a".to_string()),
+            ValidationResult::Invalid("b".to_string())
+        );
+    }
+
+    // =========================================================================
+    // Required Validator Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_required_default() {
+        let validator = Required::default();
+        assert!(validator.validate("").is_invalid());
+    }
+
+    #[test]
+    fn test_required_whitespace_only() {
+        let validator = Required::new();
+        assert!(validator.validate("\t\n").is_invalid());
+        assert!(validator.validate("  \t  ").is_invalid());
+    }
+
+    #[test]
+    fn test_required_single_char() {
+        let validator = Required::new();
+        assert!(validator.validate("a").is_valid());
+        assert!(validator.validate(" a ").is_valid());
+    }
+
+    #[test]
+    fn test_required_clone() {
+        let validator = Required::with_message("custom");
+        let cloned = validator.clone();
+        assert_eq!(cloned.message, "custom");
+    }
+
+    // =========================================================================
+    // MinLength Boundary Tests
+    // =========================================================================
+
+    #[test]
+    fn test_min_length_boundary_zero() {
+        let validator = MinLength::new(0);
+        assert!(validator.validate("").is_valid());
+        assert!(validator.validate("a").is_valid());
+    }
+
+    #[test]
+    fn test_min_length_boundary_one() {
+        let validator = MinLength::new(1);
+        assert!(validator.validate("").is_invalid());
+        assert!(validator.validate("a").is_valid());
+        assert!(validator.validate("ab").is_valid());
+    }
+
+    #[test]
+    fn test_min_length_boundary_exact() {
+        let validator = MinLength::new(5);
+        assert!(validator.validate("1234").is_invalid()); // min-1
+        assert!(validator.validate("12345").is_valid()); // exact min
+        assert!(validator.validate("123456").is_valid()); // min+1
+    }
+
+    #[test]
+    fn test_min_length_custom_message() {
+        let validator = MinLength::with_message(3, "Too short!");
+        let result = validator.validate("ab");
+        assert_eq!(result.error(), Some("Too short!"));
+    }
+
+    #[test]
+    fn test_min_length_clone() {
+        let validator = MinLength::new(5);
+        let cloned = validator.clone();
+        assert_eq!(cloned.min, 5);
+    }
+
+    // =========================================================================
+    // MaxLength Boundary Tests
+    // =========================================================================
+
+    #[test]
+    fn test_max_length_boundary_zero() {
+        let validator = MaxLength::new(0);
+        assert!(validator.validate("").is_valid());
+        assert!(validator.validate("a").is_invalid());
+    }
+
+    #[test]
+    fn test_max_length_boundary_one() {
+        let validator = MaxLength::new(1);
+        assert!(validator.validate("").is_valid());
+        assert!(validator.validate("a").is_valid());
+        assert!(validator.validate("ab").is_invalid());
+    }
+
+    #[test]
+    fn test_max_length_boundary_exact() {
+        let validator = MaxLength::new(5);
+        assert!(validator.validate("1234").is_valid()); // max-1
+        assert!(validator.validate("12345").is_valid()); // exact max
+        assert!(validator.validate("123456").is_invalid()); // max+1
+    }
+
+    #[test]
+    fn test_max_length_custom_message() {
+        let validator = MaxLength::with_message(3, "Too long!");
+        let result = validator.validate("abcd");
+        assert_eq!(result.error(), Some("Too long!"));
+    }
+
+    #[test]
+    fn test_max_length_unicode() {
+        let validator = MaxLength::new(3);
+        assert!(validator.validate("日本語").is_valid()); // 3 chars
+        assert!(validator.validate("日本語字").is_invalid()); // 4 chars
+    }
+
+    #[test]
+    fn test_max_length_clone() {
+        let validator = MaxLength::new(10);
+        let cloned = validator.clone();
+        assert_eq!(cloned.max, 10);
+    }
+
+    // =========================================================================
+    // Range Validator Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_range_boundary_exact() {
+        let validator = Range::new(10.0, 20.0);
+        assert!(validator.validate("9.99").is_invalid());
+        assert!(validator.validate("10.0").is_valid());
+        assert!(validator.validate("20.0").is_valid());
+        assert!(validator.validate("20.01").is_invalid());
+    }
+
+    #[test]
+    fn test_range_negative_values() {
+        let validator = Range::new(-100.0, -10.0);
+        assert!(validator.validate("-50").is_valid());
+        assert!(validator.validate("-100").is_valid());
+        assert!(validator.validate("-10").is_valid());
+        assert!(validator.validate("-101").is_invalid());
+        assert!(validator.validate("-9").is_invalid());
+    }
+
+    #[test]
+    fn test_range_scientific_notation() {
+        let validator = Range::new(0.0, 1e10);
+        assert!(validator.validate("1e5").is_valid());
+        assert!(validator.validate("1E9").is_valid());
+        assert!(validator.validate("1e11").is_invalid());
+    }
+
+    #[test]
+    fn test_range_float_precision() {
+        let validator = Range::new(0.1, 0.3);
+        assert!(validator.validate("0.2").is_valid());
+        // Edge case: floating point representation
+        assert!(validator.validate("0.1").is_valid());
+        assert!(validator.validate("0.3").is_valid());
+    }
+
+    #[test]
+    fn test_range_custom_message() {
+        let validator = Range::with_message(1.0, 10.0, "Out of range!");
+        let result = validator.validate("0");
+        assert_eq!(result.error(), Some("Out of range!"));
+    }
+
+    #[test]
+    fn test_range_clone() {
+        let validator = Range::new(0.0, 100.0);
+        let cloned = validator.clone();
+        assert_eq!(cloned.min, 0.0);
+        assert_eq!(cloned.max, 100.0);
+    }
+
+    #[test]
+    fn test_range_empty_string() {
+        let validator = Range::new(0.0, 100.0);
+        let result = validator.validate("");
+        assert!(result.is_invalid());
+        assert_eq!(result.error(), Some("Must be a valid number"));
+    }
+
+    // =========================================================================
+    // Pattern Validator Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_pattern_email_edge_cases() {
+        let validator = Pattern::email();
+
+        // Valid edge cases
+        assert!(validator.validate("a@b.c").is_valid());
+        assert!(validator.validate("test+tag@example.com").is_valid());
+        assert!(validator.validate("test.name@sub.domain.com").is_valid());
+
+        // Invalid edge cases
+        assert!(validator.validate("test@@example.com").is_invalid());
+        assert!(validator.validate("test@.example.com").is_invalid());
+        assert!(validator.validate("test@example.").is_invalid());
+    }
+
+    #[test]
+    fn test_pattern_url_protocols() {
+        let validator = Pattern::url();
+
+        assert!(validator.validate("http://localhost").is_valid());
+        assert!(validator.validate("https://127.0.0.1").is_valid());
+        assert!(validator.validate("ftp://ftp.example.com").is_valid());
+
+        assert!(validator.validate("file://local").is_invalid());
+        assert!(validator.validate("mailto:test@example.com").is_invalid());
+    }
+
+    #[test]
+    fn test_pattern_phone_international() {
+        let validator = Pattern::phone();
+
+        assert!(validator.validate("+44 20 7946 0958").is_valid());
+        assert!(validator.validate("+1-800-555-1234").is_valid());
+        assert!(validator.validate("(555) 123-4567").is_valid());
+    }
+
+    #[test]
+    fn test_pattern_phone_too_short() {
+        let validator = Pattern::phone();
+        assert!(validator.validate("123456").is_invalid()); // < 7 digits
+    }
+
+    #[test]
+    fn test_pattern_alphanumeric_unicode() {
+        let validator = Pattern::alphanumeric();
+        // Unicode letters should be valid
+        assert!(validator.validate("日本語").is_valid());
+        assert!(validator.validate("Café").is_valid());
+    }
+
+    #[test]
+    fn test_pattern_digits_edge_cases() {
+        let validator = Pattern::digits();
+
+        assert!(validator.validate("0").is_valid());
+        assert!(validator.validate("0123456789").is_valid());
+
+        assert!(validator.validate("-1").is_invalid());
+        assert!(validator.validate("+1").is_invalid());
+        assert!(validator.validate("1.0").is_invalid());
+    }
+
+    #[test]
+    fn test_pattern_custom_message() {
+        let validator = Pattern::email().with_message("Invalid email format");
+        let result = validator.validate("invalid");
+        assert_eq!(result.error(), Some("Invalid email format"));
+    }
+
+    #[test]
+    fn test_pattern_clone() {
+        let validator = Pattern::email();
+        let cloned = validator.clone();
+        assert!(cloned.validate("test@example.com").is_valid());
+    }
+
+    #[test]
+    fn test_pattern_custom_glob_exact() {
+        let pattern = Pattern {
+            pattern: PatternType::Custom("hello".to_string()),
+            message: "Must be hello".to_string(),
+        };
+        assert!(pattern.validate("hello").is_valid());
+        assert!(pattern.validate("hello!").is_invalid());
+        assert!(pattern.validate("hellp").is_invalid());
+    }
+
+    #[test]
+    fn test_pattern_custom_glob_prefix() {
+        let pattern = Pattern {
+            pattern: PatternType::Custom("test*".to_string()),
+            message: "Must start with test".to_string(),
+        };
+        assert!(pattern.validate("test").is_valid());
+        assert!(pattern.validate("testing").is_valid());
+        assert!(pattern.validate("TEST").is_invalid());
+    }
+
+    #[test]
+    fn test_pattern_custom_glob_suffix() {
+        let pattern = Pattern {
+            pattern: PatternType::Custom("*.txt".to_string()),
+            message: "Must end with .txt".to_string(),
+        };
+        assert!(pattern.validate("file.txt").is_valid());
+        assert!(pattern.validate(".txt").is_valid());
+        assert!(pattern.validate("file.doc").is_invalid());
+    }
+
+    #[test]
+    fn test_pattern_custom_glob_middle() {
+        let pattern = Pattern {
+            pattern: PatternType::Custom("pre*suf".to_string()),
+            message: "error".to_string(),
+        };
+        assert!(pattern.validate("presuf").is_valid());
+        assert!(pattern.validate("pre123suf").is_valid());
+        assert!(pattern.validate("prefix_suffix").is_invalid());
+    }
+
+    #[test]
+    fn test_pattern_custom_glob_empty() {
+        let pattern = Pattern {
+            pattern: PatternType::Custom("".to_string()),
+            message: "error".to_string(),
+        };
+        // Empty pattern matches anything
+        assert!(pattern.validate("anything").is_valid());
+        assert!(pattern.validate("").is_valid());
+    }
+
+    #[test]
+    fn test_pattern_custom_glob_multiple_wildcards() {
+        let pattern = Pattern {
+            pattern: PatternType::Custom("a*b*c".to_string()),
+            message: "error".to_string(),
+        };
+        assert!(pattern.validate("abc").is_valid());
+        assert!(pattern.validate("a123b456c").is_valid());
+        assert!(pattern.validate("axbxc").is_valid());
+        assert!(pattern.validate("axbx").is_invalid());
+    }
+
+    // =========================================================================
+    // Custom Validator Tests
+    // =========================================================================
+
+    #[test]
+    fn test_custom_validator_debug() {
+        let validator = Custom::new("test", |_| ValidationResult::Valid);
+        let debug = format!("{:?}", validator);
+        assert!(debug.contains("Custom"));
+        assert!(debug.contains("test"));
+    }
+
+    #[test]
+    fn test_custom_validator_pending() {
+        let validator = Custom::new("async_check", |_| ValidationResult::Pending);
+        assert!(validator.validate("anything").is_pending());
+    }
+
+    // =========================================================================
+    // FieldState Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_field_state_is_valid_no_result() {
+        let state = FieldState::new();
+        assert!(state.is_valid()); // No result means valid
+    }
+
+    #[test]
+    fn test_field_state_is_valid_with_result() {
+        let mut state = FieldState::new();
+        state.result = Some(ValidationResult::Invalid("error".to_string()));
+        assert!(!state.is_valid());
+
+        state.result = Some(ValidationResult::Valid);
+        assert!(state.is_valid());
+    }
+
+    #[test]
+    fn test_field_state_has_errors() {
+        let mut state = FieldState::new();
+        assert!(!state.has_errors());
+
+        state.errors.push("error".to_string());
+        assert!(state.has_errors());
+    }
+
+    #[test]
+    fn test_field_state_set_value_same_value() {
+        let mut state = FieldState::with_value("test");
+        state.set_value("test"); // Same value
+        assert!(!state.dirty); // Should not be dirty
+    }
+
+    #[test]
+    fn test_field_state_default() {
+        let state = FieldState::default();
+        assert!(state.value.is_empty());
+        assert!(state.result.is_none());
+        assert!(!state.touched);
+        assert!(!state.dirty);
+        assert!(state.errors.is_empty());
+    }
+
+    #[test]
+    fn test_field_state_clone() {
+        let mut state = FieldState::with_value("test");
+        state.touched = true;
+        state.dirty = true;
+        state.errors.push("error".to_string());
+
+        let cloned = state.clone();
+        assert_eq!(cloned.value, "test");
+        assert!(cloned.touched);
+        assert!(cloned.dirty);
+        assert_eq!(cloned.errors.len(), 1);
+    }
+
+    // =========================================================================
+    // FieldConfig Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_field_config_validate_on() {
+        let config = FieldConfig::new().validate_on(ValidateOn::Blur);
+        assert_eq!(config.validate_on, ValidateOn::Blur);
+    }
+
+    #[test]
+    fn test_field_config_range() {
+        let config = FieldConfig::new().range(0.0, 100.0);
+
+        let errors = config.validate("50");
+        assert!(errors.is_empty());
+
+        let errors = config.validate("150");
+        assert!(!errors.is_empty());
+    }
+
+    #[test]
+    fn test_field_config_debug() {
+        let config = FieldConfig::new().required().min_length(3);
+        let debug = format!("{:?}", config);
+        assert!(debug.contains("FieldConfig"));
+        assert!(debug.contains("validator_count"));
+    }
+
+    #[test]
+    fn test_field_config_default() {
+        let config = FieldConfig::default();
+        assert!(config.validators.is_empty());
+        assert_eq!(config.validate_on, ValidateOn::Change);
+    }
+
+    #[test]
+    fn test_field_config_multiple_validators_all_fail() {
+        let config = FieldConfig::new().required().min_length(5).max_length(3); // Impossible constraint
+
+        let errors = config.validate("");
+        assert_eq!(errors.len(), 2); // Required and MinLength
+    }
+
+    // =========================================================================
+    // ValidateOn Tests
+    // =========================================================================
+
+    #[test]
+    fn test_validate_on_default() {
+        assert_eq!(ValidateOn::default(), ValidateOn::Change);
+    }
+
+    #[test]
+    fn test_validate_on_debug() {
+        let trigger = ValidateOn::Submit;
+        let debug = format!("{:?}", trigger);
+        assert!(debug.contains("Submit"));
+    }
+
+    #[test]
+    fn test_validate_on_clone() {
+        let trigger = ValidateOn::Blur;
+        let cloned = trigger;
+        assert_eq!(trigger, cloned);
+    }
+
+    // =========================================================================
+    // FormValidator Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_form_validator_register_field() {
+        let mut form = FormValidator::new();
+        form.register_field("simple");
+        assert_eq!(form.field_count(), 1);
+        assert!(form.field("simple").is_some());
+    }
+
+    #[test]
+    fn test_form_validator_field_nonexistent() {
+        let form = FormValidator::new();
+        assert!(form.field("nonexistent").is_none());
+        assert!(form.value("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_form_validator_errors_nonexistent() {
+        let form = FormValidator::new();
+        assert!(form.errors("nonexistent").is_empty());
+    }
+
+    #[test]
+    fn test_form_validator_set_value_nonexistent() {
+        let mut form = FormValidator::new();
+        form.set_value("nonexistent", "value"); // Should not panic
+    }
+
+    #[test]
+    fn test_form_validator_touch_nonexistent() {
+        let mut form = FormValidator::new();
+        form.touch("nonexistent"); // Should not panic
+    }
+
+    #[test]
+    fn test_form_validator_field_is_valid_nonexistent() {
+        let form = FormValidator::new();
+        assert!(!form.field_is_valid("nonexistent")); // Non-existent is not valid
+    }
+
+    #[test]
+    fn test_form_validator_validate_submit_only() {
+        let mut form = FormValidator::new();
+        form.register(
+            "field",
+            FieldConfig::new()
+                .required()
+                .validate_on(ValidateOn::Submit),
+        );
+
+        form.set_value("field", "");
+        // Should not validate on change
+        assert!(form.errors("field").is_empty());
+
+        form.touch("field");
+        // Should not validate on blur
+        assert!(form.errors("field").is_empty());
+
+        form.validate();
+        // Should validate on submit
+        assert!(!form.errors("field").is_empty());
+    }
+
+    #[test]
+    fn test_form_validator_all_errors_empty() {
+        let mut form = FormValidator::new();
+        form.register("valid", FieldConfig::new().required());
+        form.set_value("valid", "value");
+        form.validate();
+
+        let errors = form.all_errors();
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_form_validator_all_errors_multiple() {
+        let mut form = FormValidator::new();
+        form.register("field1", FieldConfig::new().required());
+        form.register("field2", FieldConfig::new().required());
+        form.validate();
+
+        let errors = form.all_errors();
+        assert_eq!(errors.len(), 2);
+    }
+
+    #[test]
+    fn test_form_validator_default() {
+        let form = FormValidator::default();
+        assert_eq!(form.field_count(), 0);
+    }
+
+    #[test]
+    fn test_form_validator_debug() {
+        let form = FormValidator::new();
+        let debug = format!("{:?}", form);
+        assert!(debug.contains("FormValidator"));
+    }
+
+    #[test]
+    fn test_form_validator_is_dirty_multiple_fields() {
+        let mut form = FormValidator::new();
+        form.register_field("a");
+        form.register_field("b");
+
+        assert!(!form.is_dirty());
+
+        form.set_value("a", "value");
+        assert!(form.is_dirty());
+    }
+
+    #[test]
+    fn test_form_validator_reset_clears_all() {
+        let mut form = FormValidator::new();
+        form.register("a", FieldConfig::new().required());
+        form.register("b", FieldConfig::new().required());
+
+        form.set_value("a", "value1");
+        form.set_value("b", "value2");
+        form.touch("a");
+        form.validate();
+
+        form.reset();
+
+        assert!(!form.is_submitted());
+        assert!(!form.is_dirty());
+        assert_eq!(form.value("a"), Some(""));
+        assert_eq!(form.value("b"), Some(""));
+    }
+
+    #[test]
+    fn test_form_validator_validate_returns_true_when_valid() {
+        let mut form = FormValidator::new();
+        form.register("name", FieldConfig::new().required());
+        form.set_value("name", "John");
+
+        assert!(form.validate());
+    }
+
+    #[test]
+    fn test_form_validator_complex_scenario() {
+        let mut form = FormValidator::new();
+
+        form.register(
+            "email",
+            FieldConfig::new()
+                .required()
+                .email()
+                .validate_on(ValidateOn::Change),
+        );
+
+        form.register(
+            "password",
+            FieldConfig::new()
+                .required()
+                .min_length(8)
+                .validate_on(ValidateOn::Blur),
+        );
+
+        form.register(
+            "age",
+            FieldConfig::new()
+                .range(18.0, 120.0)
+                .validate_on(ValidateOn::Submit),
+        );
+
+        // Fill email - validates immediately
+        form.set_value("email", "invalid");
+        assert!(!form.field_is_valid("email"));
+
+        form.set_value("email", "test@example.com");
+        assert!(form.field_is_valid("email"));
+
+        // Fill password - doesn't validate until blur
+        form.set_value("password", "short");
+        assert!(form.errors("password").is_empty());
+
+        form.touch("password");
+        assert!(!form.errors("password").is_empty());
+
+        form.set_value("password", "longpassword123");
+        form.touch("password");
+        assert!(form.errors("password").is_empty());
+
+        // Fill age - doesn't validate until submit
+        form.set_value("age", "15");
+        assert!(form.errors("age").is_empty());
+
+        // Submit validates everything
+        assert!(!form.validate()); // Age is out of range
+
+        form.set_value("age", "25");
+        assert!(form.validate());
+        assert!(form.is_valid());
+    }
 }

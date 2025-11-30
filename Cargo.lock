@@ -1196,6 +1196,7 @@ dependencies = [
  "presentar-core",
  "proptest",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
