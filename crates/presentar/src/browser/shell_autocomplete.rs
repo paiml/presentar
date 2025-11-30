@@ -96,7 +96,7 @@ struct MarkovModelData {
 }
 
 /// Embedded model for testing and convenience
-const SHELL_MODEL_BYTES: &[u8] = include_bytes!("../../../../demo/assets/aprender-shell-base.apr");
+const SHELL_MODEL_BYTES: &[u8] = include_bytes!("../../assets/aprender-shell-base.apr");
 
 impl ShellAutocomplete {
     /// Create a new ShellAutocomplete with the embedded model.
