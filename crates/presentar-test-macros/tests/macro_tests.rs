@@ -16,7 +16,7 @@ fn test_basic_macro() {
 #[presentar_test(timeout = 1000)]
 fn test_with_timeout() {
     // Verify timeout attribute is parsed
-    assert!(true);
+    assert_eq!(1 + 1, 2);
 }
 
 #[presentar_test(ignore)]
@@ -41,7 +41,7 @@ fn test_combined_attrs() {
 
 #[presentar_test]
 fn test_with_setup() {
-    let data = vec![1, 2, 3];
+    let data = [1, 2, 3];
     assert_eq!(data.len(), 3);
 }
 

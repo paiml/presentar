@@ -209,7 +209,7 @@ impl Harness {
         }
     }
 
-    #[allow(clippy::self_only_used_in_recursion)]
+    #[allow(clippy::only_used_in_recursion, clippy::self_only_used_in_recursion)]
     fn find_widget<'a>(
         &'a self,
         widget: &'a dyn Widget,
@@ -228,7 +228,7 @@ impl Harness {
         None
     }
 
-    #[allow(clippy::self_only_used_in_recursion)]
+    #[allow(clippy::only_used_in_recursion, clippy::self_only_used_in_recursion)]
     fn find_all_widgets<'a>(
         &'a self,
         widget: &'a dyn Widget,
