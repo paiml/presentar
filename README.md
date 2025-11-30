@@ -1,9 +1,22 @@
-# Presentar
+<p align="center">
+  <img src=".github/presentar-hero.svg" alt="Presentar" width="900">
+</p>
 
-WASM-first visualization and rapid application framework for the Sovereign AI Stack.
+<h1 align="center">Presentar</h1>
 
-[![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+<p align="center">
+  <b>WASM-first visualization and rapid application framework for the Sovereign AI Stack.</b>
+</p>
+
+<p align="center">
+  <a href="https://crates.io/crates/presentar"><img src="https://img.shields.io/crates/v/presentar.svg" alt="Crates.io"></a>
+  <a href="https://docs.rs/presentar"><img src="https://docs.rs/presentar/badge.svg" alt="Documentation"></a>
+  <a href="https://github.com/paiml/presentar/actions/workflows/ci.yml"><img src="https://github.com/paiml/presentar/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://img.shields.io/badge/coverage-88%25-brightgreen"><img src="https://img.shields.io/badge/coverage-88%25-brightgreen" alt="Coverage"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
+</p>
+
+---
 
 ## Features
 
