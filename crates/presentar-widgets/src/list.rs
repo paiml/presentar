@@ -852,4 +852,82 @@ mod tests {
         let msg = ListItemSelected { index: 3 };
         assert_eq!(msg.index, 3);
     }
+
+    // =========================================================================
+    // Additional Coverage Tests
+    // =========================================================================
+
+    #[test]
+    fn test_list_direction_horizontal() {
+        let list = List::new().direction(ListDirection::Horizontal);
+        assert_eq!(list.direction, ListDirection::Horizontal);
+    }
+
+    #[test]
+    fn test_list_direction_is_vertical_by_default() {
+        assert_eq!(ListDirection::default(), ListDirection::Vertical);
+    }
+
+    #[test]
+    fn test_selection_mode_is_none_by_default() {
+        assert_eq!(SelectionMode::default(), SelectionMode::None);
+    }
+
+    #[test]
+    fn test_list_with_selection_mode_multiple() {
+        let list = List::new().selection_mode(SelectionMode::Multiple);
+        assert_eq!(list.selection_mode, SelectionMode::Multiple);
+    }
+
+    #[test]
+    fn test_list_with_selection_mode_single() {
+        let list = List::new().selection_mode(SelectionMode::Single);
+        assert_eq!(list.selection_mode, SelectionMode::Single);
+    }
+
+    #[test]
+    fn test_list_gap() {
+        let list = List::new().gap(10.0);
+        assert_eq!(list.gap, 10.0);
+    }
+
+    #[test]
+    fn test_list_item_height_custom() {
+        let list = List::new().item_height(60.0);
+        assert_eq!(list.item_height, Some(60.0));
+    }
+
+    #[test]
+    fn test_list_children_mut() {
+        let mut list = List::new();
+        // Children are empty when no render callback or visible items
+        assert!(list.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_list_content_size_calculated() {
+        let items: Vec<_> = (0..5).map(|i| ListItem::new(format!("{i}"))).collect();
+        let list = List::new().items(items).item_height(40.0);
+        assert!(list.content_size() > 0.0);
+    }
+
+    #[test]
+    fn test_list_item_size_custom() {
+        let item = ListItem::new("Item").size(60.0);
+        assert_eq!(item.size, 60.0);
+    }
+
+    #[test]
+    fn test_list_item_selected_state() {
+        let item = ListItem::new("Item").selected(true);
+        assert!(item.selected);
+    }
+
+    #[test]
+    fn test_list_event_returns_none_when_empty() {
+        let mut list = List::new();
+        list.layout(Rect::new(0.0, 0.0, 300.0, 200.0));
+        let result = list.event(&Event::KeyDown { key: Key::Down });
+        assert!(result.is_none());
+    }
 }

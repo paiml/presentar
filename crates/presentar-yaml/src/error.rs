@@ -61,6 +61,7 @@ impl From<crate::expression::ExpressionError> for ParseError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::error::Error;
 
     #[test]
     fn test_parse_error_display() {
@@ -78,5 +79,72 @@ mod tests {
 
         let err = ParseError::Validation("layout is required".to_string());
         assert_eq!(err.to_string(), "Validation error: layout is required");
+    }
+
+    #[test]
+    fn test_parse_error_yaml_display() {
+        // Create a YAML error by parsing invalid YAML
+        let yaml_err: serde_yaml::Error = serde_yaml::from_str::<serde_yaml::Value>("{{").unwrap_err();
+        let err = ParseError::Yaml(yaml_err);
+        assert!(err.to_string().contains("YAML error"));
+    }
+
+    #[test]
+    fn test_parse_error_expression_display() {
+        use crate::expression::ExpressionError;
+        let expr_err = ExpressionError::UnknownTransform("missing".to_string());
+        let err = ParseError::Expression(expr_err);
+        assert!(err.to_string().contains("Expression error"));
+    }
+
+    #[test]
+    fn test_parse_error_from_yaml() {
+        let yaml_err: serde_yaml::Error = serde_yaml::from_str::<serde_yaml::Value>("{{").unwrap_err();
+        let err: ParseError = yaml_err.into();
+        assert!(matches!(err, ParseError::Yaml(_)));
+    }
+
+    #[test]
+    fn test_parse_error_from_expression() {
+        use crate::expression::ExpressionError;
+        let expr_err = ExpressionError::EmptyExpression;
+        let err: ParseError = expr_err.into();
+        assert!(matches!(err, ParseError::Expression(_)));
+    }
+
+    #[test]
+    fn test_parse_error_source_yaml() {
+        let yaml_err: serde_yaml::Error = serde_yaml::from_str::<serde_yaml::Value>("{{").unwrap_err();
+        let err = ParseError::Yaml(yaml_err);
+        assert!(err.source().is_some());
+    }
+
+    #[test]
+    fn test_parse_error_source_expression() {
+        use crate::expression::ExpressionError;
+        let expr_err = ExpressionError::InvalidArgument("bad arg".to_string());
+        let err = ParseError::Expression(expr_err);
+        assert!(err.source().is_some());
+    }
+
+    #[test]
+    fn test_parse_error_source_validation() {
+        let err = ParseError::Validation("test".to_string());
+        assert!(err.source().is_none());
+    }
+
+    #[test]
+    fn test_parse_error_source_missing_field() {
+        let err = ParseError::MissingField("test".to_string());
+        assert!(err.source().is_none());
+    }
+
+    #[test]
+    fn test_parse_error_source_invalid_value() {
+        let err = ParseError::InvalidValue {
+            field: "x".to_string(),
+            message: "y".to_string(),
+        };
+        assert!(err.source().is_none());
     }
 }

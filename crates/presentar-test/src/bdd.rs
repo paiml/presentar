@@ -595,4 +595,87 @@ mod tests {
 
         assert!(outer.all_passed());
     }
+
+    // =========================================================================
+    // Additional Coverage Tests
+    // =========================================================================
+
+    #[test]
+    fn test_expect_string_owned_to_contain() {
+        expect("hello world".to_string()).to_contain("world");
+    }
+
+    #[test]
+    fn test_expect_string_owned_to_be_empty() {
+        expect(String::new()).to_be_empty();
+    }
+
+    #[test]
+    fn test_expect_string_owned_not_empty() {
+        expect("hello".to_string()).not().to_be_empty();
+    }
+
+    #[test]
+    fn test_expect_f32_close_to_negated() {
+        expect(10.0_f32).not().to_be_close_to(1.0, 0.1);
+    }
+
+    #[test]
+    fn test_expect_f64_close_to_negated() {
+        expect(10.0_f64).not().to_be_close_to(1.0, 0.1);
+    }
+
+    #[test]
+    fn test_expect_str_not_start_with() {
+        expect("hello").not().to_start_with("xyz");
+    }
+
+    #[test]
+    fn test_expect_str_not_end_with() {
+        expect("hello").not().to_end_with("xyz");
+    }
+
+    #[test]
+    fn test_expect_option_negated() {
+        expect(Some(42)).not().to_be_none();
+        expect(None::<i32>).not().to_be_some();
+    }
+
+    #[test]
+    fn test_expect_result_negated() {
+        expect(Ok::<i32, &str>(42)).not().to_be_err();
+        expect(Err::<i32, &str>("error")).not().to_be_ok();
+    }
+
+    #[test]
+    fn test_expect_vec_not_length() {
+        expect(vec![1, 2, 3]).not().to_have_length(5);
+    }
+
+    #[test]
+    fn test_expect_bool_negated() {
+        expect(true).not().to_be_false();
+        expect(false).not().to_be_true();
+    }
+
+    #[test]
+    fn test_expect_comparison_negated() {
+        expect(3).not().to_be_greater_than(10);
+        expect(10).not().to_be_less_than(3);
+    }
+
+    #[test]
+    fn test_expect_equality_negated() {
+        expect(1).not().to_equal(2);
+    }
+
+    #[test]
+    fn test_context_passed_plus_failed() {
+        let ctx = describe("Test", |ctx| {
+            ctx.it("pass1", |_| {});
+            ctx.it("pass2", |_| {});
+            ctx.it("fail", |_| { expect(1).to_equal(2); });
+        });
+        assert_eq!(ctx.passed() + ctx.failed(), 3);
+    }
 }

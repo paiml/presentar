@@ -1071,4 +1071,65 @@ mod tests {
         let card = DataCard::new("data").column(DataColumn::new("id", "int"));
         assert!(card.has_schema());
     }
+
+    // =========================================================================
+    // Additional Coverage Tests
+    // =========================================================================
+
+    #[test]
+    fn test_data_quality_color_all_variants() {
+        let _ = DataQuality::Unknown.color();
+        let _ = DataQuality::Poor.color();
+        let _ = DataQuality::Fair.color();
+        let _ = DataQuality::Good.color();
+        let _ = DataQuality::Excellent.color();
+    }
+
+    #[test]
+    fn test_data_stats_formatted_rows_none() {
+        let stats = DataStats::new();
+        assert!(stats.formatted_rows().is_none());
+    }
+
+    #[test]
+    fn test_data_stats_formatted_size_none() {
+        let stats = DataStats::new();
+        assert!(stats.formatted_size().is_none());
+    }
+
+    #[test]
+    fn test_data_card_children_mut() {
+        let mut card = DataCard::new("data");
+        assert!(card.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_data_card_event_returns_none() {
+        let mut card = DataCard::new("data");
+        let result = card.event(&presentar_core::Event::KeyDown { key: presentar_core::Key::Down });
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_data_card_test_id_none() {
+        let card = DataCard::new("data");
+        assert!(Widget::test_id(&card).is_none());
+    }
+
+    #[test]
+    fn test_data_stats_duplicate_percentage_clamped() {
+        let stats = DataStats::new().duplicate_percentage(150.0);
+        assert_eq!(stats.duplicate_percentage, Some(100.0));
+
+        let stats = DataStats::new().duplicate_percentage(-10.0);
+        assert_eq!(stats.duplicate_percentage, Some(0.0));
+    }
+
+    #[test]
+    fn test_data_column_eq() {
+        let col1 = DataColumn::new("id", "int64");
+        let col2 = DataColumn::new("id", "int64");
+        assert_eq!(col1.name, col2.name);
+        assert_eq!(col1.dtype, col2.dtype);
+    }
 }

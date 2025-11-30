@@ -937,4 +937,58 @@ mod tests {
         let card = ModelCard::new("Model").metric(ModelMetric::new("Acc", 0.9));
         assert!(card.has_metrics());
     }
+
+    // =========================================================================
+    // Additional Coverage Tests
+    // =========================================================================
+
+    #[test]
+    fn test_model_status_color_all_variants() {
+        let _ = ModelStatus::Draft.color();
+        let _ = ModelStatus::Review.color();
+        let _ = ModelStatus::Published.color();
+        let _ = ModelStatus::Deprecated.color();
+        let _ = ModelStatus::Archived.color();
+    }
+
+    #[test]
+    fn test_model_card_children_mut() {
+        let mut card = ModelCard::new("Model");
+        assert!(card.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_model_card_event_returns_none() {
+        let mut card = ModelCard::new("Model");
+        let result = card.event(&presentar_core::Event::KeyDown { key: presentar_core::Key::Down });
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_model_card_test_id_none() {
+        let card = ModelCard::new("Model");
+        assert!(Widget::test_id(&card).is_none());
+    }
+
+    #[test]
+    fn test_model_card_bounds() {
+        let mut card = ModelCard::new("Model");
+        card.layout(Rect::new(5.0, 10.0, 320.0, 200.0));
+        assert_eq!(card.bounds.x, 5.0);
+        assert_eq!(card.bounds.y, 10.0);
+    }
+
+    #[test]
+    fn test_model_metric_eq() {
+        let m1 = ModelMetric::new("Acc", 0.95);
+        let m2 = ModelMetric::new("Acc", 0.95);
+        assert_eq!(m1.name, m2.name);
+        assert_eq!(m1.value, m2.value);
+    }
+
+    #[test]
+    fn test_model_card_name_setter() {
+        let card = ModelCard::new("Initial").name("Changed");
+        assert_eq!(card.get_name(), "Changed");
+    }
 }

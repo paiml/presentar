@@ -372,6 +372,25 @@ mod tests {
     }
 
     #[test]
+    fn test_widget_id_eq() {
+        let id1 = WidgetId::new(1);
+        let id2 = WidgetId::new(1);
+        let id3 = WidgetId::new(2);
+        assert_eq!(id1, id2);
+        assert_ne!(id1, id3);
+    }
+
+    #[test]
+    fn test_widget_id_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(WidgetId::new(1));
+        set.insert(WidgetId::new(2));
+        assert_eq!(set.len(), 2);
+        assert!(set.contains(&WidgetId::new(1)));
+    }
+
+    #[test]
     fn test_type_id() {
         let id1 = TypeId::of::<u32>();
         let id2 = TypeId::of::<u32>();
@@ -382,9 +401,24 @@ mod tests {
     }
 
     #[test]
+    fn test_type_id_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(TypeId::of::<u32>());
+        set.insert(TypeId::of::<String>());
+        assert_eq!(set.len(), 2);
+    }
+
+    #[test]
     fn test_transform2d_identity() {
         let t = Transform2D::IDENTITY;
         assert_eq!(t.matrix, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn test_transform2d_default() {
+        let t = Transform2D::default();
+        assert_eq!(t.matrix, Transform2D::IDENTITY.matrix);
     }
 
     #[test]
@@ -402,14 +436,108 @@ mod tests {
     }
 
     #[test]
+    fn test_transform2d_rotate() {
+        let t = Transform2D::rotate(std::f32::consts::PI / 2.0);
+        // 90 degrees rotation: cos = 0, sin = 1
+        assert!((t.matrix[0] - 0.0).abs() < 1e-6);
+        assert!((t.matrix[1] - 1.0).abs() < 1e-6);
+        assert!((t.matrix[2] - (-1.0)).abs() < 1e-6);
+        assert!((t.matrix[3] - 0.0).abs() < 1e-6);
+    }
+
+    #[test]
     fn test_text_style_default() {
         let style = TextStyle::default();
         assert_eq!(style.size, 16.0);
         assert_eq!(style.weight, FontWeight::Normal);
+        assert_eq!(style.style, FontStyle::Normal);
+        assert_eq!(style.color, crate::Color::BLACK);
+    }
+
+    #[test]
+    fn test_text_style_eq() {
+        let s1 = TextStyle::default();
+        let s2 = TextStyle::default();
+        assert_eq!(s1, s2);
+    }
+
+    #[test]
+    fn test_text_style_custom() {
+        let style = TextStyle {
+            size: 24.0,
+            color: crate::Color::RED,
+            weight: FontWeight::Bold,
+            style: FontStyle::Italic,
+        };
+        assert_eq!(style.size, 24.0);
+        assert_eq!(style.weight, FontWeight::Bold);
+        assert_eq!(style.style, FontStyle::Italic);
+    }
+
+    #[test]
+    fn test_font_weight_variants() {
+        let weights = [
+            FontWeight::Thin,
+            FontWeight::Light,
+            FontWeight::Normal,
+            FontWeight::Medium,
+            FontWeight::Semibold,
+            FontWeight::Bold,
+            FontWeight::Black,
+        ];
+        assert_eq!(weights.len(), 7);
+    }
+
+    #[test]
+    fn test_font_style_variants() {
+        assert_ne!(FontStyle::Normal, FontStyle::Italic);
     }
 
     #[test]
     fn test_accessible_role_default() {
         assert_eq!(AccessibleRole::default(), AccessibleRole::Generic);
+    }
+
+    #[test]
+    fn test_accessible_role_variants() {
+        let roles = [
+            AccessibleRole::Generic,
+            AccessibleRole::Button,
+            AccessibleRole::Checkbox,
+            AccessibleRole::TextInput,
+            AccessibleRole::Link,
+            AccessibleRole::Heading,
+            AccessibleRole::Image,
+            AccessibleRole::List,
+            AccessibleRole::ListItem,
+            AccessibleRole::Table,
+            AccessibleRole::TableRow,
+            AccessibleRole::TableCell,
+            AccessibleRole::Menu,
+            AccessibleRole::MenuItem,
+            AccessibleRole::ComboBox,
+            AccessibleRole::Slider,
+            AccessibleRole::ProgressBar,
+            AccessibleRole::Tab,
+            AccessibleRole::TabPanel,
+            AccessibleRole::RadioGroup,
+            AccessibleRole::Radio,
+        ];
+        assert_eq!(roles.len(), 21);
+    }
+
+    #[test]
+    fn test_layout_result_default() {
+        let result = LayoutResult::default();
+        assert_eq!(result.size, Size::new(0.0, 0.0));
+    }
+
+    #[test]
+    fn test_layout_result_with_size() {
+        let result = LayoutResult {
+            size: Size::new(100.0, 50.0),
+        };
+        assert_eq!(result.size.width, 100.0);
+        assert_eq!(result.size.height, 50.0);
     }
 }

@@ -752,4 +752,102 @@ mod tests {
         let _msg = ModalOpened;
         // Just ensure it compiles
     }
+
+    // =========================================================================
+    // Additional Coverage Tests
+    // =========================================================================
+
+    #[test]
+    fn test_modal_backdrop_none() {
+        let modal = Modal::new().backdrop(BackdropBehavior::None);
+        assert_eq!(modal.backdrop, BackdropBehavior::None);
+    }
+
+    #[test]
+    fn test_modal_backdrop_static() {
+        let modal = Modal::new().backdrop(BackdropBehavior::Static);
+        assert_eq!(modal.backdrop, BackdropBehavior::Static);
+    }
+
+    #[test]
+    fn test_modal_size_small() {
+        assert_eq!(ModalSize::Small.max_width(), 300.0);
+    }
+
+    #[test]
+    fn test_modal_size_full_width() {
+        assert_eq!(ModalSize::FullWidth.max_width(), f32::MAX);
+    }
+
+    #[test]
+    fn test_modal_children_mut_empty() {
+        let mut modal = Modal::new();
+        assert!(modal.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_modal_calculate_bounds_with_title() {
+        let modal = Modal::new().title("Test Title");
+        let viewport = Rect::new(0.0, 0.0, 1024.0, 768.0);
+        let bounds = modal.calculate_modal_bounds(viewport);
+        assert!(bounds.height > 0.0);
+    }
+
+    #[test]
+    fn test_modal_layout_animation_closes() {
+        let mut modal = Modal::new().open(true);
+        modal.layout(Rect::new(0.0, 0.0, 1024.0, 768.0));
+        // Progress should increase
+        let prog1 = modal.animation_progress;
+        modal.open = false;
+        modal.layout(Rect::new(0.0, 0.0, 1024.0, 768.0));
+        // Progress should decrease
+        assert!(modal.animation_progress < prog1);
+    }
+
+    #[test]
+    fn test_modal_event_not_open_returns_none() {
+        let mut modal = Modal::new();
+        let result = modal.event(&Event::KeyDown { key: Key::Escape });
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_modal_other_key_does_nothing() {
+        let mut modal = Modal::new().open(true);
+        modal.layout(Rect::new(0.0, 0.0, 1024.0, 768.0));
+        let result = modal.event(&Event::KeyDown { key: Key::Tab });
+        assert!(result.is_none());
+        assert!(modal.is_open());
+    }
+
+    #[test]
+    fn test_close_reason_programmatic() {
+        let reason = CloseReason::Programmatic;
+        assert_eq!(reason, CloseReason::Programmatic);
+    }
+
+    #[test]
+    fn test_close_reason_close_button() {
+        let reason = CloseReason::CloseButton;
+        assert_eq!(reason, CloseReason::CloseButton);
+    }
+
+    #[test]
+    fn test_modal_size_custom_value() {
+        let size = ModalSize::Custom(750);
+        assert_eq!(size.max_width(), 750.0);
+    }
+
+    #[test]
+    fn test_modal_backdrop_eq() {
+        assert_eq!(BackdropBehavior::CloseOnClick, BackdropBehavior::CloseOnClick);
+        assert_ne!(BackdropBehavior::CloseOnClick, BackdropBehavior::Static);
+    }
+
+    #[test]
+    fn test_modal_size_eq() {
+        assert_eq!(ModalSize::Medium, ModalSize::Medium);
+        assert_ne!(ModalSize::Small, ModalSize::Large);
+    }
 }

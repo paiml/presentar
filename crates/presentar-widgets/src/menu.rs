@@ -1028,4 +1028,209 @@ mod tests {
     fn test_menu_closed_message() {
         let _msg = MenuClosed;
     }
+
+    // =========================================================================
+    // Additional Coverage Tests
+    // =========================================================================
+
+    #[test]
+    fn test_menu_shortcut_on_non_action() {
+        // shortcut() should do nothing on checkbox items
+        let item = MenuItem::checkbox("Show", "show", false).shortcut("Ctrl+S");
+        match item {
+            MenuItem::Checkbox { .. } => {} // Still checkbox, shortcut not applied
+            _ => panic!("Expected Checkbox"),
+        }
+    }
+
+    #[test]
+    fn test_menu_disabled_checkbox() {
+        let item = MenuItem::checkbox("Show", "show", true).disabled(true);
+        match item {
+            MenuItem::Checkbox { disabled, .. } => assert!(disabled),
+            _ => panic!("Expected Checkbox"),
+        }
+    }
+
+    #[test]
+    fn test_menu_disabled_submenu() {
+        let item = MenuItem::submenu("More", vec![]).disabled(true);
+        match item {
+            MenuItem::Submenu { disabled, .. } => assert!(disabled),
+            _ => panic!("Expected Submenu"),
+        }
+    }
+
+    #[test]
+    fn test_menu_disabled_separator_no_op() {
+        // Calling disabled on separator should be a no-op
+        let item = MenuItem::separator().disabled(true);
+        assert!(matches!(item, MenuItem::Separator));
+    }
+
+    #[test]
+    fn test_menu_submenu_not_selectable_when_disabled() {
+        let item = MenuItem::submenu("More", vec![]).disabled(true);
+        assert!(!item.is_selectable());
+    }
+
+    #[test]
+    fn test_menu_context_menu_trigger() {
+        let menu = Menu::new().trigger(MenuTrigger::ContextMenu);
+        assert_eq!(menu.trigger, MenuTrigger::ContextMenu);
+    }
+
+    #[test]
+    fn test_menu_hover_trigger() {
+        let menu = Menu::new().trigger(MenuTrigger::Hover);
+        assert_eq!(menu.trigger, MenuTrigger::Hover);
+    }
+
+    #[test]
+    fn test_menu_background_color() {
+        let menu = Menu::new().background_color(Color::RED);
+        assert_eq!(menu.background_color, Color::RED);
+    }
+
+    #[test]
+    fn test_menu_hover_color() {
+        let menu = Menu::new().hover_color(Color::BLUE);
+        assert_eq!(menu.hover_color, Color::BLUE);
+    }
+
+    #[test]
+    fn test_menu_text_color() {
+        let menu = Menu::new().text_color(Color::GREEN);
+        assert_eq!(menu.text_color, Color::GREEN);
+    }
+
+    #[test]
+    fn test_menu_next_selectable_empty() {
+        let menu = Menu::new();
+        assert!(menu.next_selectable(None, true).is_none());
+        assert!(menu.next_selectable(None, false).is_none());
+    }
+
+    #[test]
+    fn test_menu_next_selectable_all_disabled() {
+        let menu = Menu::new().items(vec![
+            MenuItem::separator(),
+            MenuItem::action("Cut", "cut").disabled(true),
+            MenuItem::separator(),
+        ]);
+        assert!(menu.next_selectable(None, true).is_none());
+    }
+
+    #[test]
+    fn test_menu_next_selectable_wrap_forward() {
+        let menu = Menu::new().items(vec![
+            MenuItem::action("A", "a"),
+            MenuItem::action("B", "b"),
+        ]);
+        // From last item, should wrap to first
+        assert_eq!(menu.next_selectable(Some(1), true), Some(0));
+    }
+
+    #[test]
+    fn test_menu_next_selectable_wrap_backward() {
+        let menu = Menu::new().items(vec![
+            MenuItem::action("A", "a"),
+            MenuItem::action("B", "b"),
+        ]);
+        // From first item, should wrap to last
+        assert_eq!(menu.next_selectable(Some(0), false), Some(1));
+    }
+
+    #[test]
+    fn test_menu_children_empty() {
+        let menu = Menu::new();
+        assert!(menu.children().is_empty());
+    }
+
+    #[test]
+    fn test_menu_children_mut_empty() {
+        let mut menu = Menu::new();
+        assert!(menu.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_menu_bounds() {
+        let mut menu = Menu::new();
+        menu.layout(Rect::new(10.0, 20.0, 200.0, 32.0));
+        assert_eq!(menu.bounds(), Rect::new(10.0, 20.0, 200.0, 32.0));
+    }
+
+    #[test]
+    fn test_menu_trigger_default() {
+        assert_eq!(MenuTrigger::default(), MenuTrigger::Click);
+    }
+
+    #[test]
+    fn test_menu_event_closed_returns_none() {
+        let mut menu = Menu::new();
+        // Event on closed menu should return None
+        let result = menu.event(&Event::KeyDown { key: Key::Down });
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_menu_enter_selects_item() {
+        let mut menu = Menu::new().items(vec![MenuItem::action("Cut", "cut")]);
+        menu.show();
+        menu.highlighted_index = Some(0);
+        menu.layout(Rect::new(0.0, 0.0, 200.0, 32.0));
+
+        let result = menu.event(&Event::KeyDown { key: Key::Enter });
+        assert!(result.is_some());
+        assert!(!menu.is_open());
+    }
+
+    #[test]
+    fn test_menu_space_selects_item() {
+        let mut menu = Menu::new().items(vec![MenuItem::action("Cut", "cut")]);
+        menu.show();
+        menu.highlighted_index = Some(0);
+        menu.layout(Rect::new(0.0, 0.0, 200.0, 32.0));
+
+        let result = menu.event(&Event::KeyDown { key: Key::Space });
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_menu_enter_on_checkbox_toggles() {
+        let mut menu = Menu::new().items(vec![MenuItem::checkbox("Show", "show", false)]);
+        menu.show();
+        menu.highlighted_index = Some(0);
+        menu.layout(Rect::new(0.0, 0.0, 200.0, 32.0));
+
+        let result = menu.event(&Event::KeyDown { key: Key::Enter });
+        assert!(result.is_some());
+        // Menu stays open for checkbox
+        assert!(menu.is_open());
+    }
+
+    #[test]
+    fn test_menu_enter_on_disabled_does_nothing() {
+        let mut menu = Menu::new().items(vec![MenuItem::action("Cut", "cut").disabled(true)]);
+        menu.show();
+        menu.highlighted_index = Some(0);
+        menu.layout(Rect::new(0.0, 0.0, 200.0, 32.0));
+
+        let result = menu.event(&Event::KeyDown { key: Key::Enter });
+        assert!(result.is_none());
+        assert!(menu.is_open()); // Still open
+    }
+
+    #[test]
+    fn test_menu_up_arrow_navigation() {
+        let mut menu = Menu::new().items(vec![
+            MenuItem::action("A", "a"),
+            MenuItem::action("B", "b"),
+        ]);
+        menu.show();
+        menu.highlighted_index = Some(1);
+
+        menu.event(&Event::KeyDown { key: Key::Up });
+        assert_eq!(menu.highlighted_index, Some(0));
+    }
 }

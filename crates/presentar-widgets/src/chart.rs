@@ -23,6 +23,10 @@ pub enum ChartType {
     Pie,
     /// Histogram
     Histogram,
+    /// Heatmap - displays matrix data with color encoding
+    Heatmap,
+    /// Box plot - displays statistical distributions
+    BoxPlot,
 }
 
 /// A single data series for the chart.
@@ -348,6 +352,18 @@ impl Chart {
     #[must_use]
     pub fn pie() -> Self {
         Self::new().chart_type(ChartType::Pie)
+    }
+
+    /// Create a heatmap chart.
+    #[must_use]
+    pub fn heatmap() -> Self {
+        Self::new().chart_type(ChartType::Heatmap)
+    }
+
+    /// Create a box plot chart.
+    #[must_use]
+    pub fn boxplot() -> Self {
+        Self::new().chart_type(ChartType::BoxPlot)
     }
 
     /// Set chart type.
@@ -718,6 +734,130 @@ impl Chart {
         }
     }
 
+    /// Paint heatmap chart - displays matrix data with color encoding.
+    fn paint_heatmap(&self, canvas: &mut dyn Canvas, plot: &Rect, bounds: &(f64, f64, f64, f64)) {
+        let (_, _, y_min, y_max) = *bounds;
+        let y_range = (y_max - y_min).max(1e-10);
+
+        // For heatmap, we treat each series as a row and each point as a cell
+        let row_count = self.series.len();
+        if row_count == 0 {
+            return;
+        }
+
+        let col_count = self
+            .series
+            .iter()
+            .map(|s| s.points.len())
+            .max()
+            .unwrap_or(1);
+
+        let cell_width = plot.width / col_count as f32;
+        let cell_height = plot.height / row_count as f32;
+
+        for (row, series) in self.series.iter().enumerate() {
+            for (col, &(_, value)) in series.points.iter().enumerate() {
+                // Map value to color intensity (blue to red)
+                let t = ((value - y_min) / y_range) as f32;
+                let color = Color::new(t, 0.2, 1.0 - t, 1.0);
+
+                let rect = Rect::new(
+                    (col as f32).mul_add(cell_width, plot.x),
+                    (row as f32).mul_add(cell_height, plot.y),
+                    cell_width - 1.0,
+                    cell_height - 1.0,
+                );
+                canvas.fill_rect(rect, color);
+            }
+        }
+    }
+
+    /// Paint box plot - displays statistical distributions.
+    fn paint_boxplot(&self, canvas: &mut dyn Canvas, plot: &Rect, bounds: &(f64, f64, f64, f64)) {
+        let (_, _, y_min, y_max) = *bounds;
+        let y_range = (y_max - y_min).max(1e-10);
+
+        let series_count = self.series.len();
+        if series_count == 0 {
+            return;
+        }
+
+        let box_width = (plot.width / series_count as f32) * 0.6;
+        let gap = (plot.width / series_count as f32) * 0.2;
+
+        for (i, series) in self.series.iter().enumerate() {
+            if series.points.len() < 5 {
+                continue; // Need at least 5 points for box plot (min, q1, median, q3, max)
+            }
+
+            // Sort points by y value for quartile calculation
+            let mut values: Vec<f64> = series.points.iter().map(|(_, y)| *y).collect();
+            values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+            let min_val = values[0];
+            let q1 = values[values.len() / 4];
+            let median = values[values.len() / 2];
+            let q3 = values[3 * values.len() / 4];
+            let max_val = values[values.len() - 1];
+
+            let x_center = (i as f32).mul_add(plot.width / series_count as f32, plot.x + gap);
+
+            // Map y values to screen coordinates
+            let map_y = |v: f64| -> f32 {
+                let t = (v - y_min) / y_range;
+                (1.0 - t as f32).mul_add(plot.height, plot.y)
+            };
+
+            let y_min_px = map_y(min_val);
+            let y_q1 = map_y(q1);
+            let y_median = map_y(median);
+            let y_q3 = map_y(q3);
+            let y_max_px = map_y(max_val);
+
+            // Draw whiskers (vertical lines from min to q1 and q3 to max)
+            canvas.draw_line(
+                Point::new(x_center + box_width / 2.0, y_min_px),
+                Point::new(x_center + box_width / 2.0, y_q1),
+                series.color,
+                1.0,
+            );
+            canvas.draw_line(
+                Point::new(x_center + box_width / 2.0, y_q3),
+                Point::new(x_center + box_width / 2.0, y_max_px),
+                series.color,
+                1.0,
+            );
+
+            // Draw box (from q1 to q3)
+            let box_rect = Rect::new(x_center, y_q3, box_width, y_q1 - y_q3);
+            canvas.fill_rect(box_rect, series.color);
+            canvas.stroke_rect(box_rect, Color::new(0.0, 0.0, 0.0, 1.0), 1.0);
+
+            // Draw median line
+            canvas.draw_line(
+                Point::new(x_center, y_median),
+                Point::new(x_center + box_width, y_median),
+                Color::new(0.0, 0.0, 0.0, 1.0),
+                2.0,
+            );
+
+            // Draw caps (horizontal lines at min and max)
+            let cap_width = box_width * 0.3;
+            canvas.draw_line(
+                Point::new(x_center + box_width / 2.0 - cap_width / 2.0, y_min_px),
+                Point::new(x_center + box_width / 2.0 + cap_width / 2.0, y_min_px),
+                series.color,
+                1.0,
+            );
+            canvas.draw_line(
+                Point::new(x_center + box_width / 2.0 - cap_width / 2.0, y_max_px),
+                Point::new(x_center + box_width / 2.0 + cap_width / 2.0, y_max_px),
+                series.color,
+                1.0,
+            );
+        }
+    }
+
     /// Paint legend.
     fn paint_legend(&self, canvas: &mut dyn Canvas) {
         if self.legend == LegendPosition::None || self.series.is_empty() {
@@ -831,6 +971,8 @@ impl Widget for Chart {
             ChartType::Bar | ChartType::Histogram => self.paint_bar(canvas, &plot, &bounds),
             ChartType::Scatter => self.paint_scatter(canvas, &plot, &bounds),
             ChartType::Pie => self.paint_pie(canvas, &plot),
+            ChartType::Heatmap => self.paint_heatmap(canvas, &plot, &bounds),
+            ChartType::BoxPlot => self.paint_boxplot(canvas, &plot, &bounds),
         }
 
         // Draw legend
@@ -893,8 +1035,22 @@ mod tests {
             ChartType::Area,
             ChartType::Pie,
             ChartType::Histogram,
+            ChartType::Heatmap,
+            ChartType::BoxPlot,
         ];
-        assert_eq!(types.len(), 6);
+        assert_eq!(types.len(), 8);
+    }
+
+    #[test]
+    fn test_chart_heatmap() {
+        let chart = Chart::new().chart_type(ChartType::Heatmap);
+        assert_eq!(chart.get_chart_type(), ChartType::Heatmap);
+    }
+
+    #[test]
+    fn test_chart_boxplot() {
+        let chart = Chart::new().chart_type(ChartType::BoxPlot);
+        assert_eq!(chart.get_chart_type(), ChartType::BoxPlot);
     }
 
     // ===== DataSeries Tests =====
@@ -1322,5 +1478,115 @@ mod tests {
     fn test_chart_has_data_with_points() {
         let chart = Chart::new().series(DataSeries::new("Data").point(1.0, 1.0));
         assert!(chart.has_data());
+    }
+
+    // =========================================================================
+    // Additional Coverage Tests
+    // =========================================================================
+
+    #[test]
+    fn test_data_series_eq() {
+        let s1 = DataSeries::new("A").point(1.0, 2.0);
+        let s2 = DataSeries::new("A").point(1.0, 2.0);
+        assert_eq!(s1, s2);
+    }
+
+    #[test]
+    fn test_chart_type_eq() {
+        assert_eq!(ChartType::Line, ChartType::Line);
+        assert_ne!(ChartType::Line, ChartType::Bar);
+    }
+
+    #[test]
+    fn test_legend_position_all_variants() {
+        let positions = [
+            LegendPosition::None,
+            LegendPosition::TopRight,
+            LegendPosition::TopLeft,
+            LegendPosition::BottomRight,
+            LegendPosition::BottomLeft,
+        ];
+        assert_eq!(positions.len(), 5);
+    }
+
+    #[test]
+    fn test_chart_children_mut() {
+        let mut chart = Chart::new();
+        assert!(chart.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_chart_event_returns_none() {
+        let mut chart = Chart::new();
+        let result = chart.event(&presentar_core::Event::KeyDown { key: presentar_core::Key::Down });
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_axis_default_colors() {
+        let axis = Axis::default();
+        assert_eq!(axis.color.a, 1.0);
+        assert_eq!(axis.grid_color.a, 1.0);
+    }
+
+    #[test]
+    fn test_chart_get_series() {
+        let chart = Chart::new()
+            .series(DataSeries::new("A"))
+            .series(DataSeries::new("B"));
+        assert_eq!(chart.get_series().len(), 2);
+        assert_eq!(chart.get_series()[0].name, "A");
+    }
+
+    #[test]
+    fn test_chart_histogram() {
+        let chart = Chart::new().chart_type(ChartType::Histogram);
+        assert_eq!(chart.get_chart_type(), ChartType::Histogram);
+    }
+
+    #[test]
+    fn test_chart_data_bounds_single_point() {
+        let chart = Chart::new()
+            .series(DataSeries::new("S").point(5.0, 10.0));
+        let bounds = chart.data_bounds().unwrap();
+        assert_eq!(bounds.0, 5.0); // x_min
+        assert_eq!(bounds.1, 5.0); // x_max (same as min for single point)
+    }
+
+    #[test]
+    fn test_chart_legend_none() {
+        let chart = Chart::new().legend(LegendPosition::None);
+        assert_eq!(chart.legend, LegendPosition::None);
+    }
+
+    #[test]
+    fn test_chart_legend_top_left() {
+        let chart = Chart::new().legend(LegendPosition::TopLeft);
+        assert_eq!(chart.legend, LegendPosition::TopLeft);
+    }
+
+    #[test]
+    fn test_chart_legend_bottom_left() {
+        let chart = Chart::new().legend(LegendPosition::BottomLeft);
+        assert_eq!(chart.legend, LegendPosition::BottomLeft);
+    }
+
+    #[test]
+    fn test_chart_test_id_none() {
+        let chart = Chart::new();
+        assert!(Widget::test_id(&chart).is_none());
+    }
+
+    #[test]
+    fn test_chart_accessible_name_none() {
+        let chart = Chart::new();
+        assert!(Widget::accessible_name(&chart).is_none());
+    }
+
+    #[test]
+    fn test_data_series_default_values() {
+        let series = DataSeries::new("Test");
+        assert_eq!(series.line_width, 2.0);
+        assert_eq!(series.point_size, 4.0);
     }
 }
