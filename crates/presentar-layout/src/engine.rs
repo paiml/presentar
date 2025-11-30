@@ -187,7 +187,7 @@ impl LayoutEngine {
 
     /// Get cache statistics.
     #[must_use]
-    pub fn cache_stats(&self) -> (usize, usize) {
+    pub const fn cache_stats(&self) -> (usize, usize) {
         (self.cache.hits(), self.cache.misses())
     }
 }

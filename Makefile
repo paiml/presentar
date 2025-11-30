@@ -151,3 +151,38 @@ check:
 # Generate documentation
 doc:
 	@cargo doc --workspace --no-deps --open
+
+# =============================================================================
+# WASM Browser Runtime
+# =============================================================================
+
+# Build WASM package
+wasm: ## Build WASM package for browser
+	@echo "🌐 Building WASM package..."
+	@which wasm-pack >/dev/null 2>&1 || (echo "📦 Installing wasm-pack..." && cargo install wasm-pack)
+	@wasm-pack build crates/presentar --target web --out-dir ../../www/pkg
+	@echo "✅ WASM package built to www/pkg/"
+
+# Serve WASM demo
+serve: wasm ## Build and serve WASM demo
+	@echo "🚀 Starting development server..."
+	@echo "   Open http://localhost:8080 in your browser"
+	@cd www && python3 -m http.server 8080
+
+# Build optimized WASM for production
+wasm-release: ## Build optimized WASM for production
+	@echo "📦 Building optimized WASM..."
+	@wasm-pack build crates/presentar --target web --out-dir ../../www/pkg --release
+	@which wasm-opt >/dev/null 2>&1 && wasm-opt -Oz www/pkg/presentar_bg.wasm -o www/pkg/presentar_bg.wasm || true
+	@echo "✅ Optimized WASM built"
+	@ls -lh www/pkg/*.wasm 2>/dev/null || true
+
+# Run WASM tests in headless browser (no Playwright)
+wasm-test: ## Run WASM tests in headless browser
+	@echo "🧪 Running WASM browser tests..."
+	@wasm-pack test --headless --chrome crates/presentar
+	@echo "✅ WASM tests passed"
+
+# Run WASM tests in Firefox
+wasm-test-firefox: ## Run WASM tests in Firefox
+	@wasm-pack test --headless --firefox crates/presentar

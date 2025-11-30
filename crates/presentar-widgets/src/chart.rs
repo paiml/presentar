@@ -543,9 +543,11 @@ impl Chart {
             for i in 0..=self.x_axis.grid_lines {
                 let t = i as f32 / self.x_axis.grid_lines as f32;
                 let x = t.mul_add(plot.width, plot.x);
-                canvas.fill_rect(
-                    Rect::new(x, plot.y, 1.0, plot.height),
+                canvas.draw_line(
+                    Point::new(x, plot.y),
+                    Point::new(x, plot.y + plot.height),
                     self.x_axis.grid_color,
+                    1.0,
                 );
             }
         }
@@ -555,9 +557,11 @@ impl Chart {
             for i in 0..=self.y_axis.grid_lines {
                 let t = i as f32 / self.y_axis.grid_lines as f32;
                 let y = t.mul_add(plot.height, plot.y);
-                canvas.fill_rect(
-                    Rect::new(plot.x, y, plot.width, 1.0),
+                canvas.draw_line(
+                    Point::new(plot.x, y),
+                    Point::new(plot.x + plot.width, y),
                     self.y_axis.grid_color,
+                    1.0,
                 );
             }
         }
@@ -601,45 +605,34 @@ impl Chart {
                 continue;
             }
 
-            // Draw line segments
-            let mut prev: Option<Point> = None;
-            for &(x, y) in &series.points {
-                let pt = self.map_point(x, y, bounds, plot);
-                if let Some(p) = prev {
-                    // Draw line as thin rectangle
-                    let dx = pt.x - p.x;
-                    let dy = pt.y - p.y;
-                    let len = dx.hypot(dy);
-                    if len > 0.0 {
-                        // Simplified: draw horizontal/vertical segments
-                        canvas.fill_rect(
-                            Rect::new(
-                                p.x.min(pt.x),
-                                p.y.min(pt.y),
-                                dx.abs().max(series.line_width),
-                                dy.abs().max(series.line_width),
-                            ),
-                            series.color,
-                        );
-                    }
+            // Collect points for the path
+            let path_points: Vec<Point> = series
+                .points
+                .iter()
+                .map(|&(x, y)| self.map_point(x, y, bounds, plot))
+                .collect();
+
+            // Draw line using proper path
+            canvas.draw_path(&path_points, series.color, series.line_width);
+
+            // For area charts, fill the area under the line
+            if series.fill {
+                let mut fill_points = path_points.clone();
+                // Add bottom corners
+                if let (Some(first), Some(last)) = (path_points.first(), path_points.last()) {
+                    fill_points.push(Point::new(last.x, plot.y + plot.height));
+                    fill_points.push(Point::new(first.x, plot.y + plot.height));
                 }
-                prev = Some(pt);
+                let mut fill_color = series.color;
+                fill_color.a = 0.3; // Semi-transparent fill
+                canvas.fill_polygon(&fill_points, fill_color);
             }
 
-            // Draw points
+            // Draw points as circles
             if series.show_points {
                 for &(x, y) in &series.points {
                     let pt = self.map_point(x, y, bounds, plot);
-                    let half = series.point_size / 2.0;
-                    canvas.fill_rect(
-                        Rect::new(
-                            pt.x - half,
-                            pt.y - half,
-                            series.point_size,
-                            series.point_size,
-                        ),
-                        series.color,
-                    );
+                    canvas.fill_circle(pt, series.point_size / 2.0, series.color);
                 }
             }
         }
@@ -687,16 +680,7 @@ impl Chart {
         for series in &self.series {
             for &(x, y) in &series.points {
                 let pt = self.map_point(x, y, bounds, plot);
-                let half = series.point_size / 2.0;
-                canvas.fill_rect(
-                    Rect::new(
-                        pt.x - half,
-                        pt.y - half,
-                        series.point_size,
-                        series.point_size,
-                    ),
-                    series.color,
-                );
+                canvas.fill_circle(pt, series.point_size / 2.0, series.color);
             }
         }
     }
@@ -717,23 +701,19 @@ impl Chart {
         let cx = plot.x + plot.width / 2.0;
         let cy = plot.y + plot.height / 2.0;
         let radius = plot.width.min(plot.height) / 2.0 * 0.8;
+        let center = Point::new(cx, cy);
 
-        // Draw pie segments as colored rectangles (simplified)
-        let mut offset = 0.0;
+        // Draw pie segments as arcs
+        let mut start_angle: f32 = -std::f32::consts::FRAC_PI_2; // Start from top
         for series in &self.series {
             for &(_, y) in &series.points {
-                let fraction = y / total;
-                let segment_height = (fraction as f32) * plot.height;
-                canvas.fill_rect(
-                    Rect::new(
-                        cx - radius,
-                        cy - radius + offset,
-                        radius * 2.0,
-                        segment_height,
-                    ),
-                    series.color,
-                );
-                offset += segment_height;
+                let fraction = (y / total) as f32;
+                let sweep = fraction * std::f32::consts::TAU;
+                let end_angle = start_angle + sweep;
+
+                canvas.fill_arc(center, radius, start_angle, end_angle, series.color);
+
+                start_angle = end_angle;
             }
         }
     }

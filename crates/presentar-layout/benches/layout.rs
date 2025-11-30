@@ -155,6 +155,79 @@ fn bench_constraints_operations(c: &mut Criterion) {
     });
 }
 
+fn bench_grid_12_column(c: &mut Criterion) {
+    use presentar_layout::{compute_grid_layout, GridTemplate};
+
+    c.bench_function("grid_12_column_layout", |b| {
+        let template = GridTemplate::twelve_column();
+        let child_sizes: Vec<(f32, f32)> = (0..12)
+            .map(|_| (100.0, 50.0))
+            .collect();
+
+        b.iter(|| {
+            compute_grid_layout(
+                black_box(&template),
+                black_box(1200.0),
+                black_box(600.0),
+                black_box(&child_sizes),
+            )
+        })
+    });
+}
+
+fn bench_grid_auto_placement(c: &mut Criterion) {
+    use presentar_layout::{auto_place_items, GridAutoFlow, GridItem, GridTemplate, TrackSize};
+
+    c.bench_function("grid_auto_place_24_items", |b| {
+        let template = GridTemplate {
+            columns: vec![TrackSize::Fr(1.0); 4],
+            rows: vec![TrackSize::Fr(1.0); 6],
+            ..GridTemplate::default()
+        };
+        let items: Vec<GridItem> = (0..24)
+            .map(|_| GridItem::new())
+            .collect();
+
+        b.iter(|| {
+            auto_place_items(
+                black_box(&template),
+                black_box(&items),
+                black_box(GridAutoFlow::RowDense),
+            )
+        })
+    });
+}
+
+fn bench_grid_track_sizing(c: &mut Criterion) {
+    use presentar_layout::{compute_grid_layout, GridTemplate, TrackSize};
+
+    c.bench_function("grid_mixed_track_sizing", |b| {
+        let template = GridTemplate {
+            columns: vec![
+                TrackSize::Px(100.0),
+                TrackSize::Fr(1.0),
+                TrackSize::Auto,
+                TrackSize::Fr(2.0),
+                TrackSize::Px(50.0),
+            ],
+            rows: vec![TrackSize::Fr(1.0); 3],
+            ..GridTemplate::default()
+        };
+        let child_sizes: Vec<(f32, f32)> = (0..15)
+            .map(|_| (80.0, 40.0))
+            .collect();
+
+        b.iter(|| {
+            compute_grid_layout(
+                black_box(&template),
+                black_box(800.0),
+                black_box(400.0),
+                black_box(&child_sizes),
+            )
+        })
+    });
+}
+
 criterion_group!(
     benches,
     bench_layout_single_widget,
@@ -163,5 +236,8 @@ criterion_group!(
     bench_layout_nested_3_levels,
     bench_layout_readonly,
     bench_constraints_operations,
+    bench_grid_12_column,
+    bench_grid_auto_placement,
+    bench_grid_track_sizing,
 );
 criterion_main!(benches);

@@ -154,6 +154,79 @@ impl Canvas for RecordingCanvas {
         });
     }
 
+    fn draw_line(&mut self, from: Point, to: Point, color: Color, width: f32) {
+        self.commands.push(DrawCommand::Path {
+            points: vec![from, to],
+            closed: false,
+            style: StrokeStyle {
+                color,
+                width,
+                ..Default::default()
+            },
+        });
+    }
+
+    fn fill_circle(&mut self, center: Point, radius: f32, color: Color) {
+        self.commands
+            .push(DrawCommand::filled_circle(center, radius, color));
+    }
+
+    fn stroke_circle(&mut self, center: Point, radius: f32, color: Color, width: f32) {
+        self.commands.push(DrawCommand::Circle {
+            center,
+            radius,
+            style: BoxStyle::stroke(StrokeStyle {
+                color,
+                width,
+                ..Default::default()
+            }),
+        });
+    }
+
+    fn fill_arc(
+        &mut self,
+        center: Point,
+        radius: f32,
+        start_angle: f32,
+        end_angle: f32,
+        color: Color,
+    ) {
+        self.commands.push(DrawCommand::Arc {
+            center,
+            radius,
+            start_angle,
+            end_angle,
+            color,
+        });
+    }
+
+    fn draw_path(&mut self, points: &[Point], color: Color, width: f32) {
+        self.commands.push(DrawCommand::Path {
+            points: points.to_vec(),
+            closed: false,
+            style: StrokeStyle {
+                color,
+                width,
+                ..Default::default()
+            },
+        });
+    }
+
+    fn fill_polygon(&mut self, points: &[Point], color: Color) {
+        // For filled polygons, we use a closed path
+        // A proper implementation would triangulate the polygon
+        // For now, we record the vertices
+        self.commands.push(DrawCommand::Path {
+            points: points.to_vec(),
+            closed: true,
+            style: StrokeStyle {
+                color,
+                width: 0.0, // Fill only
+                ..Default::default()
+            },
+        });
+    }
+
     fn push_clip(&mut self, rect: Rect) {
         self.clip_stack.push(rect);
     }
@@ -544,6 +617,146 @@ mod tests {
         assert_eq!(canvas.command_count(), 1);
         match &canvas.commands()[0] {
             DrawCommand::Path { points, .. } => assert!(points.is_empty()),
+            _ => panic!("Expected Path command"),
+        }
+    }
+
+    // =========================================================================
+    // Canvas Trait Implementation Tests
+    // =========================================================================
+
+    #[test]
+    fn test_canvas_draw_line() {
+        let mut canvas = RecordingCanvas::new();
+        Canvas::draw_line(
+            &mut canvas,
+            Point::new(0.0, 0.0),
+            Point::new(100.0, 100.0),
+            Color::RED,
+            2.0,
+        );
+
+        assert_eq!(canvas.command_count(), 1);
+        match &canvas.commands()[0] {
+            DrawCommand::Path { points, style, .. } => {
+                assert_eq!(points.len(), 2);
+                assert_eq!(style.color, Color::RED);
+                assert_eq!(style.width, 2.0);
+            }
+            _ => panic!("Expected Path command"),
+        }
+    }
+
+    #[test]
+    fn test_canvas_fill_circle() {
+        let mut canvas = RecordingCanvas::new();
+        Canvas::fill_circle(&mut canvas, Point::new(50.0, 50.0), 25.0, Color::GREEN);
+
+        assert_eq!(canvas.command_count(), 1);
+        match &canvas.commands()[0] {
+            DrawCommand::Circle {
+                center,
+                radius,
+                style,
+            } => {
+                assert_eq!(*center, Point::new(50.0, 50.0));
+                assert_eq!(*radius, 25.0);
+                assert_eq!(style.fill, Some(Color::GREEN));
+            }
+            _ => panic!("Expected Circle command"),
+        }
+    }
+
+    #[test]
+    fn test_canvas_stroke_circle() {
+        let mut canvas = RecordingCanvas::new();
+        Canvas::stroke_circle(&mut canvas, Point::new(50.0, 50.0), 20.0, Color::BLUE, 3.0);
+
+        assert_eq!(canvas.command_count(), 1);
+        match &canvas.commands()[0] {
+            DrawCommand::Circle { radius, style, .. } => {
+                assert_eq!(*radius, 20.0);
+                let stroke = style.stroke.as_ref().unwrap();
+                assert_eq!(stroke.color, Color::BLUE);
+                assert_eq!(stroke.width, 3.0);
+            }
+            _ => panic!("Expected Circle command"),
+        }
+    }
+
+    #[test]
+    fn test_canvas_fill_arc() {
+        let mut canvas = RecordingCanvas::new();
+        Canvas::fill_arc(
+            &mut canvas,
+            Point::new(100.0, 100.0),
+            50.0,
+            0.0,
+            std::f32::consts::PI,
+            Color::new(1.0, 0.5, 0.0, 1.0),
+        );
+
+        assert_eq!(canvas.command_count(), 1);
+        match &canvas.commands()[0] {
+            DrawCommand::Arc {
+                center,
+                radius,
+                start_angle,
+                end_angle,
+                color,
+            } => {
+                assert_eq!(*center, Point::new(100.0, 100.0));
+                assert_eq!(*radius, 50.0);
+                assert_eq!(*start_angle, 0.0);
+                assert!((end_angle - std::f32::consts::PI).abs() < 0.001);
+                assert_eq!(color.r, 1.0);
+            }
+            _ => panic!("Expected Arc command"),
+        }
+    }
+
+    #[test]
+    fn test_canvas_draw_path() {
+        let mut canvas = RecordingCanvas::new();
+        let points = [
+            Point::new(0.0, 0.0),
+            Point::new(50.0, 100.0),
+            Point::new(100.0, 0.0),
+        ];
+        Canvas::draw_path(&mut canvas, &points, Color::BLACK, 1.5);
+
+        assert_eq!(canvas.command_count(), 1);
+        match &canvas.commands()[0] {
+            DrawCommand::Path {
+                points: p,
+                closed,
+                style,
+            } => {
+                assert_eq!(p.len(), 3);
+                assert!(!closed);
+                assert_eq!(style.width, 1.5);
+            }
+            _ => panic!("Expected Path command"),
+        }
+    }
+
+    #[test]
+    fn test_canvas_fill_polygon() {
+        let mut canvas = RecordingCanvas::new();
+        let points = [
+            Point::new(0.0, 0.0),
+            Point::new(100.0, 0.0),
+            Point::new(50.0, 100.0),
+        ];
+        Canvas::fill_polygon(&mut canvas, &points, Color::BLUE);
+
+        assert_eq!(canvas.command_count(), 1);
+        match &canvas.commands()[0] {
+            DrawCommand::Path { points: p, closed, style } => {
+                assert_eq!(p.len(), 3);
+                assert!(*closed);
+                assert_eq!(style.color, Color::BLUE);
+            }
             _ => panic!("Expected Path command"),
         }
     }

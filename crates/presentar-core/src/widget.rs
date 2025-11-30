@@ -127,6 +127,14 @@ pub trait Widget: Send + Sync {
     fn test_id(&self) -> Option<&str> {
         None
     }
+
+    /// Get the current bounds of this widget.
+    ///
+    /// Returns the rectangle set during the last layout phase.
+    /// Default returns zero-sized bounds at origin.
+    fn bounds(&self) -> Rect {
+        Rect::new(0.0, 0.0, 0.0, 0.0)
+    }
 }
 
 /// Canvas trait for paint operations.
@@ -141,6 +149,37 @@ pub trait Canvas {
 
     /// Draw text.
     fn draw_text(&mut self, text: &str, position: crate::Point, style: &TextStyle);
+
+    /// Draw a line between two points.
+    fn draw_line(&mut self, from: crate::Point, to: crate::Point, color: crate::Color, width: f32);
+
+    /// Draw a filled circle.
+    fn fill_circle(&mut self, center: crate::Point, radius: f32, color: crate::Color);
+
+    /// Draw a stroked circle.
+    fn stroke_circle(
+        &mut self,
+        center: crate::Point,
+        radius: f32,
+        color: crate::Color,
+        width: f32,
+    );
+
+    /// Draw a filled arc (pie slice).
+    fn fill_arc(
+        &mut self,
+        center: crate::Point,
+        radius: f32,
+        start_angle: f32,
+        end_angle: f32,
+        color: crate::Color,
+    );
+
+    /// Draw a path (polyline).
+    fn draw_path(&mut self, points: &[crate::Point], color: crate::Color, width: f32);
+
+    /// Fill a polygon.
+    fn fill_polygon(&mut self, points: &[crate::Point], color: crate::Color);
 
     /// Push a clip region.
     fn push_clip(&mut self, rect: Rect);

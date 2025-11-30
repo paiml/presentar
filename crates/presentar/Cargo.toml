@@ -13,10 +13,30 @@ presentar-core = { workspace = true }
 presentar-widgets = { workspace = true }
 presentar-layout = { workspace = true }
 presentar-yaml = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+wgpu = { workspace = true }
+bytemuck = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+js-sys = { workspace = true }
+web-sys = { workspace = true }
+console_error_panic_hook = { workspace = true }
+getrandom = { workspace = true }
 
 [dev-dependencies]
 presentar-test = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 proptest = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = { workspace = true }
+
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [lints]
 workspace = true

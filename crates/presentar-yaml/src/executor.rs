@@ -1,6 +1,6 @@
 //! Expression executor for data transformations.
 
-use crate::expression::{Expression, Transform};
+use crate::expression::{AggregateOp, Expression, RankMethod, Transform};
 use std::collections::HashMap;
 
 /// A generic value that can hold any data type.
@@ -314,7 +314,7 @@ impl ExpressionExecutor {
 
         // Apply transforms
         for transform in &expr.transforms {
-            value = self.apply_transform(&value, transform)?;
+            value = self.apply_transform(&value, transform, ctx)?;
         }
 
         Ok(value)
@@ -324,6 +324,7 @@ impl ExpressionExecutor {
         &self,
         value: &Value,
         transform: &Transform,
+        ctx: &DataContext,
     ) -> Result<Value, ExecutionError> {
         match transform {
             Transform::Filter {
@@ -332,20 +333,36 @@ impl ExpressionExecutor {
             } => self.apply_filter(value, field, match_value),
             Transform::Select { fields } => self.apply_select(value, fields),
             Transform::Sort { field, desc } => self.apply_sort(value, field, *desc),
-            Transform::Limit { n } => self.apply_limit(value, *n),
             Transform::Count => Ok(self.apply_count(value)),
             Transform::Sum { field } => self.apply_sum(value, field),
             Transform::Mean { field } => self.apply_mean(value, field),
             Transform::Sample { n } => self.apply_sample(value, *n),
             Transform::Percentage => self.apply_percentage(value),
-            Transform::Rate { .. } => {
-                // Rate requires time-series data, return value as-is for now
-                Ok(value.clone())
+            Transform::Rate { window } => self.apply_rate(value, window),
+            Transform::Join { other, on } => self.apply_join(value, other, on, ctx),
+            Transform::GroupBy { field } => self.apply_group_by(value, field),
+            Transform::Distinct { field } => self.apply_distinct(value, field.as_deref()),
+            Transform::Where { field, op, value: match_value } => {
+                self.apply_where(value, field, op, match_value)
             }
-            Transform::Join { .. } => {
-                // Join requires access to other datasets, return value as-is for now
-                Ok(value.clone())
+            Transform::Offset { n } => self.apply_offset(value, *n),
+            Transform::Min { field } => self.apply_min(value, field),
+            Transform::Max { field } => self.apply_max(value, field),
+            Transform::First { n } | Transform::Limit { n } => self.apply_limit(value, *n),
+            Transform::Last { n } => self.apply_last(value, *n),
+            Transform::Flatten => self.apply_flatten(value),
+            Transform::Reverse => self.apply_reverse(value),
+            // New transforms
+            Transform::Map { expr } => self.apply_map(value, expr),
+            Transform::Reduce { initial, expr } => self.apply_reduce(value, initial, expr),
+            Transform::Aggregate { field, op } => self.apply_aggregate(value, field, *op),
+            Transform::Pivot { row_field, col_field, value_field } => {
+                self.apply_pivot(value, row_field, col_field, value_field)
             }
+            Transform::CumulativeSum { field } => self.apply_cumsum(value, field),
+            Transform::Rank { field, method } => self.apply_rank(value, field, *method),
+            Transform::MovingAverage { field, window } => self.apply_moving_avg(value, field, *window),
+            Transform::PercentChange { field } => self.apply_pct_change(value, field),
         }
     }
 
@@ -497,6 +514,673 @@ impl ExpressionExecutor {
                 "percentage requires a number".to_string(),
             )),
         }
+    }
+
+    fn apply_rate(&self, value: &Value, window: &str) -> Result<Value, ExecutionError> {
+        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+
+        // Parse window (e.g., "1m", "5m", "1h")
+        let window_ms = self.parse_window(window)?;
+
+        // For rate calculation, we need timestamped data
+        // Look for a "timestamp" or "time" field
+        let mut values_with_time: Vec<(f64, f64)> = arr
+            .iter()
+            .filter_map(|item| {
+                let obj = item.as_object()?;
+                let time = obj
+                    .get("timestamp")
+                    .or_else(|| obj.get("time"))
+                    .and_then(Value::as_number)?;
+                let val = obj
+                    .get("value")
+                    .or_else(|| obj.get("count"))
+                    .and_then(Value::as_number)
+                    .unwrap_or(1.0);
+                Some((time, val))
+            })
+            .collect();
+
+        if values_with_time.len() < 2 {
+            return Ok(Value::Number(0.0));
+        }
+
+        // Sort by time
+        values_with_time.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+
+        // Calculate rate over the window
+        let window_ms_f64 = window_ms as f64;
+        let last_time = values_with_time.last().map_or(0.0, |v| v.0);
+        let window_start = last_time - window_ms_f64;
+
+        let sum_in_window: f64 = values_with_time
+            .iter()
+            .filter(|(t, _)| *t >= window_start)
+            .map(|(_, v)| v)
+            .sum();
+
+        // Rate per second
+        let rate = sum_in_window / (window_ms_f64 / 1000.0);
+
+        Ok(Value::Number(rate))
+    }
+
+    fn parse_window(&self, window: &str) -> Result<u64, ExecutionError> {
+        let window = window.trim();
+        if window.is_empty() {
+            return Err(ExecutionError::InvalidTransform("empty window".to_string()));
+        }
+
+        let (num_str, unit) = if let Some(s) = window.strip_suffix("ms") {
+            (s, "ms")
+        } else if let Some(s) = window.strip_suffix('s') {
+            (s, "s")
+        } else if let Some(s) = window.strip_suffix('m') {
+            (s, "m")
+        } else if let Some(s) = window.strip_suffix('h') {
+            (s, "h")
+        } else if let Some(s) = window.strip_suffix('d') {
+            (s, "d")
+        } else {
+            // Assume milliseconds if no unit
+            (window, "ms")
+        };
+
+        let num: u64 = num_str
+            .parse()
+            .map_err(|_| ExecutionError::InvalidTransform(format!("invalid window: {window}")))?;
+
+        let ms = match unit {
+            "s" => num * 1000,
+            "m" => num * 60 * 1000,
+            "h" => num * 60 * 60 * 1000,
+            "d" => num * 24 * 60 * 60 * 1000,
+            // "ms" and any other unit default to num (milliseconds)
+            _ => num,
+        };
+
+        Ok(ms)
+    }
+
+    fn apply_join(
+        &self,
+        value: &Value,
+        other: &str,
+        on: &str,
+        ctx: &DataContext,
+    ) -> Result<Value, ExecutionError> {
+        let left_arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+
+        // Get the other dataset from context
+        let right_value = ctx
+            .get(other)
+            .ok_or_else(|| ExecutionError::SourceNotFound(other.to_string()))?;
+        let right_arr = right_value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+
+        // Build a lookup map for the right side (keyed by the join field)
+        let mut right_lookup: HashMap<String, Vec<&Value>> = HashMap::new();
+        for item in right_arr {
+            if let Some(obj) = item.as_object() {
+                if let Some(key_val) = obj.get(on) {
+                    let key = self.value_to_string(key_val);
+                    right_lookup.entry(key).or_default().push(item);
+                }
+            }
+        }
+
+        // Perform the join (left join - keeps all left items)
+        let mut result = Vec::new();
+        for left_item in left_arr {
+            if let Some(left_obj) = left_item.as_object() {
+                if let Some(key_val) = left_obj.get(on) {
+                    let key = self.value_to_string(key_val);
+                    if let Some(right_items) = right_lookup.get(&key) {
+                        // Join with each matching right item
+                        for right_item in right_items {
+                            if let Some(right_obj) = right_item.as_object() {
+                                // Merge left and right objects
+                                let mut merged = left_obj.clone();
+                                for (k, v) in right_obj {
+                                    // Don't overwrite left values, prefix with source name
+                                    if merged.contains_key(k) && k != on {
+                                        merged.insert(format!("{other}_{k}"), v.clone());
+                                    } else if k != on {
+                                        merged.insert(k.clone(), v.clone());
+                                    }
+                                }
+                                result.push(Value::Object(merged));
+                            }
+                        }
+                    } else {
+                        // No match, keep left item as-is (left join behavior)
+                        result.push(left_item.clone());
+                    }
+                } else {
+                    // No join key, keep as-is
+                    result.push(left_item.clone());
+                }
+            } else {
+                // Not an object, keep as-is
+                result.push(left_item.clone());
+            }
+        }
+
+        Ok(Value::Array(result))
+    }
+
+    fn apply_group_by(&self, value: &Value, field: &str) -> Result<Value, ExecutionError> {
+        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+
+        let mut groups: HashMap<String, Vec<Value>> = HashMap::new();
+
+        for item in arr {
+            let key = if let Some(obj) = item.as_object() {
+                if let Some(val) = obj.get(field) {
+                    self.value_to_string(val)
+                } else {
+                    "_null".to_string()
+                }
+            } else {
+                "_null".to_string()
+            };
+
+            groups.entry(key).or_default().push(item.clone());
+        }
+
+        // Convert to array of objects with key and items
+        let result: Vec<Value> = groups
+            .into_iter()
+            .map(|(key, items)| {
+                let mut obj = HashMap::new();
+                obj.insert("key".to_string(), Value::String(key));
+                obj.insert("items".to_string(), Value::Array(items.clone()));
+                obj.insert("count".to_string(), Value::Number(items.len() as f64));
+                Value::Object(obj)
+            })
+            .collect();
+
+        Ok(Value::Array(result))
+    }
+
+    fn value_to_string(&self, value: &Value) -> String {
+        match value {
+            Value::Null => "_null".to_string(),
+            Value::Bool(b) => b.to_string(),
+            Value::Number(n) => n.to_string(),
+            Value::String(s) => s.clone(),
+            Value::Array(_) => "_array".to_string(),
+            Value::Object(_) => "_object".to_string(),
+        }
+    }
+
+    fn apply_distinct(&self, value: &Value, field: Option<&str>) -> Result<Value, ExecutionError> {
+        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut result = Vec::new();
+
+        for item in arr {
+            let key = if let Some(f) = field {
+                if let Some(obj) = item.as_object() {
+                    obj.get(f)
+                        .map(|v| self.value_to_string(v))
+                        .unwrap_or_default()
+                } else {
+                    self.value_to_string(item)
+                }
+            } else {
+                self.value_to_string(item)
+            };
+
+            if seen.insert(key) {
+                result.push(item.clone());
+            }
+        }
+
+        Ok(Value::Array(result))
+    }
+
+    fn apply_where(
+        &self,
+        value: &Value,
+        field: &str,
+        op: &str,
+        match_value: &str,
+    ) -> Result<Value, ExecutionError> {
+        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+
+        let filtered: Vec<Value> = arr
+            .iter()
+            .filter(|item| {
+                if let Some(obj) = item.as_object() {
+                    if let Some(val) = obj.get(field) {
+                        return self.compare_values(val, op, match_value);
+                    }
+                }
+                false
+            })
+            .cloned()
+            .collect();
+
+        Ok(Value::Array(filtered))
+    }
+
+    fn compare_values(&self, value: &Value, op: &str, target: &str) -> bool {
+        match op {
+            "eq" | "==" | "=" => self.value_matches(value, target),
+            "ne" | "!=" | "<>" => !self.value_matches(value, target),
+            "gt" | ">" => {
+                if let (Some(v), Ok(t)) = (value.as_number(), target.parse::<f64>()) {
+                    v > t
+                } else {
+                    false
+                }
+            }
+            "lt" | "<" => {
+                if let (Some(v), Ok(t)) = (value.as_number(), target.parse::<f64>()) {
+                    v < t
+                } else {
+                    false
+                }
+            }
+            "gte" | ">=" => {
+                if let (Some(v), Ok(t)) = (value.as_number(), target.parse::<f64>()) {
+                    v >= t
+                } else {
+                    false
+                }
+            }
+            "lte" | "<=" => {
+                if let (Some(v), Ok(t)) = (value.as_number(), target.parse::<f64>()) {
+                    v <= t
+                } else {
+                    false
+                }
+            }
+            "contains" => {
+                if let Some(s) = value.as_str() {
+                    s.contains(target)
+                } else {
+                    false
+                }
+            }
+            "starts_with" => {
+                if let Some(s) = value.as_str() {
+                    s.starts_with(target)
+                } else {
+                    false
+                }
+            }
+            "ends_with" => {
+                if let Some(s) = value.as_str() {
+                    s.ends_with(target)
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
+    }
+
+    fn apply_offset(&self, value: &Value, n: usize) -> Result<Value, ExecutionError> {
+        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        Ok(Value::Array(arr.iter().skip(n).cloned().collect()))
+    }
+
+    fn apply_min(&self, value: &Value, field: &str) -> Result<Value, ExecutionError> {
+        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+
+        let min = arr
+            .iter()
+            .filter_map(|item| item.get(field)?.as_number())
+            .fold(f64::INFINITY, f64::min);
+
+        if min.is_infinite() {
+            Ok(Value::Null)
+        } else {
+            Ok(Value::Number(min))
+        }
+    }
+
+    fn apply_max(&self, value: &Value, field: &str) -> Result<Value, ExecutionError> {
+        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+
+        let max = arr
+            .iter()
+            .filter_map(|item| item.get(field)?.as_number())
+            .fold(f64::NEG_INFINITY, f64::max);
+
+        if max.is_infinite() {
+            Ok(Value::Null)
+        } else {
+            Ok(Value::Number(max))
+        }
+    }
+
+    fn apply_last(&self, value: &Value, n: usize) -> Result<Value, ExecutionError> {
+        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let len = arr.len();
+        let skip = len.saturating_sub(n);
+        Ok(Value::Array(arr.iter().skip(skip).cloned().collect()))
+    }
+
+    fn apply_flatten(&self, value: &Value) -> Result<Value, ExecutionError> {
+        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+
+        let mut result = Vec::new();
+        for item in arr {
+            if let Some(inner) = item.as_array() {
+                result.extend(inner.iter().cloned());
+            } else {
+                result.push(item.clone());
+            }
+        }
+
+        Ok(Value::Array(result))
+    }
+
+    fn apply_reverse(&self, value: &Value) -> Result<Value, ExecutionError> {
+        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let mut reversed = arr.clone();
+        reversed.reverse();
+        Ok(Value::Array(reversed))
+    }
+
+    // =========================================================================
+    // New Transform Implementations
+    // =========================================================================
+
+    fn apply_map(&self, value: &Value, expr: &str) -> Result<Value, ExecutionError> {
+        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+
+        // Simple expression evaluation: extract field if expr is "item.field"
+        // For complex expressions, this would need a proper expression evaluator
+        let mapped: Vec<Value> = arr
+            .iter()
+            .map(|item| {
+                // Handle simple field access like "item.field"
+                if let Some(field) = expr.strip_prefix("item.") {
+                    if let Some(obj) = item.as_object() {
+                        obj.get(field).cloned().unwrap_or(Value::Null)
+                    } else {
+                        item.clone()
+                    }
+                } else {
+                    // Return item unchanged if we can't parse the expression
+                    item.clone()
+                }
+            })
+            .collect();
+
+        Ok(Value::Array(mapped))
+    }
+
+    fn apply_reduce(&self, value: &Value, initial: &str, _expr: &str) -> Result<Value, ExecutionError> {
+        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+
+        // Parse initial value
+        let mut acc: f64 = initial.parse().unwrap_or(0.0);
+
+        // Simple sum reduction (a proper implementation would evaluate the expr)
+        for item in arr {
+            if let Some(n) = item.as_number() {
+                acc += n;
+            }
+        }
+
+        Ok(Value::Number(acc))
+    }
+
+    fn apply_aggregate(&self, value: &Value, field: &str, op: AggregateOp) -> Result<Value, ExecutionError> {
+        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+
+        // For grouped data, expect array of {key: ..., values: [...]}
+        // For ungrouped data, operate on the field directly
+
+        let values: Vec<f64> = arr
+            .iter()
+            .filter_map(|item| {
+                if let Some(obj) = item.as_object() {
+                    // If this is a group with "values" key
+                    if let Some(Value::Array(group_values)) = obj.get("values") {
+                        return Some(
+                            group_values
+                                .iter()
+                                .filter_map(|v| v.get(field)?.as_number())
+                                .collect::<Vec<_>>(),
+                        );
+                    }
+                    // Direct field access
+                    obj.get(field)?.as_number().map(|n| vec![n])
+                } else {
+                    None
+                }
+            })
+            .flatten()
+            .collect();
+
+        let result = match op {
+            AggregateOp::Sum => values.iter().sum(),
+            AggregateOp::Count => values.len() as f64,
+            AggregateOp::Mean => {
+                if values.is_empty() {
+                    0.0
+                } else {
+                    values.iter().sum::<f64>() / values.len() as f64
+                }
+            }
+            AggregateOp::Min => values.iter().cloned().fold(f64::INFINITY, f64::min),
+            AggregateOp::Max => values.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+            AggregateOp::First => values.first().copied().unwrap_or(0.0),
+            AggregateOp::Last => values.last().copied().unwrap_or(0.0),
+        };
+
+        Ok(Value::Number(result))
+    }
+
+    fn apply_pivot(
+        &self,
+        value: &Value,
+        row_field: &str,
+        col_field: &str,
+        value_field: &str,
+    ) -> Result<Value, ExecutionError> {
+        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+
+        // Build pivot table
+        let mut rows: HashMap<String, HashMap<String, f64>> = HashMap::new();
+
+        for item in arr {
+            if let Some(obj) = item.as_object() {
+                let row_key = obj
+                    .get(row_field)
+                    .map(|v| self.value_to_string(v))
+                    .unwrap_or_default();
+                let col_key = obj
+                    .get(col_field)
+                    .map(|v| self.value_to_string(v))
+                    .unwrap_or_default();
+                let val = obj.get(value_field).and_then(|v| v.as_number()).unwrap_or(0.0);
+
+                rows.entry(row_key)
+                    .or_default()
+                    .entry(col_key)
+                    .and_modify(|v| *v += val)
+                    .or_insert(val);
+            }
+        }
+
+        // Convert to array of objects
+        let result: Vec<Value> = rows
+            .into_iter()
+            .map(|(row_key, cols)| {
+                let mut obj = HashMap::new();
+                obj.insert(row_field.to_string(), Value::String(row_key));
+                for (col_key, val) in cols {
+                    obj.insert(col_key, Value::Number(val));
+                }
+                Value::Object(obj)
+            })
+            .collect();
+
+        Ok(Value::Array(result))
+    }
+
+    fn apply_cumsum(&self, value: &Value, field: &str) -> Result<Value, ExecutionError> {
+        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+
+        let mut running_sum = 0.0;
+        let result: Vec<Value> = arr
+            .iter()
+            .map(|item| {
+                if let Some(obj) = item.as_object() {
+                    let val = obj.get(field).and_then(|v| v.as_number()).unwrap_or(0.0);
+                    running_sum += val;
+
+                    let mut new_obj = obj.clone();
+                    new_obj.insert(format!("{field}_cumsum"), Value::Number(running_sum));
+                    Value::Object(new_obj)
+                } else {
+                    item.clone()
+                }
+            })
+            .collect();
+
+        Ok(Value::Array(result))
+    }
+
+    fn apply_rank(&self, value: &Value, field: &str, method: RankMethod) -> Result<Value, ExecutionError> {
+        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+
+        // Extract values with indices
+        let mut indexed: Vec<(usize, f64)> = arr
+            .iter()
+            .enumerate()
+            .filter_map(|(i, item)| {
+                item.as_object()?.get(field)?.as_number().map(|n| (i, n))
+            })
+            .collect();
+
+        // Sort by value (descending for ranking)
+        indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        // Assign ranks based on method
+        let mut ranks = vec![0.0; arr.len()];
+        match method {
+            RankMethod::Dense => {
+                let mut rank = 0;
+                let mut prev_val: Option<f64> = None;
+                for (i, val) in indexed {
+                    if prev_val != Some(val) {
+                        rank += 1;
+                    }
+                    ranks[i] = rank as f64;
+                    prev_val = Some(val);
+                }
+            }
+            RankMethod::Ordinal => {
+                for (rank, (i, _)) in indexed.iter().enumerate() {
+                    ranks[*i] = (rank + 1) as f64;
+                }
+            }
+            RankMethod::Average => {
+                let mut i = 0;
+                while i < indexed.len() {
+                    let val = indexed[i].1;
+                    let start = i;
+                    while i < indexed.len() && (indexed[i].1 - val).abs() < f64::EPSILON {
+                        i += 1;
+                    }
+                    let avg_rank = (start + 1..=i).map(|r| r as f64).sum::<f64>() / (i - start) as f64;
+                    for j in start..i {
+                        ranks[indexed[j].0] = avg_rank;
+                    }
+                }
+            }
+        }
+
+        // Add rank to each object
+        let result: Vec<Value> = arr
+            .iter()
+            .enumerate()
+            .map(|(i, item)| {
+                if let Some(obj) = item.as_object() {
+                    let mut new_obj = obj.clone();
+                    new_obj.insert(format!("{field}_rank"), Value::Number(ranks[i]));
+                    Value::Object(new_obj)
+                } else {
+                    item.clone()
+                }
+            })
+            .collect();
+
+        Ok(Value::Array(result))
+    }
+
+    fn apply_moving_avg(&self, value: &Value, field: &str, window: usize) -> Result<Value, ExecutionError> {
+        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+
+        let values: Vec<f64> = arr
+            .iter()
+            .filter_map(|item| item.as_object()?.get(field)?.as_number())
+            .collect();
+
+        let result: Vec<Value> = arr
+            .iter()
+            .enumerate()
+            .map(|(i, item)| {
+                if let Some(obj) = item.as_object() {
+                    let start = i.saturating_sub(window - 1);
+                    let window_values = &values[start..=i.min(values.len() - 1)];
+                    let ma = if window_values.is_empty() {
+                        0.0
+                    } else {
+                        window_values.iter().sum::<f64>() / window_values.len() as f64
+                    };
+
+                    let mut new_obj = obj.clone();
+                    new_obj.insert(format!("{field}_ma{window}"), Value::Number(ma));
+                    Value::Object(new_obj)
+                } else {
+                    item.clone()
+                }
+            })
+            .collect();
+
+        Ok(Value::Array(result))
+    }
+
+    fn apply_pct_change(&self, value: &Value, field: &str) -> Result<Value, ExecutionError> {
+        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+
+        let values: Vec<f64> = arr
+            .iter()
+            .filter_map(|item| item.as_object()?.get(field)?.as_number())
+            .collect();
+
+        let result: Vec<Value> = arr
+            .iter()
+            .enumerate()
+            .map(|(i, item)| {
+                if let Some(obj) = item.as_object() {
+                    let pct = if i == 0 || values.get(i - 1).map_or(true, |&prev| prev == 0.0) {
+                        0.0
+                    } else {
+                        let prev = values[i - 1];
+                        let curr = values.get(i).copied().unwrap_or(prev);
+                        (curr - prev) / prev * 100.0
+                    };
+
+                    let mut new_obj = obj.clone();
+                    new_obj.insert(format!("{field}_pct_change"), Value::Number(pct));
+                    Value::Object(new_obj)
+                } else {
+                    item.clone()
+                }
+            })
+            .collect();
+
+        Ok(Value::Array(result))
     }
 }
 
@@ -909,5 +1593,721 @@ mod tests {
         let result = executor.execute(&expr, &ctx).unwrap();
 
         assert_eq!(result.as_number(), Some(0.0));
+    }
+
+    // ===== Rate Transform Tests =====
+
+    fn make_time_series_data() -> DataContext {
+        let mut ctx = DataContext::new();
+
+        let events: Vec<Value> = vec![
+            {
+                let mut e = HashMap::new();
+                e.insert("timestamp".to_string(), Value::number(1000.0));
+                e.insert("value".to_string(), Value::number(10.0));
+                Value::Object(e)
+            },
+            {
+                let mut e = HashMap::new();
+                e.insert("timestamp".to_string(), Value::number(2000.0));
+                e.insert("value".to_string(), Value::number(20.0));
+                Value::Object(e)
+            },
+            {
+                let mut e = HashMap::new();
+                e.insert("timestamp".to_string(), Value::number(3000.0));
+                e.insert("value".to_string(), Value::number(30.0));
+                Value::Object(e)
+            },
+        ];
+
+        ctx.insert("events", Value::Array(events));
+        ctx
+    }
+
+    #[test]
+    fn test_execute_rate() {
+        let ctx = make_time_series_data();
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser.parse("{{ events | rate(5s) }}").unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        // Rate should be sum of values in window / window in seconds
+        // Window is 5s (5000ms), all 3 values sum to 60, rate = 60 / 5 = 12
+        assert!(result.is_number());
+        let rate = result.as_number().unwrap();
+        assert!(rate > 0.0);
+    }
+
+    #[test]
+    fn test_execute_rate_minute_window() {
+        let ctx = make_time_series_data();
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser.parse("{{ events | rate(1m) }}").unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        assert!(result.is_number());
+    }
+
+    // ===== Group By Tests =====
+
+    #[test]
+    fn test_execute_group_by() {
+        let ctx = make_test_data();
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser
+            .parse("{{ data.transactions | group_by(status) }}")
+            .unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        let arr = result.as_array().unwrap();
+        // Should have 2 groups: "completed" (2 items) and "pending" (1 item)
+        assert_eq!(arr.len(), 2);
+
+        for group in arr {
+            let obj = group.as_object().unwrap();
+            assert!(obj.contains_key("key"));
+            assert!(obj.contains_key("items"));
+            assert!(obj.contains_key("count"));
+        }
+    }
+
+    // ===== Distinct Tests =====
+
+    #[test]
+    fn test_execute_distinct_field() {
+        let ctx = make_test_data();
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser
+            .parse("{{ data.transactions | distinct(status) }}")
+            .unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        // Should get first of each distinct status
+        assert_eq!(result.len(), 2); // "completed" and "pending"
+    }
+
+    #[test]
+    fn test_execute_distinct_no_field() {
+        let mut ctx = DataContext::new();
+        ctx.insert(
+            "items",
+            Value::array(vec![
+                Value::string("a"),
+                Value::string("b"),
+                Value::string("a"),
+                Value::string("c"),
+            ]),
+        );
+
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser.parse("{{ items | distinct }}").unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        assert_eq!(result.len(), 3); // "a", "b", "c"
+    }
+
+    // ===== Where Tests =====
+
+    #[test]
+    fn test_execute_where_gt() {
+        let ctx = make_test_data();
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser
+            .parse("{{ data.transactions | where(amount, gt, 60) }}")
+            .unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        // Should get 2 items: amount=100 and amount=75
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_execute_where_lt() {
+        let ctx = make_test_data();
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser
+            .parse("{{ data.transactions | where(amount, lt, 80) }}")
+            .unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        // Should get 2 items: amount=50 and amount=75
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_execute_where_eq() {
+        let ctx = make_test_data();
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser
+            .parse("{{ data.transactions | where(status, eq, pending) }}")
+            .unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn test_execute_where_ne() {
+        let ctx = make_test_data();
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser
+            .parse("{{ data.transactions | where(status, ne, pending) }}")
+            .unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_execute_where_contains() {
+        let mut ctx = DataContext::new();
+        let items: Vec<Value> = vec![
+            {
+                let mut t = HashMap::new();
+                t.insert("name".to_string(), Value::string("hello world"));
+                Value::Object(t)
+            },
+            {
+                let mut t = HashMap::new();
+                t.insert("name".to_string(), Value::string("goodbye"));
+                Value::Object(t)
+            },
+        ];
+        ctx.insert("items", Value::Array(items));
+
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser
+            .parse("{{ items | where(name, contains, world) }}")
+            .unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        assert_eq!(result.len(), 1);
+    }
+
+    // ===== Offset Tests =====
+
+    #[test]
+    fn test_execute_offset() {
+        let ctx = make_test_data();
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser
+            .parse("{{ data.transactions | offset(1) }}")
+            .unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        assert_eq!(result.len(), 2); // Original 3, skip 1
+    }
+
+    #[test]
+    fn test_execute_offset_with_limit() {
+        let ctx = make_test_data();
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser
+            .parse("{{ data.transactions | offset(1) | limit(1) }}")
+            .unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        assert_eq!(result.len(), 1);
+    }
+
+    // ===== Min/Max Tests =====
+
+    #[test]
+    fn test_execute_min() {
+        let ctx = make_test_data();
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser
+            .parse("{{ data.transactions | min(amount) }}")
+            .unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        assert_eq!(result.as_number(), Some(50.0));
+    }
+
+    #[test]
+    fn test_execute_max() {
+        let ctx = make_test_data();
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser
+            .parse("{{ data.transactions | max(amount) }}")
+            .unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        assert_eq!(result.as_number(), Some(100.0));
+    }
+
+    #[test]
+    fn test_execute_min_empty() {
+        let mut ctx = DataContext::new();
+        ctx.insert("items", Value::array(vec![]));
+
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser.parse("{{ items | min(value) }}").unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        assert!(result.is_null());
+    }
+
+    // ===== First/Last Tests =====
+
+    #[test]
+    fn test_execute_first() {
+        let ctx = make_test_data();
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser.parse("{{ data.transactions | first(2) }}").unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_execute_last() {
+        let ctx = make_test_data();
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser.parse("{{ data.transactions | last(2) }}").unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+
+        // Last item should be id=3
+        assert_eq!(arr[1].get("id").unwrap().as_number(), Some(3.0));
+    }
+
+    // ===== Flatten Tests =====
+
+    #[test]
+    fn test_execute_flatten() {
+        let mut ctx = DataContext::new();
+        ctx.insert(
+            "nested",
+            Value::array(vec![
+                Value::array(vec![Value::number(1.0), Value::number(2.0)]),
+                Value::array(vec![Value::number(3.0), Value::number(4.0)]),
+            ]),
+        );
+
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser.parse("{{ nested | flatten }}").unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 4);
+        assert_eq!(arr[0].as_number(), Some(1.0));
+        assert_eq!(arr[3].as_number(), Some(4.0));
+    }
+
+    #[test]
+    fn test_execute_flatten_mixed() {
+        let mut ctx = DataContext::new();
+        ctx.insert(
+            "items",
+            Value::array(vec![
+                Value::number(1.0),
+                Value::array(vec![Value::number(2.0), Value::number(3.0)]),
+                Value::number(4.0),
+            ]),
+        );
+
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser.parse("{{ items | flatten }}").unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        assert_eq!(result.len(), 4);
+    }
+
+    // ===== Reverse Tests =====
+
+    #[test]
+    fn test_execute_reverse() {
+        let ctx = make_test_data();
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser.parse("{{ data.transactions | reverse }}").unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        let arr = result.as_array().unwrap();
+        // First item should now be the last one (id=3)
+        assert_eq!(arr[0].get("id").unwrap().as_number(), Some(3.0));
+    }
+
+    // ===== Complex Chain Tests =====
+
+    #[test]
+    fn test_execute_complex_chain() {
+        let ctx = make_test_data();
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        // Filter by status, sort by amount descending, get first 1
+        let expr = parser
+            .parse("{{ data.transactions | where(status, eq, completed) | sort(amount, desc=true) | first(1) }}")
+            .unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        // Should be the completed transaction with highest amount (100)
+        assert_eq!(arr[0].get("amount").unwrap().as_number(), Some(100.0));
+    }
+
+    #[test]
+    fn test_execute_group_then_count() {
+        let ctx = make_test_data();
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser
+            .parse("{{ data.transactions | group_by(status) | count }}")
+            .unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        // Should count the groups (2)
+        assert_eq!(result.as_number(), Some(2.0));
+    }
+
+    // ===== Join Tests =====
+
+    fn make_join_test_data() -> DataContext {
+        let mut ctx = DataContext::new();
+
+        // Orders dataset
+        let orders = Value::Array(vec![
+            {
+                let mut obj = HashMap::new();
+                obj.insert("id".to_string(), Value::Number(1.0));
+                obj.insert("customer_id".to_string(), Value::Number(100.0));
+                obj.insert("amount".to_string(), Value::Number(50.0));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("id".to_string(), Value::Number(2.0));
+                obj.insert("customer_id".to_string(), Value::Number(101.0));
+                obj.insert("amount".to_string(), Value::Number(75.0));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("id".to_string(), Value::Number(3.0));
+                obj.insert("customer_id".to_string(), Value::Number(100.0));
+                obj.insert("amount".to_string(), Value::Number(25.0));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("id".to_string(), Value::Number(4.0));
+                obj.insert("customer_id".to_string(), Value::Number(999.0)); // No matching customer
+                obj.insert("amount".to_string(), Value::Number(10.0));
+                Value::Object(obj)
+            },
+        ]);
+
+        // Customers dataset
+        let customers = Value::Array(vec![
+            {
+                let mut obj = HashMap::new();
+                obj.insert("customer_id".to_string(), Value::Number(100.0));
+                obj.insert("name".to_string(), Value::String("Alice".to_string()));
+                obj.insert("tier".to_string(), Value::String("gold".to_string()));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("customer_id".to_string(), Value::Number(101.0));
+                obj.insert("name".to_string(), Value::String("Bob".to_string()));
+                obj.insert("tier".to_string(), Value::String("silver".to_string()));
+                Value::Object(obj)
+            },
+        ]);
+
+        ctx.insert("orders", orders);
+        ctx.insert("customers", customers);
+        ctx
+    }
+
+    #[test]
+    fn test_execute_join_basic() {
+        let ctx = make_join_test_data();
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser
+            .parse("{{ orders | join(customers, on=customer_id) }}")
+            .unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        let arr = result.as_array().unwrap();
+        // 4 orders total - 3 with matches, 1 without
+        assert_eq!(arr.len(), 4);
+
+        // Check first order (customer 100 - Alice)
+        let first = arr[0].as_object().unwrap();
+        assert_eq!(first.get("id").unwrap().as_number(), Some(1.0));
+        assert_eq!(first.get("name").unwrap().as_str(), Some("Alice"));
+        assert_eq!(first.get("tier").unwrap().as_str(), Some("gold"));
+    }
+
+    #[test]
+    fn test_execute_join_multiple_matches() {
+        let ctx = make_join_test_data();
+        let executor = ExpressionExecutor::new();
+
+        // Create expression manually for testing
+        let expr = Expression {
+            source: "orders".to_string(),
+            transforms: vec![Transform::Join {
+                other: "customers".to_string(),
+                on: "customer_id".to_string(),
+            }],
+        };
+
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+
+        // Count orders for customer 100 (should have 2 orders: id 1 and id 3)
+        let alice_orders: Vec<_> = arr
+            .iter()
+            .filter(|v| {
+                v.as_object()
+                    .and_then(|o| o.get("name"))
+                    .and_then(|n| n.as_str())
+                    == Some("Alice")
+            })
+            .collect();
+        assert_eq!(alice_orders.len(), 2);
+    }
+
+    #[test]
+    fn test_execute_join_no_match_keeps_left() {
+        let ctx = make_join_test_data();
+        let executor = ExpressionExecutor::new();
+
+        let expr = Expression {
+            source: "orders".to_string(),
+            transforms: vec![Transform::Join {
+                other: "customers".to_string(),
+                on: "customer_id".to_string(),
+            }],
+        };
+
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+
+        // Find order 4 (customer 999, no match)
+        let order4: Vec<_> = arr
+            .iter()
+            .filter(|v| {
+                v.as_object()
+                    .and_then(|o| o.get("id"))
+                    .and_then(|n| n.as_number())
+                    == Some(4.0)
+            })
+            .collect();
+        assert_eq!(order4.len(), 1);
+
+        // Should still have original fields but no name/tier
+        let obj = order4[0].as_object().unwrap();
+        assert_eq!(obj.get("customer_id").unwrap().as_number(), Some(999.0));
+        assert!(obj.get("name").is_none());
+    }
+
+    #[test]
+    fn test_execute_join_other_source_not_found() {
+        let ctx = make_join_test_data();
+        let executor = ExpressionExecutor::new();
+
+        let expr = Expression {
+            source: "orders".to_string(),
+            transforms: vec![Transform::Join {
+                other: "nonexistent".to_string(),
+                on: "customer_id".to_string(),
+            }],
+        };
+
+        let result = executor.execute(&expr, &ctx);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            ExecutionError::SourceNotFound(_)
+        ));
+    }
+
+    #[test]
+    fn test_execute_join_chained_with_filter() {
+        let ctx = make_join_test_data();
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        // Join and then filter to only gold tier customers
+        let expr = parser
+            .parse("{{ orders | join(customers, on=customer_id) | filter(tier=gold) }}")
+            .unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        let arr = result.as_array().unwrap();
+        // Only orders from customer 100 (Alice, gold tier) - 2 orders
+        assert_eq!(arr.len(), 2);
+    }
+
+    #[test]
+    fn test_execute_join_empty_left() {
+        let mut ctx = DataContext::new();
+        ctx.insert("empty", Value::Array(vec![]));
+        ctx.insert(
+            "other",
+            Value::Array(vec![{
+                let mut obj = HashMap::new();
+                obj.insert("id".to_string(), Value::Number(1.0));
+                Value::Object(obj)
+            }]),
+        );
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "empty".to_string(),
+            transforms: vec![Transform::Join {
+                other: "other".to_string(),
+                on: "id".to_string(),
+            }],
+        };
+
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+        assert!(arr.is_empty());
+    }
+
+    #[test]
+    fn test_execute_join_empty_right() {
+        let mut ctx = DataContext::new();
+        ctx.insert(
+            "orders",
+            Value::Array(vec![{
+                let mut obj = HashMap::new();
+                obj.insert("id".to_string(), Value::Number(1.0));
+                Value::Object(obj)
+            }]),
+        );
+        ctx.insert("empty", Value::Array(vec![]));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "orders".to_string(),
+            transforms: vec![Transform::Join {
+                other: "empty".to_string(),
+                on: "id".to_string(),
+            }],
+        };
+
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+        // Left join keeps left items even with no matches
+        assert_eq!(arr.len(), 1);
+    }
+
+    #[test]
+    fn test_execute_join_conflicting_field_names() {
+        let mut ctx = DataContext::new();
+
+        // Both have "value" field
+        ctx.insert(
+            "left",
+            Value::Array(vec![{
+                let mut obj = HashMap::new();
+                obj.insert("id".to_string(), Value::Number(1.0));
+                obj.insert("value".to_string(), Value::String("left_val".to_string()));
+                Value::Object(obj)
+            }]),
+        );
+        ctx.insert(
+            "right",
+            Value::Array(vec![{
+                let mut obj = HashMap::new();
+                obj.insert("id".to_string(), Value::Number(1.0));
+                obj.insert("value".to_string(), Value::String("right_val".to_string()));
+                obj.insert("extra".to_string(), Value::String("extra_val".to_string()));
+                Value::Object(obj)
+            }]),
+        );
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "left".to_string(),
+            transforms: vec![Transform::Join {
+                other: "right".to_string(),
+                on: "id".to_string(),
+            }],
+        };
+
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+
+        let obj = arr[0].as_object().unwrap();
+        // Original left value should be preserved
+        assert_eq!(obj.get("value").unwrap().as_str(), Some("left_val"));
+        // Right value should be prefixed
+        assert_eq!(
+            obj.get("right_value").unwrap().as_str(),
+            Some("right_val")
+        );
+        // Non-conflicting fields should be added directly
+        assert_eq!(obj.get("extra").unwrap().as_str(), Some("extra_val"));
+    }
+
+    #[test]
+    fn test_execute_join_with_sum() {
+        let ctx = make_join_test_data();
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        // Join, filter to gold tier, sum amounts
+        let expr = parser
+            .parse("{{ orders | join(customers, on=customer_id) | filter(tier=gold) | sum(amount) }}")
+            .unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+
+        // Alice has orders 1 (50) and 3 (25) = 75
+        assert_eq!(result.as_number(), Some(75.0));
     }
 }

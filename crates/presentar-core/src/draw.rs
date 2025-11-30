@@ -283,6 +283,20 @@ pub enum DrawCommand {
         style: BoxStyle,
     },
 
+    /// Draw an arc (pie slice)
+    Arc {
+        /// Center point
+        center: Point,
+        /// Radius
+        radius: f32,
+        /// Start angle in radians
+        start_angle: f32,
+        /// End angle in radians
+        end_angle: f32,
+        /// Fill color
+        color: Color,
+    },
+
     /// Draw text
     Text {
         /// Text content

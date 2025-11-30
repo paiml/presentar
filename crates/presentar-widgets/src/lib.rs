@@ -8,6 +8,9 @@ pub mod container;
 pub mod data_card;
 pub mod data_table;
 pub mod image;
+pub mod list;
+pub mod menu;
+pub mod modal;
 pub mod model_card;
 pub mod progress_bar;
 pub mod radio_group;
@@ -32,6 +35,13 @@ pub use data_table::{
     TextAlign,
 };
 pub use image::{Image, ImageFit};
+pub use list::{
+    List, ListDirection, ListItem, ListItemClicked, ListItemSelected, ListScrolled, SelectionMode,
+};
+pub use menu::{
+    Menu, MenuCheckboxToggled, MenuClosed, MenuItem, MenuItemSelected, MenuToggled, MenuTrigger,
+};
+pub use modal::{BackdropBehavior, CloseReason, Modal, ModalClosed, ModalOpened, ModalSize};
 pub use model_card::{ModelCard, ModelMetric, ModelStatus};
 pub use progress_bar::{ProgressBar, ProgressMode};
 pub use radio_group::{RadioChanged, RadioGroup, RadioOption, RadioOrientation};

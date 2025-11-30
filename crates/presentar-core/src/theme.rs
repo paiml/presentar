@@ -38,17 +38,84 @@ impl Default for ColorPalette {
     }
 }
 
+/// Result of a WCAG contrast check.
+#[derive(Debug, Clone)]
+pub struct ContrastCheck {
+    /// Name of the color pair
+    pub name: String,
+    /// Foreground color
+    pub foreground: Color,
+    /// Background color
+    pub background: Color,
+    /// Calculated contrast ratio
+    pub ratio: f32,
+    /// Passes WCAG AA for normal text (4.5:1)
+    pub passes_aa: bool,
+    /// Passes WCAG AAA for normal text (7:1)
+    pub passes_aaa: bool,
+}
+
 impl ColorPalette {
+    /// Check all foreground/background combinations for WCAG compliance.
+    /// Returns a list of contrast checks for each semantic color pair.
+    #[must_use]
+    pub fn check_contrast(&self) -> Vec<ContrastCheck> {
+        let checks = [
+            ("on_primary/primary", self.on_primary, self.primary),
+            ("on_secondary/secondary", self.on_secondary, self.secondary),
+            ("on_surface/surface", self.on_surface, self.surface),
+            ("on_background/background", self.on_background, self.background),
+            ("on_error/error", self.on_error, self.error),
+        ];
+
+        checks
+            .into_iter()
+            .map(|(name, fg, bg)| {
+                let ratio = fg.contrast_ratio(&bg);
+                ContrastCheck {
+                    name: name.to_string(),
+                    foreground: fg,
+                    background: bg,
+                    ratio,
+                    passes_aa: ratio >= 4.5,
+                    passes_aaa: ratio >= 7.0,
+                }
+            })
+            .collect()
+    }
+
+    /// Check if all color pairs pass WCAG AA.
+    #[must_use]
+    pub fn passes_wcag_aa(&self) -> bool {
+        self.check_contrast().iter().all(|c| c.passes_aa)
+    }
+
+    /// Check if all color pairs pass WCAG AAA.
+    #[must_use]
+    pub fn passes_wcag_aaa(&self) -> bool {
+        self.check_contrast().iter().all(|c| c.passes_aaa)
+    }
+
+    /// Get any failing contrast pairs for WCAG AA.
+    #[must_use]
+    pub fn failing_aa(&self) -> Vec<ContrastCheck> {
+        self.check_contrast()
+            .into_iter()
+            .filter(|c| !c.passes_aa)
+            .collect()
+    }
+
     /// Create a light color palette.
+    /// All color combinations pass WCAG AA (4.5:1 contrast ratio).
     #[must_use]
     pub fn light() -> Self {
         Self {
-            primary: Color::new(0.2, 0.47, 0.96, 1.0),    // Blue
-            secondary: Color::new(0.02, 0.53, 0.82, 1.0), // Teal
+            primary: Color::new(0.0, 0.35, 0.75, 1.0),    // Darker blue for AA compliance
+            secondary: Color::new(0.0, 0.40, 0.60, 1.0),  // Darker teal for AA compliance
             surface: Color::WHITE,
             background: Color::new(0.98, 0.98, 0.98, 1.0), // Light gray
-            error: Color::new(0.69, 0.18, 0.18, 1.0),      // Red
-            warning: Color::new(0.93, 0.60, 0.0, 1.0),     // Orange
+            error: Color::new(0.69, 0.18, 0.18, 1.0),      // Red (passes with white)
+            warning: Color::new(0.70, 0.45, 0.0, 1.0),     // Darker orange for AA
             success: Color::new(0.18, 0.55, 0.34, 1.0),    // Green
             on_primary: Color::WHITE,
             on_secondary: Color::WHITE,
@@ -702,5 +769,100 @@ mod tests {
         let json = serde_json::to_string(&theme).expect("serialize");
         let restored: Theme = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(theme, restored);
+    }
+
+    // =========================================================================
+    // Contrast Check Tests
+    // =========================================================================
+
+    #[test]
+    fn test_light_palette_contrast_aa() {
+        let palette = ColorPalette::light();
+        let checks = palette.check_contrast();
+
+        // Should have checks for all pairs
+        assert_eq!(checks.len(), 5);
+
+        // on_primary/primary should pass (white on blue)
+        let primary_check = checks.iter().find(|c| c.name.contains("primary")).unwrap();
+        assert!(
+            primary_check.passes_aa,
+            "on_primary/primary ratio: {:.2}",
+            primary_check.ratio
+        );
+    }
+
+    #[test]
+    fn test_dark_palette_contrast_aa() {
+        let palette = ColorPalette::dark();
+        let checks = palette.check_contrast();
+
+        // on_surface/surface should pass (white on dark)
+        let surface_check = checks.iter().find(|c| c.name.contains("surface")).unwrap();
+        assert!(
+            surface_check.passes_aa,
+            "on_surface/surface ratio: {:.2}",
+            surface_check.ratio
+        );
+    }
+
+    #[test]
+    fn test_passes_wcag_aa() {
+        let light = ColorPalette::light();
+        let dark = ColorPalette::dark();
+
+        // Built-in palettes should be accessible
+        assert!(
+            light.passes_wcag_aa(),
+            "Light palette should pass AA: {:?}",
+            light.failing_aa()
+        );
+        assert!(
+            dark.passes_wcag_aa(),
+            "Dark palette should pass AA: {:?}",
+            dark.failing_aa()
+        );
+    }
+
+    #[test]
+    fn test_failing_aa() {
+        // Create an intentionally inaccessible palette
+        let bad_palette = ColorPalette {
+            primary: Color::rgb(0.5, 0.5, 0.5),
+            secondary: Color::rgb(0.5, 0.5, 0.5),
+            surface: Color::rgb(0.6, 0.6, 0.6),     // Similar to on_surface
+            background: Color::rgb(0.6, 0.6, 0.6),
+            error: Color::rgb(0.5, 0.5, 0.5),
+            warning: Color::rgb(0.5, 0.5, 0.5),
+            success: Color::rgb(0.5, 0.5, 0.5),
+            on_primary: Color::rgb(0.6, 0.6, 0.6), // Low contrast
+            on_secondary: Color::rgb(0.6, 0.6, 0.6),
+            on_surface: Color::rgb(0.5, 0.5, 0.5), // Low contrast
+            on_background: Color::rgb(0.5, 0.5, 0.5),
+            on_error: Color::rgb(0.6, 0.6, 0.6),
+        };
+
+        assert!(!bad_palette.passes_wcag_aa());
+        let failures = bad_palette.failing_aa();
+        assert!(!failures.is_empty());
+    }
+
+    #[test]
+    fn test_contrast_check_ratios() {
+        let palette = ColorPalette::light();
+        let checks = palette.check_contrast();
+
+        for check in checks {
+            // All ratios should be >= 1.0 (minimum possible)
+            assert!(
+                check.ratio >= 1.0,
+                "{} has invalid ratio {}",
+                check.name,
+                check.ratio
+            );
+            // Consistency check
+            assert_eq!(check.passes_aa, check.ratio >= 4.5);
+            assert_eq!(check.passes_aaa, check.ratio >= 7.0);
+        }
     }
 }

@@ -1,0 +1,23 @@
+[package]
+name = "presentar-cli"
+description = "CLI for Presentar WASM apps - serve and bundle"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "presentar"
+path = "src/main.rs"
+
+[dependencies]
+presentar-yaml = { workspace = true }
+clap = { version = "4.4", features = ["derive"] }
+notify = "7.0"
+tiny_http = "0.12"
+tungstenite = "0.26"
+
+[lints]
+workspace = true

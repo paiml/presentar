@@ -1,3 +1,20 @@
+#![allow(clippy::missing_const_for_fn)]
+#![allow(clippy::missing_fields_in_debug)]
+#![allow(clippy::struct_excessive_bools)]
+#![allow(clippy::many_single_char_names)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::should_implement_trait)]
+#![allow(clippy::trivially_copy_pass_by_ref)]
+#![allow(clippy::fn_params_excessive_bools)]
+#![allow(clippy::type_complexity)]
+#![allow(clippy::match_same_arms)]
+#![allow(clippy::unreadable_literal)]
+#![allow(clippy::manual_clamp)]
+#![allow(clippy::unnecessary_wraps)]
+#![allow(clippy::match_like_matches_macro)]
+#![allow(clippy::struct_field_names)]
+#![allow(clippy::needless_pass_by_value)]
+#![allow(clippy::cast_possible_wrap)]
 //! Core types and traits for Presentar UI framework.
 //!
 //! This crate provides foundational types used throughout Presentar:
@@ -44,32 +61,102 @@
 //! }
 //! ```
 
+pub mod accessibility;
+pub mod animation;
+pub mod binding;
+pub mod cache;
 mod canvas;
+pub mod chart;
+pub mod clipboard;
 mod color;
 mod constraints;
+pub mod diff;
+pub mod dnd;
 pub mod draw;
 mod event;
+pub mod gesture;
 mod geometry;
+pub mod history;
+pub mod lifecycle;
 mod runtime;
+pub mod shortcut;
+pub mod simd;
 mod state;
+pub mod streaming;
 pub mod theme;
+pub mod validation;
+pub mod virtualization;
 pub mod widget;
 
+pub use accessibility::{
+    AccessibilityTree, AccessibilityTreeBuilder, AccessibleNode, AccessibleNodeId, CheckedState,
+    HitTester, LiveRegion,
+};
+pub use animation::{
+    AnimatedValue, AnimColor, AnimationController, EasedValue, Easing, Interpolate, Keyframe,
+    KeyframeTrack, Spring, SpringConfig,
+};
+pub use cache::{
+    CacheBuilder, CacheCallback, CacheConfig, CacheEvent, CacheKey, CacheMetadata, CacheOptions,
+    CacheSize, CacheState, CacheStats, DataCache, StringCache,
+};
 pub use canvas::RecordingCanvas;
+pub use chart::{
+    ArcGeometry, CatmullRom, CubicBezier, CubicSpline, DataNormalizer, DrawBatch, HistogramBins,
+    Interpolator, LinearInterpolator, PathTessellator, Point2D,
+};
+pub use clipboard::{
+    Clipboard, ClipboardData, ClipboardEvent, ClipboardFormat, ClipboardHistory,
+    ClipboardOperation, ClipboardResult,
+};
 pub use color::{Color, ColorParseError};
 pub use constraints::Constraints;
+pub use diff::{diff_trees, DiffNode, DiffOp, DiffResult, TreeDiffer, WidgetKey};
+pub use dnd::{
+    DragData, DragDataType, DragDropManager, DragId, DragPayload, DragPhase, DragState,
+    DropEffect, DropResult, DropTarget,
+};
 pub use draw::{
     BoxStyle, DrawCommand, FillRule, LineCap, LineJoin, PathRef, Sampling, Shadow, StrokeStyle,
     TensorRef, Transform2D as DrawTransform,
 };
-pub use event::{Event, Key, MouseButton};
+pub use event::{Event, GestureState, Key, MouseButton, PointerId, PointerType, TouchId};
 pub use geometry::{CornerRadius, Point, Rect, Size};
-pub use runtime::{
-    default_executor, CommandExecutor, ExecutionResult, ExecutorConfig, MemoryRouter,
-    MemoryStorage, Router, Storage,
+pub use gesture::{
+    GestureConfig, GestureRecognizer, PointerGestureRecognizer, PointerInfo, RecognizedGesture,
+    TouchPoint,
 };
-pub use state::{Command, CounterMessage, CounterState, State};
-pub use theme::{ColorPalette, Radii, Shadows, Spacing, Theme, Typography};
+pub use history::{
+    Checkpoint, CheckpointId, Command as HistoryCommand, CommandHistory, CommandId, CommandResult,
+    CompositeCommand, GroupId, HistoryCallback, HistoryConfig, HistoryEvent, SetValueCommand,
+};
+pub use lifecycle::{
+    Effect, EffectManager, HookId, LifecycleEvent, LifecycleManager, LifecyclePhase,
+};
+pub use runtime::{
+    default_executor, AnimatedProperty, AnimationId, AnimationInstance, AnimationState, Animator,
+    CommandExecutor, DataRefreshManager, EasingFunction, ExecutionResult, ExecutorConfig,
+    FocusDirection, FocusManager, FocusTrap, FrameTimer, MemoryRouter, MemoryStorage, RefreshTask,
+    Router, SpringAnimation, Storage, Timer, TransitionConfig, Tween,
+};
+pub use shortcut::{
+    Modifiers, Shortcut, ShortcutBuilder, ShortcutContext, ShortcutId, ShortcutManager,
+    ShortcutPriority,
+};
+pub use state::{Command, CounterMessage, CounterState, State, Store};
+pub use streaming::{
+    ConnectionState, DataStream, MessageBuffer, RateLimiter, ReconnectConfig, StreamConfig,
+    StreamMessage, StreamSubscription,
+};
+pub use theme::{ColorPalette, ContrastCheck, Radii, Shadows, Spacing, Theme, Typography};
+pub use validation::{
+    FieldConfig, FieldState, FormValidator, MaxLength, MinLength, Pattern, PatternType, Range,
+    Required, ValidateOn, ValidationResult, Validator,
+};
+pub use virtualization::{
+    CellLayout, GridCell, ItemIndex, ItemLayout, ScrollAlign, VirtualGrid, VirtualGridConfig,
+    VirtualList, VirtualListConfig, VisibleGridRange, VisibleRange,
+};
 pub use widget::{
     AccessibleRole, Canvas, FontStyle, FontWeight, LayoutResult, TextStyle, Transform2D, TypeId,
     Widget, WidgetId,
