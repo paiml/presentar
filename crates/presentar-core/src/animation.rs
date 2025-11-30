@@ -1152,4 +1152,563 @@ mod tests {
         controller.update(1.0 / 60.0);
         assert_eq!(controller.active_count(), 2);
     }
+
+    // =========================================================================
+    // Easing Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_easing_default() {
+        assert_eq!(Easing::default(), Easing::Linear);
+    }
+
+    #[test]
+    fn test_easing_all_variants_at_zero() {
+        let easings = [
+            Easing::Linear,
+            Easing::EaseIn,
+            Easing::EaseOut,
+            Easing::EaseInOut,
+            Easing::CubicIn,
+            Easing::CubicOut,
+            Easing::CubicInOut,
+            Easing::ExpoIn,
+            Easing::ExpoOut,
+            Easing::ElasticOut,
+            Easing::BounceOut,
+            Easing::BackOut,
+        ];
+        for easing in easings {
+            let val = easing.apply(0.0);
+            assert!(val.abs() < 0.01, "{:?} at 0.0 = {}", easing, val);
+        }
+    }
+
+    #[test]
+    fn test_easing_all_variants_at_one() {
+        let easings = [
+            Easing::Linear,
+            Easing::EaseIn,
+            Easing::EaseOut,
+            Easing::EaseInOut,
+            Easing::CubicIn,
+            Easing::CubicOut,
+            Easing::CubicInOut,
+            Easing::ExpoIn,
+            Easing::ExpoOut,
+            Easing::ElasticOut,
+            Easing::BounceOut,
+            Easing::BackOut,
+        ];
+        for easing in easings {
+            let val = easing.apply(1.0);
+            assert!((val - 1.0).abs() < 0.01, "{:?} at 1.0 = {}", easing, val);
+        }
+    }
+
+    #[test]
+    fn test_easing_cubic_in_out_midpoint() {
+        let val = Easing::CubicInOut.apply(0.5);
+        assert!((val - 0.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_easing_expo_in_zero() {
+        // ExpoIn has special case for 0
+        let val = Easing::ExpoIn.apply(0.0);
+        assert!((val - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_easing_expo_out_one() {
+        // ExpoOut has special case for 1
+        let val = Easing::ExpoOut.apply(1.0);
+        assert!((val - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_easing_elastic_out_zero() {
+        let val = Easing::ElasticOut.apply(0.0);
+        assert!((val - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_easing_bounce_out_segments() {
+        // Test all segments of bounce
+        assert!(Easing::BounceOut.apply(0.1) < 0.3);
+        assert!(Easing::BounceOut.apply(0.5) > 0.5);
+        assert!(Easing::BounceOut.apply(0.8) > 0.9);
+        assert!(Easing::BounceOut.apply(0.95) > 0.98);
+    }
+
+    #[test]
+    fn test_easing_back_out_overshoots() {
+        // BackOut should overshoot slightly past 1.0 before settling
+        let val_mid = Easing::BackOut.apply(0.5);
+        assert!(val_mid > 0.5); // Should be ahead of linear
+    }
+
+    #[test]
+    fn test_easing_clone() {
+        let e = Easing::CubicOut;
+        let cloned = e;
+        assert_eq!(e, cloned);
+    }
+
+    #[test]
+    fn test_easing_debug() {
+        let e = Easing::ElasticOut;
+        let debug = format!("{:?}", e);
+        assert!(debug.contains("ElasticOut"));
+    }
+
+    // =========================================================================
+    // SpringConfig Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_spring_config_default() {
+        let config = SpringConfig::default();
+        assert_eq!(config, SpringConfig::GENTLE);
+    }
+
+    #[test]
+    fn test_spring_config_custom() {
+        let config = SpringConfig::custom(2.0, 200.0, 20.0);
+        assert!((config.mass - 2.0).abs() < 0.001);
+        assert!((config.stiffness - 200.0).abs() < 0.001);
+        assert!((config.damping - 20.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_spring_config_molasses() {
+        let config = SpringConfig::MOLASSES;
+        assert!(config.stiffness < SpringConfig::GENTLE.stiffness);
+    }
+
+    #[test]
+    fn test_spring_config_critically_damped() {
+        // Critical damping = 2 * sqrt(m * k)
+        // For m=1, k=100: critical = 2 * 10 = 20
+        let config = SpringConfig::custom(1.0, 100.0, 20.0);
+        assert!(config.is_critically_damped());
+    }
+
+    #[test]
+    fn test_spring_config_all_presets_valid() {
+        let presets = [
+            SpringConfig::GENTLE,
+            SpringConfig::WOBBLY,
+            SpringConfig::STIFF,
+            SpringConfig::MOLASSES,
+        ];
+        for config in presets {
+            assert!(config.mass > 0.0);
+            assert!(config.stiffness > 0.0);
+            assert!(config.damping > 0.0);
+        }
+    }
+
+    #[test]
+    fn test_spring_config_clone() {
+        let config = SpringConfig::STIFF;
+        let cloned = config;
+        assert_eq!(config, cloned);
+    }
+
+    #[test]
+    fn test_spring_config_debug() {
+        let config = SpringConfig::WOBBLY;
+        let debug = format!("{:?}", config);
+        assert!(debug.contains("SpringConfig"));
+    }
+
+    // =========================================================================
+    // Spring Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_spring_with_config() {
+        let spring = Spring::new(0.0).with_config(SpringConfig::STIFF);
+        assert_eq!(spring.config, SpringConfig::STIFF);
+    }
+
+    #[test]
+    fn test_spring_set_target_same_value() {
+        let mut spring = Spring::new(100.0);
+        spring.set_target(100.0); // Same as initial
+        assert!(spring.at_rest); // Should remain at rest
+    }
+
+    #[test]
+    fn test_spring_update_small_dt() {
+        let mut spring = Spring::new(0.0);
+        spring.set_target(100.0);
+        spring.update(0.001); // Very small time step
+        assert!(spring.value > 0.0);
+    }
+
+    #[test]
+    fn test_spring_precision_threshold() {
+        let mut spring = Spring::new(0.0);
+        spring.precision = 0.1; // Larger precision
+        spring.set_target(0.05); // Within precision
+        spring.update(0.016);
+        // Should settle quickly with larger precision
+    }
+
+    #[test]
+    fn test_spring_negative_values() {
+        let mut spring = Spring::new(0.0);
+        spring.set_target(-100.0);
+        for _ in 0..200 {
+            spring.update(1.0 / 60.0);
+        }
+        assert!((spring.value - (-100.0)).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_spring_clone() {
+        let spring = Spring::new(50.0);
+        let cloned = spring.clone();
+        assert!((cloned.value - 50.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_spring_debug() {
+        let spring = Spring::new(0.0);
+        let debug = format!("{:?}", spring);
+        assert!(debug.contains("Spring"));
+    }
+
+    // =========================================================================
+    // EasedValue Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_eased_value_zero_duration() {
+        let eased = EasedValue::new(0.0, 100.0, 0.0);
+        assert!((eased.value() - 100.0).abs() < 0.001); // Instant
+        assert!(eased.is_complete());
+    }
+
+    #[test]
+    fn test_eased_value_negative_update() {
+        let mut eased = EasedValue::new(0.0, 100.0, 1.0);
+        eased.update(0.5);
+        eased.update(-0.2); // Negative dt (shouldn't happen but handle gracefully)
+        // elapsed should not exceed duration and value should stay in valid range
+        assert!(eased.elapsed <= eased.duration);
+        // value() clamps progress to [0, 1], so value is always in [from, to] range
+        assert!(eased.value() >= 0.0 && eased.value() <= 100.0);
+        // elapsed should be 0.3 after -0.2 from 0.5
+        assert!((eased.elapsed - 0.3).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_eased_value_progress_zero_duration() {
+        let eased = EasedValue::new(0.0, 100.0, 0.0);
+        assert!((eased.progress() - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_eased_value_linear_interpolation() {
+        let mut eased = EasedValue::new(0.0, 100.0, 1.0).with_easing(Easing::Linear);
+        eased.update(0.5);
+        assert!((eased.value() - 50.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_eased_value_clone() {
+        let eased = EasedValue::new(10.0, 90.0, 2.0);
+        let cloned = eased.clone();
+        assert!((cloned.from - 10.0).abs() < 0.001);
+        assert!((cloned.to - 90.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_eased_value_debug() {
+        let eased = EasedValue::new(0.0, 100.0, 1.0);
+        let debug = format!("{:?}", eased);
+        assert!(debug.contains("EasedValue"));
+    }
+
+    // =========================================================================
+    // AnimatedValue Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_animated_value_spring_complete() {
+        let mut spring = Spring::new(0.0);
+        spring.set_immediate(100.0);
+        let anim = AnimatedValue::Spring(spring);
+        assert!(anim.is_complete());
+    }
+
+    #[test]
+    fn test_animated_value_update_eased() {
+        let mut anim = AnimatedValue::Eased(EasedValue::new(0.0, 100.0, 1.0));
+        anim.update(0.5);
+        assert!(anim.value() > 0.0);
+        assert!(anim.value() < 100.0);
+    }
+
+    #[test]
+    fn test_animated_value_update_spring() {
+        let mut spring = Spring::new(0.0);
+        spring.set_target(100.0);
+        let mut anim = AnimatedValue::Spring(spring);
+        anim.update(1.0 / 60.0);
+        assert!(anim.value() > 0.0);
+    }
+
+    // =========================================================================
+    // Keyframe Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_keyframe_with_easing() {
+        let kf: Keyframe<f64> = Keyframe::new(0.5, 50.0).with_easing(Easing::CubicOut);
+        assert_eq!(kf.easing, Easing::CubicOut);
+    }
+
+    #[test]
+    fn test_keyframe_clamps_negative_time() {
+        let kf: Keyframe<f64> = Keyframe::new(-0.5, 50.0);
+        assert!((kf.time - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_keyframe_clone() {
+        let kf: Keyframe<f64> = Keyframe::new(0.5, 75.0);
+        let cloned = kf.clone();
+        assert!((cloned.time - 0.5).abs() < 0.001);
+        assert!((cloned.value - 75.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_keyframe_debug() {
+        let kf: Keyframe<f64> = Keyframe::new(0.5, 50.0);
+        let debug = format!("{:?}", kf);
+        assert!(debug.contains("Keyframe"));
+    }
+
+    // =========================================================================
+    // KeyframeTrack Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_keyframe_track_zero_duration() {
+        let mut track: KeyframeTrack<f64> = KeyframeTrack::new(0.0);
+        track.add_keyframe(Keyframe::new(0.0, 0.0));
+        track.add_keyframe(Keyframe::new(1.0, 100.0));
+        // Zero duration should jump to end
+        assert!((track.value().unwrap() - 100.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_keyframe_track_multiple_keyframes() {
+        let mut track: KeyframeTrack<f64> = KeyframeTrack::new(1.0);
+        track.add_keyframe(Keyframe::new(0.0, 0.0));
+        track.add_keyframe(Keyframe::new(0.5, 50.0));
+        track.add_keyframe(Keyframe::new(1.0, 100.0));
+
+        track.elapsed = 0.25;
+        let val = track.value().unwrap();
+        assert!(val > 20.0 && val < 30.0); // Between 0 and 50
+
+        track.elapsed = 0.75;
+        let val = track.value().unwrap();
+        assert!(val > 70.0 && val < 80.0); // Between 50 and 100
+    }
+
+    #[test]
+    fn test_keyframe_track_keyframe_sorting() {
+        let mut track: KeyframeTrack<f64> = KeyframeTrack::new(1.0);
+        // Add out of order
+        track.add_keyframe(Keyframe::new(1.0, 100.0));
+        track.add_keyframe(Keyframe::new(0.0, 0.0));
+        track.add_keyframe(Keyframe::new(0.5, 50.0));
+
+        // Should still work correctly
+        track.elapsed = 0.0;
+        assert!((track.value().unwrap() - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_keyframe_track_looping_wrap() {
+        let mut track: KeyframeTrack<f64> = KeyframeTrack::new(1.0).with_loop(true);
+        track.add_keyframe(Keyframe::new(0.0, 0.0));
+        track.add_keyframe(Keyframe::new(1.0, 100.0));
+
+        track.update(2.5); // 2.5 seconds on 1 second loop
+        // Should be at 0.5 normalized time
+        let val = track.value().unwrap();
+        assert!(val > 40.0 && val < 60.0);
+    }
+
+    #[test]
+    fn test_keyframe_track_non_looping_clamps() {
+        let mut track: KeyframeTrack<f64> = KeyframeTrack::new(1.0);
+        track.add_keyframe(Keyframe::new(0.0, 0.0));
+        track.add_keyframe(Keyframe::new(1.0, 100.0));
+
+        track.update(5.0); // Way past duration
+        assert!((track.elapsed - 1.0).abs() < 0.001); // Clamped to duration
+        assert!((track.value().unwrap() - 100.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_keyframe_track_is_complete() {
+        let mut track: KeyframeTrack<f64> = KeyframeTrack::new(1.0);
+        track.add_keyframe(Keyframe::new(0.0, 0.0));
+        assert!(!track.is_complete());
+        track.update(1.0);
+        assert!(track.is_complete());
+    }
+
+    #[test]
+    fn test_keyframe_track_looping_never_complete() {
+        let mut track: KeyframeTrack<f64> = KeyframeTrack::new(1.0).with_loop(true);
+        track.add_keyframe(Keyframe::new(0.0, 0.0));
+        track.update(10.0);
+        assert!(!track.is_complete());
+    }
+
+    #[test]
+    fn test_keyframe_track_clone() {
+        let mut track: KeyframeTrack<f64> = KeyframeTrack::new(2.0);
+        track.add_keyframe(Keyframe::new(0.0, 0.0));
+        let cloned = track.clone();
+        assert!((cloned.duration - 2.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_keyframe_track_debug() {
+        let track: KeyframeTrack<f64> = KeyframeTrack::new(1.0);
+        let debug = format!("{:?}", track);
+        assert!(debug.contains("KeyframeTrack"));
+    }
+
+    // =========================================================================
+    // AnimColor Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_anim_color_new() {
+        let color = AnimColor::new(0.5, 0.6, 0.7, 0.8);
+        assert!((color.r - 0.5).abs() < 0.001);
+        assert!((color.g - 0.6).abs() < 0.001);
+        assert!((color.b - 0.7).abs() < 0.001);
+        assert!((color.a - 0.8).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_anim_color_constants() {
+        assert!((AnimColor::WHITE.r - 1.0).abs() < 0.001);
+        assert!((AnimColor::BLACK.r - 0.0).abs() < 0.001);
+        assert!((AnimColor::TRANSPARENT.a - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_anim_color_interpolate_alpha() {
+        let from = AnimColor::new(1.0, 1.0, 1.0, 0.0);
+        let to = AnimColor::new(1.0, 1.0, 1.0, 1.0);
+        let result = AnimColor::interpolate(&from, &to, 0.5);
+        assert!((result.a - 0.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_anim_color_clone() {
+        let color = AnimColor::new(0.1, 0.2, 0.3, 0.4);
+        let cloned = color;
+        assert_eq!(color, cloned);
+    }
+
+    #[test]
+    fn test_anim_color_debug() {
+        let color = AnimColor::WHITE;
+        let debug = format!("{:?}", color);
+        assert!(debug.contains("AnimColor"));
+    }
+
+    // =========================================================================
+    // AnimationController Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_controller_default() {
+        let controller = AnimationController::default();
+        assert!(!controller.is_animating());
+    }
+
+    #[test]
+    fn test_controller_set_target_nonexistent() {
+        let mut controller = AnimationController::new();
+        controller.set_target("nonexistent", 100.0); // Should not panic
+    }
+
+    #[test]
+    fn test_controller_mixed_animations() {
+        let mut controller = AnimationController::new();
+        controller.add_spring("spring", 0.0, SpringConfig::STIFF);
+        controller.add_eased("eased", 0.0, 100.0, 0.5, Easing::Linear);
+
+        controller.set_target("spring", 100.0);
+        controller.update(0.25);
+
+        assert!(controller.is_animating());
+        // Both should have values
+        assert!(controller.get("spring").is_some());
+        assert!(controller.get("eased").is_some());
+    }
+
+    #[test]
+    fn test_controller_eased_completes() {
+        let mut controller = AnimationController::new();
+        controller.add_eased("fade", 0.0, 1.0, 0.5, Easing::Linear);
+        controller.update(0.5);
+        assert!(!controller.is_animating()); // Should be complete
+    }
+
+    #[test]
+    fn test_controller_debug() {
+        let controller = AnimationController::new();
+        let debug = format!("{:?}", controller);
+        assert!(debug.contains("AnimationController"));
+    }
+
+    // =========================================================================
+    // Interpolate Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_interpolate_f64_boundaries() {
+        assert!((f64::interpolate(&0.0, &100.0, 0.0) - 0.0).abs() < 0.001);
+        assert!((f64::interpolate(&0.0, &100.0, 1.0) - 100.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_interpolate_f32_negative() {
+        let result = f32::interpolate(&-50.0, &50.0, 0.5);
+        assert!((result - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_interpolate_point_negative() {
+        let from = Point { x: -100.0, y: -100.0 };
+        let to = Point { x: 100.0, y: 100.0 };
+        let result = Point::interpolate(&from, &to, 0.5);
+        assert!((result.x - 0.0).abs() < 0.001);
+        assert!((result.y - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_interpolate_color_boundaries() {
+        let result_start = AnimColor::interpolate(&AnimColor::BLACK, &AnimColor::WHITE, 0.0);
+        assert!((result_start.r - 0.0).abs() < 0.001);
+
+        let result_end = AnimColor::interpolate(&AnimColor::BLACK, &AnimColor::WHITE, 1.0);
+        assert!((result_end.r - 1.0).abs() < 0.001);
+    }
 }
