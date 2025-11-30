@@ -242,4 +242,292 @@ mod tests {
         assert_eq!(cache.hits(), 0);
         assert_eq!(cache.misses(), 0);
     }
+
+    // =========================================================================
+    // CacheKey Tests
+    // =========================================================================
+
+    #[test]
+    fn test_cache_key_equality() {
+        let key1 = CacheKey {
+            widget_id: 1,
+            constraints_hash: 100,
+        };
+        let key2 = CacheKey {
+            widget_id: 1,
+            constraints_hash: 100,
+        };
+        assert_eq!(key1, key2);
+    }
+
+    #[test]
+    fn test_cache_key_inequality_widget_id() {
+        let key1 = CacheKey {
+            widget_id: 1,
+            constraints_hash: 100,
+        };
+        let key2 = CacheKey {
+            widget_id: 2,
+            constraints_hash: 100,
+        };
+        assert_ne!(key1, key2);
+    }
+
+    #[test]
+    fn test_cache_key_inequality_constraints() {
+        let key1 = CacheKey {
+            widget_id: 1,
+            constraints_hash: 100,
+        };
+        let key2 = CacheKey {
+            widget_id: 1,
+            constraints_hash: 200,
+        };
+        assert_ne!(key1, key2);
+    }
+
+    #[test]
+    fn test_cache_key_clone() {
+        let key = CacheKey {
+            widget_id: 42,
+            constraints_hash: 999,
+        };
+        let cloned = key;
+        assert_eq!(key, cloned);
+    }
+
+    #[test]
+    fn test_cache_key_debug() {
+        let key = CacheKey {
+            widget_id: 1,
+            constraints_hash: 100,
+        };
+        let debug = format!("{:?}", key);
+        assert!(debug.contains("widget_id"));
+        assert!(debug.contains("constraints_hash"));
+    }
+
+    // =========================================================================
+    // Multiple Entries Tests
+    // =========================================================================
+
+    #[test]
+    fn test_cache_multiple_entries() {
+        let mut cache = LayoutCache::new();
+
+        for i in 0..10 {
+            let key = CacheKey {
+                widget_id: i,
+                constraints_hash: i * 100,
+            };
+            cache.insert(key, Size::new(i as f32, i as f32));
+        }
+
+        assert_eq!(cache.len(), 10);
+
+        // Verify each entry
+        for i in 0..10 {
+            let key = CacheKey {
+                widget_id: i,
+                constraints_hash: i * 100,
+            };
+            assert_eq!(cache.get(key), Some(Size::new(i as f32, i as f32)));
+        }
+    }
+
+    #[test]
+    fn test_cache_overwrite_entry() {
+        let mut cache = LayoutCache::new();
+        let key = CacheKey {
+            widget_id: 1,
+            constraints_hash: 100,
+        };
+
+        cache.insert(key, Size::new(10.0, 10.0));
+        assert_eq!(cache.get(key), Some(Size::new(10.0, 10.0)));
+
+        // Overwrite with new size
+        cache.insert(key, Size::new(20.0, 20.0));
+        assert_eq!(cache.get(key), Some(Size::new(20.0, 20.0)));
+        assert_eq!(cache.len(), 1);
+    }
+
+    // =========================================================================
+    // Eviction Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_cache_eviction_threshold() {
+        let mut cache = LayoutCache::new();
+
+        let key1 = CacheKey {
+            widget_id: 1,
+            constraints_hash: 100,
+        };
+        let key2 = CacheKey {
+            widget_id: 2,
+            constraints_hash: 200,
+        };
+
+        cache.insert(key1, Size::new(10.0, 10.0));
+        cache.advance_frame();
+        cache.insert(key2, Size::new(20.0, 20.0));
+        cache.advance_frame();
+
+        // Both should still be present (threshold is 2 frames)
+        assert_eq!(cache.len(), 2);
+
+        // One more frame without touching key1
+        let _ = cache.get(key2);
+        cache.advance_frame();
+
+        // key1 should be evicted (not used in last 2 frames)
+        assert_eq!(cache.len(), 1);
+        assert_eq!(cache.get(key2), Some(Size::new(20.0, 20.0)));
+    }
+
+    #[test]
+    fn test_cache_eviction_empty_cache() {
+        let mut cache = LayoutCache::new();
+
+        // Advancing frames on empty cache should not panic
+        for _ in 0..10 {
+            cache.advance_frame();
+        }
+
+        assert!(cache.is_empty());
+    }
+
+    // =========================================================================
+    // Default Implementation
+    // =========================================================================
+
+    #[test]
+    fn test_cache_default() {
+        let cache = LayoutCache::default();
+        assert!(cache.is_empty());
+        assert_eq!(cache.hits(), 0);
+        assert_eq!(cache.misses(), 0);
+    }
+
+    // =========================================================================
+    // Debug Format
+    // =========================================================================
+
+    #[test]
+    fn test_cache_debug() {
+        let cache = LayoutCache::new();
+        let debug = format!("{:?}", cache);
+        assert!(debug.contains("LayoutCache"));
+    }
+
+    // =========================================================================
+    // Size Values
+    // =========================================================================
+
+    #[test]
+    fn test_cache_with_zero_size() {
+        let mut cache = LayoutCache::new();
+        let key = CacheKey {
+            widget_id: 1,
+            constraints_hash: 100,
+        };
+
+        cache.insert(key, Size::new(0.0, 0.0));
+        assert_eq!(cache.get(key), Some(Size::new(0.0, 0.0)));
+    }
+
+    #[test]
+    fn test_cache_with_large_size() {
+        let mut cache = LayoutCache::new();
+        let key = CacheKey {
+            widget_id: 1,
+            constraints_hash: 100,
+        };
+
+        cache.insert(key, Size::new(10000.0, 10000.0));
+        assert_eq!(cache.get(key), Some(Size::new(10000.0, 10000.0)));
+    }
+
+    #[test]
+    fn test_cache_with_fractional_size() {
+        let mut cache = LayoutCache::new();
+        let key = CacheKey {
+            widget_id: 1,
+            constraints_hash: 100,
+        };
+
+        cache.insert(key, Size::new(10.5, 20.75));
+        assert_eq!(cache.get(key), Some(Size::new(10.5, 20.75)));
+    }
+
+    // =========================================================================
+    // Hash Collision Resistance
+    // =========================================================================
+
+    #[test]
+    fn test_cache_different_widget_same_constraints() {
+        let mut cache = LayoutCache::new();
+
+        let key1 = CacheKey {
+            widget_id: 1,
+            constraints_hash: 100,
+        };
+        let key2 = CacheKey {
+            widget_id: 2,
+            constraints_hash: 100,
+        };
+
+        cache.insert(key1, Size::new(10.0, 10.0));
+        cache.insert(key2, Size::new(20.0, 20.0));
+
+        assert_eq!(cache.get(key1), Some(Size::new(10.0, 10.0)));
+        assert_eq!(cache.get(key2), Some(Size::new(20.0, 20.0)));
+        assert_eq!(cache.len(), 2);
+    }
+
+    #[test]
+    fn test_cache_same_widget_different_constraints() {
+        let mut cache = LayoutCache::new();
+
+        let key1 = CacheKey {
+            widget_id: 1,
+            constraints_hash: 100,
+        };
+        let key2 = CacheKey {
+            widget_id: 1,
+            constraints_hash: 200,
+        };
+
+        cache.insert(key1, Size::new(10.0, 10.0));
+        cache.insert(key2, Size::new(20.0, 20.0));
+
+        assert_eq!(cache.get(key1), Some(Size::new(10.0, 10.0)));
+        assert_eq!(cache.get(key2), Some(Size::new(20.0, 20.0)));
+        assert_eq!(cache.len(), 2);
+    }
+
+    // =========================================================================
+    // Frame Counter
+    // =========================================================================
+
+    #[test]
+    fn test_cache_frame_counter_overflow() {
+        let mut cache = LayoutCache::new();
+        let key = CacheKey {
+            widget_id: 1,
+            constraints_hash: 100,
+        };
+
+        cache.insert(key, Size::new(10.0, 10.0));
+
+        // Advance many frames while keeping entry fresh
+        for _ in 0..100 {
+            let _ = cache.get(key);
+            cache.advance_frame();
+        }
+
+        // Entry should still exist
+        assert_eq!(cache.get(key), Some(Size::new(10.0, 10.0)));
+    }
 }

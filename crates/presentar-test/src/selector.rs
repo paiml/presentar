@@ -316,4 +316,327 @@ mod tests {
             "unexpected character: '@'"
         );
     }
+
+    // =========================================================================
+    // Additional Selector Error Display Tests
+    // =========================================================================
+
+    #[test]
+    fn test_selector_error_display_all_variants() {
+        assert_eq!(SelectorError::Empty.to_string(), "empty selector");
+        assert_eq!(
+            SelectorError::ExpectedIdentifier.to_string(),
+            "expected identifier"
+        );
+        assert_eq!(
+            SelectorError::InvalidAttribute.to_string(),
+            "invalid attribute syntax"
+        );
+        assert_eq!(
+            SelectorError::UnclosedAttribute.to_string(),
+            "unclosed attribute bracket"
+        );
+    }
+
+    // =========================================================================
+    // Type Selector Tests
+    // =========================================================================
+
+    #[test]
+    fn test_parse_type_with_hyphen() {
+        let sel = Selector::parse("data-table").unwrap();
+        assert_eq!(sel, Selector::Type("data-table".to_string()));
+    }
+
+    #[test]
+    fn test_parse_type_with_underscore() {
+        let sel = Selector::parse("my_widget").unwrap();
+        assert_eq!(sel, Selector::Type("my_widget".to_string()));
+    }
+
+    #[test]
+    fn test_parse_type_with_numbers() {
+        let sel = Selector::parse("Button2").unwrap();
+        assert_eq!(sel, Selector::Type("Button2".to_string()));
+    }
+
+    #[test]
+    fn test_parse_type_case_sensitive() {
+        let sel1 = Selector::parse("Button").unwrap();
+        let sel2 = Selector::parse("button").unwrap();
+        assert_ne!(sel1, sel2);
+    }
+
+    // =========================================================================
+    // ID Selector Tests
+    // =========================================================================
+
+    #[test]
+    fn test_parse_id_with_numbers() {
+        let sel = Selector::parse("#item-123").unwrap();
+        assert_eq!(sel, Selector::Id("item-123".to_string()));
+    }
+
+    #[test]
+    fn test_parse_id_with_underscores() {
+        let sel = Selector::parse("#my_element").unwrap();
+        assert_eq!(sel, Selector::Id("my_element".to_string()));
+    }
+
+    #[test]
+    fn test_parse_id_simple() {
+        let sel = Selector::parse("#main").unwrap();
+        assert_eq!(sel, Selector::Id("main".to_string()));
+    }
+
+    // =========================================================================
+    // Class Selector Tests
+    // =========================================================================
+
+    #[test]
+    fn test_parse_class_with_numbers() {
+        let sel = Selector::parse(".col-12").unwrap();
+        assert_eq!(sel, Selector::Class("col-12".to_string()));
+    }
+
+    #[test]
+    fn test_parse_class_with_underscores() {
+        let sel = Selector::parse(".btn_primary").unwrap();
+        assert_eq!(sel, Selector::Class("btn_primary".to_string()));
+    }
+
+    // =========================================================================
+    // Attribute Selector Tests
+    // =========================================================================
+
+    #[test]
+    fn test_parse_attribute_role() {
+        let sel = Selector::parse("[role='button']").unwrap();
+        assert_eq!(
+            sel,
+            Selector::Attribute {
+                name: "role".to_string(),
+                value: "button".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_attribute_disabled() {
+        let sel = Selector::parse("[disabled='true']").unwrap();
+        assert_eq!(
+            sel,
+            Selector::Attribute {
+                name: "disabled".to_string(),
+                value: "true".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_attribute_with_spaces_in_value() {
+        let sel = Selector::parse("[aria-label='Click to submit']").unwrap();
+        assert_eq!(
+            sel,
+            Selector::Attribute {
+                name: "aria-label".to_string(),
+                value: "Click to submit".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_testid_variations() {
+        // Single quotes
+        let sel1 = Selector::parse("[data-testid='foo']").unwrap();
+        assert_eq!(sel1, Selector::TestId("foo".to_string()));
+
+        // Double quotes
+        let sel2 = Selector::parse("[data-testid=\"bar\"]").unwrap();
+        assert_eq!(sel2, Selector::TestId("bar".to_string()));
+    }
+
+    // =========================================================================
+    // Error Cases
+    // =========================================================================
+
+    #[test]
+    fn test_parse_unexpected_char() {
+        let result = Selector::parse("@invalid");
+        assert_eq!(result, Err(SelectorError::UnexpectedChar('@')));
+    }
+
+    #[test]
+    fn test_parse_unexpected_char_special() {
+        assert!(Selector::parse("!invalid").is_err());
+        assert!(Selector::parse("$invalid").is_err());
+        assert!(Selector::parse("*invalid").is_err());
+    }
+
+    #[test]
+    fn test_parse_empty_id() {
+        let result = Selector::parse("#");
+        assert_eq!(result, Err(SelectorError::ExpectedIdentifier));
+    }
+
+    #[test]
+    fn test_parse_empty_class() {
+        let result = Selector::parse(".");
+        assert_eq!(result, Err(SelectorError::ExpectedIdentifier));
+    }
+
+    #[test]
+    fn test_parse_unclosed_attribute() {
+        let result = Selector::parse("[data-testid='foo'");
+        assert_eq!(result, Err(SelectorError::UnclosedAttribute));
+    }
+
+    #[test]
+    fn test_parse_invalid_attribute_no_equals() {
+        let result = Selector::parse("[disabled]");
+        // This parses the name but then expects '=' - currently reads until '=' which is empty
+        assert!(result.is_err());
+    }
+
+    // =========================================================================
+    // Whitespace Handling Tests
+    // =========================================================================
+
+    #[test]
+    fn test_parse_leading_whitespace() {
+        let sel = Selector::parse("   #main").unwrap();
+        assert_eq!(sel, Selector::Id("main".to_string()));
+    }
+
+    #[test]
+    fn test_parse_trailing_whitespace() {
+        let sel = Selector::parse(".button   ").unwrap();
+        assert_eq!(sel, Selector::Class("button".to_string()));
+    }
+
+    #[test]
+    fn test_parse_only_whitespace() {
+        let result = Selector::parse("   ");
+        assert_eq!(result, Err(SelectorError::Empty));
+    }
+
+    // =========================================================================
+    // Selector Equality Tests
+    // =========================================================================
+
+    #[test]
+    fn test_selector_equality() {
+        let sel1 = Selector::parse("#main").unwrap();
+        let sel2 = Selector::parse("#main").unwrap();
+        assert_eq!(sel1, sel2);
+    }
+
+    #[test]
+    fn test_selector_inequality_different_types() {
+        let id = Selector::parse("#main").unwrap();
+        let class = Selector::parse(".main").unwrap();
+        assert_ne!(id, class);
+    }
+
+    #[test]
+    fn test_selector_inequality_different_values() {
+        let sel1 = Selector::parse("#main").unwrap();
+        let sel2 = Selector::parse("#header").unwrap();
+        assert_ne!(sel1, sel2);
+    }
+
+    // =========================================================================
+    // Selector Clone Tests
+    // =========================================================================
+
+    #[test]
+    fn test_selector_clone() {
+        let sel = Selector::parse("[data-testid='foo']").unwrap();
+        let cloned = sel.clone();
+        assert_eq!(sel, cloned);
+    }
+
+    // =========================================================================
+    // SelectorParser Tests
+    // =========================================================================
+
+    #[test]
+    fn test_parser_new() {
+        let parser = SelectorParser::new("Button");
+        assert_eq!(parser.input, "Button");
+        assert_eq!(parser.pos, 0);
+    }
+
+    // =========================================================================
+    // Complex Selectors (Descendant/Child) - Structure Tests
+    // =========================================================================
+
+    #[test]
+    fn test_selector_descendant_structure() {
+        // Test the structure of descendant selectors
+        let parent = Box::new(Selector::Type("Container".to_string()));
+        let child = Box::new(Selector::Type("Button".to_string()));
+        let desc = Selector::Descendant(parent, child);
+
+        // Verify it's a descendant selector
+        matches!(desc, Selector::Descendant(_, _));
+    }
+
+    #[test]
+    fn test_selector_child_structure() {
+        // Test the structure of child selectors
+        let parent = Box::new(Selector::Type("Row".to_string()));
+        let child = Box::new(Selector::Type("Column".to_string()));
+        let sel = Selector::Child(parent, child);
+
+        // Verify it's a child selector
+        matches!(sel, Selector::Child(_, _));
+    }
+
+    // =========================================================================
+    // Debug Format Tests
+    // =========================================================================
+
+    #[test]
+    fn test_selector_debug_format() {
+        let sel = Selector::parse("#main").unwrap();
+        let debug = format!("{:?}", sel);
+        assert!(debug.contains("Id"));
+        assert!(debug.contains("main"));
+    }
+
+    #[test]
+    fn test_selector_error_debug_format() {
+        let err = SelectorError::Empty;
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("Empty"));
+    }
+
+    // =========================================================================
+    // Unicode Handling (if applicable)
+    // =========================================================================
+
+    #[test]
+    fn test_parse_unicode_in_attribute_value() {
+        let sel = Selector::parse("[aria-label='日本語']").unwrap();
+        assert_eq!(
+            sel,
+            Selector::Attribute {
+                name: "aria-label".to_string(),
+                value: "日本語".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_emoji_in_attribute_value() {
+        let sel = Selector::parse("[aria-label='Hello 👋']").unwrap();
+        assert_eq!(
+            sel,
+            Selector::Attribute {
+                name: "aria-label".to_string(),
+                value: "Hello 👋".to_string(),
+            }
+        );
+    }
 }

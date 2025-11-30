@@ -372,4 +372,270 @@ mod tests {
         assert_eq!(pos.x, 0.0);
         assert_eq!(pos.y, 0.0);
     }
+
+    // =========================================================================
+    // LayoutTree Tests
+    // =========================================================================
+
+    #[test]
+    fn test_layout_tree_widget_count() {
+        let mut tree = LayoutTree::default();
+        assert_eq!(tree.widget_count(), 0);
+
+        tree.positions.insert(0, Rect::default());
+        tree.positions.insert(1, Rect::default());
+        tree.positions.insert(2, Rect::default());
+
+        assert_eq!(tree.widget_count(), 3);
+    }
+
+    #[test]
+    fn test_layout_tree_sizes_and_positions() {
+        let mut tree = LayoutTree::default();
+
+        tree.sizes.insert(0, Size::new(100.0, 50.0));
+        tree.positions.insert(0, Rect::new(10.0, 20.0, 100.0, 50.0));
+
+        tree.sizes.insert(1, Size::new(200.0, 100.0));
+        tree.positions.insert(1, Rect::new(120.0, 20.0, 200.0, 100.0));
+
+        assert_eq!(tree.sizes.len(), 2);
+        assert_eq!(tree.positions.len(), 2);
+    }
+
+    #[test]
+    fn test_layout_tree_debug() {
+        let tree = LayoutTree::default();
+        let debug = format!("{:?}", tree);
+        assert!(debug.contains("LayoutTree"));
+    }
+
+    // =========================================================================
+    // LayoutEngine Default Tests
+    // =========================================================================
+
+    #[test]
+    fn test_layout_engine_default() {
+        let engine = LayoutEngine::default();
+        assert_eq!(engine.next_id, 0);
+    }
+
+    #[test]
+    fn test_layout_engine_debug() {
+        let engine = LayoutEngine::new();
+        let debug = format!("{:?}", engine);
+        assert!(debug.contains("LayoutEngine"));
+    }
+
+    // =========================================================================
+    // Multiple Compute Calls
+    // =========================================================================
+
+    #[test]
+    fn test_layout_multiple_computes() {
+        let mut engine = LayoutEngine::new();
+        let viewport = Size::new(800.0, 600.0);
+
+        // First compute
+        let mut widget1 = TestWidget::new(100.0, 50.0);
+        let tree1 = engine.compute(&mut widget1, viewport);
+        assert_eq!(tree1.widget_count(), 1);
+
+        // Second compute (should reset IDs)
+        let mut widget2 = TestWidget::new(200.0, 100.0);
+        let tree2 = engine.compute(&mut widget2, viewport);
+        assert_eq!(tree2.widget_count(), 1);
+    }
+
+    #[test]
+    fn test_layout_cache_cleared_on_compute() {
+        let mut engine = LayoutEngine::new();
+        let viewport = Size::new(800.0, 600.0);
+
+        let mut widget = TestWidget::new(100.0, 50.0);
+        engine.compute(&mut widget, viewport);
+
+        let (hits, misses) = engine.cache_stats();
+        assert_eq!(hits, 0);
+        assert_eq!(misses, 0);
+    }
+
+    // =========================================================================
+    // Viewport Size Variations
+    // =========================================================================
+
+    #[test]
+    fn test_layout_zero_viewport() {
+        let mut engine = LayoutEngine::new();
+        let mut widget = TestWidget::new(100.0, 50.0);
+        let viewport = Size::new(0.0, 0.0);
+
+        let tree = engine.compute(&mut widget, viewport);
+        assert_eq!(tree.widget_count(), 1);
+    }
+
+    #[test]
+    fn test_layout_very_large_viewport() {
+        let mut engine = LayoutEngine::new();
+        let mut widget = TestWidget::new(100.0, 50.0);
+        let viewport = Size::new(10000.0, 10000.0);
+
+        let tree = engine.compute(&mut widget, viewport);
+        let size = tree.get_size(0).unwrap();
+
+        // Widget should keep its intrinsic size within loose constraints
+        assert!(size.width <= 100.0);
+        assert!(size.height <= 50.0);
+    }
+
+    #[test]
+    fn test_layout_square_viewport() {
+        let mut engine = LayoutEngine::new();
+        let mut widget = TestWidget::new(100.0, 100.0);
+        let viewport = Size::new(500.0, 500.0);
+
+        let tree = engine.compute(&mut widget, viewport);
+        assert_eq!(tree.widget_count(), 1);
+    }
+
+    // =========================================================================
+    // Complex Widget Trees
+    // =========================================================================
+
+    #[test]
+    fn test_layout_deeply_nested() {
+        let mut engine = LayoutEngine::new();
+        let viewport = Size::new(800.0, 600.0);
+
+        let mut widget = TestWidget::new(100.0, 100.0)
+            .with_child(
+                TestWidget::new(80.0, 80.0)
+                    .with_child(
+                        TestWidget::new(60.0, 60.0)
+                            .with_child(
+                                TestWidget::new(40.0, 40.0)
+                                    .with_child(TestWidget::new(20.0, 20.0)),
+                            ),
+                    ),
+            );
+
+        let tree = engine.compute(&mut widget, viewport);
+        assert_eq!(tree.widget_count(), 5); // 5 levels of nesting
+    }
+
+    #[test]
+    fn test_layout_wide_tree() {
+        let mut engine = LayoutEngine::new();
+        let viewport = Size::new(800.0, 600.0);
+
+        let mut widget = TestWidget::new(200.0, 100.0)
+            .with_child(TestWidget::new(30.0, 30.0))
+            .with_child(TestWidget::new(30.0, 30.0))
+            .with_child(TestWidget::new(30.0, 30.0))
+            .with_child(TestWidget::new(30.0, 30.0))
+            .with_child(TestWidget::new(30.0, 30.0));
+
+        let tree = engine.compute(&mut widget, viewport);
+        assert_eq!(tree.widget_count(), 6); // Root + 5 children
+    }
+
+    #[test]
+    fn test_layout_mixed_tree() {
+        let mut engine = LayoutEngine::new();
+        let viewport = Size::new(800.0, 600.0);
+
+        let mut widget = TestWidget::new(300.0, 200.0)
+            .with_child(
+                TestWidget::new(100.0, 100.0)
+                    .with_child(TestWidget::new(30.0, 30.0))
+                    .with_child(TestWidget::new(30.0, 30.0)),
+            )
+            .with_child(TestWidget::new(100.0, 100.0))
+            .with_child(
+                TestWidget::new(100.0, 100.0)
+                    .with_child(TestWidget::new(30.0, 30.0)),
+            );
+
+        let tree = engine.compute(&mut widget, viewport);
+        // Root + 3 children + 2 grandchildren + 1 grandchild = 7
+        assert_eq!(tree.widget_count(), 7);
+    }
+
+    // =========================================================================
+    // Read-only Compute Tests
+    // =========================================================================
+
+    #[test]
+    fn test_layout_readonly_with_children() {
+        let mut engine = LayoutEngine::new();
+        let viewport = Size::new(800.0, 600.0);
+
+        let widget = TestWidget::new(200.0, 100.0)
+            .with_child(TestWidget::new(50.0, 50.0))
+            .with_child(TestWidget::new(50.0, 50.0));
+
+        let tree = engine.compute_readonly(&widget, viewport);
+        assert_eq!(tree.widget_count(), 3);
+    }
+
+    #[test]
+    fn test_layout_readonly_nested() {
+        let mut engine = LayoutEngine::new();
+        let viewport = Size::new(800.0, 600.0);
+
+        let widget = TestWidget::new(100.0, 100.0)
+            .with_child(TestWidget::new(80.0, 80.0).with_child(TestWidget::new(60.0, 60.0)));
+
+        let tree = engine.compute_readonly(&widget, viewport);
+        assert_eq!(tree.widget_count(), 3);
+    }
+
+    // =========================================================================
+    // Cache Stats Tests
+    // =========================================================================
+
+    #[test]
+    fn test_cache_stats_initial() {
+        let engine = LayoutEngine::new();
+        let (hits, misses) = engine.cache_stats();
+        assert_eq!(hits, 0);
+        assert_eq!(misses, 0);
+    }
+
+    #[test]
+    fn test_cache_stats_after_clear() {
+        let mut engine = LayoutEngine::new();
+        engine.clear_cache();
+        let (hits, misses) = engine.cache_stats();
+        assert_eq!(hits, 0);
+        assert_eq!(misses, 0);
+    }
+
+    // =========================================================================
+    // Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_layout_widget_larger_than_viewport() {
+        let mut engine = LayoutEngine::new();
+        let mut widget = TestWidget::new(2000.0, 1500.0);
+        let viewport = Size::new(800.0, 600.0);
+
+        let tree = engine.compute(&mut widget, viewport);
+        let size = tree.get_size(0).unwrap();
+
+        // Should be constrained
+        assert!(size.width <= viewport.width);
+        assert!(size.height <= viewport.height);
+    }
+
+    #[test]
+    fn test_layout_widget_fractional_size() {
+        let mut engine = LayoutEngine::new();
+        let mut widget = TestWidget::new(100.5, 50.25);
+        let viewport = Size::new(800.0, 600.0);
+
+        let tree = engine.compute(&mut widget, viewport);
+        assert_eq!(tree.widget_count(), 1);
+    }
 }
