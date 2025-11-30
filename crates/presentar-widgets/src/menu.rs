@@ -401,12 +401,8 @@ impl Widget for Menu {
         // Calculate menu panel bounds (below trigger)
         if self.open {
             let menu_height = self.calculate_menu_height();
-            self.panel_bounds = Rect::new(
-                bounds.x,
-                bounds.y + bounds.height,
-                self.width,
-                menu_height,
-            );
+            self.panel_bounds =
+                Rect::new(bounds.x, bounds.y + bounds.height, self.width, menu_height);
         }
 
         LayoutResult {
@@ -471,7 +467,11 @@ impl Widget for Menu {
                     } else {
                         &text_style
                     };
-                    canvas.draw_text(label, Point::new(self.panel_bounds.x + 12.0, y + 20.0), style);
+                    canvas.draw_text(
+                        label,
+                        Point::new(self.panel_bounds.x + 12.0, y + 20.0),
+                        style,
+                    );
 
                     // Shortcut
                     if let Some(ref shortcut) = shortcut {
@@ -482,7 +482,10 @@ impl Widget for Menu {
                         };
                         canvas.draw_text(
                             shortcut,
-                            Point::new(self.panel_bounds.x + self.panel_bounds.width - 60.0, y + 20.0),
+                            Point::new(
+                                self.panel_bounds.x + self.panel_bounds.width - 60.0,
+                                y + 20.0,
+                            ),
                             &shortcut_style,
                         );
                     }
@@ -514,7 +517,11 @@ impl Widget for Menu {
                     );
 
                     // Label
-                    canvas.draw_text(label, Point::new(self.panel_bounds.x + 32.0, y + 20.0), style);
+                    canvas.draw_text(
+                        label,
+                        Point::new(self.panel_bounds.x + 32.0, y + 20.0),
+                        style,
+                    );
                 }
                 MenuItem::Separator => {
                     let line_y = y + 4.0;
@@ -541,12 +548,19 @@ impl Widget for Menu {
                     } else {
                         &text_style
                     };
-                    canvas.draw_text(label, Point::new(self.panel_bounds.x + 12.0, y + 20.0), style);
+                    canvas.draw_text(
+                        label,
+                        Point::new(self.panel_bounds.x + 12.0, y + 20.0),
+                        style,
+                    );
 
                     // Arrow indicator
                     canvas.draw_text(
                         "›",
-                        Point::new(self.panel_bounds.x + self.panel_bounds.width - 20.0, y + 20.0),
+                        Point::new(
+                            self.panel_bounds.x + self.panel_bounds.width - 20.0,
+                            y + 20.0,
+                        ),
                         style,
                     );
                 }
@@ -653,9 +667,7 @@ impl Widget for Menu {
                                 } if !*disabled => {
                                     let action_id = action.clone();
                                     self.hide();
-                                    return Some(Box::new(MenuItemSelected {
-                                        action: action_id,
-                                    }));
+                                    return Some(Box::new(MenuItemSelected { action: action_id }));
                                 }
                                 MenuItem::Checkbox {
                                     action,
@@ -1123,20 +1135,14 @@ mod tests {
 
     #[test]
     fn test_menu_next_selectable_wrap_forward() {
-        let menu = Menu::new().items(vec![
-            MenuItem::action("A", "a"),
-            MenuItem::action("B", "b"),
-        ]);
+        let menu = Menu::new().items(vec![MenuItem::action("A", "a"), MenuItem::action("B", "b")]);
         // From last item, should wrap to first
         assert_eq!(menu.next_selectable(Some(1), true), Some(0));
     }
 
     #[test]
     fn test_menu_next_selectable_wrap_backward() {
-        let menu = Menu::new().items(vec![
-            MenuItem::action("A", "a"),
-            MenuItem::action("B", "b"),
-        ]);
+        let menu = Menu::new().items(vec![MenuItem::action("A", "a"), MenuItem::action("B", "b")]);
         // From first item, should wrap to last
         assert_eq!(menu.next_selectable(Some(0), false), Some(1));
     }
@@ -1223,10 +1229,8 @@ mod tests {
 
     #[test]
     fn test_menu_up_arrow_navigation() {
-        let mut menu = Menu::new().items(vec![
-            MenuItem::action("A", "a"),
-            MenuItem::action("B", "b"),
-        ]);
+        let mut menu =
+            Menu::new().items(vec![MenuItem::action("A", "a"), MenuItem::action("B", "b")]);
         menu.show();
         menu.highlighted_index = Some(1);
 

@@ -1,12 +1,12 @@
 //! WASM application entry point.
 
 use super::canvas2d::Canvas2DRenderer;
-use super::events::{mouse_event_to_presentar, keyboard_event_to_presentar};
+use super::events::{keyboard_event_to_presentar, mouse_event_to_presentar};
 use presentar_core::draw::DrawCommand;
 use presentar_core::{Constraints, Event, RecordingCanvas, Rect, Size, Widget};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use web_sys::{window, HtmlCanvasElement, MouseEvent, KeyboardEvent};
+use web_sys::{window, HtmlCanvasElement, KeyboardEvent, MouseEvent};
 
 /// Main application runner for browser.
 #[wasm_bindgen]
@@ -41,8 +41,7 @@ impl App {
         let width = canvas.width() as f32;
         let height = canvas.height() as f32;
 
-        let renderer = Canvas2DRenderer::new(canvas.clone())
-            .map_err(|e| JsValue::from_str(&e))?;
+        let renderer = Canvas2DRenderer::new(canvas.clone()).map_err(|e| JsValue::from_str(&e))?;
 
         Ok(Self {
             renderer,
@@ -62,7 +61,9 @@ impl App {
             let json = serde_json::to_string(&event).unwrap_or_default();
             let _ = callback.call1(&JsValue::NULL, &JsValue::from_str(&json));
         });
-        self.canvas.add_event_listener_with_callback("click", cb.as_ref().unchecked_ref()).ok();
+        self.canvas
+            .add_event_listener_with_callback("click", cb.as_ref().unchecked_ref())
+            .ok();
         self.click_callback = Some(cb);
     }
 
@@ -73,7 +74,9 @@ impl App {
             let json = serde_json::to_string(&event).unwrap_or_default();
             let _ = callback.call1(&JsValue::NULL, &JsValue::from_str(&json));
         });
-        self.canvas.add_event_listener_with_callback("mousemove", cb.as_ref().unchecked_ref()).ok();
+        self.canvas
+            .add_event_listener_with_callback("mousemove", cb.as_ref().unchecked_ref())
+            .ok();
         self.mousemove_callback = Some(cb);
     }
 
@@ -86,7 +89,8 @@ impl App {
                 let json = serde_json::to_string(&event).unwrap_or_default();
                 let _ = callback.call1(&JsValue::NULL, &JsValue::from_str(&json));
             });
-            doc.add_event_listener_with_callback("keydown", cb.as_ref().unchecked_ref()).ok();
+            doc.add_event_listener_with_callback("keydown", cb.as_ref().unchecked_ref())
+                .ok();
             self.keydown_callback = Some(cb);
         }
     }
@@ -116,26 +120,26 @@ impl App {
 
     /// Render a counter widget demo (WASM export).
     pub fn render_counter(&self, count: i32) {
-        use presentar_widgets::{Column, Row, Text, Button};
         use presentar_core::Color;
+        use presentar_widgets::{Button, Column, Row, Text};
 
         let mut widget = Column::new()
             .gap(20.0)
             .child(
                 Text::new("Counter Demo")
                     .font_size(28.0)
-                    .color(Color::from_hex("#111827").unwrap_or(Color::BLACK))
+                    .color(Color::from_hex("#111827").unwrap_or(Color::BLACK)),
             )
             .child(
                 Text::new(&format!("Count: {}", count))
                     .font_size(48.0)
-                    .color(Color::from_hex("#6366f1").unwrap_or(Color::BLUE))
+                    .color(Color::from_hex("#6366f1").unwrap_or(Color::BLUE)),
             )
             .child(
                 Row::new()
                     .gap(16.0)
                     .child(Button::new("-").padding(12.0))
-                    .child(Button::new("+").padding(12.0))
+                    .child(Button::new("+").padding(12.0)),
             );
 
         self.render_widget_internal(&mut widget);
@@ -143,20 +147,20 @@ impl App {
 
     /// Render a dashboard widget (WASM export).
     pub fn render_dashboard(&self, title: &str, value: f64, progress: f64) {
-        use presentar_widgets::{Column, Text, ProgressBar};
         use presentar_core::Color;
+        use presentar_widgets::{Column, ProgressBar, Text};
 
         let mut widget = Column::new()
             .gap(16.0)
             .child(
                 Text::new(title)
                     .font_size(24.0)
-                    .color(Color::from_hex("#111827").unwrap_or(Color::BLACK))
+                    .color(Color::from_hex("#111827").unwrap_or(Color::BLACK)),
             )
             .child(
                 Text::new(&format!("${:.2}M", value / 1_000_000.0))
                     .font_size(36.0)
-                    .color(Color::from_hex("#059669").unwrap_or(Color::GREEN))
+                    .color(Color::from_hex("#059669").unwrap_or(Color::GREEN)),
             )
             .child(
                 Column::new()
@@ -165,8 +169,8 @@ impl App {
                     .child(
                         ProgressBar::new()
                             .value(progress as f32)
-                            .fill_color(Color::from_hex("#6366f1").unwrap_or(Color::BLUE))
-                    )
+                            .fill_color(Color::from_hex("#6366f1").unwrap_or(Color::BLUE)),
+                    ),
             );
 
         self.render_widget_internal(&mut widget);

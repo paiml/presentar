@@ -681,7 +681,9 @@ mod tests {
                 Tensor::from_f32("bias", vec![2], &[0.1, 0.2]),
             ],
         });
-        model.metadata.insert("trained_epochs".to_string(), "100".to_string());
+        model
+            .metadata
+            .insert("trained_epochs".to_string(), "100".to_string());
 
         let bytes = model.save();
         let loaded = AprModel::load(&bytes).unwrap();

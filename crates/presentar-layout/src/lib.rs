@@ -28,6 +28,6 @@ pub use cache::LayoutCache;
 pub use engine::LayoutEngine;
 pub use flex::{FlexAlign, FlexDirection, FlexItem, FlexJustify};
 pub use grid::{
-    auto_place_items, compute_grid_layout, GridAlign, GridArea, GridAutoFlow, GridItem,
-    GridLayout, GridTemplate, TrackSize,
+    auto_place_items, compute_grid_layout, GridAlign, GridArea, GridAutoFlow, GridItem, GridLayout,
+    GridTemplate, TrackSize,
 };

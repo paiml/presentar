@@ -1,4 +1,8 @@
-#![allow(clippy::unwrap_used, clippy::disallowed_methods, clippy::many_single_char_names)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::disallowed_methods,
+    clippy::many_single_char_names
+)]
 //! Gesture recognition from touch/pointer events.
 //!
 //! This module provides gesture recognizers that process raw touch and pointer
@@ -103,14 +107,9 @@ pub enum RecognizedGesture {
     #[default]
     None,
     /// Tap gesture (with tap count).
-    Tap {
-        position: Point,
-        count: u8,
-    },
+    Tap { position: Point, count: u8 },
     /// Long press gesture.
-    LongPress {
-        position: Point,
-    },
+    LongPress { position: Point },
     /// Pan/drag gesture.
     Pan {
         delta: Point,
@@ -211,12 +210,7 @@ impl GestureRecognizer {
         }
     }
 
-    fn on_touch_start(
-        &mut self,
-        id: TouchId,
-        position: Point,
-        pressure: f32,
-    ) -> Option<Event> {
+    fn on_touch_start(&mut self, id: TouchId, position: Point, pressure: f32) -> Option<Event> {
         let touch = TouchPoint::new(id, position, pressure);
         self.touches.insert(id, touch);
 
@@ -228,12 +222,7 @@ impl GestureRecognizer {
         None
     }
 
-    fn on_touch_move(
-        &mut self,
-        id: TouchId,
-        position: Point,
-        pressure: f32,
-    ) -> Option<Event> {
+    fn on_touch_move(&mut self, id: TouchId, position: Point, pressure: f32) -> Option<Event> {
         if let Some(touch) = self.touches.get_mut(&id) {
             touch.update(position, pressure);
         } else {
@@ -343,7 +332,8 @@ impl GestureRecognizer {
         let scale_change = (scale - 1.0).abs();
         let angle_change = angle_delta.abs();
 
-        if scale_change > self.config.pinch_threshold || angle_change > self.config.rotate_threshold {
+        if scale_change > self.config.pinch_threshold || angle_change > self.config.rotate_threshold
+        {
             // Prefer the larger change
             if scale_change > angle_change {
                 let state = match &self.current_gesture {
@@ -411,7 +401,9 @@ impl GestureRecognizer {
 
     fn end_active_gesture(&mut self) -> Option<Event> {
         let result = match &self.current_gesture {
-            RecognizedGesture::Pan { delta, velocity, .. } => Some(Event::GesturePan {
+            RecognizedGesture::Pan {
+                delta, velocity, ..
+            } => Some(Event::GesturePan {
                 delta: *delta,
                 velocity: *velocity,
                 state: GestureState::Ended,
@@ -464,8 +456,7 @@ impl GestureRecognizer {
             .retain(|(_, time)| now.duration_since(*time).as_millis() < 100);
 
         if let Some(touch) = self.touches.values().next() {
-            self.velocity_samples
-                .push((touch.current_position, now));
+            self.velocity_samples.push((touch.current_position, now));
         }
 
         if self.velocity_samples.len() < 2 {
@@ -584,8 +575,7 @@ impl PointerGestureRecognizer {
 
     /// Get the primary pointer.
     pub fn primary(&self) -> Option<&PointerInfo> {
-        self.primary_pointer
-            .and_then(|id| self.pointers.get(&id))
+        self.primary_pointer.and_then(|id| self.pointers.get(&id))
     }
 
     /// Process a pointer event.
@@ -833,7 +823,13 @@ mod tests {
             pressure: 0.5,
         });
 
-        assert!(matches!(result, Some(Event::GesturePan { state: GestureState::Started, .. })));
+        assert!(matches!(
+            result,
+            Some(Event::GesturePan {
+                state: GestureState::Started,
+                ..
+            })
+        ));
     }
 
     #[test]
@@ -860,7 +856,13 @@ mod tests {
             pressure: 0.5,
         });
 
-        assert!(matches!(result, Some(Event::GesturePan { state: GestureState::Changed, .. })));
+        assert!(matches!(
+            result,
+            Some(Event::GesturePan {
+                state: GestureState::Changed,
+                ..
+            })
+        ));
     }
 
     #[test]

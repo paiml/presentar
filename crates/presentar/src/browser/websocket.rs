@@ -112,9 +112,8 @@ impl WebSocketClient {
 
         self.set_state(ConnectionState::Connecting);
 
-        let ws = WebSocket::new(&self.url).map_err(|e| {
-            WebSocketError::ConnectionFailed(format!("{:?}", e))
-        })?;
+        let ws = WebSocket::new(&self.url)
+            .map_err(|e| WebSocketError::ConnectionFailed(format!("{:?}", e)))?;
 
         ws.set_binary_type(web_sys::BinaryType::Arraybuffer);
 
@@ -149,7 +148,9 @@ impl WebSocketClient {
         let sub = StreamSubscription::new(source);
         let id = sub.id.clone();
 
-        self.handlers.borrow_mut().insert(id.clone(), Box::new(handler));
+        self.handlers
+            .borrow_mut()
+            .insert(id.clone(), Box::new(handler));
         self.stream.borrow().subscribe(sub);
 
         self.flush_outbox();
@@ -177,7 +178,9 @@ impl WebSocketClient {
         }
 
         let id = sub.id.clone();
-        self.handlers.borrow_mut().insert(id.clone(), Box::new(handler));
+        self.handlers
+            .borrow_mut()
+            .insert(id.clone(), Box::new(handler));
         self.stream.borrow().subscribe(sub);
 
         self.flush_outbox();
@@ -414,7 +417,8 @@ impl WebSocketClient {
                             }
 
                             // Restart heartbeat
-                            let heartbeat_interval = config_inner.heartbeat_interval.as_millis() as i32;
+                            let heartbeat_interval =
+                                config_inner.heartbeat_interval.as_millis() as i32;
                             let socket_hb = socket_inner.clone();
                             let heartbeat_fn = Closure::<dyn FnMut()>::new(move || {
                                 if let Some(ws) = socket_hb.borrow().as_ref() {
@@ -426,10 +430,12 @@ impl WebSocketClient {
                             });
 
                             if let Some(window) = web_sys::window() {
-                                if let Ok(id) = window.set_interval_with_callback_and_timeout_and_arguments_0(
-                                    heartbeat_fn.as_ref().unchecked_ref(),
-                                    heartbeat_interval,
-                                ) {
+                                if let Ok(id) = window
+                                    .set_interval_with_callback_and_timeout_and_arguments_0(
+                                        heartbeat_fn.as_ref().unchecked_ref(),
+                                        heartbeat_interval,
+                                    )
+                                {
                                     *heartbeat_inner.borrow_mut() = Some(id);
                                 }
                             }
@@ -552,14 +558,8 @@ mod tests {
     // Test WebSocketError Display
     #[test]
     fn test_error_display() {
-        assert_eq!(
-            WebSocketError::NotConnected.to_string(),
-            "not connected"
-        );
-        assert_eq!(
-            WebSocketError::RateLimited.to_string(),
-            "rate limited"
-        );
+        assert_eq!(WebSocketError::NotConnected.to_string(), "not connected");
+        assert_eq!(WebSocketError::RateLimited.to_string(), "rate limited");
         assert_eq!(
             WebSocketError::ConnectionFailed("timeout".to_string()).to_string(),
             "connection failed: timeout"
@@ -654,12 +654,8 @@ mod wasm_tests {
     #[wasm_bindgen_test]
     fn test_subscribe_with_options() {
         let client = WebSocketClient::new("wss://example.com/ws");
-        let id = client.subscribe_with_options(
-            "metrics/cpu",
-            Some("rate()"),
-            Some(1000),
-            |_data| {},
-        );
+        let id =
+            client.subscribe_with_options("metrics/cpu", Some("rate()"), Some(1000), |_data| {});
         assert!(id.starts_with("sub_"));
     }
 }

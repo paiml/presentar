@@ -129,17 +129,11 @@ impl LifecycleManager {
         self.callbacks.insert(id, callback);
 
         // Index by widget
-        self.by_widget
-            .entry(widget_id)
-            .or_default()
-            .push(id);
+        self.by_widget.entry(widget_id).or_default().push(id);
 
         // Index by phase
         for phase in phases {
-            self.by_phase
-                .entry(phase)
-                .or_default()
-                .push(id);
+            self.by_phase.entry(phase).or_default().push(id);
         }
 
         id
@@ -239,7 +233,11 @@ impl LifecycleManager {
         let events: Vec<LifecycleEvent> = self.pending_events.drain(..).collect();
 
         for event in events {
-            let widget_hooks = self.by_widget.get(&event.widget_id).cloned().unwrap_or_default();
+            let widget_hooks = self
+                .by_widget
+                .get(&event.widget_id)
+                .cloned()
+                .unwrap_or_default();
             let phase_hooks = self.by_phase.get(&event.phase).cloned().unwrap_or_default();
 
             for hook_id in widget_hooks {
@@ -274,7 +272,9 @@ impl LifecycleManager {
 
     /// Check if a widget has any hooks.
     pub fn has_hooks(&self, widget_id: WidgetId) -> bool {
-        self.by_widget.get(&widget_id).is_some_and(|h| !h.is_empty())
+        self.by_widget
+            .get(&widget_id)
+            .is_some_and(|h| !h.is_empty())
     }
 
     /// Clear all hooks and events.
@@ -504,11 +504,7 @@ mod tests {
         let mut manager = LifecycleManager::new();
         let widget_id = WidgetId::new(1);
 
-        let hook_id = manager.register(
-            widget_id,
-            vec![LifecyclePhase::Mount],
-            Box::new(|_| {}),
-        );
+        let hook_id = manager.register(widget_id, vec![LifecyclePhase::Mount], Box::new(|_| {}));
 
         assert_eq!(manager.hook_count(), 1);
         assert!(manager.has_hooks(widget_id));
@@ -542,9 +538,12 @@ mod tests {
         let mut manager = LifecycleManager::new();
         let widget_id = WidgetId::new(1);
 
-        manager.on_mount(widget_id, Box::new(move |_| {
-            counter_clone.fetch_add(1, Ordering::SeqCst);
-        }));
+        manager.on_mount(
+            widget_id,
+            Box::new(move |_| {
+                counter_clone.fetch_add(1, Ordering::SeqCst);
+            }),
+        );
 
         manager.emit(widget_id, LifecyclePhase::Mount);
         assert_eq!(counter.load(Ordering::SeqCst), 1);
@@ -562,9 +561,12 @@ mod tests {
         let mut manager = LifecycleManager::new();
         let widget_id = WidgetId::new(1);
 
-        manager.on_mount(widget_id, Box::new(move |_| {
-            counter_clone.fetch_add(1, Ordering::SeqCst);
-        }));
+        manager.on_mount(
+            widget_id,
+            Box::new(move |_| {
+                counter_clone.fetch_add(1, Ordering::SeqCst);
+            }),
+        );
 
         // Emit unmount instead of mount
         manager.emit(widget_id, LifecyclePhase::Unmount);
@@ -579,9 +581,12 @@ mod tests {
         let mut manager = LifecycleManager::new();
         let widget_id = WidgetId::new(1);
 
-        manager.on_mount(widget_id, Box::new(move |_| {
-            counter_clone.fetch_add(1, Ordering::SeqCst);
-        }));
+        manager.on_mount(
+            widget_id,
+            Box::new(move |_| {
+                counter_clone.fetch_add(1, Ordering::SeqCst);
+            }),
+        );
 
         manager.queue(widget_id, LifecyclePhase::Mount);
         manager.queue(widget_id, LifecyclePhase::Mount);
@@ -656,12 +661,18 @@ mod tests {
 
         let mut manager = LifecycleManager::new();
 
-        manager.on_mount(WidgetId::new(1), Box::new(move |_| {
-            c1.fetch_add(1, Ordering::SeqCst);
-        }));
-        manager.on_mount(WidgetId::new(2), Box::new(move |_| {
-            c2.fetch_add(1, Ordering::SeqCst);
-        }));
+        manager.on_mount(
+            WidgetId::new(1),
+            Box::new(move |_| {
+                c1.fetch_add(1, Ordering::SeqCst);
+            }),
+        );
+        manager.on_mount(
+            WidgetId::new(2),
+            Box::new(move |_| {
+                c2.fetch_add(1, Ordering::SeqCst);
+            }),
+        );
 
         manager.emit(WidgetId::new(1), LifecyclePhase::Mount);
         assert_eq!(counter1.load(Ordering::SeqCst), 1);
@@ -762,10 +773,13 @@ mod tests {
         let mut manager = EffectManager::new();
         let widget_id = WidgetId::new(1);
 
-        manager.add(widget_id, Effect::new(move || {
-            c.fetch_add(1, Ordering::SeqCst);
-            None
-        }));
+        manager.add(
+            widget_id,
+            Effect::new(move || {
+                c.fetch_add(1, Ordering::SeqCst);
+                None
+            }),
+        );
 
         manager.run_effects(widget_id, None);
         assert_eq!(counter.load(Ordering::SeqCst), 1);
@@ -779,12 +793,15 @@ mod tests {
         let mut manager = EffectManager::new();
         let widget_id = WidgetId::new(1);
 
-        manager.add(widget_id, Effect::new(move || {
-            let cc = cc.clone();
-            Some(Box::new(move || {
-                cc.fetch_add(1, Ordering::SeqCst);
-            }) as Box<dyn FnOnce() + Send>)
-        }));
+        manager.add(
+            widget_id,
+            Effect::new(move || {
+                let cc = cc.clone();
+                Some(Box::new(move || {
+                    cc.fetch_add(1, Ordering::SeqCst);
+                }) as Box<dyn FnOnce() + Send>)
+            }),
+        );
 
         manager.run_effects(widget_id, None);
         assert_eq!(manager.effect_count(), 1);

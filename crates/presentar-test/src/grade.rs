@@ -968,7 +968,10 @@ impl QualityGates {
             }
         }
 
-        result.passed = result.violations.iter().all(|v| v.severity != ViolationSeverity::Error);
+        result.passed = result
+            .violations
+            .iter()
+            .all(|v| v.severity != ViolationSeverity::Error);
         result
     }
 
@@ -1821,7 +1824,10 @@ mod tests {
         // Render time exceeds 16ms limit
         let result = gates.check_extended(&score, Some(25), Some(400), Some(50));
         assert!(!result.passed);
-        assert!(result.violations.iter().any(|v| v.gate == "max_render_time_ms"));
+        assert!(result
+            .violations
+            .iter()
+            .any(|v| v.gate == "max_render_time_ms"));
     }
 
     #[test]
@@ -1839,7 +1845,10 @@ mod tests {
         // Bundle size exceeds 500KB limit
         let result = gates.check_extended(&score, Some(10), Some(600), Some(50));
         assert!(!result.passed);
-        assert!(result.violations.iter().any(|v| v.gate == "max_bundle_size_kb"));
+        assert!(result
+            .violations
+            .iter()
+            .any(|v| v.gate == "max_bundle_size_kb"));
     }
 
     #[test]

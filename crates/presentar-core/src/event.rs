@@ -510,8 +510,7 @@ impl Event {
             | Self::PointerUp { position, .. }
             | Self::GestureLongPress { position }
             | Self::GestureTap { position, .. } => Some(*position),
-            Self::GesturePinch { center, .. }
-            | Self::GestureRotate { center, .. } => Some(*center),
+            Self::GesturePinch { center, .. } | Self::GestureRotate { center, .. } => Some(*center),
             _ => None,
         }
     }

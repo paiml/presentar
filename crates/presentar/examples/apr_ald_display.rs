@@ -27,7 +27,10 @@ fn main() {
     // Create a sample .ald dataset
     let dataset = create_sample_dataset();
     let dataset_bytes = dataset.save();
-    println!("Created sample .ald dataset ({} bytes)\n", dataset_bytes.len());
+    println!(
+        "Created sample .ald dataset ({} bytes)\n",
+        dataset_bytes.len()
+    );
 
     // Load and display as DataCard
     let data_card = load_ald_as_card(&dataset_bytes, "mnist_train").expect("load ald");

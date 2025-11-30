@@ -342,9 +342,11 @@ impl ExpressionExecutor {
             Transform::Join { other, on } => self.apply_join(value, other, on, ctx),
             Transform::GroupBy { field } => self.apply_group_by(value, field),
             Transform::Distinct { field } => self.apply_distinct(value, field.as_deref()),
-            Transform::Where { field, op, value: match_value } => {
-                self.apply_where(value, field, op, match_value)
-            }
+            Transform::Where {
+                field,
+                op,
+                value: match_value,
+            } => self.apply_where(value, field, op, match_value),
             Transform::Offset { n } => self.apply_offset(value, *n),
             Transform::Min { field } => self.apply_min(value, field),
             Transform::Max { field } => self.apply_max(value, field),
@@ -356,12 +358,16 @@ impl ExpressionExecutor {
             Transform::Map { expr } => self.apply_map(value, expr),
             Transform::Reduce { initial, expr } => self.apply_reduce(value, initial, expr),
             Transform::Aggregate { field, op } => self.apply_aggregate(value, field, *op),
-            Transform::Pivot { row_field, col_field, value_field } => {
-                self.apply_pivot(value, row_field, col_field, value_field)
-            }
+            Transform::Pivot {
+                row_field,
+                col_field,
+                value_field,
+            } => self.apply_pivot(value, row_field, col_field, value_field),
             Transform::CumulativeSum { field } => self.apply_cumsum(value, field),
             Transform::Rank { field, method } => self.apply_rank(value, field, *method),
-            Transform::MovingAverage { field, window } => self.apply_moving_avg(value, field, *window),
+            Transform::MovingAverage { field, window } => {
+                self.apply_moving_avg(value, field, *window)
+            }
             Transform::PercentChange { field } => self.apply_pct_change(value, field),
         }
     }
@@ -615,7 +621,9 @@ impl ExpressionExecutor {
         let right_value = ctx
             .get(other)
             .ok_or_else(|| ExecutionError::SourceNotFound(other.to_string()))?;
-        let right_arr = right_value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let right_arr = right_value
+            .as_array()
+            .ok_or(ExecutionError::ExpectedArray)?;
 
         // Build a lookup map for the right side (keyed by the join field)
         let mut right_lookup: HashMap<String, Vec<&Value>> = HashMap::new();
@@ -915,7 +923,12 @@ impl ExpressionExecutor {
         Ok(Value::Array(mapped))
     }
 
-    fn apply_reduce(&self, value: &Value, initial: &str, _expr: &str) -> Result<Value, ExecutionError> {
+    fn apply_reduce(
+        &self,
+        value: &Value,
+        initial: &str,
+        _expr: &str,
+    ) -> Result<Value, ExecutionError> {
         let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
 
         // Parse initial value
@@ -931,7 +944,12 @@ impl ExpressionExecutor {
         Ok(Value::Number(acc))
     }
 
-    fn apply_aggregate(&self, value: &Value, field: &str, op: AggregateOp) -> Result<Value, ExecutionError> {
+    fn apply_aggregate(
+        &self,
+        value: &Value,
+        field: &str,
+        op: AggregateOp,
+    ) -> Result<Value, ExecutionError> {
         let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
 
         // For grouped data, expect array of {key: ..., values: [...]}
@@ -1000,7 +1018,10 @@ impl ExpressionExecutor {
                     .get(col_field)
                     .map(|v| self.value_to_string(v))
                     .unwrap_or_default();
-                let val = obj.get(value_field).and_then(|v| v.as_number()).unwrap_or(0.0);
+                let val = obj
+                    .get(value_field)
+                    .and_then(|v| v.as_number())
+                    .unwrap_or(0.0);
 
                 rows.entry(row_key)
                     .or_default()
@@ -1049,16 +1070,19 @@ impl ExpressionExecutor {
         Ok(Value::Array(result))
     }
 
-    fn apply_rank(&self, value: &Value, field: &str, method: RankMethod) -> Result<Value, ExecutionError> {
+    fn apply_rank(
+        &self,
+        value: &Value,
+        field: &str,
+        method: RankMethod,
+    ) -> Result<Value, ExecutionError> {
         let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
 
         // Extract values with indices
         let mut indexed: Vec<(usize, f64)> = arr
             .iter()
             .enumerate()
-            .filter_map(|(i, item)| {
-                item.as_object()?.get(field)?.as_number().map(|n| (i, n))
-            })
+            .filter_map(|(i, item)| item.as_object()?.get(field)?.as_number().map(|n| (i, n)))
             .collect();
 
         // Sort by value (descending for ranking)
@@ -1091,7 +1115,8 @@ impl ExpressionExecutor {
                     while i < indexed.len() && (indexed[i].1 - val).abs() < f64::EPSILON {
                         i += 1;
                     }
-                    let avg_rank = (start + 1..=i).map(|r| r as f64).sum::<f64>() / (i - start) as f64;
+                    let avg_rank =
+                        (start + 1..=i).map(|r| r as f64).sum::<f64>() / (i - start) as f64;
                     for j in start..i {
                         ranks[indexed[j].0] = avg_rank;
                     }
@@ -1117,7 +1142,12 @@ impl ExpressionExecutor {
         Ok(Value::Array(result))
     }
 
-    fn apply_moving_avg(&self, value: &Value, field: &str, window: usize) -> Result<Value, ExecutionError> {
+    fn apply_moving_avg(
+        &self,
+        value: &Value,
+        field: &str,
+        window: usize,
+    ) -> Result<Value, ExecutionError> {
         let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
 
         let values: Vec<f64> = arr
@@ -1813,9 +1843,7 @@ mod tests {
         let parser = ExpressionParser::new();
         let executor = ExpressionExecutor::new();
 
-        let expr = parser
-            .parse("{{ data.transactions | offset(1) }}")
-            .unwrap();
+        let expr = parser.parse("{{ data.transactions | offset(1) }}").unwrap();
         let result = executor.execute(&expr, &ctx).unwrap();
 
         assert_eq!(result.len(), 2); // Original 3, skip 1
@@ -2287,10 +2315,7 @@ mod tests {
         // Original left value should be preserved
         assert_eq!(obj.get("value").unwrap().as_str(), Some("left_val"));
         // Right value should be prefixed
-        assert_eq!(
-            obj.get("right_value").unwrap().as_str(),
-            Some("right_val")
-        );
+        assert_eq!(obj.get("right_value").unwrap().as_str(), Some("right_val"));
         // Non-conflicting fields should be added directly
         assert_eq!(obj.get("extra").unwrap().as_str(), Some("extra_val"));
     }
@@ -2303,7 +2328,9 @@ mod tests {
 
         // Join, filter to gold tier, sum amounts
         let expr = parser
-            .parse("{{ orders | join(customers, on=customer_id) | filter(tier=gold) | sum(amount) }}")
+            .parse(
+                "{{ orders | join(customers, on=customer_id) | filter(tier=gold) | sum(amount) }}",
+            )
             .unwrap();
         let result = executor.execute(&expr, &ctx).unwrap();
 

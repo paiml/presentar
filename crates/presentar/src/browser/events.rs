@@ -43,23 +43,56 @@ pub fn keyboard_event_to_presentar(event: &KeyboardEvent, event_type: &str) -> E
 /// Convert JS key code to presentar Key.
 fn code_to_key(code: &str) -> Key {
     match code {
-        "KeyA" => Key::A, "KeyB" => Key::B, "KeyC" => Key::C, "KeyD" => Key::D,
-        "KeyE" => Key::E, "KeyF" => Key::F, "KeyG" => Key::G, "KeyH" => Key::H,
-        "KeyI" => Key::I, "KeyJ" => Key::J, "KeyK" => Key::K, "KeyL" => Key::L,
-        "KeyM" => Key::M, "KeyN" => Key::N, "KeyO" => Key::O, "KeyP" => Key::P,
-        "KeyQ" => Key::Q, "KeyR" => Key::R, "KeyS" => Key::S, "KeyT" => Key::T,
-        "KeyU" => Key::U, "KeyV" => Key::V, "KeyW" => Key::W, "KeyX" => Key::X,
-        "KeyY" => Key::Y, "KeyZ" => Key::Z,
-        "Digit0" => Key::Num0, "Digit1" => Key::Num1, "Digit2" => Key::Num2,
-        "Digit3" => Key::Num3, "Digit4" => Key::Num4, "Digit5" => Key::Num5,
-        "Digit6" => Key::Num6, "Digit7" => Key::Num7, "Digit8" => Key::Num8,
+        "KeyA" => Key::A,
+        "KeyB" => Key::B,
+        "KeyC" => Key::C,
+        "KeyD" => Key::D,
+        "KeyE" => Key::E,
+        "KeyF" => Key::F,
+        "KeyG" => Key::G,
+        "KeyH" => Key::H,
+        "KeyI" => Key::I,
+        "KeyJ" => Key::J,
+        "KeyK" => Key::K,
+        "KeyL" => Key::L,
+        "KeyM" => Key::M,
+        "KeyN" => Key::N,
+        "KeyO" => Key::O,
+        "KeyP" => Key::P,
+        "KeyQ" => Key::Q,
+        "KeyR" => Key::R,
+        "KeyS" => Key::S,
+        "KeyT" => Key::T,
+        "KeyU" => Key::U,
+        "KeyV" => Key::V,
+        "KeyW" => Key::W,
+        "KeyX" => Key::X,
+        "KeyY" => Key::Y,
+        "KeyZ" => Key::Z,
+        "Digit0" => Key::Num0,
+        "Digit1" => Key::Num1,
+        "Digit2" => Key::Num2,
+        "Digit3" => Key::Num3,
+        "Digit4" => Key::Num4,
+        "Digit5" => Key::Num5,
+        "Digit6" => Key::Num6,
+        "Digit7" => Key::Num7,
+        "Digit8" => Key::Num8,
         "Digit9" => Key::Num9,
-        "Enter" => Key::Enter, "Escape" => Key::Escape, "Backspace" => Key::Backspace,
-        "Tab" => Key::Tab, "Space" => Key::Space, "Delete" => Key::Delete,
-        "ArrowUp" => Key::Up, "ArrowDown" => Key::Down,
-        "ArrowLeft" => Key::Left, "ArrowRight" => Key::Right,
-        "ShiftLeft" => Key::ShiftLeft, "ShiftRight" => Key::ShiftRight,
-        "ControlLeft" => Key::ControlLeft, "ControlRight" => Key::ControlRight,
+        "Enter" => Key::Enter,
+        "Escape" => Key::Escape,
+        "Backspace" => Key::Backspace,
+        "Tab" => Key::Tab,
+        "Space" => Key::Space,
+        "Delete" => Key::Delete,
+        "ArrowUp" => Key::Up,
+        "ArrowDown" => Key::Down,
+        "ArrowLeft" => Key::Left,
+        "ArrowRight" => Key::Right,
+        "ShiftLeft" => Key::ShiftLeft,
+        "ShiftRight" => Key::ShiftRight,
+        "ControlLeft" => Key::ControlLeft,
+        "ControlRight" => Key::ControlRight,
         _ => Key::Space, // Default fallback
     }
 }
@@ -94,7 +127,11 @@ impl TouchPoint {
     /// Create a new touch point.
     #[must_use]
     pub const fn new(id: i32, position: Point, pressure: f32) -> Self {
-        Self { id, position, pressure }
+        Self {
+            id,
+            position,
+            pressure,
+        }
     }
 }
 
@@ -119,7 +156,11 @@ pub fn touch_event_to_points(event: &TouchEvent, canvas_offset: Point) -> Vec<To
 }
 
 /// Convert a touch event to a presentar Event (first touch only).
-pub fn touch_event_to_presentar(event: &TouchEvent, event_type: &str, canvas_offset: Point) -> Event {
+pub fn touch_event_to_presentar(
+    event: &TouchEvent,
+    event_type: &str,
+    canvas_offset: Point,
+) -> Event {
     let touches = event.touches();
     if touches.length() == 0 {
         return Event::MouseLeave;
@@ -352,7 +393,8 @@ impl JsonEventClosure {
         let closure = Closure::new(move |e: web_sys::Event| {
             if let Some(touch_event) = e.dyn_ref::<TouchEvent>() {
                 let event_type = e.type_();
-                let presentar_event = touch_event_to_presentar(touch_event, &event_type, canvas_offset);
+                let presentar_event =
+                    touch_event_to_presentar(touch_event, &event_type, canvas_offset);
                 let points = touch_event_to_points(touch_event, canvas_offset);
                 callback(presentar_event, points);
             }

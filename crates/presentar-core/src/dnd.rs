@@ -229,12 +229,7 @@ pub struct DragState {
 
 impl DragState {
     /// Create a new drag state.
-    pub fn new(
-        id: DragId,
-        source_widget: WidgetId,
-        position: Point,
-        data: DragData,
-    ) -> Self {
+    pub fn new(id: DragId, source_widget: WidgetId, position: Point, data: DragData) -> Self {
         Self {
             id,
             source_widget,
@@ -255,7 +250,10 @@ impl DragState {
 
     /// Check if drag is active.
     pub fn is_active(&self) -> bool {
-        matches!(self.phase, DragPhase::Started | DragPhase::Dragging | DragPhase::OverTarget)
+        matches!(
+            self.phase,
+            DragPhase::Started | DragPhase::Dragging | DragPhase::OverTarget
+        )
     }
 }
 
@@ -489,9 +487,7 @@ impl DragDropManager {
 
     /// Check if a drag is active.
     pub fn is_dragging(&self) -> bool {
-        self.current_drag
-            .as_ref()
-            .is_some_and(DragState::is_active)
+        self.current_drag.as_ref().is_some_and(DragState::is_active)
     }
 
     /// Get the preview position for rendering.
@@ -592,8 +588,7 @@ mod tests {
 
     #[test]
     fn test_drag_data_with_format() {
-        let data = DragData::text("Hello")
-            .with_format(DragDataType::Html, "<p>Hello</p>");
+        let data = DragData::text("Hello").with_format(DragDataType::Html, "<p>Hello</p>");
 
         assert!(data.has_format(&DragDataType::Text));
         assert!(data.has_format(&DragDataType::Html));
@@ -751,9 +746,10 @@ mod tests {
     fn test_manager_register_target() {
         let mut manager = DragDropManager::new();
 
-        manager.register_target(
-            DropTarget::new(WidgetId::new(1), Rect::new(0.0, 0.0, 100.0, 100.0))
-        );
+        manager.register_target(DropTarget::new(
+            WidgetId::new(1),
+            Rect::new(0.0, 0.0, 100.0, 100.0),
+        ));
 
         assert_eq!(manager.target_count(), 1);
     }
@@ -762,9 +758,10 @@ mod tests {
     fn test_manager_unregister_target() {
         let mut manager = DragDropManager::new();
 
-        manager.register_target(
-            DropTarget::new(WidgetId::new(1), Rect::new(0.0, 0.0, 100.0, 100.0))
-        );
+        manager.register_target(DropTarget::new(
+            WidgetId::new(1),
+            Rect::new(0.0, 0.0, 100.0, 100.0),
+        ));
         manager.unregister_target(WidgetId::new(1));
 
         assert_eq!(manager.target_count(), 0);
@@ -809,9 +806,10 @@ mod tests {
         let mut manager = DragDropManager::new();
         manager.set_min_drag_distance(0.0);
 
-        manager.register_target(
-            DropTarget::new(WidgetId::new(10), Rect::new(100.0, 100.0, 100.0, 100.0))
-        );
+        manager.register_target(DropTarget::new(
+            WidgetId::new(10),
+            Rect::new(100.0, 100.0, 100.0, 100.0),
+        ));
 
         manager.start_drag(
             WidgetId::new(1),
@@ -831,9 +829,10 @@ mod tests {
         let mut manager = DragDropManager::new();
         manager.set_min_drag_distance(0.0);
 
-        manager.register_target(
-            DropTarget::new(WidgetId::new(10), Rect::new(100.0, 100.0, 100.0, 100.0))
-        );
+        manager.register_target(DropTarget::new(
+            WidgetId::new(10),
+            Rect::new(100.0, 100.0, 100.0, 100.0),
+        ));
 
         manager.start_drag(
             WidgetId::new(1),
@@ -901,12 +900,14 @@ mod tests {
     fn test_manager_target_at() {
         let mut manager = DragDropManager::new();
 
-        manager.register_target(
-            DropTarget::new(WidgetId::new(1), Rect::new(0.0, 0.0, 100.0, 100.0))
-        );
-        manager.register_target(
-            DropTarget::new(WidgetId::new(2), Rect::new(200.0, 200.0, 100.0, 100.0))
-        );
+        manager.register_target(DropTarget::new(
+            WidgetId::new(1),
+            Rect::new(0.0, 0.0, 100.0, 100.0),
+        ));
+        manager.register_target(DropTarget::new(
+            WidgetId::new(2),
+            Rect::new(200.0, 200.0, 100.0, 100.0),
+        ));
 
         assert!(manager.target_at(Point::new(50.0, 50.0)).is_some());
         assert!(manager.target_at(Point::new(150.0, 150.0)).is_none());
@@ -917,15 +918,12 @@ mod tests {
     fn test_manager_clear() {
         let mut manager = DragDropManager::new();
 
-        manager.register_target(
-            DropTarget::new(WidgetId::new(1), Rect::new(0.0, 0.0, 100.0, 100.0))
-        );
+        manager.register_target(DropTarget::new(
+            WidgetId::new(1),
+            Rect::new(0.0, 0.0, 100.0, 100.0),
+        ));
 
-        manager.start_drag(
-            WidgetId::new(2),
-            Point::ORIGIN,
-            DragData::text("test"),
-        );
+        manager.start_drag(WidgetId::new(2), Point::ORIGIN, DragData::text("test"));
 
         manager.clear();
 
@@ -937,9 +935,10 @@ mod tests {
     fn test_manager_update_target_bounds() {
         let mut manager = DragDropManager::new();
 
-        manager.register_target(
-            DropTarget::new(WidgetId::new(1), Rect::new(0.0, 0.0, 100.0, 100.0))
-        );
+        manager.register_target(DropTarget::new(
+            WidgetId::new(1),
+            Rect::new(0.0, 0.0, 100.0, 100.0),
+        ));
 
         manager.update_target_bounds(WidgetId::new(1), Rect::new(50.0, 50.0, 200.0, 200.0));
 

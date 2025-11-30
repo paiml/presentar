@@ -752,7 +752,11 @@ mod tests {
 
         assert_eq!(canvas.command_count(), 1);
         match &canvas.commands()[0] {
-            DrawCommand::Path { points: p, closed, style } => {
+            DrawCommand::Path {
+                points: p,
+                closed,
+                style,
+            } => {
                 assert_eq!(p.len(), 3);
                 assert!(*closed);
                 assert_eq!(style.color, Color::BLUE);

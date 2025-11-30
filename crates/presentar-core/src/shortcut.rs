@@ -198,8 +198,7 @@ impl ShortcutId {
 }
 
 /// Context in which a shortcut is active.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub enum ShortcutContext {
     /// Global - active everywhere.
     #[default]
@@ -211,7 +210,6 @@ pub enum ShortcutContext {
     /// Custom context identified by name.
     Custom(String),
 }
-
 
 /// Priority for shortcut resolution when multiple match.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -269,12 +267,14 @@ impl ShortcutManager {
     }
 
     /// Register a shortcut.
-    pub fn register(
-        &mut self,
-        shortcut: Shortcut,
-        handler: ShortcutHandler,
-    ) -> ShortcutId {
-        self.register_with_options(shortcut, handler, ShortcutContext::Global, ShortcutPriority::Normal, "")
+    pub fn register(&mut self, shortcut: Shortcut, handler: ShortcutHandler) -> ShortcutId {
+        self.register_with_options(
+            shortcut,
+            handler,
+            ShortcutContext::Global,
+            ShortcutPriority::Normal,
+            "",
+        )
     }
 
     /// Register a shortcut with full options.
@@ -301,10 +301,7 @@ impl ShortcutManager {
         self.bindings.insert(id, binding);
         self.handlers.insert(id, handler);
 
-        self.by_shortcut
-            .entry(shortcut)
-            .or_default()
-            .push(id);
+        self.by_shortcut.entry(shortcut).or_default().push(id);
 
         id
     }
@@ -363,7 +360,8 @@ impl ShortcutManager {
     /// Set the focused widget context.
     pub fn set_focused_widget(&mut self, widget_id: Option<WidgetId>) {
         // Remove any existing widget context
-        self.active_contexts.retain(|c| !matches!(c, ShortcutContext::Widget(_)));
+        self.active_contexts
+            .retain(|c| !matches!(c, ShortcutContext::Widget(_)));
 
         if let Some(id) = widget_id {
             self.active_contexts.push(ShortcutContext::Widget(id));
@@ -425,7 +423,9 @@ impl ShortcutManager {
 
     /// Get all registered shortcuts.
     pub fn shortcuts(&self) -> impl Iterator<Item = (&Shortcut, &str)> {
-        self.bindings.values().map(|b| (&b.shortcut, b.description.as_str()))
+        self.bindings
+            .values()
+            .map(|b| (&b.shortcut, b.description.as_str()))
     }
 
     /// Get binding count.
@@ -446,10 +446,7 @@ impl ShortcutManager {
             let mut by_context: HashMap<&ShortcutContext, Vec<ShortcutId>> = HashMap::new();
             for &id in ids {
                 if let Some(binding) = self.bindings.get(&id) {
-                    by_context
-                        .entry(&binding.context)
-                        .or_default()
-                        .push(id);
+                    by_context.entry(&binding.context).or_default().push(id);
                 }
             }
 
@@ -739,10 +736,13 @@ mod tests {
         let triggered_clone = triggered.clone();
 
         let mut manager = ShortcutManager::new();
-        manager.register(Shortcut::ctrl(Key::S), Box::new(move || {
-            triggered_clone.store(true, Ordering::SeqCst);
-            true
-        }));
+        manager.register(
+            Shortcut::ctrl(Key::S),
+            Box::new(move || {
+                triggered_clone.store(true, Ordering::SeqCst);
+                true
+            }),
+        );
 
         // Without Ctrl, should not trigger
         manager.set_modifiers(Modifiers::NONE);
@@ -763,10 +763,13 @@ mod tests {
         let counter_clone = counter.clone();
 
         let mut manager = ShortcutManager::new();
-        manager.register(Shortcut::ctrl(Key::C), Box::new(move || {
-            counter_clone.fetch_add(1, Ordering::SeqCst);
-            true
-        }));
+        manager.register(
+            Shortcut::ctrl(Key::C),
+            Box::new(move || {
+                counter_clone.fetch_add(1, Ordering::SeqCst);
+                true
+            }),
+        );
 
         manager.trigger(Shortcut::ctrl(Key::C));
         assert_eq!(counter.load(Ordering::SeqCst), 1);
@@ -781,10 +784,13 @@ mod tests {
         let triggered_clone = triggered.clone();
 
         let mut manager = ShortcutManager::new();
-        let id = manager.register(Shortcut::ctrl(Key::S), Box::new(move || {
-            triggered_clone.store(true, Ordering::SeqCst);
-            true
-        }));
+        let id = manager.register(
+            Shortcut::ctrl(Key::S),
+            Box::new(move || {
+                triggered_clone.store(true, Ordering::SeqCst);
+                true
+            }),
+        );
 
         manager.set_enabled(id, false);
         manager.set_modifiers(Modifiers::CTRL);
@@ -979,10 +985,7 @@ mod tests {
     // ShortcutBuilder tests
     #[test]
     fn test_builder() {
-        let shortcut = ShortcutBuilder::new(Key::S)
-            .ctrl()
-            .shift()
-            .build();
+        let shortcut = ShortcutBuilder::new(Key::S).ctrl().shift().build();
 
         assert_eq!(shortcut.key, Key::S);
         assert!(shortcut.modifiers.ctrl);
@@ -1005,8 +1008,7 @@ mod tests {
 
     #[test]
     fn test_builder_for_widget() {
-        let builder = ShortcutBuilder::new(Key::Enter)
-            .for_widget(WidgetId::new(42));
+        let builder = ShortcutBuilder::new(Key::Enter).for_widget(WidgetId::new(42));
 
         assert_eq!(builder.context, ShortcutContext::Widget(WidgetId::new(42)));
     }

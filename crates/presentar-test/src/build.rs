@@ -92,11 +92,11 @@ impl BundleAnalyzer {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            max_size_kb: 500,                  // Per spec: <500KB
-            expected_compression_ratio: 0.3,   // Typical Brotli ratio for WASM
+            max_size_kb: 500,                // Per spec: <500KB
+            expected_compression_ratio: 0.3, // Typical Brotli ratio for WASM
             forbidden_patterns: vec![
-                "PANIC_MESSAGE".to_string(),   // Debug panics
-                "debug_assert".to_string(),    // Debug assertions
+                "PANIC_MESSAGE".to_string(), // Debug panics
+                "debug_assert".to_string(),  // Debug assertions
             ],
         }
     }
@@ -325,7 +325,9 @@ impl BundleAnalyzer {
             });
         }
 
-        let passed = !violations.iter().any(|v| v.severity == ViolationSeverity::Error);
+        let passed = !violations
+            .iter()
+            .any(|v| v.severity == ViolationSeverity::Error);
 
         GateCheckResult { passed, violations }
     }
@@ -647,7 +649,10 @@ mod tests {
         let result = analyzer.check_gates(&analysis, &gates);
 
         assert!(!result.passed);
-        assert!(result.violations.iter().any(|v| v.gate == "max_bundle_size_kb"));
+        assert!(result
+            .violations
+            .iter()
+            .any(|v| v.gate == "max_bundle_size_kb"));
     }
 
     #[test]

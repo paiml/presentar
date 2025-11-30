@@ -95,20 +95,23 @@ mod selector;
 mod snapshot;
 
 pub use a11y::{
-    aria_from_widget, A11yChecker, A11yConfig, A11yReport, A11yViolation, AriaAttributes, AriaChecked, AriaLive,
-    AutocompleteValue, FormA11yChecker, FormA11yReport, FormA11yRule, FormAccessibility, FormFieldA11y,
-    FormFieldGroup, FormViolation, Impact, InputType, MIN_FOCUS_INDICATOR_AREA, MIN_TOUCH_TARGET_SIZE,
+    aria_from_widget, A11yChecker, A11yConfig, A11yReport, A11yViolation, AriaAttributes,
+    AriaChecked, AriaLive, AutocompleteValue, FormA11yChecker, FormA11yReport, FormA11yRule,
+    FormAccessibility, FormFieldA11y, FormFieldGroup, FormViolation, Impact, InputType,
+    MIN_FOCUS_INDICATOR_AREA, MIN_TOUCH_TARGET_SIZE,
 };
 pub use bdd::{describe, describe_and_assert, expect, Expectation, TestContext};
-pub use fixture::{Fixture, FixtureBuilder, FixtureContext, FixtureError, FixtureManifest, TestData};
 pub use build::{
     BuildInfo, BuildMode, BundleAnalysis, BundleAnalyzer, BundleError, SizeRecord, SizeTracker,
     WasmSection,
 };
+pub use fixture::{
+    Fixture, FixtureBuilder, FixtureContext, FixtureError, FixtureManifest, TestData,
+};
 pub use grade::{
     AccessibilityGates, AppQualityScore, Criterion, DataGates, DocumentationGates,
-    EvaluationBuilder, GateCheckResult, GateViolation, Grade, PerformanceGates,
-    QualityGates, QualityScoreBuilder, ReportCard, ScoreBreakdown, ViolationSeverity,
+    EvaluationBuilder, GateCheckResult, GateViolation, Grade, PerformanceGates, QualityGates,
+    QualityScoreBuilder, ReportCard, ScoreBreakdown, ViolationSeverity,
 };
 pub use harness::Harness;
 pub use selector::{Selector, SelectorParser};

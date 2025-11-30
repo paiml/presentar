@@ -56,14 +56,21 @@ impl Vec4 {
     #[inline]
     #[must_use]
     pub const fn to_point(self) -> Point {
-        Point { x: self.x, y: self.y }
+        Point {
+            x: self.x,
+            y: self.y,
+        }
     }
 
     /// Dot product.
     #[inline]
     #[must_use]
     pub fn dot(self, other: Self) -> f32 {
-        self.w.mul_add(other.w, self.z.mul_add(other.z, self.x.mul_add(other.x, self.y * other.y)))
+        self.w.mul_add(
+            other.w,
+            self.z
+                .mul_add(other.z, self.x.mul_add(other.x, self.y * other.y)),
+        )
     }
 
     /// Component-wise addition.
@@ -295,10 +302,22 @@ impl Mat4 {
     #[must_use]
     pub fn transform_vec4(&self, v: Vec4) -> Vec4 {
         Vec4::new(
-            self.data[0][3].mul_add(v.w, self.data[0][2].mul_add(v.z, self.data[0][0].mul_add(v.x, self.data[0][1] * v.y))),
-            self.data[1][3].mul_add(v.w, self.data[1][2].mul_add(v.z, self.data[1][0].mul_add(v.x, self.data[1][1] * v.y))),
-            self.data[2][3].mul_add(v.w, self.data[2][2].mul_add(v.z, self.data[2][0].mul_add(v.x, self.data[2][1] * v.y))),
-            self.data[3][3].mul_add(v.w, self.data[3][2].mul_add(v.z, self.data[3][0].mul_add(v.x, self.data[3][1] * v.y))),
+            self.data[0][3].mul_add(
+                v.w,
+                self.data[0][2].mul_add(v.z, self.data[0][0].mul_add(v.x, self.data[0][1] * v.y)),
+            ),
+            self.data[1][3].mul_add(
+                v.w,
+                self.data[1][2].mul_add(v.z, self.data[1][0].mul_add(v.x, self.data[1][1] * v.y)),
+            ),
+            self.data[2][3].mul_add(
+                v.w,
+                self.data[2][2].mul_add(v.z, self.data[2][0].mul_add(v.x, self.data[2][1] * v.y)),
+            ),
+            self.data[3][3].mul_add(
+                v.w,
+                self.data[3][2].mul_add(v.z, self.data[3][0].mul_add(v.x, self.data[3][1] * v.y)),
+            ),
         )
     }
 
@@ -323,10 +342,22 @@ impl Mat4 {
 
         let transformed: Vec<Point> = corners.iter().map(|&p| self.transform_point(p)).collect();
 
-        let min_x = transformed.iter().map(|p| p.x).fold(f32::INFINITY, f32::min);
-        let max_x = transformed.iter().map(|p| p.x).fold(f32::NEG_INFINITY, f32::max);
-        let min_y = transformed.iter().map(|p| p.y).fold(f32::INFINITY, f32::min);
-        let max_y = transformed.iter().map(|p| p.y).fold(f32::NEG_INFINITY, f32::max);
+        let min_x = transformed
+            .iter()
+            .map(|p| p.x)
+            .fold(f32::INFINITY, f32::min);
+        let max_x = transformed
+            .iter()
+            .map(|p| p.x)
+            .fold(f32::NEG_INFINITY, f32::max);
+        let min_y = transformed
+            .iter()
+            .map(|p| p.y)
+            .fold(f32::INFINITY, f32::min);
+        let max_y = transformed
+            .iter()
+            .map(|p| p.y)
+            .fold(f32::NEG_INFINITY, f32::max);
 
         Rect::new(min_x, min_y, max_x - min_x, max_y - min_y)
     }
@@ -360,10 +391,30 @@ impl Mat4 {
     #[must_use]
     pub const fn transpose(&self) -> Self {
         Self::from_data([
-            [self.data[0][0], self.data[1][0], self.data[2][0], self.data[3][0]],
-            [self.data[0][1], self.data[1][1], self.data[2][1], self.data[3][1]],
-            [self.data[0][2], self.data[1][2], self.data[2][2], self.data[3][2]],
-            [self.data[0][3], self.data[1][3], self.data[2][3], self.data[3][3]],
+            [
+                self.data[0][0],
+                self.data[1][0],
+                self.data[2][0],
+                self.data[3][0],
+            ],
+            [
+                self.data[0][1],
+                self.data[1][1],
+                self.data[2][1],
+                self.data[3][1],
+            ],
+            [
+                self.data[0][2],
+                self.data[1][2],
+                self.data[2][2],
+                self.data[3][2],
+            ],
+            [
+                self.data[0][3],
+                self.data[1][3],
+                self.data[2][3],
+                self.data[3][3],
+            ],
         ])
     }
 }
@@ -394,7 +445,10 @@ impl std::ops::Mul<Vec4> for Mat4 {
 #[inline]
 #[must_use]
 pub fn batch_transform_points(points: &[Point], transform: &Mat4) -> Vec<Point> {
-    points.iter().map(|&p| transform.transform_point(p)).collect()
+    points
+        .iter()
+        .map(|&p| transform.transform_point(p))
+        .collect()
 }
 
 /// Batch transform multiple Vec4s.
@@ -446,7 +500,9 @@ pub fn centroid(points: &[Point]) -> Option<Point> {
         return None;
     }
 
-    let sum: (f32, f32) = points.iter().fold((0.0, 0.0), |acc, p| (acc.0 + p.x, acc.1 + p.y));
+    let sum: (f32, f32) = points
+        .iter()
+        .fold((0.0, 0.0), |acc, p| (acc.0 + p.x, acc.1 + p.y));
     let n = points.len() as f32;
     Some(Point::new(sum.0 / n, sum.1 / n))
 }
@@ -965,7 +1021,10 @@ mod tests {
     fn test_polygon_area_too_few_points() {
         assert_eq!(polygon_area(&[]), 0.0);
         assert_eq!(polygon_area(&[Point::new(0.0, 0.0)]), 0.0);
-        assert_eq!(polygon_area(&[Point::new(0.0, 0.0), Point::new(1.0, 1.0)]), 0.0);
+        assert_eq!(
+            polygon_area(&[Point::new(0.0, 0.0), Point::new(1.0, 1.0)]),
+            0.0
+        );
     }
 
     // =========================================================================

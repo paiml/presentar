@@ -247,7 +247,8 @@ impl CommandHistory {
         let group_id = if self.current_group.is_some() {
             self.current_group
         } else if self.config.auto_group_interval_ms > 0
-            && self.timestamp.saturating_sub(self.last_command_time) < self.config.auto_group_interval_ms
+            && self.timestamp.saturating_sub(self.last_command_time)
+                < self.config.auto_group_interval_ms
             && !self.undo_stack.is_empty()
         {
             // Auto-group with previous command
@@ -627,8 +628,7 @@ impl Command for CompositeCommandImpl {
     }
 
     fn memory_size(&self) -> usize {
-        std::mem::size_of::<Self>()
-            + self.commands.iter().map(|c| c.memory_size()).sum::<usize>()
+        std::mem::size_of::<Self>() + self.commands.iter().map(|c| c.memory_size()).sum::<usize>()
     }
 }
 

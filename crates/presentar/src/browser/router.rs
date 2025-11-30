@@ -228,7 +228,10 @@ impl BrowserRouter {
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
-            self.state.lock().map(|s| s.history_index > 0).unwrap_or(false)
+            self.state
+                .lock()
+                .map(|s| s.history_index > 0)
+                .unwrap_or(false)
         }
     }
 
@@ -274,11 +277,7 @@ impl BrowserRouter {
     fn push_wasm(&self, path: &str) {
         if let Some(window) = web_sys::window() {
             if let Ok(history) = window.history() {
-                let _ = history.push_state_with_url(
-                    &wasm_bindgen::JsValue::NULL,
-                    "",
-                    Some(path),
-                );
+                let _ = history.push_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(path));
             }
         }
     }
@@ -287,11 +286,8 @@ impl BrowserRouter {
     fn replace_wasm(&self, path: &str) {
         if let Some(window) = web_sys::window() {
             if let Ok(history) = window.history() {
-                let _ = history.replace_state_with_url(
-                    &wasm_bindgen::JsValue::NULL,
-                    "",
-                    Some(path),
-                );
+                let _ =
+                    history.replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(path));
             }
         }
     }

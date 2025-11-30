@@ -406,7 +406,10 @@ impl ExpressionParser {
                         ));
                     }
                     let op = AggregateOp::from_str(parts[1]).ok_or_else(|| {
-                        ExpressionError::InvalidArgument(format!("unknown aggregate op: {}", parts[1]))
+                        ExpressionError::InvalidArgument(format!(
+                            "unknown aggregate op: {}",
+                            parts[1]
+                        ))
                     })?;
                     Ok(Transform::Aggregate {
                         field: parts[0].to_string(),
@@ -445,9 +448,9 @@ impl ExpressionParser {
                             "moving_avg requires field, window".to_string(),
                         ));
                     }
-                    let window = parts[1]
-                        .parse()
-                        .map_err(|_| ExpressionError::InvalidArgument("moving_avg window".to_string()))?;
+                    let window = parts[1].parse().map_err(|_| {
+                        ExpressionError::InvalidArgument("moving_avg window".to_string())
+                    })?;
                     Ok(Transform::MovingAverage {
                         field: parts[0].to_string(),
                         window,
@@ -670,7 +673,9 @@ mod tests {
     #[test]
     fn test_parse_reduce() {
         let parser = ExpressionParser::new();
-        let expr = parser.parse("{{ data | reduce(0, acc + item.value) }}").unwrap();
+        let expr = parser
+            .parse("{{ data | reduce(0, acc + item.value) }}")
+            .unwrap();
         assert_eq!(
             expr.transforms,
             vec![Transform::Reduce {
@@ -690,11 +695,15 @@ mod tests {
     #[test]
     fn test_parse_aggregate_sum() {
         let parser = ExpressionParser::new();
-        let expr = parser.parse("{{ data | group_by(category) | agg(amount, sum) }}").unwrap();
+        let expr = parser
+            .parse("{{ data | group_by(category) | agg(amount, sum) }}")
+            .unwrap();
         assert_eq!(
             expr.transforms,
             vec![
-                Transform::GroupBy { field: "category".to_string() },
+                Transform::GroupBy {
+                    field: "category".to_string()
+                },
                 Transform::Aggregate {
                     field: "amount".to_string(),
                     op: AggregateOp::Sum,
@@ -752,7 +761,9 @@ mod tests {
     #[test]
     fn test_parse_pivot() {
         let parser = ExpressionParser::new();
-        let expr = parser.parse("{{ data | pivot(date, product, sales) }}").unwrap();
+        let expr = parser
+            .parse("{{ data | pivot(date, product, sales) }}")
+            .unwrap();
         assert_eq!(
             expr.transforms,
             vec![Transform::Pivot {
@@ -877,7 +888,10 @@ mod tests {
         assert!(matches!(expr.transforms[0], Transform::Filter { .. }));
         assert!(matches!(expr.transforms[1], Transform::GroupBy { .. }));
         assert!(matches!(expr.transforms[2], Transform::Aggregate { .. }));
-        assert!(matches!(expr.transforms[3], Transform::Sort { desc: true, .. }));
+        assert!(matches!(
+            expr.transforms[3],
+            Transform::Sort { desc: true, .. }
+        ));
         assert!(matches!(expr.transforms[4], Transform::Limit { n: 10 }));
     }
 

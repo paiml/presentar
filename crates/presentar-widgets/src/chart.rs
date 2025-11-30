@@ -1518,7 +1518,9 @@ mod tests {
     #[test]
     fn test_chart_event_returns_none() {
         let mut chart = Chart::new();
-        let result = chart.event(&presentar_core::Event::KeyDown { key: presentar_core::Key::Down });
+        let result = chart.event(&presentar_core::Event::KeyDown {
+            key: presentar_core::Key::Down,
+        });
         assert!(result.is_none());
     }
 
@@ -1546,8 +1548,7 @@ mod tests {
 
     #[test]
     fn test_chart_data_bounds_single_point() {
-        let chart = Chart::new()
-            .series(DataSeries::new("S").point(5.0, 10.0));
+        let chart = Chart::new().series(DataSeries::new("S").point(5.0, 10.0));
         let bounds = chart.data_bounds().unwrap();
         assert_eq!(bounds.0, 5.0); // x_min
         assert_eq!(bounds.1, 5.0); // x_max (same as min for single point)

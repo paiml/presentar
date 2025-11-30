@@ -39,22 +39,46 @@ fn main() {
                 .child(
                     Column::new()
                         .gap(4.0)
-                        .child(Text::new("Total Revenue").font_size(12.0).color(Color::from_hex("#6b7280").expect("hex")))
-                        .child(Text::new("$1,200,000").font_size(24.0).color(Color::from_hex("#111827").expect("hex")))
+                        .child(
+                            Text::new("Total Revenue")
+                                .font_size(12.0)
+                                .color(Color::from_hex("#6b7280").expect("hex")),
+                        )
+                        .child(
+                            Text::new("$1,200,000")
+                                .font_size(24.0)
+                                .color(Color::from_hex("#111827").expect("hex")),
+                        )
                         .child(Text::new("+12.5%").font_size(14.0).color(Color::GREEN)),
                 )
                 .child(
                     Column::new()
                         .gap(4.0)
-                        .child(Text::new("Orders").font_size(12.0).color(Color::from_hex("#6b7280").expect("hex")))
-                        .child(Text::new("3,847").font_size(24.0).color(Color::from_hex("#111827").expect("hex")))
+                        .child(
+                            Text::new("Orders")
+                                .font_size(12.0)
+                                .color(Color::from_hex("#6b7280").expect("hex")),
+                        )
+                        .child(
+                            Text::new("3,847")
+                                .font_size(24.0)
+                                .color(Color::from_hex("#111827").expect("hex")),
+                        )
                         .child(Text::new("+8.2%").font_size(14.0).color(Color::GREEN)),
                 )
                 .child(
                     Column::new()
                         .gap(4.0)
-                        .child(Text::new("Customers").font_size(12.0).color(Color::from_hex("#6b7280").expect("hex")))
-                        .child(Text::new("12,493").font_size(24.0).color(Color::from_hex("#111827").expect("hex")))
+                        .child(
+                            Text::new("Customers")
+                                .font_size(12.0)
+                                .color(Color::from_hex("#6b7280").expect("hex")),
+                        )
+                        .child(
+                            Text::new("12,493")
+                                .font_size(24.0)
+                                .color(Color::from_hex("#111827").expect("hex")),
+                        )
                         .child(Text::new("-2.1%").font_size(14.0).color(Color::RED)),
                 ),
         )
@@ -92,7 +116,10 @@ fn main() {
 
     let bounds = Rect::new(0.0, 0.0, size.width, size.height);
     let result = dashboard.layout(bounds);
-    println!("Layout complete: {}x{}", result.size.width, result.size.height);
+    println!(
+        "Layout complete: {}x{}",
+        result.size.width, result.size.height
+    );
 
     // Paint and count commands
     let mut canvas = RecordingCanvas::new();

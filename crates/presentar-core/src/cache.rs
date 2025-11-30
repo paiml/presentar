@@ -114,7 +114,7 @@ impl Default for CacheConfig {
     fn default() -> Self {
         Self {
             max_entries: 1000,
-            max_memory: 50 * 1024 * 1024, // 50 MB
+            max_memory: 50 * 1024 * 1024,  // 50 MB
             default_ttl_ms: 5 * 60 * 1000, // 5 minutes
             default_stale_ms: 60 * 1000,   // 1 minute stale
             enable_lru: true,
@@ -385,7 +385,9 @@ where
     /// Remove a value from cache
     pub fn remove(&mut self, key: &K) -> Option<V> {
         if let Some(entry) = self.entries.remove(key) {
-            self.current_memory = self.current_memory.saturating_sub(entry.metadata.size_bytes);
+            self.current_memory = self
+                .current_memory
+                .saturating_sub(entry.metadata.size_bytes);
             self.access_order.retain(|k| k != key);
             self.stats.current_entries = self.entries.len();
             self.stats.current_memory = self.current_memory;
@@ -489,7 +491,9 @@ where
 
         for key in keys_to_remove {
             if let Some(entry) = self.entries.remove(&key) {
-                self.current_memory = self.current_memory.saturating_sub(entry.metadata.size_bytes);
+                self.current_memory = self
+                    .current_memory
+                    .saturating_sub(entry.metadata.size_bytes);
                 self.access_order.retain(|k| k != &key);
                 self.stats.evictions += 1;
             }
@@ -504,7 +508,9 @@ where
             // LRU eviction
             let key = self.access_order.remove(0);
             if let Some(entry) = self.entries.remove(&key) {
-                self.current_memory = self.current_memory.saturating_sub(entry.metadata.size_bytes);
+                self.current_memory = self
+                    .current_memory
+                    .saturating_sub(entry.metadata.size_bytes);
                 self.stats.evictions += 1;
                 return true;
             }
@@ -512,8 +518,9 @@ where
             // Random eviction as fallback
             if let Some(key) = self.entries.keys().next().cloned() {
                 if let Some(entry) = self.entries.remove(&key) {
-                    self.current_memory =
-                        self.current_memory.saturating_sub(entry.metadata.size_bytes);
+                    self.current_memory = self
+                        .current_memory
+                        .saturating_sub(entry.metadata.size_bytes);
                     self.access_order.retain(|k| k != &key);
                     self.stats.evictions += 1;
                     return true;

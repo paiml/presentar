@@ -303,7 +303,8 @@ impl PachaLoader {
 
         for try_path in paths_to_try {
             if try_path.exists() {
-                let data = std::fs::read(&try_path).map_err(|e| PachaError::IoError(e.to_string()))?;
+                let data =
+                    std::fs::read(&try_path).map_err(|e| PachaError::IoError(e.to_string()))?;
 
                 let content_type = try_path
                     .extension()
@@ -649,10 +650,8 @@ impl<C: HttpClient> RemotePachaLoader<C> {
                     });
                 }
                 Ok(response) => {
-                    last_error = PachaError::ConnectionError(format!(
-                        "HTTP {} error",
-                        response.status
-                    ));
+                    last_error =
+                        PachaError::ConnectionError(format!("HTTP {} error", response.status));
                     // Don't retry 4xx errors
                     if response.status >= 400 && response.status < 500 {
                         break;
@@ -1002,8 +1001,14 @@ mod tests {
             .with_header("Authorization", "Bearer token123")
             .with_header("Content-Type", "application/json");
 
-        assert_eq!(req.headers.get("Authorization"), Some(&"Bearer token123".to_string()));
-        assert_eq!(req.headers.get("Content-Type"), Some(&"application/json".to_string()));
+        assert_eq!(
+            req.headers.get("Authorization"),
+            Some(&"Bearer token123".to_string())
+        );
+        assert_eq!(
+            req.headers.get("Content-Type"),
+            Some(&"application/json".to_string())
+        );
     }
 
     #[test]
@@ -1048,9 +1053,18 @@ mod tests {
         };
 
         // Case-insensitive lookup
-        assert_eq!(response.get_header("content-type"), Some("application/json"));
-        assert_eq!(response.get_header("Content-Type"), Some("application/json"));
-        assert_eq!(response.get_header("CONTENT-TYPE"), Some("application/json"));
+        assert_eq!(
+            response.get_header("content-type"),
+            Some("application/json")
+        );
+        assert_eq!(
+            response.get_header("Content-Type"),
+            Some("application/json")
+        );
+        assert_eq!(
+            response.get_header("CONTENT-TYPE"),
+            Some("application/json")
+        );
         assert_eq!(response.get_header("x-custom"), Some("value"));
         assert!(response.get_header("nonexistent").is_none());
     }
@@ -1067,10 +1081,22 @@ mod tests {
             }
         };
 
-        assert_eq!(make_response("application/json").detect_content_type(), ContentType::Json);
-        assert_eq!(make_response("application/json; charset=utf-8").detect_content_type(), ContentType::Json);
-        assert_eq!(make_response("text/csv").detect_content_type(), ContentType::Csv);
-        assert_eq!(make_response("application/octet-stream").detect_content_type(), ContentType::Binary);
+        assert_eq!(
+            make_response("application/json").detect_content_type(),
+            ContentType::Json
+        );
+        assert_eq!(
+            make_response("application/json; charset=utf-8").detect_content_type(),
+            ContentType::Json
+        );
+        assert_eq!(
+            make_response("text/csv").detect_content_type(),
+            ContentType::Csv
+        );
+        assert_eq!(
+            make_response("application/octet-stream").detect_content_type(),
+            ContentType::Binary
+        );
     }
 
     #[test]
@@ -1099,7 +1125,7 @@ mod tests {
         let config = RetryConfig::default();
 
         assert_eq!(config.delay_for_attempt(0), 0);
-        assert_eq!(config.delay_for_attempt(1), 500);  // initial
+        assert_eq!(config.delay_for_attempt(1), 500); // initial
         assert_eq!(config.delay_for_attempt(2), 1000); // 500 * 2
         assert_eq!(config.delay_for_attempt(3), 2000); // 500 * 4
     }
@@ -1222,7 +1248,10 @@ mod tests {
         let loader = RemotePachaLoader::new(NoopHttpClient);
 
         let uri1 = PachaUri::parse("pacha://server.com:8080/api/data").unwrap();
-        assert_eq!(loader.build_http_url(&uri1), "https://server.com:8080/api/data");
+        assert_eq!(
+            loader.build_http_url(&uri1),
+            "https://server.com:8080/api/data"
+        );
 
         let uri2 = PachaUri::parse("pacha://server.com/data?limit=10").unwrap();
         assert!(loader.build_http_url(&uri2).contains("limit=10"));

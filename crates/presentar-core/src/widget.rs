@@ -157,13 +157,7 @@ pub trait Canvas {
     fn fill_circle(&mut self, center: crate::Point, radius: f32, color: crate::Color);
 
     /// Draw a stroked circle.
-    fn stroke_circle(
-        &mut self,
-        center: crate::Point,
-        radius: f32,
-        color: crate::Color,
-        width: f32,
-    );
+    fn stroke_circle(&mut self, center: crate::Point, radius: f32, color: crate::Color, width: f32);
 
     /// Draw a filled arc (pie slice).
     fn fill_arc(

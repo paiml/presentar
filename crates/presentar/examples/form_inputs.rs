@@ -2,9 +2,7 @@
 //!
 //! Run with: `cargo run --example form_inputs`
 
-use presentar::widgets::{
-    Button, Checkbox, Column, Row, Slider, Text, TextInput, Toggle,
-};
+use presentar::widgets::{Button, Checkbox, Column, Row, Slider, Text, TextInput, Toggle};
 use presentar::{Color, Constraints, DrawCommand, RecordingCanvas, Rect, Size, Widget};
 
 fn main() {
@@ -26,11 +24,7 @@ fn main() {
                 .child(TextInput::new().placeholder("Enter your username")),
         )
         // Checkbox
-        .child(
-            Checkbox::new()
-                .label("Enable dark mode")
-                .checked(true),
-        )
+        .child(Checkbox::new().label("Enable dark mode").checked(true))
         // Toggle
         .child(
             Row::new()
@@ -75,7 +69,10 @@ fn main() {
 
     let bounds = Rect::new(0.0, 0.0, size.width, size.height);
     let result = form.layout(bounds);
-    println!("Layout complete: {}x{}", result.size.width, result.size.height);
+    println!(
+        "Layout complete: {}x{}",
+        result.size.width, result.size.height
+    );
 
     // Paint and analyze commands
     let mut canvas = RecordingCanvas::new();

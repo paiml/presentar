@@ -253,10 +253,7 @@ impl TreeDiffer {
                         from_path.push(old_idx);
                         let mut to_path = self.current_path.clone();
                         to_path.push(new_idx);
-                        result.push(DiffOp::Move {
-                            from_path,
-                            to_path,
-                        });
+                        result.push(DiffOp::Move { from_path, to_path });
                     }
 
                     // Recursively diff

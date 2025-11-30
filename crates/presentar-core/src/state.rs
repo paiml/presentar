@@ -129,11 +129,7 @@ impl<M> Command<M> {
     {
         match self {
             Self::None => Command::None,
-            Self::Batch(cmds) => Command::Batch(
-                cmds.into_iter()
-                    .map(|c| c.map_inner(f))
-                    .collect(),
-            ),
+            Self::Batch(cmds) => Command::Batch(cmds.into_iter().map(|c| c.map_inner(f)).collect()),
             Self::Task(fut) => {
                 let f = f.clone();
                 Command::Task(Box::pin(async move { f(fut.await) }))

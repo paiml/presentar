@@ -2,11 +2,11 @@
 //!
 //! Pure Rust implementation - no external dependencies.
 
-use std::path::{Path, PathBuf};
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use presentar_core::draw::DrawCommand;
 use presentar_core::Color;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use std::path::{Path, PathBuf};
 
 /// Image data for snapshot comparison.
 #[derive(Debug, Clone)]
@@ -172,7 +172,11 @@ impl Image {
                     );
                 }
             }
-            DrawCommand::Circle { center, radius, style } => {
+            DrawCommand::Circle {
+                center,
+                radius,
+                style,
+            } => {
                 if let Some(fill) = style.fill {
                     self.fill_circle(center.x as i32, center.y as i32, *radius as u32, &fill);
                 }

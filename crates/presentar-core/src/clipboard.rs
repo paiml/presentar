@@ -207,7 +207,11 @@ pub struct ClipboardEvent {
 
 impl ClipboardEvent {
     /// Create a new clipboard event.
-    pub fn new(operation: ClipboardOperation, formats: Vec<ClipboardFormat>, timestamp: u64) -> Self {
+    pub fn new(
+        operation: ClipboardOperation,
+        formats: Vec<ClipboardFormat>,
+        timestamp: u64,
+    ) -> Self {
         Self {
             operation,
             formats,
@@ -538,9 +542,18 @@ mod tests {
 
     #[test]
     fn test_clipboard_format_from_mime() {
-        assert_eq!(ClipboardFormat::from_mime("text/plain"), ClipboardFormat::Text);
-        assert_eq!(ClipboardFormat::from_mime("text/html"), ClipboardFormat::Html);
-        assert_eq!(ClipboardFormat::from_mime("image/png"), ClipboardFormat::ImagePng);
+        assert_eq!(
+            ClipboardFormat::from_mime("text/plain"),
+            ClipboardFormat::Text
+        );
+        assert_eq!(
+            ClipboardFormat::from_mime("text/html"),
+            ClipboardFormat::Html
+        );
+        assert_eq!(
+            ClipboardFormat::from_mime("image/png"),
+            ClipboardFormat::ImagePng
+        );
         assert_eq!(
             ClipboardFormat::from_mime("application/json"),
             ClipboardFormat::Custom("application/json".to_string())
@@ -631,11 +644,7 @@ mod tests {
     // ClipboardEvent tests
     #[test]
     fn test_clipboard_event_new() {
-        let event = ClipboardEvent::new(
-            ClipboardOperation::Copy,
-            vec![ClipboardFormat::Text],
-            42,
-        );
+        let event = ClipboardEvent::new(ClipboardOperation::Copy, vec![ClipboardFormat::Text], 42);
         assert_eq!(event.operation, ClipboardOperation::Copy);
         assert_eq!(event.formats.len(), 1);
         assert_eq!(event.timestamp, 42);
@@ -805,10 +814,16 @@ mod tests {
         assert!(history.current().is_none());
 
         history.push(ClipboardData::text("first"));
-        assert_eq!(history.current().unwrap().get_text(), Some("first".to_string()));
+        assert_eq!(
+            history.current().unwrap().get_text(),
+            Some("first".to_string())
+        );
 
         history.push(ClipboardData::text("second"));
-        assert_eq!(history.current().unwrap().get_text(), Some("second".to_string()));
+        assert_eq!(
+            history.current().unwrap().get_text(),
+            Some("second".to_string())
+        );
     }
 
     #[test]
@@ -819,7 +834,10 @@ mod tests {
         history.push(ClipboardData::text("third"));
 
         // At "third"
-        assert_eq!(history.current().unwrap().get_text(), Some("third".to_string()));
+        assert_eq!(
+            history.current().unwrap().get_text(),
+            Some("third".to_string())
+        );
 
         // Go back to "second"
         let prev = history.previous();
@@ -892,8 +910,14 @@ mod tests {
         history.push(ClipboardData::text("first"));
         history.push(ClipboardData::text("second"));
 
-        assert_eq!(history.get(0).unwrap().get_text(), Some("first".to_string()));
-        assert_eq!(history.get(1).unwrap().get_text(), Some("second".to_string()));
+        assert_eq!(
+            history.get(0).unwrap().get_text(),
+            Some("first".to_string())
+        );
+        assert_eq!(
+            history.get(1).unwrap().get_text(),
+            Some("second".to_string())
+        );
         assert!(history.get(2).is_none());
     }
 
@@ -912,7 +936,10 @@ mod tests {
         // Push new entry - should truncate "second" and "third"
         history.push(ClipboardData::text("new"));
         assert_eq!(history.len(), 2);
-        assert_eq!(history.get(0).unwrap().get_text(), Some("first".to_string()));
+        assert_eq!(
+            history.get(0).unwrap().get_text(),
+            Some("first".to_string())
+        );
         assert_eq!(history.get(1).unwrap().get_text(), Some("new".to_string()));
     }
 }

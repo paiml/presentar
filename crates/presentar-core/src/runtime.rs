@@ -586,7 +586,10 @@ impl<T: Clone> Tween<T> {
 
     /// Advance the tween by delta milliseconds.
     pub fn advance(&mut self, delta_ms: u32) {
-        self.elapsed_ms = self.elapsed_ms.saturating_add(delta_ms).min(self.duration_ms);
+        self.elapsed_ms = self
+            .elapsed_ms
+            .saturating_add(delta_ms)
+            .min(self.duration_ms);
     }
 
     /// Reset the tween to the beginning.
@@ -720,7 +723,8 @@ impl AnimationInstance {
         if self.forward {
             self.tween.value()
         } else {
-            self.tween.from + (self.tween.to - self.tween.from) * (1.0 - self.tween.eased_progress())
+            self.tween.from
+                + (self.tween.to - self.tween.from) * (1.0 - self.tween.eased_progress())
         }
     }
 
@@ -2481,8 +2485,8 @@ mod tests {
 
     #[test]
     fn test_animation_instance_with_easing() {
-        let anim = AnimationInstance::new(1, 0.0, 100.0, 1000)
-            .with_easing(EasingFunction::EaseInQuad);
+        let anim =
+            AnimationInstance::new(1, 0.0, 100.0, 1000).with_easing(EasingFunction::EaseInQuad);
         assert_eq!(anim.tween.easing, EasingFunction::EaseInQuad);
     }
 
@@ -2875,10 +2879,8 @@ mod tests {
 
     #[test]
     fn test_animated_property_with_delay() {
-        let mut prop = AnimatedProperty::with_config(
-            0.0_f32,
-            TransitionConfig::new(1000).with_delay(500),
-        );
+        let mut prop =
+            AnimatedProperty::with_config(0.0_f32, TransitionConfig::new(1000).with_delay(500));
         prop.set(100.0);
 
         // During delay, progress should be 0
@@ -2904,10 +2906,8 @@ mod tests {
 
     #[test]
     fn test_animated_property_color() {
-        let mut prop = AnimatedProperty::with_config(
-            crate::Color::BLACK,
-            TransitionConfig::new(1000),
-        );
+        let mut prop =
+            AnimatedProperty::with_config(crate::Color::BLACK, TransitionConfig::new(1000));
         prop.set(crate::Color::WHITE);
 
         prop.advance(500);
@@ -2917,10 +2917,8 @@ mod tests {
 
     #[test]
     fn test_animated_property_point() {
-        let mut prop = AnimatedProperty::with_config(
-            crate::Point::new(0.0, 0.0),
-            TransitionConfig::new(1000),
-        );
+        let mut prop =
+            AnimatedProperty::with_config(crate::Point::new(0.0, 0.0), TransitionConfig::new(1000));
         prop.set(crate::Point::new(100.0, 200.0));
 
         prop.advance(500);
@@ -2931,10 +2929,8 @@ mod tests {
 
     #[test]
     fn test_animated_property_size() {
-        let mut prop = AnimatedProperty::with_config(
-            crate::Size::new(0.0, 0.0),
-            TransitionConfig::new(1000),
-        );
+        let mut prop =
+            AnimatedProperty::with_config(crate::Size::new(0.0, 0.0), TransitionConfig::new(1000));
         prop.set(crate::Size::new(100.0, 100.0));
 
         prop.advance(500);

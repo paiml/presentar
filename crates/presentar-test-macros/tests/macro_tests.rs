@@ -69,6 +69,8 @@ fn test_preserves_other_attrs() {
 
 #[presentar_test]
 fn test_sync_function() {
-    let result = std::thread::spawn(|| 42).join().expect("thread join failed");
+    let result = std::thread::spawn(|| 42)
+        .join()
+        .expect("thread join failed");
     assert_eq!(result, 42);
 }

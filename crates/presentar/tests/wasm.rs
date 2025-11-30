@@ -56,7 +56,9 @@ fn test_text_json_roundtrip() {
     let parsed: DrawCommand = serde_json::from_str(&json).expect("deserialize");
 
     match parsed {
-        DrawCommand::Text { content, position, .. } => {
+        DrawCommand::Text {
+            content, position, ..
+        } => {
             assert_eq!(content, "Hello WASM");
             assert_eq!(position.x, 10.0);
         }

@@ -1,13 +1,13 @@
 //! Widget implementations for Presentar UI framework.
 
 pub mod button;
-pub mod formats;
 pub mod chart;
 pub mod checkbox;
 pub mod column;
 pub mod container;
 pub mod data_card;
 pub mod data_table;
+pub mod formats;
 pub mod image;
 pub mod list;
 pub mod menu;

@@ -157,7 +157,10 @@ fn main() {
         Commands::Serve { port, dir, watch } => {
             serve(port, dir, watch);
         }
-        Commands::Bundle { output, no_optimize } => {
+        Commands::Bundle {
+            output,
+            no_optimize,
+        } => {
             bundle(output, no_optimize);
         }
         Commands::New { name } => {
@@ -450,7 +453,14 @@ fn watch_and_rebuild(dir: &PathBuf) {
 
 fn rebuild_wasm() {
     let status = Command::new("wasm-pack")
-        .args(["build", "crates/presentar", "--target", "web", "--out-dir", "../../www/pkg"])
+        .args([
+            "build",
+            "crates/presentar",
+            "--target",
+            "web",
+            "--out-dir",
+            "../../www/pkg",
+        ])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status();
@@ -466,7 +476,14 @@ fn bundle(output: PathBuf, no_optimize: bool) {
 
     // Build with wasm-pack
     let status = Command::new("wasm-pack")
-        .args(["build", "crates/presentar", "--target", "web", "--release", "--out-dir"])
+        .args([
+            "build",
+            "crates/presentar",
+            "--target",
+            "web",
+            "--release",
+            "--out-dir",
+        ])
         .arg(format!("../../{}", output.join("pkg").display()))
         .status()
         .expect("wasm-pack failed");
@@ -687,7 +704,11 @@ fn analyze_manifest_quality(manifest: &presentar_yaml::Manifest) -> QualityScore
     let structural_score = {
         let widget_score = (widget_count.min(20) as f64 / 20.0) * 10.0; // Up to 10 points for widgets
         let section_score = (section_count.min(5) as f64 / 5.0) * 8.0; // Up to 8 points for sections
-        let layout_score = if manifest.layout.columns > 0 { 7.0 } else { 0.0 }; // 7 points for grid layout
+        let layout_score = if manifest.layout.columns > 0 {
+            7.0
+        } else {
+            0.0
+        }; // 7 points for grid layout
         widget_score + section_score + layout_score
     };
 
@@ -755,11 +776,10 @@ fn analyze_manifest_quality(manifest: &presentar_yaml::Manifest) -> QualityScore
     // Consistency (10 points max)
     let consistency_score = {
         // Check for consistent naming conventions
-        let ids_consistent = manifest
-            .layout
-            .sections
-            .iter()
-            .all(|s| s.id.chars().all(|c| c.is_ascii_lowercase() || c == '-' || c == '_'));
+        let ids_consistent = manifest.layout.sections.iter().all(|s| {
+            s.id.chars()
+                .all(|c| c.is_ascii_lowercase() || c == '-' || c == '_')
+        });
 
         let widgets_have_types = manifest
             .layout
@@ -972,7 +992,10 @@ fn deploy(
     if !skip_build {
         println!("Step 1: Building production bundle...");
         if dry_run {
-            println!("  [dry-run] Would run: presentar bundle --output {}", source.display());
+            println!(
+                "  [dry-run] Would run: presentar bundle --output {}",
+                source.display()
+            );
         } else {
             bundle(source.clone(), false);
         }
@@ -981,7 +1004,10 @@ fn deploy(
 
     // Verify source directory exists
     if !dry_run && !source.exists() {
-        eprintln!("Error: Source directory '{}' does not exist", source.display());
+        eprintln!(
+            "Error: Source directory '{}' does not exist",
+            source.display()
+        );
         eprintln!("Run 'presentar bundle' first or use --skip-build with existing files");
         std::process::exit(1);
     }
@@ -1030,8 +1056,12 @@ fn deploy_to_s3(
         println!("Files that would be uploaded:");
         for (path, content_type) in &files {
             let rel_path = path.strip_prefix(source).unwrap_or(path);
-            println!("  {} ({}, {} bytes)", rel_path.display(), content_type,
-                     fs::metadata(path).map(|m| m.len()).unwrap_or(0));
+            println!(
+                "  {} ({}, {} bytes)",
+                rel_path.display(),
+                content_type,
+                fs::metadata(path).map(|m| m.len()).unwrap_or(0)
+            );
         }
     } else {
         // Upload files using AWS CLI
@@ -1094,7 +1124,10 @@ fn deploy_to_s3(
         println!("Dry run complete. No files were uploaded.");
     } else {
         println!("Deployment complete!");
-        println!("  URL: https://{}.s3.{}.amazonaws.com/index.html", bucket, region);
+        println!(
+            "  URL: https://{}.s3.{}.amazonaws.com/index.html",
+            bucket, region
+        );
         if distribution.is_some() {
             println!("  Note: CloudFront may take a few minutes to propagate");
         }
@@ -1109,8 +1142,11 @@ fn deploy_to_cloudflare(source: &PathBuf, project: Option<&str>, dry_run: bool) 
     println!("  Project: {}", project);
 
     if dry_run {
-        println!("  [dry-run] Would run: npx wrangler pages deploy {} --project-name {}",
-                 source.display(), project);
+        println!(
+            "  [dry-run] Would run: npx wrangler pages deploy {} --project-name {}",
+            source.display(),
+            project
+        );
     } else {
         let status = Command::new("npx")
             .args(["wrangler", "pages", "deploy"])
@@ -1138,7 +1174,10 @@ fn deploy_to_vercel(source: &PathBuf, dry_run: bool) {
     println!("Step 2: Deploying to Vercel...");
 
     if dry_run {
-        println!("  [dry-run] Would run: vercel deploy {} --prod", source.display());
+        println!(
+            "  [dry-run] Would run: vercel deploy {} --prod",
+            source.display()
+        );
     } else {
         let status = Command::new("vercel")
             .args(["deploy", "--prod"])
@@ -1165,7 +1204,10 @@ fn deploy_to_netlify(source: &PathBuf, dry_run: bool) {
     println!("Step 2: Deploying to Netlify...");
 
     if dry_run {
-        println!("  [dry-run] Would run: netlify deploy --dir {} --prod", source.display());
+        println!(
+            "  [dry-run] Would run: netlify deploy --dir {} --prod",
+            source.display()
+        );
     } else {
         let status = Command::new("netlify")
             .args(["deploy", "--prod"])
@@ -1200,7 +1242,11 @@ fn deploy_to_local(source: &PathBuf, dest: Option<&str>, dry_run: bool) {
         println!("  [dry-run] Would copy {} files", files.len());
         for (path, _) in &files {
             let rel_path = path.strip_prefix(source).unwrap_or(path);
-            println!("    {} -> {}", rel_path.display(), dest_path.join(rel_path).display());
+            println!(
+                "    {} -> {}",
+                rel_path.display(),
+                dest_path.join(rel_path).display()
+            );
         }
     } else {
         // Use cp -r for simplicity
@@ -1510,23 +1556,41 @@ layout:
     #[test]
     fn test_get_content_type() {
         assert_eq!(get_content_type(&PathBuf::from("index.html")), "text/html");
-        assert_eq!(get_content_type(&PathBuf::from("app.js")), "application/javascript");
-        assert_eq!(get_content_type(&PathBuf::from("app.wasm")), "application/wasm");
+        assert_eq!(
+            get_content_type(&PathBuf::from("app.js")),
+            "application/javascript"
+        );
+        assert_eq!(
+            get_content_type(&PathBuf::from("app.wasm")),
+            "application/wasm"
+        );
         assert_eq!(get_content_type(&PathBuf::from("style.css")), "text/css");
-        assert_eq!(get_content_type(&PathBuf::from("data.json")), "application/json");
-        assert_eq!(get_content_type(&PathBuf::from("logo.svg")), "image/svg+xml");
+        assert_eq!(
+            get_content_type(&PathBuf::from("data.json")),
+            "application/json"
+        );
+        assert_eq!(
+            get_content_type(&PathBuf::from("logo.svg")),
+            "image/svg+xml"
+        );
         assert_eq!(get_content_type(&PathBuf::from("photo.png")), "image/png");
         assert_eq!(get_content_type(&PathBuf::from("photo.jpg")), "image/jpeg");
         assert_eq!(get_content_type(&PathBuf::from("photo.jpeg")), "image/jpeg");
         assert_eq!(get_content_type(&PathBuf::from("anim.gif")), "image/gif");
-        assert_eq!(get_content_type(&PathBuf::from("favicon.ico")), "image/x-icon");
+        assert_eq!(
+            get_content_type(&PathBuf::from("favicon.ico")),
+            "image/x-icon"
+        );
         assert_eq!(get_content_type(&PathBuf::from("font.woff")), "font/woff");
         assert_eq!(get_content_type(&PathBuf::from("font.woff2")), "font/woff2");
         assert_eq!(get_content_type(&PathBuf::from("font.ttf")), "font/ttf");
         assert_eq!(get_content_type(&PathBuf::from("config.yaml")), "text/yaml");
         assert_eq!(get_content_type(&PathBuf::from("config.yml")), "text/yaml");
         assert_eq!(get_content_type(&PathBuf::from("readme.txt")), "text/plain");
-        assert_eq!(get_content_type(&PathBuf::from("unknown.xyz")), "application/octet-stream");
+        assert_eq!(
+            get_content_type(&PathBuf::from("unknown.xyz")),
+            "application/octet-stream"
+        );
     }
 
     #[test]
@@ -1563,9 +1627,15 @@ layout:
         let files = collect_deploy_files(&temp_dir);
 
         assert_eq!(files.len(), 3);
-        assert!(files.iter().any(|(p, t)| p.ends_with("index.html") && t == "text/html"));
-        assert!(files.iter().any(|(p, t)| p.ends_with("app.js") && t == "application/javascript"));
-        assert!(files.iter().any(|(p, t)| p.ends_with("app.wasm") && t == "application/wasm"));
+        assert!(files
+            .iter()
+            .any(|(p, t)| p.ends_with("index.html") && t == "text/html"));
+        assert!(files
+            .iter()
+            .any(|(p, t)| p.ends_with("app.js") && t == "application/javascript"));
+        assert!(files
+            .iter()
+            .any(|(p, t)| p.ends_with("app.wasm") && t == "application/wasm"));
 
         // Cleanup
         let _ = fs::remove_dir_all(&temp_dir);

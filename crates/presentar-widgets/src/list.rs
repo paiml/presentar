@@ -650,22 +650,14 @@ mod tests {
 
     #[test]
     fn test_list_items() {
-        let items = vec![
-            ListItem::new("1"),
-            ListItem::new("2"),
-            ListItem::new("3"),
-        ];
+        let items = vec![ListItem::new("1"), ListItem::new("2"), ListItem::new("3")];
         let list = List::new().items(items);
         assert_eq!(list.item_count(), 3);
     }
 
     #[test]
     fn test_list_content_size() {
-        let items = vec![
-            ListItem::new("1"),
-            ListItem::new("2"),
-            ListItem::new("3"),
-        ];
+        let items = vec![ListItem::new("1"), ListItem::new("2"), ListItem::new("3")];
         let list = List::new().item_height(50.0).gap(10.0).items(items);
         // 3 items * 50px + 2 gaps * 10px = 170px
         assert_eq!(list.content_size(), 170.0);
@@ -688,7 +680,9 @@ mod tests {
     #[test]
     fn test_list_select_single() {
         let items = vec![ListItem::new("1"), ListItem::new("2")];
-        let mut list = List::new().selection_mode(SelectionMode::Single).items(items);
+        let mut list = List::new()
+            .selection_mode(SelectionMode::Single)
+            .items(items);
 
         list.select(0);
         assert_eq!(list.selected_indices(), &[0]);
@@ -725,7 +719,9 @@ mod tests {
     #[test]
     fn test_list_toggle_selection() {
         let items = vec![ListItem::new("1")];
-        let mut list = List::new().selection_mode(SelectionMode::Single).items(items);
+        let mut list = List::new()
+            .selection_mode(SelectionMode::Single)
+            .items(items);
 
         list.toggle_selection(0);
         assert_eq!(list.selected_indices(), &[0]);

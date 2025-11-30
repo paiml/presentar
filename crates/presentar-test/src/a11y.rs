@@ -8,8 +8,8 @@
 //! - Name/role/value (4.1.2)
 //! - Heading hierarchy (1.3.1)
 
-use presentar_core::{Color, Widget};
 use presentar_core::widget::AccessibleRole;
+use presentar_core::{Color, Widget};
 
 /// Minimum touch target size in pixels (WCAG 2.5.5)
 pub const MIN_TOUCH_TARGET_SIZE: f32 = 44.0;
@@ -44,7 +44,11 @@ impl A11yChecker {
         A11yReport { violations }
     }
 
-    fn check_widget(widget: &dyn Widget, violations: &mut Vec<A11yViolation>, context: &mut CheckContext) {
+    fn check_widget(
+        widget: &dyn Widget,
+        violations: &mut Vec<A11yViolation>,
+        context: &mut CheckContext,
+    ) {
         // Check for missing accessible name on interactive elements (WCAG 4.1.2)
         if widget.is_interactive() && widget.accessible_name().is_none() {
             violations.push(A11yViolation {
@@ -73,8 +77,7 @@ impl A11yChecker {
                     rule: "touch-target".to_string(),
                     message: format!(
                         "Touch target too small: {}x{} (minimum {}x{})",
-                        bounds.width, bounds.height,
-                        MIN_TOUCH_TARGET_SIZE, MIN_TOUCH_TARGET_SIZE
+                        bounds.width, bounds.height, MIN_TOUCH_TARGET_SIZE, MIN_TOUCH_TARGET_SIZE
                     ),
                     wcag: "2.5.5".to_string(),
                     impact: Impact::Moderate,
@@ -91,7 +94,9 @@ impl A11yChecker {
                         rule: "heading-order".to_string(),
                         message: format!(
                             "Heading level skipped: h{} followed by h{} (should be h{} or lower)",
-                            last_level, level, last_level + 1
+                            last_level,
+                            level,
+                            last_level + 1
                         ),
                         wcag: "1.3.1".to_string(),
                         impact: Impact::Moderate,
@@ -290,7 +295,7 @@ impl A11yConfig {
             check_heading_hierarchy: true,
             check_focus_indicators: true,
             min_contrast_normal: 7.0, // AAA level
-            min_contrast_large: 4.5,   // AAA level
+            min_contrast_large: 4.5,  // AAA level
         }
     }
 
@@ -600,16 +605,10 @@ impl AriaAttributes {
             attrs.push(("aria-hidden".to_string(), "true".to_string()));
         }
         if let Some(expanded) = self.expanded {
-            attrs.push((
-                "aria-expanded".to_string(),
-                expanded.to_string(),
-            ));
+            attrs.push(("aria-expanded".to_string(), expanded.to_string()));
         }
         if let Some(selected) = self.selected {
-            attrs.push((
-                "aria-selected".to_string(),
-                selected.to_string(),
-            ));
+            attrs.push(("aria-selected".to_string(), selected.to_string()));
         }
         if let Some(checked) = self.checked {
             attrs.push(("aria-checked".to_string(), checked.as_str().to_string()));
@@ -859,10 +858,7 @@ impl FormA11yChecker {
         }
 
         // Check for placeholder-only labeling (anti-pattern)
-        if field.placeholder.is_some()
-            && field.label.is_none()
-            && field.aria_label.is_none()
-        {
+        if field.placeholder.is_some() && field.label.is_none() && field.aria_label.is_none() {
             violations.push(FormViolation {
                 field_id: field.id.clone(),
                 rule: FormA11yRule::PlaceholderAsLabel,
@@ -1148,12 +1144,7 @@ impl InputType {
     pub const fn should_have_autocomplete(&self) -> bool {
         matches!(
             self,
-            Self::Text
-                | Self::Email
-                | Self::Password
-                | Self::Tel
-                | Self::Url
-                | Self::Number
+            Self::Text | Self::Email | Self::Password | Self::Tel | Self::Url | Self::Number
         )
     }
 }
@@ -1308,9 +1299,10 @@ impl FormA11yReport {
     /// Check if form passes with no critical/serious issues.
     #[must_use]
     pub fn is_acceptable(&self) -> bool {
-        !self.violations.iter().any(|v| {
-            matches!(v.impact, Impact::Critical | Impact::Serious)
-        })
+        !self
+            .violations
+            .iter()
+            .any(|v| matches!(v.impact, Impact::Critical | Impact::Serious))
     }
 
     /// Get violations by rule.
@@ -2065,14 +2057,12 @@ mod tests {
 
     #[test]
     fn test_form_field_passing() {
-        let form = FormAccessibility::new()
-            .with_name("Login Form")
-            .field(
-                FormFieldA11y::new("email")
-                    .with_label("Email Address")
-                    .with_type(InputType::Email)
-                    .with_autocomplete(AutocompleteValue::Email),
-            );
+        let form = FormAccessibility::new().with_name("Login Form").field(
+            FormFieldA11y::new("email")
+                .with_label("Email Address")
+                .with_type(InputType::Email)
+                .with_autocomplete(AutocompleteValue::Email),
+        );
 
         let report = FormA11yChecker::check(&form);
         assert!(report.is_passing());
@@ -2094,13 +2084,11 @@ mod tests {
 
     #[test]
     fn test_form_field_aria_label_counts() {
-        let form = FormAccessibility::new()
-            .with_name("Test Form")
-            .field(
-                FormFieldA11y::new("search")
-                    .with_type(InputType::Search)
-                    .with_aria_label("Search products"),
-            );
+        let form = FormAccessibility::new().with_name("Test Form").field(
+            FormFieldA11y::new("search")
+                .with_type(InputType::Search)
+                .with_aria_label("Search products"),
+        );
 
         let report = FormA11yChecker::check(&form);
         // aria-label should satisfy label requirement
@@ -2112,13 +2100,11 @@ mod tests {
 
     #[test]
     fn test_form_required_missing_aria() {
-        let form = FormAccessibility::new()
-            .with_name("Test Form")
-            .field(
-                FormFieldA11y::new("name")
-                    .with_label("Full Name")
-                    .with_required(true, false), // Visual but no aria
-            );
+        let form = FormAccessibility::new().with_name("Test Form").field(
+            FormFieldA11y::new("name")
+                .with_label("Full Name")
+                .with_required(true, false), // Visual but no aria
+        );
 
         let report = FormA11yChecker::check(&form);
         assert!(report
@@ -2129,15 +2115,13 @@ mod tests {
 
     #[test]
     fn test_form_required_missing_visual() {
-        let form = FormAccessibility::new()
-            .with_name("Test Form")
-            .field({
-                let mut field = FormFieldA11y::new("name").with_label("Full Name");
-                field.required = true;
-                field.aria_required = true;
-                field.has_visual_required_indicator = false;
-                field
-            });
+        let form = FormAccessibility::new().with_name("Test Form").field({
+            let mut field = FormFieldA11y::new("name").with_label("Full Name");
+            field.required = true;
+            field.aria_required = true;
+            field.has_visual_required_indicator = false;
+            field
+        });
 
         let report = FormA11yChecker::check(&form);
         assert!(report
@@ -2148,38 +2132,31 @@ mod tests {
 
     #[test]
     fn test_form_required_proper() {
-        let form = FormAccessibility::new()
-            .with_name("Test Form")
-            .field(
-                FormFieldA11y::new("name")
-                    .with_label("Full Name")
-                    .required(), // Sets both visual and aria
-            );
+        let form = FormAccessibility::new().with_name("Test Form").field(
+            FormFieldA11y::new("name")
+                .with_label("Full Name")
+                .required(), // Sets both visual and aria
+        );
 
         let report = FormA11yChecker::check(&form);
         // Should not have required-related violations
-        assert!(!report
-            .violations
-            .iter()
-            .any(|v| matches!(
-                v.rule,
-                FormA11yRule::MissingRequiredIndicator | FormA11yRule::MissingVisualRequired
-            )));
+        assert!(!report.violations.iter().any(|v| matches!(
+            v.rule,
+            FormA11yRule::MissingRequiredIndicator | FormA11yRule::MissingVisualRequired
+        )));
     }
 
     #[test]
     fn test_form_error_without_aria_invalid() {
-        let form = FormAccessibility::new()
-            .with_name("Test Form")
-            .field({
-                let mut field = FormFieldA11y::new("email")
-                    .with_label("Email")
-                    .with_type(InputType::Email);
-                field.has_error = true;
-                field.aria_invalid = false;
-                field.error_message = Some("Invalid email".to_string());
-                field
-            });
+        let form = FormAccessibility::new().with_name("Test Form").field({
+            let mut field = FormFieldA11y::new("email")
+                .with_label("Email")
+                .with_type(InputType::Email);
+            field.has_error = true;
+            field.aria_invalid = false;
+            field.error_message = Some("Invalid email".to_string());
+            field
+        });
 
         let report = FormA11yChecker::check(&form);
         assert!(report
@@ -2190,17 +2167,15 @@ mod tests {
 
     #[test]
     fn test_form_error_without_message() {
-        let form = FormAccessibility::new()
-            .with_name("Test Form")
-            .field({
-                let mut field = FormFieldA11y::new("email")
-                    .with_label("Email")
-                    .with_type(InputType::Email);
-                field.has_error = true;
-                field.aria_invalid = true;
-                // No error message
-                field
-            });
+        let form = FormAccessibility::new().with_name("Test Form").field({
+            let mut field = FormFieldA11y::new("email")
+                .with_label("Email")
+                .with_type(InputType::Email);
+            field.has_error = true;
+            field.aria_invalid = true;
+            // No error message
+            field
+        });
 
         let report = FormA11yChecker::check(&form);
         assert!(report
@@ -2211,18 +2186,16 @@ mod tests {
 
     #[test]
     fn test_form_error_not_associated() {
-        let form = FormAccessibility::new()
-            .with_name("Test Form")
-            .field({
-                let mut field = FormFieldA11y::new("email")
-                    .with_label("Email")
-                    .with_type(InputType::Email);
-                field.has_error = true;
-                field.aria_invalid = true;
-                field.error_message = Some("Invalid email".to_string());
-                // No aria-describedby or aria-errormessage
-                field
-            });
+        let form = FormAccessibility::new().with_name("Test Form").field({
+            let mut field = FormFieldA11y::new("email")
+                .with_label("Email")
+                .with_type(InputType::Email);
+            field.has_error = true;
+            field.aria_invalid = true;
+            field.error_message = Some("Invalid email".to_string());
+            // No aria-describedby or aria-errormessage
+            field
+        });
 
         let report = FormA11yChecker::check(&form);
         assert!(report
@@ -2233,39 +2206,32 @@ mod tests {
 
     #[test]
     fn test_form_error_properly_associated() {
-        let form = FormAccessibility::new()
-            .with_name("Test Form")
-            .field(
-                FormFieldA11y::new("email")
-                    .with_label("Email")
-                    .with_type(InputType::Email)
-                    .with_autocomplete(AutocompleteValue::Email)
-                    .with_error("Please enter a valid email address", true),
-            );
+        let form = FormAccessibility::new().with_name("Test Form").field(
+            FormFieldA11y::new("email")
+                .with_label("Email")
+                .with_type(InputType::Email)
+                .with_autocomplete(AutocompleteValue::Email)
+                .with_error("Please enter a valid email address", true),
+        );
 
         let report = FormA11yChecker::check(&form);
         // Should not have error-related violations
-        assert!(!report
-            .violations
-            .iter()
-            .any(|v| matches!(
-                v.rule,
-                FormA11yRule::MissingErrorState
-                    | FormA11yRule::MissingErrorMessage
-                    | FormA11yRule::ErrorNotAssociated
-            )));
+        assert!(!report.violations.iter().any(|v| matches!(
+            v.rule,
+            FormA11yRule::MissingErrorState
+                | FormA11yRule::MissingErrorMessage
+                | FormA11yRule::ErrorNotAssociated
+        )));
     }
 
     #[test]
     fn test_form_missing_autocomplete() {
-        let form = FormAccessibility::new()
-            .with_name("Test Form")
-            .field(
-                FormFieldA11y::new("email")
-                    .with_label("Email")
-                    .with_type(InputType::Email),
-                // No autocomplete
-            );
+        let form = FormAccessibility::new().with_name("Test Form").field(
+            FormFieldA11y::new("email")
+                .with_label("Email")
+                .with_type(InputType::Email),
+            // No autocomplete
+        );
 
         let report = FormA11yChecker::check(&form);
         assert!(report
@@ -2276,13 +2242,11 @@ mod tests {
 
     #[test]
     fn test_form_autocomplete_not_needed_for_checkbox() {
-        let form = FormAccessibility::new()
-            .with_name("Test Form")
-            .field(
-                FormFieldA11y::new("terms")
-                    .with_label("I agree to terms")
-                    .with_type(InputType::Checkbox),
-            );
+        let form = FormAccessibility::new().with_name("Test Form").field(
+            FormFieldA11y::new("terms")
+                .with_label("I agree to terms")
+                .with_type(InputType::Checkbox),
+        );
 
         let report = FormA11yChecker::check(&form);
         // Checkbox doesn't need autocomplete
@@ -2294,13 +2258,11 @@ mod tests {
 
     #[test]
     fn test_form_placeholder_as_label() {
-        let form = FormAccessibility::new()
-            .with_name("Test Form")
-            .field(
-                FormFieldA11y::new("email")
-                    .with_type(InputType::Email)
-                    .with_placeholder("Enter your email"),
-            );
+        let form = FormAccessibility::new().with_name("Test Form").field(
+            FormFieldA11y::new("email")
+                .with_type(InputType::Email)
+                .with_placeholder("Enter your email"),
+        );
 
         let report = FormA11yChecker::check(&form);
         assert!(report
@@ -2311,15 +2273,13 @@ mod tests {
 
     #[test]
     fn test_form_placeholder_with_label_ok() {
-        let form = FormAccessibility::new()
-            .with_name("Test Form")
-            .field(
-                FormFieldA11y::new("email")
-                    .with_label("Email")
-                    .with_type(InputType::Email)
-                    .with_autocomplete(AutocompleteValue::Email)
-                    .with_placeholder("e.g., user@example.com"),
-            );
+        let form = FormAccessibility::new().with_name("Test Form").field(
+            FormFieldA11y::new("email")
+                .with_label("Email")
+                .with_type(InputType::Email)
+                .with_autocomplete(AutocompleteValue::Email)
+                .with_placeholder("e.g., user@example.com"),
+        );
 
         let report = FormA11yChecker::check(&form);
         // Placeholder with label is fine
@@ -2381,9 +2341,11 @@ mod tests {
 
     #[test]
     fn test_form_group_missing_legend() {
-        let form = FormAccessibility::new()
-            .with_name("Test Form")
-            .group(FormFieldGroup::new("address").with_field("street").with_field("city"));
+        let form = FormAccessibility::new().with_name("Test Form").group(
+            FormFieldGroup::new("address")
+                .with_field("street")
+                .with_field("city"),
+        );
 
         let report = FormA11yChecker::check(&form);
         assert!(report
@@ -2431,14 +2393,12 @@ mod tests {
     #[test]
     fn test_form_report_is_acceptable() {
         // Form with only moderate violations should be acceptable
-        let form = FormAccessibility::new()
-            .with_name("Test Form")
-            .field(
-                FormFieldA11y::new("email")
-                    .with_label("Email")
-                    .with_type(InputType::Email),
-                // Missing autocomplete is Moderate impact
-            );
+        let form = FormAccessibility::new().with_name("Test Form").field(
+            FormFieldA11y::new("email")
+                .with_label("Email")
+                .with_type(InputType::Email),
+            // Missing autocomplete is Moderate impact
+        );
 
         let report = FormA11yChecker::check(&form);
         assert!(report.is_acceptable()); // Only Moderate violations
@@ -2459,7 +2419,10 @@ mod tests {
     fn test_autocomplete_value_as_str() {
         assert_eq!(AutocompleteValue::Email.as_str(), "email");
         assert_eq!(AutocompleteValue::GivenName.as_str(), "given-name");
-        assert_eq!(AutocompleteValue::CurrentPassword.as_str(), "current-password");
+        assert_eq!(
+            AutocompleteValue::CurrentPassword.as_str(),
+            "current-password"
+        );
         assert_eq!(AutocompleteValue::Off.as_str(), "off");
     }
 
@@ -2529,6 +2492,10 @@ mod tests {
             );
 
         let report = FormA11yChecker::check(&form);
-        assert!(report.is_passing(), "Complete signup form should pass: {:?}", report.violations);
+        assert!(
+            report.is_passing(),
+            "Complete signup form should pass: {:?}",
+            report.violations
+        );
     }
 }

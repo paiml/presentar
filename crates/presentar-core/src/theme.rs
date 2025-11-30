@@ -64,7 +64,11 @@ impl ColorPalette {
             ("on_primary/primary", self.on_primary, self.primary),
             ("on_secondary/secondary", self.on_secondary, self.secondary),
             ("on_surface/surface", self.on_surface, self.surface),
-            ("on_background/background", self.on_background, self.background),
+            (
+                "on_background/background",
+                self.on_background,
+                self.background,
+            ),
             ("on_error/error", self.on_error, self.error),
         ];
 
@@ -110,8 +114,8 @@ impl ColorPalette {
     #[must_use]
     pub fn light() -> Self {
         Self {
-            primary: Color::new(0.0, 0.35, 0.75, 1.0),    // Darker blue for AA compliance
-            secondary: Color::new(0.0, 0.40, 0.60, 1.0),  // Darker teal for AA compliance
+            primary: Color::new(0.0, 0.35, 0.75, 1.0), // Darker blue for AA compliance
+            secondary: Color::new(0.0, 0.40, 0.60, 1.0), // Darker teal for AA compliance
             surface: Color::WHITE,
             background: Color::new(0.98, 0.98, 0.98, 1.0), // Light gray
             error: Color::new(0.69, 0.18, 0.18, 1.0),      // Red (passes with white)
@@ -830,7 +834,7 @@ mod tests {
         let bad_palette = ColorPalette {
             primary: Color::rgb(0.5, 0.5, 0.5),
             secondary: Color::rgb(0.5, 0.5, 0.5),
-            surface: Color::rgb(0.6, 0.6, 0.6),     // Similar to on_surface
+            surface: Color::rgb(0.6, 0.6, 0.6), // Similar to on_surface
             background: Color::rgb(0.6, 0.6, 0.6),
             error: Color::rgb(0.5, 0.5, 0.5),
             warning: Color::rgb(0.5, 0.5, 0.5),

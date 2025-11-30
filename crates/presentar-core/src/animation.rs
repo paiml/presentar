@@ -114,7 +114,9 @@ impl Easing {
             t
         } else {
             let c4 = (2.0 * std::f64::consts::PI) / 3.0;
-            (-10.0 * t).exp2().mul_add((t.mul_add(10.0, -0.75) * c4).sin(), 1.0)
+            (-10.0 * t)
+                .exp2()
+                .mul_add((t.mul_add(10.0, -0.75) * c4).sin(), 1.0)
         }
     }
 
@@ -487,7 +489,8 @@ impl<T: Clone + Interpolate> KeyframeTrack<T> {
     /// Add a keyframe.
     pub fn add_keyframe(&mut self, keyframe: Keyframe<T>) {
         self.keyframes.push(keyframe);
-        self.keyframes.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
+        self.keyframes
+            .sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
     }
 
     /// Set looping.
@@ -610,9 +613,24 @@ pub struct AnimColor {
 }
 
 impl AnimColor {
-    pub const WHITE: Self = Self { r: 1.0, g: 1.0, b: 1.0, a: 1.0 };
-    pub const BLACK: Self = Self { r: 0.0, g: 0.0, b: 0.0, a: 1.0 };
-    pub const TRANSPARENT: Self = Self { r: 0.0, g: 0.0, b: 0.0, a: 0.0 };
+    pub const WHITE: Self = Self {
+        r: 1.0,
+        g: 1.0,
+        b: 1.0,
+        a: 1.0,
+    };
+    pub const BLACK: Self = Self {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+        a: 1.0,
+    };
+    pub const TRANSPARENT: Self = Self {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+        a: 0.0,
+    };
 
     #[must_use]
     pub const fn new(r: f32, g: f32, b: f32, a: f32) -> Self {

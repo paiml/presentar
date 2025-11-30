@@ -74,8 +74,8 @@ pub mod diff;
 pub mod dnd;
 pub mod draw;
 mod event;
-pub mod gesture;
 mod geometry;
+pub mod gesture;
 pub mod history;
 pub mod lifecycle;
 mod runtime;
@@ -93,7 +93,7 @@ pub use accessibility::{
     HitTester, LiveRegion,
 };
 pub use animation::{
-    AnimatedValue, AnimColor, AnimationController, EasedValue, Easing, Interpolate, Keyframe,
+    AnimColor, AnimatedValue, AnimationController, EasedValue, Easing, Interpolate, Keyframe,
     KeyframeTrack, Spring, SpringConfig,
 };
 pub use cache::{
@@ -113,8 +113,8 @@ pub use color::{Color, ColorParseError};
 pub use constraints::Constraints;
 pub use diff::{diff_trees, DiffNode, DiffOp, DiffResult, TreeDiffer, WidgetKey};
 pub use dnd::{
-    DragData, DragDataType, DragDropManager, DragId, DragPayload, DragPhase, DragState,
-    DropEffect, DropResult, DropTarget,
+    DragData, DragDataType, DragDropManager, DragId, DragPayload, DragPhase, DragState, DropEffect,
+    DropResult, DropTarget,
 };
 pub use draw::{
     BoxStyle, DrawCommand, FillRule, LineCap, LineJoin, PathRef, Sampling, Shadow, StrokeStyle,

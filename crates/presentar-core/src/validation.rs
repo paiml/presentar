@@ -305,10 +305,9 @@ impl Pattern {
                     || value.starts_with("ftp://")
             }
             PatternType::Phone => {
-                value
-                    .chars()
-                    .all(|c| c.is_ascii_digit() || c == ' ' || c == '-' || c == '(' || c == ')' || c == '+')
-                    && value.chars().filter(char::is_ascii_digit).count() >= 7
+                value.chars().all(|c| {
+                    c.is_ascii_digit() || c == ' ' || c == '-' || c == '(' || c == ')' || c == '+'
+                }) && value.chars().filter(char::is_ascii_digit).count() >= 7
             }
             PatternType::Alphanumeric => value.chars().all(char::is_alphanumeric),
             PatternType::Digits => value.chars().all(|c| c.is_ascii_digit()),
@@ -441,7 +440,9 @@ impl FieldState {
 
     /// Check if field is valid.
     pub fn is_valid(&self) -> bool {
-        self.result.as_ref().map_or(true, ValidationResult::is_valid)
+        self.result
+            .as_ref()
+            .map_or(true, ValidationResult::is_valid)
     }
 
     /// Check if field has errors.
@@ -631,9 +632,7 @@ impl FormValidator {
 
     /// Get field errors.
     pub fn errors(&self, name: &str) -> &[String] {
-        self.states
-            .get(name)
-            .map_or(&[], |s| s.errors.as_slice())
+        self.states.get(name).map_or(&[], |s| s.errors.as_slice())
     }
 
     /// Check if a specific field is valid.
@@ -954,9 +953,7 @@ mod tests {
 
     #[test]
     fn test_field_config_validate() {
-        let config = FieldConfig::new()
-            .required()
-            .min_length(3);
+        let config = FieldConfig::new().required().min_length(3);
 
         let errors = config.validate("");
         assert_eq!(errors.len(), 2); // Required and MinLength
@@ -1018,9 +1015,7 @@ mod tests {
         let mut form = FormValidator::new();
         form.register(
             "email",
-            FieldConfig::new()
-                .required()
-                .validate_on(ValidateOn::Blur),
+            FieldConfig::new().required().validate_on(ValidateOn::Blur),
         );
 
         form.set_value("email", "");

@@ -160,9 +160,7 @@ fn bench_grid_12_column(c: &mut Criterion) {
 
     c.bench_function("grid_12_column_layout", |b| {
         let template = GridTemplate::twelve_column();
-        let child_sizes: Vec<(f32, f32)> = (0..12)
-            .map(|_| (100.0, 50.0))
-            .collect();
+        let child_sizes: Vec<(f32, f32)> = (0..12).map(|_| (100.0, 50.0)).collect();
 
         b.iter(|| {
             compute_grid_layout(
@@ -184,9 +182,7 @@ fn bench_grid_auto_placement(c: &mut Criterion) {
             rows: vec![TrackSize::Fr(1.0); 6],
             ..GridTemplate::default()
         };
-        let items: Vec<GridItem> = (0..24)
-            .map(|_| GridItem::new())
-            .collect();
+        let items: Vec<GridItem> = (0..24).map(|_| GridItem::new()).collect();
 
         b.iter(|| {
             auto_place_items(
@@ -213,9 +209,7 @@ fn bench_grid_track_sizing(c: &mut Criterion) {
             rows: vec![TrackSize::Fr(1.0); 3],
             ..GridTemplate::default()
         };
-        let child_sizes: Vec<(f32, f32)> = (0..15)
-            .map(|_| (80.0, 40.0))
-            .collect();
+        let child_sizes: Vec<(f32, f32)> = (0..15).map(|_| (80.0, 40.0)).collect();
 
         b.iter(|| {
             compute_grid_layout(

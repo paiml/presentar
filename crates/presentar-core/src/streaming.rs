@@ -516,7 +516,12 @@ impl DataStream {
     /// Get all active subscriptions.
     #[must_use]
     pub fn subscriptions(&self) -> Vec<StreamSubscription> {
-        self.subscriptions.lock().unwrap().values().cloned().collect()
+        self.subscriptions
+            .lock()
+            .unwrap()
+            .values()
+            .cloned()
+            .collect()
     }
 
     /// Get cached data for a subscription.
@@ -528,7 +533,9 @@ impl DataStream {
     /// Handle an incoming message.
     pub fn handle_message(&self, msg: StreamMessage) -> Option<StreamMessage> {
         match msg {
-            StreamMessage::Data { id, payload, seq, .. } => {
+            StreamMessage::Data {
+                id, payload, seq, ..
+            } => {
                 // Update subscription state
                 if let Some(sub) = self.subscriptions.lock().unwrap().get_mut(&id) {
                     sub.last_seq = seq;
@@ -829,7 +836,10 @@ mod tests {
     #[test]
     fn test_stream_message_data() {
         let msg = StreamMessage::data("sub1", serde_json::json!({"value": 42}), 5);
-        if let StreamMessage::Data { id, payload, seq, .. } = msg {
+        if let StreamMessage::Data {
+            id, payload, seq, ..
+        } = msg
+        {
             assert_eq!(id, "sub1");
             assert_eq!(payload, serde_json::json!({"value": 42}));
             assert_eq!(seq, 5);
@@ -902,10 +912,7 @@ mod tests {
             StreamMessage::data("sub3", serde_json::json!({}), 0).subscription_id(),
             Some("sub3")
         );
-        assert_eq!(
-            StreamMessage::error("msg").subscription_id(),
-            None
-        );
+        assert_eq!(StreamMessage::error("msg").subscription_id(), None);
         assert_eq!(
             StreamMessage::error_for("sub4", "msg").subscription_id(),
             Some("sub4")
@@ -1168,7 +1175,10 @@ mod tests {
         let stream = DataStream::new(StreamConfig::default());
         let response = stream.handle_message(StreamMessage::ping(12345));
 
-        assert!(matches!(response, Some(StreamMessage::Pong { timestamp: 12345 })));
+        assert!(matches!(
+            response,
+            Some(StreamMessage::Pong { timestamp: 12345 })
+        ));
     }
 
     #[test]

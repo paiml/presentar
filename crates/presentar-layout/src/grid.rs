@@ -388,7 +388,12 @@ impl GridLayout {
 
     /// Get the bounds for a grid item.
     #[must_use]
-    pub fn item_bounds(&self, item: &GridItem, row: usize, col: usize) -> Option<(f32, f32, f32, f32)> {
+    pub fn item_bounds(
+        &self,
+        item: &GridItem,
+        row: usize,
+        col: usize,
+    ) -> Option<(f32, f32, f32, f32)> {
         let area = GridArea::new(
             row,
             col,
@@ -411,7 +416,11 @@ pub fn compute_grid_layout(
         &template.columns,
         available_width,
         template.column_gap,
-        child_sizes.iter().map(|(w, _)| *w).collect::<Vec<_>>().as_slice(),
+        child_sizes
+            .iter()
+            .map(|(w, _)| *w)
+            .collect::<Vec<_>>()
+            .as_slice(),
     );
 
     // Determine row count from items if not specified
@@ -434,7 +443,11 @@ pub fn compute_grid_layout(
         &row_templates,
         available_height,
         template.row_gap,
-        child_sizes.iter().map(|(_, h)| *h).collect::<Vec<_>>().as_slice(),
+        child_sizes
+            .iter()
+            .map(|(_, h)| *h)
+            .collect::<Vec<_>>()
+            .as_slice(),
     );
 
     let width = columns.last().map(|(pos, size)| pos + size).unwrap_or(0.0);
@@ -612,7 +625,13 @@ fn ensure_rows(occupied: &mut Vec<Vec<bool>>, min_rows: usize, col_count: usize)
     }
 }
 
-fn can_place(occupied: &[Vec<bool>], row: usize, col: usize, row_span: usize, col_span: usize) -> bool {
+fn can_place(
+    occupied: &[Vec<bool>],
+    row: usize,
+    col: usize,
+    row_span: usize,
+    col_span: usize,
+) -> bool {
     for r in row..(row + row_span) {
         for c in col..(col + col_span) {
             if let Some(row_data) = occupied.get(r) {
@@ -923,11 +942,8 @@ mod tests {
 
     #[test]
     fn test_auto_place_items_with_span() {
-        let template = GridTemplate::columns([
-            TrackSize::fr(1.0),
-            TrackSize::fr(1.0),
-            TrackSize::fr(1.0),
-        ]);
+        let template =
+            GridTemplate::columns([TrackSize::fr(1.0), TrackSize::fr(1.0), TrackSize::fr(1.0)]);
         let items = vec![
             GridItem::new().span_columns(2),
             GridItem::new(),
@@ -945,10 +961,7 @@ mod tests {
     #[test]
     fn test_auto_place_items_explicit() {
         let template = GridTemplate::columns([TrackSize::fr(1.0), TrackSize::fr(1.0)]);
-        let items = vec![
-            GridItem::new().column(2).row(2),
-            GridItem::new(),
-        ];
+        let items = vec![GridItem::new().column(2).row(2), GridItem::new()];
 
         let placements = auto_place_items(&template, &items, GridAutoFlow::Row);
 
@@ -960,10 +973,7 @@ mod tests {
     fn test_auto_place_items_named_area() {
         let template = GridTemplate::columns([TrackSize::fr(1.0), TrackSize::fr(1.0)])
             .with_area("main", GridArea::cell(1, 1));
-        let items = vec![
-            GridItem::new().in_area("main"),
-            GridItem::new(),
-        ];
+        let items = vec![GridItem::new().in_area("main"), GridItem::new()];
 
         let placements = auto_place_items(&template, &items, GridAutoFlow::Row);
 

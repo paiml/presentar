@@ -255,7 +255,9 @@ impl Modal {
         let header_height = if self.title.is_some() { 56.0 } else { 0.0 };
         let footer_height = if self.footer.is_some() { 64.0 } else { 0.0 };
         let content_height = 200.0; // Placeholder, will be measured properly
-        let total_height = self.padding.mul_add(2.0, header_height + content_height + footer_height);
+        let total_height = self
+            .padding
+            .mul_add(2.0, header_height + content_height + footer_height);
         let modal_height = total_height.min(viewport.height - 64.0); // 32px margin top/bottom
 
         let x = viewport.x + (viewport.width - modal_width) / 2.0;
@@ -290,7 +292,10 @@ impl Widget for Modal {
                     self.content_bounds.x + self.padding,
                     self.content_bounds.y + header_height + self.padding,
                     self.padding.mul_add(-2.0, self.content_bounds.width),
-                    self.padding.mul_add(-2.0, self.content_bounds.height - header_height - footer_height),
+                    self.padding.mul_add(
+                        -2.0,
+                        self.content_bounds.height - header_height - footer_height,
+                    ),
                 );
                 content.layout(content_rect);
             }
@@ -425,7 +430,8 @@ impl Widget for Modal {
 
                 // Check if click is on close button
                 if self.show_close_button {
-                    let close_x = self.content_bounds.x + self.content_bounds.width - 40.0 - self.padding;
+                    let close_x =
+                        self.content_bounds.x + self.content_bounds.width - 40.0 - self.padding;
                     let close_y = self.content_bounds.y + self.padding;
                     let on_close_btn = position.x >= close_x
                         && position.x <= close_x + 24.0
@@ -841,7 +847,10 @@ mod tests {
 
     #[test]
     fn test_modal_backdrop_eq() {
-        assert_eq!(BackdropBehavior::CloseOnClick, BackdropBehavior::CloseOnClick);
+        assert_eq!(
+            BackdropBehavior::CloseOnClick,
+            BackdropBehavior::CloseOnClick
+        );
         assert_ne!(BackdropBehavior::CloseOnClick, BackdropBehavior::Static);
     }
 

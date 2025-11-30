@@ -168,7 +168,10 @@ impl LinearInterpolator {
         }
         // Extrapolate
         if x < self.points[0].x {
-            Some((0, (x - self.points[0].x) / (self.points[1].x - self.points[0].x)))
+            Some((
+                0,
+                (x - self.points[0].x) / (self.points[1].x - self.points[0].x),
+            ))
         } else {
             let n = self.points.len();
             Some((
@@ -237,8 +240,8 @@ impl CubicSpline {
             let sig = h_prev / (h_prev + h_next);
             let p = sig.mul_add(y2[i - 1], 2.0);
             y2[i] = (sig - 1.0) / p;
-            u[i] = (sorted[i + 1].y - sorted[i].y) / h_next
-                - (sorted[i].y - sorted[i - 1].y) / h_prev;
+            u[i] =
+                (sorted[i + 1].y - sorted[i].y) / h_next - (sorted[i].y - sorted[i - 1].y) / h_prev;
             u[i] = sig.mul_add(-u[i - 1], 6.0 * u[i] / (h_prev + h_next)) / p;
         }
 
@@ -304,7 +307,12 @@ impl Interpolator for CubicSpline {
         let b = (x - self.points[lo].x) / h;
 
         a.mul_add(self.points[lo].y, b * self.points[hi].y)
-            + (a * a).mul_add(a, -a).mul_add(self.y2[lo], (b * b).mul_add(b, -b) * self.y2[hi]) * h * h / 6.0
+            + (a * a)
+                .mul_add(a, -a)
+                .mul_add(self.y2[lo], (b * b).mul_add(b, -b) * self.y2[hi])
+                * h
+                * h
+                / 6.0
     }
 }
 
@@ -380,7 +388,14 @@ impl CatmullRom {
     }
 
     /// Compute point on Catmull-Rom curve.
-    fn catmull_rom_point(&self, p0: Point2D, p1: Point2D, p2: Point2D, p3: Point2D, t: f64) -> Point2D {
+    fn catmull_rom_point(
+        &self,
+        p0: Point2D,
+        p1: Point2D,
+        p2: Point2D,
+        p3: Point2D,
+        t: f64,
+    ) -> Point2D {
         let t2 = t * t;
         let t3 = t2 * t;
 
@@ -474,8 +489,10 @@ impl CubicBezier {
         let t3 = t2 * t;
 
         Point2D::new(
-            (3.0 * mt * t2).mul_add(self.p2.x, mt3 * self.p0.x + 3.0 * mt2 * t * self.p1.x) + t3 * self.p3.x,
-            (3.0 * mt * t2).mul_add(self.p2.y, mt3 * self.p0.y + 3.0 * mt2 * t * self.p1.y) + t3 * self.p3.y,
+            (3.0 * mt * t2).mul_add(self.p2.x, mt3 * self.p0.x + 3.0 * mt2 * t * self.p1.x)
+                + t3 * self.p3.x,
+            (3.0 * mt * t2).mul_add(self.p2.y, mt3 * self.p0.y + 3.0 * mt2 * t * self.p1.y)
+                + t3 * self.p3.y,
         )
     }
 
@@ -492,10 +509,7 @@ impl CubicBezier {
     #[must_use]
     pub fn arc_length(&self, segments: usize) -> f64 {
         let points = self.to_polyline(segments);
-        points
-            .windows(2)
-            .map(|w| w[0].distance(&w[1]))
-            .sum()
+        points.windows(2).map(|w| w[0].distance(&w[1])).sum()
     }
 
     /// Split curve at parameter t.
@@ -894,14 +908,10 @@ impl PathTessellator {
             let base_idx = self.vertices.len() as u32;
 
             // Add quad vertices
-            self.vertices
-                .push([(p1.x + nx) as f32, (p1.y + ny) as f32]);
-            self.vertices
-                .push([(p1.x - nx) as f32, (p1.y - ny) as f32]);
-            self.vertices
-                .push([(p2.x + nx) as f32, (p2.y + ny) as f32]);
-            self.vertices
-                .push([(p2.x - nx) as f32, (p2.y - ny) as f32]);
+            self.vertices.push([(p1.x + nx) as f32, (p1.y + ny) as f32]);
+            self.vertices.push([(p1.x - nx) as f32, (p1.y - ny) as f32]);
+            self.vertices.push([(p2.x + nx) as f32, (p2.y + ny) as f32]);
+            self.vertices.push([(p2.x - nx) as f32, (p2.y - ny) as f32]);
 
             // Two triangles for quad
             self.indices.push(base_idx);
@@ -944,7 +954,8 @@ impl PathTessellator {
 
         self.vertices.push([x as f32, y as f32]);
         self.vertices.push([(x + width) as f32, y as f32]);
-        self.vertices.push([(x + width) as f32, (y + height) as f32]);
+        self.vertices
+            .push([(x + width) as f32, (y + height) as f32]);
         self.vertices.push([x as f32, (y + height) as f32]);
 
         // Two triangles
@@ -1130,10 +1141,8 @@ mod tests {
 
     #[test]
     fn test_linear_two_points() {
-        let interp = LinearInterpolator::from_points(&[
-            Point2D::new(0.0, 0.0),
-            Point2D::new(10.0, 20.0),
-        ]);
+        let interp =
+            LinearInterpolator::from_points(&[Point2D::new(0.0, 0.0), Point2D::new(10.0, 20.0)]);
         assert!((interp.interpolate(0.0) - 0.0).abs() < 1e-10);
         assert!((interp.interpolate(5.0) - 10.0).abs() < 1e-10);
         assert!((interp.interpolate(10.0) - 20.0).abs() < 1e-10);
@@ -1169,10 +1178,8 @@ mod tests {
 
     #[test]
     fn test_linear_sample() {
-        let interp = LinearInterpolator::from_points(&[
-            Point2D::new(0.0, 0.0),
-            Point2D::new(10.0, 10.0),
-        ]);
+        let interp =
+            LinearInterpolator::from_points(&[Point2D::new(0.0, 0.0), Point2D::new(10.0, 10.0)]);
         let samples = interp.sample(0.0, 10.0, 11);
         assert_eq!(samples.len(), 11);
         assert!((samples[0].x - 0.0).abs() < 1e-10);
@@ -1197,10 +1204,7 @@ mod tests {
 
     #[test]
     fn test_spline_two_points() {
-        let spline = CubicSpline::from_points(&[
-            Point2D::new(0.0, 0.0),
-            Point2D::new(10.0, 20.0),
-        ]);
+        let spline = CubicSpline::from_points(&[Point2D::new(0.0, 0.0), Point2D::new(10.0, 20.0)]);
         assert!((spline.interpolate(5.0) - 10.0).abs() < 1e-10);
     }
 

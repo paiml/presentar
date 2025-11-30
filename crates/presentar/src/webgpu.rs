@@ -41,10 +41,10 @@ impl Vertex {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Instance {
-    pub bounds: [f32; 4],       // x, y, width, height
-    pub color: [f32; 4],        // r, g, b, a
+    pub bounds: [f32; 4], // x, y, width, height
+    pub color: [f32; 4],  // r, g, b, a
     pub corner_radius: f32,
-    pub shape_type: u32,        // 0=rect, 1=circle, 2=rounded_rect
+    pub shape_type: u32, // 0=rect, 1=circle, 2=rounded_rect
     pub _padding: [f32; 2],
 }
 
@@ -71,7 +71,12 @@ impl Instance {
 
     pub fn circle(center: &Point, radius: f32, color: &Color) -> Self {
         Self {
-            bounds: [center.x - radius, center.y - radius, radius * 2.0, radius * 2.0],
+            bounds: [
+                center.x - radius,
+                center.y - radius,
+                radius * 2.0,
+                radius * 2.0,
+            ],
             color: [color.r, color.g, color.b, color.a],
             corner_radius: radius,
             shape_type: 1,
@@ -90,10 +95,22 @@ pub struct Uniforms {
 
 /// Unit quad vertices for instanced rendering.
 pub const QUAD_VERTICES: &[Vertex] = &[
-    Vertex { position: [0.0, 0.0], uv: [0.0, 0.0] },
-    Vertex { position: [1.0, 0.0], uv: [1.0, 0.0] },
-    Vertex { position: [1.0, 1.0], uv: [1.0, 1.0] },
-    Vertex { position: [0.0, 1.0], uv: [0.0, 1.0] },
+    Vertex {
+        position: [0.0, 0.0],
+        uv: [0.0, 0.0],
+    },
+    Vertex {
+        position: [1.0, 0.0],
+        uv: [1.0, 0.0],
+    },
+    Vertex {
+        position: [1.0, 1.0],
+        uv: [1.0, 1.0],
+    },
+    Vertex {
+        position: [0.0, 1.0],
+        uv: [0.0, 1.0],
+    },
 ];
 
 pub const QUAD_INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];
@@ -104,7 +121,11 @@ pub fn commands_to_instances(commands: &[DrawCommand]) -> Vec<Instance> {
 
     for cmd in commands {
         match cmd {
-            DrawCommand::Rect { bounds, radius, style } => {
+            DrawCommand::Rect {
+                bounds,
+                radius,
+                style,
+            } => {
                 if let Some(fill) = style.fill {
                     if radius.is_zero() {
                         instances.push(Instance::rect(bounds, &fill));
@@ -113,7 +134,11 @@ pub fn commands_to_instances(commands: &[DrawCommand]) -> Vec<Instance> {
                     }
                 }
             }
-            DrawCommand::Circle { center, radius, style } => {
+            DrawCommand::Circle {
+                center,
+                radius,
+                style,
+            } => {
                 if let Some(fill) = style.fill {
                     instances.push(Instance::circle(center, *radius, &fill));
                 }
@@ -194,7 +219,12 @@ impl AtlasRegion {
     /// Create a new atlas region.
     #[must_use]
     pub const fn new(x: u16, y: u16, width: u16, height: u16) -> Self {
-        Self { x, y, width, height }
+        Self {
+            x,
+            y,
+            width,
+            height,
+        }
     }
 
     /// Convert to UV coordinates given atlas dimensions.
@@ -235,12 +265,7 @@ pub struct CachedGlyph {
 impl CachedGlyph {
     /// Create a new cached glyph.
     #[must_use]
-    pub const fn new(
-        region: AtlasRegion,
-        advance_x: f32,
-        bearing_x: f32,
-        bearing_y: f32,
-    ) -> Self {
+    pub const fn new(region: AtlasRegion, advance_x: f32, bearing_x: f32, bearing_y: f32) -> Self {
         Self {
             region,
             advance_x,
@@ -623,14 +648,8 @@ pub fn layout_text(
         let key = GlyphKey::new(ch, options.size_px as u16, options.weight);
         if let Some(glyph) = cache.get(&key) {
             if !glyph.region.is_empty() {
-                let instance = GlyphInstance::from_cached(
-                    glyph,
-                    cursor_x,
-                    cursor_y,
-                    scale,
-                    atlas_size,
-                    color,
-                );
+                let instance =
+                    GlyphInstance::from_cached(glyph, cursor_x, cursor_y, scale, atlas_size, color);
                 layout.glyphs.push(instance);
             }
             cursor_x += glyph.advance_x * scale + options.letter_spacing;
@@ -802,18 +821,22 @@ impl GpuResourceBuilder {
     /// Returns error if shader compilation or pipeline creation fails.
     pub fn build(self) -> WebGpuResult<GpuResources> {
         // Create vertex buffer for unit quad
-        let vertex_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Quad Vertex Buffer"),
-            contents: bytemuck::cast_slice(QUAD_VERTICES),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+        let vertex_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Quad Vertex Buffer"),
+                contents: bytemuck::cast_slice(QUAD_VERTICES),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
 
         // Create index buffer
-        let index_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Quad Index Buffer"),
-            contents: bytemuck::cast_slice(QUAD_INDICES),
-            usage: wgpu::BufferUsages::INDEX,
-        });
+        let index_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Quad Index Buffer"),
+                contents: bytemuck::cast_slice(QUAD_INDICES),
+                usage: wgpu::BufferUsages::INDEX,
+            });
 
         // Create instance buffer
         let instance_buffer_size = std::mem::size_of::<Instance>() * self.max_instances;
@@ -833,19 +856,21 @@ impl GpuResourceBuilder {
         });
 
         // Create bind group layout
-        let bind_group_layout = self.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Uniform Bind Group Layout"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-        });
+        let bind_group_layout =
+            self.device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("Uniform Bind Group Layout"),
+                    entries: &[wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    }],
+                });
 
         // Create bind group
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -858,17 +883,21 @@ impl GpuResourceBuilder {
         });
 
         // Compile shader
-        let shader = self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Primitive Shader"),
-            source: wgpu::ShaderSource::Wgsl(PRIMITIVE_SHADER.into()),
-        });
+        let shader = self
+            .device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("Primitive Shader"),
+                source: wgpu::ShaderSource::Wgsl(PRIMITIVE_SHADER.into()),
+            });
 
         // Create pipeline layout
-        let pipeline_layout = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Shape Pipeline Layout"),
-            bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[],
-        });
+        let pipeline_layout = self
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Shape Pipeline Layout"),
+                bind_group_layouts: &[&bind_group_layout],
+                push_constant_ranges: &[],
+            });
 
         // Instance attributes
         let instance_attribs = [
@@ -898,46 +927,48 @@ impl GpuResourceBuilder {
         ];
 
         // Create render pipeline
-        let shape_pipeline = self.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Shape Pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                buffers: &[
-                    Vertex::desc(),
-                    wgpu::VertexBufferLayout {
-                        array_stride: std::mem::size_of::<Instance>() as u64,
-                        step_mode: wgpu::VertexStepMode::Instance,
-                        attributes: &instance_attribs,
-                    },
-                ],
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: self.format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                unclipped_depth: false,
-                conservative: false,
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            multiview: None,
-            cache: None,
-        });
+        let shape_pipeline = self
+            .device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("Shape Pipeline"),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("vs_main"),
+                    buffers: &[
+                        Vertex::desc(),
+                        wgpu::VertexBufferLayout {
+                            array_stride: std::mem::size_of::<Instance>() as u64,
+                            step_mode: wgpu::VertexStepMode::Instance,
+                            attributes: &instance_attribs,
+                        },
+                    ],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some("fs_main"),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: self.format,
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: None,
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    unclipped_depth: false,
+                    conservative: false,
+                },
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+                cache: None,
+            });
 
         Ok(GpuResources {
             device: self.device,
@@ -1084,7 +1115,9 @@ pub fn render_instances(
         viewport: [viewport.0, viewport.1],
         _padding: [0.0, 0.0],
     };
-    resources.queue.write_buffer(&resources.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
+    resources
+        .queue
+        .write_buffer(&resources.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
 
     // Batch instances
     let mut offset = 0;
@@ -1093,16 +1126,17 @@ pub fn render_instances(
         let batch = &instances[offset..offset + batch_size];
 
         // Update instance buffer
-        resources.queue.write_buffer(
-            &resources.instance_buffer,
-            0,
-            bytemuck::cast_slice(batch),
-        );
+        resources
+            .queue
+            .write_buffer(&resources.instance_buffer, 0, bytemuck::cast_slice(batch));
 
         // Create command encoder
-        let mut encoder = resources.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Render Encoder"),
-        });
+        let mut encoder =
+            resources
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Render Encoder"),
+                });
 
         // Render pass
         {

@@ -25,13 +25,33 @@ fn to_svg(commands: &[DrawCommand], width: f32, height: f32) -> String {
 
     for cmd in commands {
         match cmd {
-            DrawCommand::Rect { bounds, style, radius } => {
+            DrawCommand::Rect {
+                bounds,
+                style,
+                radius,
+            } => {
                 let fill = style.fill.map_or("none".to_string(), |c| {
-                    format!("rgb({},{},{})", (c.r * 255.0) as u8, (c.g * 255.0) as u8, (c.b * 255.0) as u8)
+                    format!(
+                        "rgb({},{},{})",
+                        (c.r * 255.0) as u8,
+                        (c.g * 255.0) as u8,
+                        (c.b * 255.0) as u8
+                    )
                 });
-                let stroke = style.stroke.as_ref().map_or(("none".to_string(), 0.0), |s| {
-                    (format!("rgb({},{},{})", (s.color.r * 255.0) as u8, (s.color.g * 255.0) as u8, (s.color.b * 255.0) as u8), s.width)
-                });
+                let stroke = style
+                    .stroke
+                    .as_ref()
+                    .map_or(("none".to_string(), 0.0), |s| {
+                        (
+                            format!(
+                                "rgb({},{},{})",
+                                (s.color.r * 255.0) as u8,
+                                (s.color.g * 255.0) as u8,
+                                (s.color.b * 255.0) as u8
+                            ),
+                            s.width,
+                        )
+                    });
                 let rx = radius.top_left.max(0.0);
                 svg.push_str(&format!(
                     r#"  <rect x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" rx="{:.1}" fill="{}" stroke="{}" stroke-width="{:.1}"/>
@@ -39,7 +59,11 @@ fn to_svg(commands: &[DrawCommand], width: f32, height: f32) -> String {
                     bounds.x, bounds.y, bounds.width, bounds.height, rx, fill, stroke.0, stroke.1
                 ));
             }
-            DrawCommand::Text { content, position, style } => {
+            DrawCommand::Text {
+                content,
+                position,
+                style,
+            } => {
                 let color = format!(
                     "rgb({},{},{})",
                     (style.color.r * 255.0) as u8,
@@ -61,9 +85,18 @@ fn to_svg(commands: &[DrawCommand], width: f32, height: f32) -> String {
                     html_escape(content)
                 ));
             }
-            DrawCommand::Circle { center, radius, style } => {
+            DrawCommand::Circle {
+                center,
+                radius,
+                style,
+            } => {
                 let fill = style.fill.map_or("none".to_string(), |c| {
-                    format!("rgb({},{},{})", (c.r * 255.0) as u8, (c.g * 255.0) as u8, (c.b * 255.0) as u8)
+                    format!(
+                        "rgb({},{},{})",
+                        (c.r * 255.0) as u8,
+                        (c.g * 255.0) as u8,
+                        (c.b * 255.0) as u8
+                    )
                 });
                 svg.push_str(&format!(
                     r#"  <circle cx="{:.1}" cy="{:.1}" r="{:.1}" fill="{}"/>
@@ -121,22 +154,46 @@ fn main() {
                 .child(
                     Column::new()
                         .gap(4.0)
-                        .child(Text::new("Revenue").font_size(12.0).color(Color::from_hex("#6b7280").expect("hex")))
-                        .child(Text::new("$1.2M").font_size(28.0).color(Color::from_hex("#111827").expect("hex")))
+                        .child(
+                            Text::new("Revenue")
+                                .font_size(12.0)
+                                .color(Color::from_hex("#6b7280").expect("hex")),
+                        )
+                        .child(
+                            Text::new("$1.2M")
+                                .font_size(28.0)
+                                .color(Color::from_hex("#111827").expect("hex")),
+                        )
                         .child(Text::new("+12.5%").font_size(14.0).color(Color::GREEN)),
                 )
                 .child(
                     Column::new()
                         .gap(4.0)
-                        .child(Text::new("Orders").font_size(12.0).color(Color::from_hex("#6b7280").expect("hex")))
-                        .child(Text::new("3,847").font_size(28.0).color(Color::from_hex("#111827").expect("hex")))
+                        .child(
+                            Text::new("Orders")
+                                .font_size(12.0)
+                                .color(Color::from_hex("#6b7280").expect("hex")),
+                        )
+                        .child(
+                            Text::new("3,847")
+                                .font_size(28.0)
+                                .color(Color::from_hex("#111827").expect("hex")),
+                        )
                         .child(Text::new("+8.2%").font_size(14.0).color(Color::GREEN)),
                 )
                 .child(
                     Column::new()
                         .gap(4.0)
-                        .child(Text::new("Users").font_size(12.0).color(Color::from_hex("#6b7280").expect("hex")))
-                        .child(Text::new("12.4K").font_size(28.0).color(Color::from_hex("#111827").expect("hex")))
+                        .child(
+                            Text::new("Users")
+                                .font_size(12.0)
+                                .color(Color::from_hex("#6b7280").expect("hex")),
+                        )
+                        .child(
+                            Text::new("12.4K")
+                                .font_size(28.0)
+                                .color(Color::from_hex("#111827").expect("hex")),
+                        )
                         .child(Text::new("-2.1%").font_size(14.0).color(Color::RED)),
                 ),
         )

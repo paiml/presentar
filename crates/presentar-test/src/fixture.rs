@@ -222,7 +222,9 @@ impl Fixture {
                 let content = if pos + size <= data.len() {
                     data[pos..pos + size].to_vec()
                 } else {
-                    return Err(FixtureError::InvalidTar("truncated file content".to_string()));
+                    return Err(FixtureError::InvalidTar(
+                        "truncated file content".to_string(),
+                    ));
                 };
 
                 self.files.insert(name, content);
@@ -644,10 +646,7 @@ mod tests {
 
     #[test]
     fn test_fixture_total_size() {
-        let fixture = Fixture::from_files(vec![
-            ("a.txt", b"12345" as &[u8]),
-            ("b.txt", b"67890"),
-        ]);
+        let fixture = Fixture::from_files(vec![("a.txt", b"12345" as &[u8]), ("b.txt", b"67890")]);
 
         assert_eq!(fixture.total_size(), 10);
     }
@@ -682,9 +681,7 @@ mod tests {
 
     #[test]
     fn test_manifest_model_files() {
-        let fixture = Fixture::from_files(vec![
-            ("model.apr", b"data" as &[u8]),
-        ]);
+        let fixture = Fixture::from_files(vec![("model.apr", b"data" as &[u8])]);
 
         assert_eq!(fixture.manifest().model_files.len(), 1);
     }
@@ -879,7 +876,10 @@ mod tests {
         let png = TestData::minimal_png(2, 2, [255, 0, 0, 255]);
 
         // Check PNG signature
-        assert_eq!(&png[0..8], &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]);
+        assert_eq!(
+            &png[0..8],
+            &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]
+        );
     }
 
     #[test]
@@ -887,9 +887,7 @@ mod tests {
         let png = TestData::minimal_png(4, 4, [0, 255, 0, 255]);
 
         // Find IHDR chunk
-        let ihdr_pos = png
-            .windows(4)
-            .position(|w| w == b"IHDR");
+        let ihdr_pos = png.windows(4).position(|w| w == b"IHDR");
         assert!(ihdr_pos.is_some());
     }
 
@@ -898,9 +896,7 @@ mod tests {
         let png = TestData::minimal_png(4, 4, [0, 0, 255, 255]);
 
         // Find IEND chunk
-        let iend_pos = png
-            .windows(4)
-            .position(|w| w == b"IEND");
+        let iend_pos = png.windows(4).position(|w| w == b"IEND");
         assert!(iend_pos.is_some());
     }
 
@@ -935,9 +931,7 @@ mod tests {
 
     #[test]
     fn test_context_new() {
-        let fixture = FixtureBuilder::new("test")
-            .app_yaml("name: test")
-            .build();
+        let fixture = FixtureBuilder::new("test").app_yaml("name: test").build();
         let context = FixtureContext::new(fixture, "my_test");
 
         assert_eq!(context.test_name, "my_test");
@@ -954,9 +948,7 @@ mod tests {
 
     #[test]
     fn test_context_app_yaml() {
-        let fixture = FixtureBuilder::new("test")
-            .app_yaml("name: my-app")
-            .build();
+        let fixture = FixtureBuilder::new("test").app_yaml("name: my-app").build();
         let context = FixtureContext::new(fixture, "test");
 
         let yaml = context.app_yaml().unwrap();
@@ -970,11 +962,26 @@ mod tests {
     #[test]
     fn test_error_display() {
         let errors = vec![
-            (FixtureError::InvalidTar("bad header".to_string()), "invalid tar archive: bad header"),
-            (FixtureError::FileNotFound("test.txt".to_string()), "file not found: test.txt"),
-            (FixtureError::InvalidFormat("bad format".to_string()), "invalid fixture format: bad format"),
-            (FixtureError::IoError("read failed".to_string()), "IO error: read failed"),
-            (FixtureError::YamlError("parse error".to_string()), "YAML error: parse error"),
+            (
+                FixtureError::InvalidTar("bad header".to_string()),
+                "invalid tar archive: bad header",
+            ),
+            (
+                FixtureError::FileNotFound("test.txt".to_string()),
+                "file not found: test.txt",
+            ),
+            (
+                FixtureError::InvalidFormat("bad format".to_string()),
+                "invalid fixture format: bad format",
+            ),
+            (
+                FixtureError::IoError("read failed".to_string()),
+                "IO error: read failed",
+            ),
+            (
+                FixtureError::YamlError("parse error".to_string()),
+                "YAML error: parse error",
+            ),
         ];
 
         for (error, expected) in errors {
@@ -1012,7 +1019,10 @@ layout:
 "#,
             )
             .data("metrics", TestData::metrics_json(100).into_bytes())
-            .snapshot("dashboard", TestData::minimal_png(100, 100, [255, 255, 255, 255]))
+            .snapshot(
+                "dashboard",
+                TestData::minimal_png(100, 100, [255, 255, 255, 255]),
+            )
             .build();
 
         // Verify structure

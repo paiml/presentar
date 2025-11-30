@@ -162,12 +162,7 @@ impl Storage {
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
-            self.memory
-                .lock()
-                .ok()?
-                .keys()
-                .nth(index)
-                .cloned()
+            self.memory.lock().ok()?.keys().nth(index).cloned()
         }
     }
 

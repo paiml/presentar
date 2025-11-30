@@ -81,4 +81,6 @@ pub use browser::{BrowserRouter, RouteMatch, RouteMatcher};
 
 // WebGPU types available on all platforms for testing
 mod webgpu;
-pub use webgpu::{Instance as GpuInstance, Uniforms as GpuUniforms, Vertex as GpuVertex, commands_to_instances};
+pub use webgpu::{
+    commands_to_instances, Instance as GpuInstance, Uniforms as GpuUniforms, Vertex as GpuVertex,
+};

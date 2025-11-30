@@ -228,7 +228,10 @@ impl<T: Clone + Send + Sync + 'static> ReactiveCell<T> {
 
     /// Get the current value.
     pub fn get(&self) -> T {
-        self.value.read().expect("ReactiveCell lock poisoned").clone()
+        self.value
+            .read()
+            .expect("ReactiveCell lock poisoned")
+            .clone()
     }
 
     /// Set a new value, notifying subscribers.
@@ -257,7 +260,10 @@ impl<T: Clone + Send + Sync + 'static> ReactiveCell<T> {
     where
         F: Fn(&T) + Send + Sync + 'static,
     {
-        self.subscribers.write().expect("ReactiveCell lock poisoned").push(Box::new(callback));
+        self.subscribers
+            .write()
+            .expect("ReactiveCell lock poisoned")
+            .push(Box::new(callback));
     }
 
     fn notify(&self) {
@@ -287,7 +293,10 @@ impl<T: Clone + Send + Sync + Default + 'static> Default for ReactiveCell<T> {
 impl<T: Clone + Send + Sync + fmt::Debug + 'static> fmt::Debug for ReactiveCell<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ReactiveCell")
-            .field("value", &*self.value.read().expect("ReactiveCell lock poisoned"))
+            .field(
+                "value",
+                &*self.value.read().expect("ReactiveCell lock poisoned"),
+            )
             .finish_non_exhaustive()
     }
 }
@@ -322,7 +331,9 @@ impl<T: Clone + Send + Sync + 'static> Computed<T> {
             *self.dirty.write().expect("Computed lock poisoned") = false;
             value
         } else {
-            self.cached.read().expect("Computed lock poisoned")
+            self.cached
+                .read()
+                .expect("Computed lock poisoned")
                 .clone()
                 .expect("Computed cache should contain value when not dirty")
         }
@@ -337,8 +348,14 @@ impl<T: Clone + Send + Sync + 'static> Computed<T> {
 impl<T: Clone + Send + Sync + fmt::Debug + 'static> fmt::Debug for Computed<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Computed")
-            .field("cached", &*self.cached.read().expect("Computed lock poisoned"))
-            .field("dirty", &*self.dirty.read().expect("Computed lock poisoned"))
+            .field(
+                "cached",
+                &*self.cached.read().expect("Computed lock poisoned"),
+            )
+            .field(
+                "dirty",
+                &*self.dirty.read().expect("Computed lock poisoned"),
+            )
             .finish_non_exhaustive()
     }
 }
@@ -700,7 +717,9 @@ impl BindingManager {
 
             // Check if this path affects this binding
             if &binding.config.source == path
-                || path.to_string_path().starts_with(&binding.config.source.to_string_path())
+                || path
+                    .to_string_path()
+                    .starts_with(&binding.config.source.to_string_path())
             {
                 binding.current_value = Some(value.to_string());
 

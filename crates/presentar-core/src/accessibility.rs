@@ -346,9 +346,9 @@ impl AccessibilityTree {
             return None;
         }
 
-        let current_idx = self.focus.and_then(|id| {
-            self.focus_order.iter().position(|&fid| fid == id)
-        });
+        let current_idx = self
+            .focus
+            .and_then(|id| self.focus_order.iter().position(|&fid| fid == id));
 
         let next_idx = match current_idx {
             Some(idx) => (idx + 1) % self.focus_order.len(),
@@ -368,9 +368,9 @@ impl AccessibilityTree {
             return None;
         }
 
-        let current_idx = self.focus.and_then(|id| {
-            self.focus_order.iter().position(|&fid| fid == id)
-        });
+        let current_idx = self
+            .focus
+            .and_then(|id| self.focus_order.iter().position(|&fid| fid == id));
 
         let prev_idx = match current_idx {
             Some(idx) if idx > 0 => idx - 1,
@@ -455,8 +455,7 @@ impl HitTester {
 
     /// Find the deepest accessible element at the given point.
     pub fn hit_test(&self, point: Point) -> Option<&AccessibleNode> {
-        self.hit_test_id(point)
-            .and_then(|id| self.tree.get(id))
+        self.hit_test_id(point).and_then(|id| self.tree.get(id))
     }
 
     /// Find the ID of the deepest accessible element at the given point.
@@ -466,7 +465,11 @@ impl HitTester {
     }
 
     /// Recursive hit test implementation.
-    fn hit_test_recursive(&self, node_id: AccessibleNodeId, point: Point) -> Option<AccessibleNodeId> {
+    fn hit_test_recursive(
+        &self,
+        node_id: AccessibleNodeId,
+        point: Point,
+    ) -> Option<AccessibleNodeId> {
         let node = self.tree.get(node_id)?;
 
         if !node.contains_point(point) {
@@ -760,7 +763,10 @@ mod tests {
         assert_eq!(node.name, Some("Submit".to_string()));
         assert_eq!(node.description, Some("Submit the form".to_string()));
         assert!(node.focusable);
-        assert_eq!(node.properties.get("aria-pressed"), Some(&"false".to_string()));
+        assert_eq!(
+            node.properties.get("aria-pressed"),
+            Some(&"false".to_string())
+        );
     }
 
     // AccessibilityTree tests
@@ -775,7 +781,11 @@ mod tests {
     fn test_tree_insert_and_get() {
         let mut tree = AccessibilityTree::new();
         let id = tree.next_id();
-        let node = AccessibleNode::new(id, AccessibleRole::Generic, Rect::new(0.0, 0.0, 100.0, 100.0));
+        let node = AccessibleNode::new(
+            id,
+            AccessibleRole::Generic,
+            Rect::new(0.0, 0.0, 100.0, 100.0),
+        );
         tree.insert(node);
         tree.set_root(id);
 
@@ -788,7 +798,11 @@ mod tests {
     fn test_tree_remove() {
         let mut tree = AccessibilityTree::new();
         let id = tree.next_id();
-        let node = AccessibleNode::new(id, AccessibleRole::Generic, Rect::new(0.0, 0.0, 100.0, 100.0));
+        let node = AccessibleNode::new(
+            id,
+            AccessibleRole::Generic,
+            Rect::new(0.0, 0.0, 100.0, 100.0),
+        );
         tree.insert(node);
 
         let removed = tree.remove(id);
@@ -801,8 +815,16 @@ mod tests {
         let mut tree = AccessibilityTree::new();
         let id1 = tree.next_id();
         let id2 = tree.next_id();
-        tree.insert(AccessibleNode::new(id1, AccessibleRole::Generic, Rect::default()));
-        tree.insert(AccessibleNode::new(id2, AccessibleRole::Generic, Rect::default()));
+        tree.insert(AccessibleNode::new(
+            id1,
+            AccessibleRole::Generic,
+            Rect::default(),
+        ));
+        tree.insert(AccessibleNode::new(
+            id2,
+            AccessibleRole::Generic,
+            Rect::default(),
+        ));
 
         tree.clear();
         assert!(tree.is_empty());
@@ -828,7 +850,11 @@ mod tests {
     fn test_tree_focus_non_focusable() {
         let mut tree = AccessibilityTree::new();
         let id = tree.next_id();
-        let node = AccessibleNode::new(id, AccessibleRole::Generic, Rect::new(0.0, 0.0, 100.0, 50.0));
+        let node = AccessibleNode::new(
+            id,
+            AccessibleRole::Generic,
+            Rect::new(0.0, 0.0, 100.0, 50.0),
+        );
         tree.insert(node);
 
         assert!(!tree.set_focus(id));
@@ -906,7 +932,11 @@ mod tests {
     fn test_hit_test_single_node() {
         let mut tree = AccessibilityTree::new();
         let id = tree.next_id();
-        let node = AccessibleNode::new(id, AccessibleRole::Button, Rect::new(10.0, 10.0, 100.0, 50.0));
+        let node = AccessibleNode::new(
+            id,
+            AccessibleRole::Button,
+            Rect::new(10.0, 10.0, 100.0, 50.0),
+        );
         tree.insert(node);
         tree.set_root(id);
 
@@ -1007,11 +1037,8 @@ mod tests {
         );
 
         let child_id = tree.next_id();
-        let mut child = AccessibleNode::button(
-            child_id,
-            "Button",
-            Rect::new(50.0, 50.0, 100.0, 100.0),
-        );
+        let mut child =
+            AccessibleNode::button(child_id, "Button", Rect::new(50.0, 50.0, 100.0, 100.0));
         child.parent = Some(parent_id);
         child.focusable = true;
         parent.children.push(child_id);
@@ -1078,7 +1105,10 @@ mod tests {
             .root(AccessibleRole::Generic, Rect::new(0.0, 0.0, 800.0, 600.0))
             .push_child(AccessibleRole::Button, Rect::new(10.0, 10.0, 100.0, 50.0))
             .pop()
-            .push_child(AccessibleRole::TextInput, Rect::new(10.0, 70.0, 200.0, 30.0))
+            .push_child(
+                AccessibleRole::TextInput,
+                Rect::new(10.0, 70.0, 200.0, 30.0),
+            )
             .pop()
             .build();
 

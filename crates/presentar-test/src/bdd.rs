@@ -178,16 +178,10 @@ impl<T: PartialEq + std::fmt::Debug> Expectation<T> {
         let matches = self.value == expected;
         if self.negated {
             if matches {
-                panic!(
-                    "Expected {:?} not to equal {:?}",
-                    self.value, expected
-                );
+                panic!("Expected {:?} not to equal {:?}", self.value, expected);
             }
         } else if !matches {
-            panic!(
-                "Expected {:?} to equal {:?}",
-                self.value, expected
-            );
+            panic!("Expected {:?} to equal {:?}", self.value, expected);
         }
     }
 }
@@ -204,10 +198,7 @@ impl<T: PartialOrd + std::fmt::Debug> Expectation<T> {
                 );
             }
         } else if !matches {
-            panic!(
-                "Expected {:?} to be greater than {:?}",
-                self.value, other
-            );
+            panic!("Expected {:?} to be greater than {:?}", self.value, other);
         }
     }
 
@@ -216,16 +207,10 @@ impl<T: PartialOrd + std::fmt::Debug> Expectation<T> {
         let matches = self.value < other;
         if self.negated {
             if matches {
-                panic!(
-                    "Expected {:?} not to be less than {:?}",
-                    self.value, other
-                );
+                panic!("Expected {:?} not to be less than {:?}", self.value, other);
             }
         } else if !matches {
-            panic!(
-                "Expected {:?} to be less than {:?}",
-                self.value, other
-            );
+            panic!("Expected {:?} to be less than {:?}", self.value, other);
         }
     }
 }
@@ -338,10 +323,7 @@ impl Expectation<&str> {
         let contains = self.value.contains(needle);
         if self.negated {
             if contains {
-                panic!(
-                    "Expected {:?} not to contain {:?}",
-                    self.value, needle
-                );
+                panic!("Expected {:?} not to contain {:?}", self.value, needle);
             }
         } else if !contains {
             panic!("Expected {:?} to contain {:?}", self.value, needle);
@@ -353,16 +335,10 @@ impl Expectation<&str> {
         let starts = self.value.starts_with(prefix);
         if self.negated {
             if starts {
-                panic!(
-                    "Expected {:?} not to start with {:?}",
-                    self.value, prefix
-                );
+                panic!("Expected {:?} not to start with {:?}", self.value, prefix);
             }
         } else if !starts {
-            panic!(
-                "Expected {:?} to start with {:?}",
-                self.value, prefix
-            );
+            panic!("Expected {:?} to start with {:?}", self.value, prefix);
         }
     }
 
@@ -371,10 +347,7 @@ impl Expectation<&str> {
         let ends = self.value.ends_with(suffix);
         if self.negated {
             if ends {
-                panic!(
-                    "Expected {:?} not to end with {:?}",
-                    self.value, suffix
-                );
+                panic!("Expected {:?} not to end with {:?}", self.value, suffix);
             }
         } else if !ends {
             panic!("Expected {:?} to end with {:?}", self.value, suffix);
@@ -388,10 +361,7 @@ impl Expectation<String> {
         let contains = self.value.contains(needle);
         if self.negated {
             if contains {
-                panic!(
-                    "Expected {:?} not to contain {:?}",
-                    self.value, needle
-                );
+                panic!("Expected {:?} not to contain {:?}", self.value, needle);
             }
         } else if !contains {
             panic!("Expected {:?} to contain {:?}", self.value, needle);
@@ -674,7 +644,9 @@ mod tests {
         let ctx = describe("Test", |ctx| {
             ctx.it("pass1", |_| {});
             ctx.it("pass2", |_| {});
-            ctx.it("fail", |_| { expect(1).to_equal(2); });
+            ctx.it("fail", |_| {
+                expect(1).to_equal(2);
+            });
         });
         assert_eq!(ctx.passed() + ctx.failed(), 3);
     }

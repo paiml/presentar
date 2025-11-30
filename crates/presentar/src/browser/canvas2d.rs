@@ -40,7 +40,13 @@ impl Canvas2DRenderer {
     }
 
     /// Register an image from RGBA data.
-    pub fn register_image(&mut self, id: u32, data: &[u8], width: u32, height: u32) -> Result<(), String> {
+    pub fn register_image(
+        &mut self,
+        id: u32,
+        data: &[u8],
+        width: u32,
+        height: u32,
+    ) -> Result<(), String> {
         let clamped = wasm_bindgen::Clamped(data);
         let image_data = ImageData::new_with_u8_clamped_array_and_sh(clamped, width, height)
             .map_err(|e| format!("Failed to create ImageData: {:?}", e))?;
@@ -83,28 +89,49 @@ impl Canvas2DRenderer {
 
     fn render_command(&self, cmd: &DrawCommand) {
         match cmd {
-            DrawCommand::Rect { bounds, radius, style } => {
+            DrawCommand::Rect {
+                bounds,
+                radius,
+                style,
+            } => {
                 self.draw_rect(bounds, radius, style);
             }
-            DrawCommand::Circle { center, radius, style } => {
+            DrawCommand::Circle {
+                center,
+                radius,
+                style,
+            } => {
                 self.draw_circle(center, *radius, style);
             }
-            DrawCommand::Text { content, position, style } => {
+            DrawCommand::Text {
+                content,
+                position,
+                style,
+            } => {
                 self.draw_text(content, position, style);
             }
-            DrawCommand::Path { points, closed, style } => {
+            DrawCommand::Path {
+                points,
+                closed,
+                style,
+            } => {
                 self.draw_path(points, *closed, style);
             }
-            DrawCommand::Group { children, transform } => {
+            DrawCommand::Group {
+                children,
+                transform,
+            } => {
                 self.ctx.save();
-                self.ctx.transform(
-                    f64::from(transform.matrix[0]),
-                    f64::from(transform.matrix[1]),
-                    f64::from(transform.matrix[2]),
-                    f64::from(transform.matrix[3]),
-                    f64::from(transform.matrix[4]),
-                    f64::from(transform.matrix[5]),
-                ).ok();
+                self.ctx
+                    .transform(
+                        f64::from(transform.matrix[0]),
+                        f64::from(transform.matrix[1]),
+                        f64::from(transform.matrix[2]),
+                        f64::from(transform.matrix[3]),
+                        f64::from(transform.matrix[4]),
+                        f64::from(transform.matrix[5]),
+                    )
+                    .ok();
                 for child in children {
                     self.render_command(child);
                 }
@@ -129,7 +156,13 @@ impl Canvas2DRenderer {
                 self.render_command(child);
                 self.ctx.restore();
             }
-            DrawCommand::Arc { center, radius, start_angle, end_angle, color } => {
+            DrawCommand::Arc {
+                center,
+                radius,
+                start_angle,
+                end_angle,
+                color,
+            } => {
                 self.draw_arc(center, *radius, *start_angle, *end_angle, color);
             }
             DrawCommand::Fill { path, color, rule } => {
@@ -190,13 +223,15 @@ impl Canvas2DRenderer {
 
     fn draw_circle(&self, center: &Point, radius: f32, style: &BoxStyle) {
         self.ctx.begin_path();
-        self.ctx.arc(
-            f64::from(center.x),
-            f64::from(center.y),
-            f64::from(radius),
-            0.0,
-            std::f64::consts::TAU,
-        ).ok();
+        self.ctx
+            .arc(
+                f64::from(center.x),
+                f64::from(center.y),
+                f64::from(radius),
+                0.0,
+                std::f64::consts::TAU,
+            )
+            .ok();
 
         if let Some(fill) = style.fill {
             self.ctx.set_fill_style_str(&color_to_css(&fill));
@@ -210,7 +245,12 @@ impl Canvas2DRenderer {
         }
     }
 
-    fn draw_text(&self, content: &str, position: &Point, style: &presentar_core::widget::TextStyle) {
+    fn draw_text(
+        &self,
+        content: &str,
+        position: &Point,
+        style: &presentar_core::widget::TextStyle,
+    ) {
         let weight = match style.weight {
             presentar_core::widget::FontWeight::Bold => "bold",
             presentar_core::widget::FontWeight::Medium => "500",
@@ -220,7 +260,13 @@ impl Canvas2DRenderer {
         let font = format!("{} {}px sans-serif", weight, style.size);
         self.ctx.set_font(&font);
         self.ctx.set_fill_style_str(&color_to_css(&style.color));
-        self.ctx.fill_text(content, f64::from(position.x), f64::from(position.y + style.size)).ok();
+        self.ctx
+            .fill_text(
+                content,
+                f64::from(position.x),
+                f64::from(position.y + style.size),
+            )
+            .ok();
     }
 
     fn draw_path(&self, points: &[Point], closed: bool, style: &StrokeStyle) {
@@ -229,7 +275,8 @@ impl Canvas2DRenderer {
         }
 
         self.ctx.begin_path();
-        self.ctx.move_to(f64::from(points[0].x), f64::from(points[0].y));
+        self.ctx
+            .move_to(f64::from(points[0].x), f64::from(points[0].y));
         for p in points.iter().skip(1) {
             self.ctx.line_to(f64::from(p.x), f64::from(p.y));
         }
@@ -242,16 +289,25 @@ impl Canvas2DRenderer {
         self.ctx.stroke();
     }
 
-    fn draw_arc(&self, center: &Point, radius: f32, start_angle: f32, end_angle: f32, color: &Color) {
+    fn draw_arc(
+        &self,
+        center: &Point,
+        radius: f32,
+        start_angle: f32,
+        end_angle: f32,
+        color: &Color,
+    ) {
         self.ctx.begin_path();
         self.ctx.move_to(f64::from(center.x), f64::from(center.y));
-        self.ctx.arc(
-            f64::from(center.x),
-            f64::from(center.y),
-            f64::from(radius),
-            f64::from(start_angle),
-            f64::from(end_angle),
-        ).ok();
+        self.ctx
+            .arc(
+                f64::from(center.x),
+                f64::from(center.y),
+                f64::from(radius),
+                f64::from(start_angle),
+                f64::from(end_angle),
+            )
+            .ok();
         self.ctx.close_path();
         self.ctx.set_fill_style_str(&color_to_css(color));
         self.ctx.fill();
@@ -264,7 +320,8 @@ impl Canvas2DRenderer {
             }
 
             self.ctx.begin_path();
-            self.ctx.move_to(f64::from(points[0].x), f64::from(points[0].y));
+            self.ctx
+                .move_to(f64::from(points[0].x), f64::from(points[0].y));
             for p in points.iter().skip(1) {
                 self.ctx.line_to(f64::from(p.x), f64::from(p.y));
             }
@@ -276,9 +333,8 @@ impl Canvas2DRenderer {
             match rule {
                 FillRule::NonZero => self.ctx.fill(),
                 FillRule::EvenOdd => {
-                    self.ctx.fill_with_canvas_winding_rule(
-                        web_sys::CanvasWindingRule::Evenodd
-                    );
+                    self.ctx
+                        .fill_with_canvas_winding_rule(web_sys::CanvasWindingRule::Evenodd);
                 }
             }
         }
@@ -293,10 +349,13 @@ impl Canvas2DRenderer {
             self.ctx.save();
 
             // Translate to position
-            self.ctx.translate(f64::from(bounds.x), f64::from(bounds.y)).ok();
+            self.ctx
+                .translate(f64::from(bounds.x), f64::from(bounds.y))
+                .ok();
 
             // Scale to fit bounds if different from image size
-            if (img_width - bounds.width).abs() > 0.01 || (img_height - bounds.height).abs() > 0.01 {
+            if (img_width - bounds.width).abs() > 0.01 || (img_height - bounds.height).abs() > 0.01
+            {
                 let scale_x = bounds.width / img_width;
                 let scale_y = bounds.height / img_height;
                 self.ctx.scale(f64::from(scale_x), f64::from(scale_y)).ok();
