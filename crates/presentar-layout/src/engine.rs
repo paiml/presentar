@@ -397,7 +397,8 @@ mod tests {
         tree.positions.insert(0, Rect::new(10.0, 20.0, 100.0, 50.0));
 
         tree.sizes.insert(1, Size::new(200.0, 100.0));
-        tree.positions.insert(1, Rect::new(120.0, 20.0, 200.0, 100.0));
+        tree.positions
+            .insert(1, Rect::new(120.0, 20.0, 200.0, 100.0));
 
         assert_eq!(tree.sizes.len(), 2);
         assert_eq!(tree.positions.len(), 2);
@@ -507,17 +508,12 @@ mod tests {
         let mut engine = LayoutEngine::new();
         let viewport = Size::new(800.0, 600.0);
 
-        let mut widget = TestWidget::new(100.0, 100.0)
-            .with_child(
-                TestWidget::new(80.0, 80.0)
-                    .with_child(
-                        TestWidget::new(60.0, 60.0)
-                            .with_child(
-                                TestWidget::new(40.0, 40.0)
-                                    .with_child(TestWidget::new(20.0, 20.0)),
-                            ),
-                    ),
-            );
+        let mut widget =
+            TestWidget::new(100.0, 100.0).with_child(TestWidget::new(80.0, 80.0).with_child(
+                TestWidget::new(60.0, 60.0).with_child(
+                    TestWidget::new(40.0, 40.0).with_child(TestWidget::new(20.0, 20.0)),
+                ),
+            ));
 
         let tree = engine.compute(&mut widget, viewport);
         assert_eq!(tree.widget_count(), 5); // 5 levels of nesting
@@ -551,10 +547,7 @@ mod tests {
                     .with_child(TestWidget::new(30.0, 30.0)),
             )
             .with_child(TestWidget::new(100.0, 100.0))
-            .with_child(
-                TestWidget::new(100.0, 100.0)
-                    .with_child(TestWidget::new(30.0, 30.0)),
-            );
+            .with_child(TestWidget::new(100.0, 100.0).with_child(TestWidget::new(30.0, 30.0)));
 
         let tree = engine.compute(&mut widget, viewport);
         // Root + 3 children + 2 grandchildren + 1 grandchild = 7
