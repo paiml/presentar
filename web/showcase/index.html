@@ -475,13 +475,7 @@
             ctx.fillText('Grade: A+', x, y + 85);
         }
 
-        function drawTitle() {
-            ctx.fillStyle = state.theme === 'dark' ? '#f0f0f5' : '#111827';
-            ctx.font = '700 14px -apple-system, sans-serif';
-            ctx.fillText('PRESENTAR GPU SHOWCASE', 60, 40);
-            ctx.fillStyle = '#6366f1';
-            ctx.fillText(' • 60fps WebGPU', 250, 40);
-        }
+        // Title removed - displayed in HTML header instead
 
         // Animation loop
         let lastTime = 0;
@@ -505,7 +499,6 @@
 
             // Draw
             drawBackground();
-            drawTitle();
             drawBarChart();
             drawDonutChart();
             drawParticles();
