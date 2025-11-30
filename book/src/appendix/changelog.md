@@ -24,6 +24,10 @@ PATCH - Bug fixes (backward compatible)
 | Canvas2D fallback | Software rendering for non-WebGPU browsers |
 | Hot reload | Live reload during development with WebSocket |
 | Chart primitives | Interpolation, Bezier curves, arc geometry, histogram binning |
+| Chart examples | Scatter/bubble, heatmap, boxplot, area stacked, donut, sparkline, multi-axis |
+| Dashboard examples | Performance monitoring, pipeline viz, infrastructure, research, alerts |
+| Edge case examples | Unicode/CJK, RTL, numeric edge cases, slow data, high cardinality, theming |
+| Data management | Model version history, dataset lineage tracking, batch upload preview |
 | Test fixtures | TAR-based fixture loading for integration tests |
 | BDD testing | `describe()`, `expect()`, `TestContext` for behavior specs |
 | Virtualization | Scroll virtualization for large lists (60fps at 100k items) |
@@ -40,7 +44,7 @@ PATCH - Bug fixes (backward compatible)
 | Area | Enhancement |
 |------|-------------|
 | Coverage | 91.18% line coverage, 94.97% function coverage |
-| Tests | 3,423 tests across workspace |
+| Tests | 3,463+ tests across workspace (194 new example tests) |
 | Lint | All clippy warnings resolved with targeted allows |
 | YAML | Expression executor with aggregations and transforms |
 | Quality | Grade system (F-A) with configurable gates |

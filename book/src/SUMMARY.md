@@ -99,10 +99,12 @@
 - [Hello World](./examples/hello-world.md)
 - [Counter App](./examples/counter-app.md)
 - [Dashboard](./examples/dashboard.md)
+- [Charts](./examples/charts.md)
+- [Edge Cases](./examples/edge-cases.md)
+- [Data Management](./examples/data-management.md)
 - [Fraud Detection Dashboard](./examples/fraud-detection.md)
 - [MNIST Explorer](./examples/mnist-explorer.md)
 - [Data Table](./examples/data-table.md)
-- [Charts](./examples/charts.md)
 - [Model Card Display](./examples/model-card-display.md)
 
 # Development Guide
