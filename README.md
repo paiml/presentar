@@ -1,5 +1,9 @@
 <p align="center">
-  <img src=".github/presentar-hero.svg" alt="Presentar" width="900">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/paiml/presentar/main/.github/presentar-hero.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/paiml/presentar/main/.github/presentar-hero.svg">
+    <img src="https://raw.githubusercontent.com/paiml/presentar/main/.github/presentar-hero.svg" alt="Presentar" width="800">
+  </picture>
 </p>
 
 <h1 align="center">Presentar</h1>
