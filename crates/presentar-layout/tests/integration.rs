@@ -66,6 +66,7 @@ impl Widget for Box {
 }
 
 /// A flexible widget that fills available space
+#[allow(dead_code)]
 struct Flexible {
     flex: f32,
     children: Vec<std::boxed::Box<dyn Widget>>,
@@ -201,7 +202,7 @@ fn test_layout_cache_clear() {
 
     // First layout
     engine.compute(&mut widget, viewport);
-    let (hits1, misses1) = engine.cache_stats();
+    let (hits1, _misses1) = engine.cache_stats();
 
     // Clear and layout again
     engine.clear_cache();
