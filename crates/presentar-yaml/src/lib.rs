@@ -28,6 +28,7 @@ mod expression;
 pub mod formats;
 mod manifest;
 pub mod pacha;
+pub mod scene;
 
 pub use error::ParseError;
 pub use executor::{DataContext, ExecutionError, ExpressionExecutor, Value};
@@ -37,4 +38,10 @@ pub use manifest::{DataSource, Manifest, ModelRef, Section, WidgetConfig};
 pub use pacha::{
     parse_refresh_interval, ContentType, LoadedResource, PachaError, PachaLoader, PachaUri,
     ResourceType,
+};
+pub use scene::{
+    Binding, BindingAction, DatasetResource, DatasetType, FlexDirection, GridPosition, LayoutType,
+    ModelResource, ModelType, Permissions, ResourceSource, Scene, SceneError, SceneLayout,
+    SceneMetadata, SceneTheme, SceneWidget, Threshold, WidgetConfig as SceneWidgetConfig,
+    WidgetType,
 };

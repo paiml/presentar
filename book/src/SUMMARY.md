@@ -54,6 +54,7 @@
 # YAML Manifest
 
 - [Manifest Schema](./yaml/manifest-schema.md)
+- [Scene Format (.prs)](./yaml/scene-format.md)
 - [Data Sources](./yaml/data-sources.md)
 - [Model References](./yaml/model-references.md)
 - [Expression Language](./yaml/expression-language.md)

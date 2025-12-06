@@ -21,8 +21,8 @@ rust-version = "1.75"
 
 [workspace.dependencies]
 # Sovereign Stack
-trueno = "0.7.3"
-trueno-viz = "0.1.1"
+trueno = "0.7.4"
+trueno-viz = "0.1.2"
 
 # Internal crates (version + path for crates.io publishing)
 presentar-core = { version = "0.1.0", path = "crates/presentar-core" }
