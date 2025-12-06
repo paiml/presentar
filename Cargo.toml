@@ -12,7 +12,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Pragmatic AI Labs"]
 license = "MIT"
@@ -25,21 +25,21 @@ trueno = "0.7.4"
 trueno-viz = "0.1.2"
 
 # Internal crates (version + path for crates.io publishing)
-presentar-core = { version = "0.1.0", path = "crates/presentar-core" }
-presentar-widgets = { version = "0.1.0", path = "crates/presentar-widgets" }
-presentar-layout = { version = "0.1.0", path = "crates/presentar-layout" }
-presentar-yaml = { version = "0.1.0", path = "crates/presentar-yaml" }
-presentar-test = { version = "0.1.0", path = "crates/presentar-test" }
-presentar-test-macros = { version = "0.1.0", path = "crates/presentar-test-macros" }
+presentar-core = { version = "0.1.1", path = "crates/presentar-core" }
+presentar-widgets = { version = "0.1.1", path = "crates/presentar-widgets" }
+presentar-layout = { version = "0.1.1", path = "crates/presentar-layout" }
+presentar-yaml = { version = "0.1.1", path = "crates/presentar-yaml" }
+presentar-test = { version = "0.1.1", path = "crates/presentar-test" }
+presentar-test-macros = { version = "0.1.1", path = "crates/presentar-test-macros" }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9"
-toml = "0.8"
+toml = "0.9"
 
 # Testing
-proptest = "1.5"
+proptest = "1.9"
 criterion = { version = "0.5", features = ["html_reports"] }
 
 # WASM
@@ -84,8 +84,8 @@ getrandom = { version = "0.2", features = ["js"] }
 wasm-bindgen-test = "0.3"
 
 # GPU
-wgpu = "23.0"
-bytemuck = { version = "1.14", features = ["derive"] }
+wgpu = "24.0"
+bytemuck = { version = "1.24", features = ["derive"] }
 
 [workspace.lints.rust]
 unsafe_code = "deny"
