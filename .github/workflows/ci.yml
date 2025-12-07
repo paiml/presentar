@@ -42,6 +42,29 @@ jobs:
       - name: Build docs
         run: cargo doc --no-deps
 
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: Swatinem/rust-cache@v2
+      - name: Generate coverage
+        run: cargo llvm-cov --lcov --output-path lcov.info
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: lcov.info
+          fail_ci_if_error: false
+
   wasm:
     runs-on: ubuntu-latest
     steps:
