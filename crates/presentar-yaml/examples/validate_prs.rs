@@ -130,7 +130,9 @@ fn format_scene_error(e: &SceneError) -> String {
             format!("Invalid expression in {context}: '{expression}' - {message}")
         }
         SceneError::InvalidMetadataName(name) => {
-            format!("Invalid metadata name '{name}' (must be kebab-case: lowercase, numbers, hyphens)")
+            format!(
+                "Invalid metadata name '{name}' (must be kebab-case: lowercase, numbers, hyphens)"
+            )
         }
         SceneError::LayoutError(msg) => format!("Layout error: {msg}"),
     }
@@ -193,10 +195,7 @@ fn print_scene_info(scene: &Scene) {
         println!("  ─────────────────");
         for (name, model) in &scene.resources.models {
             let hash_status = if model.hash.is_some() { "✓" } else { "○" };
-            println!(
-                "  • {name} ({:?}) [{hash_status}]",
-                model.resource_type
-            );
+            println!("  • {name} ({:?}) [{hash_status}]", model.resource_type);
             println!("    Source: {}", model.source.primary());
         }
     }
@@ -210,20 +209,14 @@ fn print_scene_info(scene: &Scene) {
         println!("  ───────────────────");
         for (name, dataset) in &scene.resources.datasets {
             let hash_status = if dataset.hash.is_some() { "✓" } else { "○" };
-            println!(
-                "  • {name} ({:?}) [{hash_status}]",
-                dataset.resource_type
-            );
+            println!("  • {name} ({:?}) [{hash_status}]", dataset.resource_type);
             println!("    Source: {}", dataset.source.primary());
         }
     }
 
     if !scene.bindings.is_empty() {
         println!();
-        println!(
-            "  \x1b[1mBindings ({} total)\x1b[0m",
-            scene.bindings.len()
-        );
+        println!("  \x1b[1mBindings ({} total)\x1b[0m", scene.bindings.len());
         println!("  ──────────────────");
         for binding in &scene.bindings {
             let debounce = binding

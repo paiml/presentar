@@ -85,8 +85,8 @@ mod individual_examples {
             .join("prs")
             .join(name);
 
-        let content = fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("Failed to read {name}: {e}"));
+        let content =
+            fs::read_to_string(&path).unwrap_or_else(|e| panic!("Failed to read {name}: {e}"));
 
         Scene::from_yaml(&content).unwrap_or_else(|e| panic!("Failed to parse {name}: {e}"))
     }

@@ -543,7 +543,10 @@ impl fmt::Display for SceneError {
             Self::InvalidVersion(v) => write!(f, "Invalid prs_version: {v}"),
             Self::DuplicateWidgetId(id) => write!(f, "Duplicate widget id: {id}"),
             Self::InvalidBindingTarget { trigger, target } => {
-                write!(f, "Invalid binding target '{target}' in trigger '{trigger}'")
+                write!(
+                    f,
+                    "Invalid binding target '{target}' in trigger '{trigger}'"
+                )
             }
             Self::InvalidHashFormat { resource, hash } => {
                 write!(f, "Invalid hash format for '{resource}': {hash}")
@@ -845,7 +848,10 @@ widgets:
     fn test_parse_widget_config() {
         let scene = Scene::from_yaml(MINIMAL_SCENE).unwrap();
         let widget = &scene.widgets[0];
-        assert_eq!(widget.config.content.as_deref(), Some("# Hello, Presentar!"));
+        assert_eq!(
+            widget.config.content.as_deref(),
+            Some("# Hello, Presentar!")
+        );
     }
 
     // =========================================================================
