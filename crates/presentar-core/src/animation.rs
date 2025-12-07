@@ -489,8 +489,11 @@ impl<T: Clone + Interpolate> KeyframeTrack<T> {
     /// Add a keyframe.
     pub fn add_keyframe(&mut self, keyframe: Keyframe<T>) {
         self.keyframes.push(keyframe);
-        self.keyframes
-            .sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
+        self.keyframes.sort_by(|a, b| {
+            a.time
+                .partial_cmp(&b.time)
+                .expect("keyframe times must be comparable")
+        });
     }
 
     /// Set looping.

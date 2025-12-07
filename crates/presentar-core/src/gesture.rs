@@ -463,8 +463,8 @@ impl GestureRecognizer {
             return Point::ORIGIN;
         }
 
-        let (first_pos, first_time) = self.velocity_samples.first().unwrap();
-        let (last_pos, last_time) = self.velocity_samples.last().unwrap();
+        let (first_pos, first_time) = self.velocity_samples.first().expect("checked len >= 2");
+        let (last_pos, last_time) = self.velocity_samples.last().expect("checked len >= 2");
 
         let dt = last_time.duration_since(*first_time).as_secs_f32();
         if dt < 0.001 {

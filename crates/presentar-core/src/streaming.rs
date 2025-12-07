@@ -475,12 +475,12 @@ impl DataStream {
     /// Get connection state.
     #[must_use]
     pub fn state(&self) -> ConnectionState {
-        *self.state.lock().unwrap()
+        *self.state.lock().expect("state mutex not poisoned")
     }
 
     /// Set connection state.
     pub fn set_state(&self, state: ConnectionState) {
-        *self.state.lock().unwrap() = state;
+        *self.state.lock().expect("state mutex not poisoned") = state;
     }
 
     /// Subscribe to a data source.
@@ -490,27 +490,40 @@ impl DataStream {
 
         self.subscriptions
             .lock()
-            .unwrap()
+            .expect("subscriptions mutex not poisoned")
             .insert(id.clone(), subscription);
 
-        self.outbox.lock().unwrap().push(msg);
+        self.outbox
+            .lock()
+            .expect("outbox mutex not poisoned")
+            .push(msg);
         id
     }
 
     /// Unsubscribe from a data source.
     pub fn unsubscribe(&self, id: &str) {
-        self.subscriptions.lock().unwrap().remove(id);
-        self.data_cache.lock().unwrap().remove(id);
+        self.subscriptions
+            .lock()
+            .expect("subscriptions mutex not poisoned")
+            .remove(id);
+        self.data_cache
+            .lock()
+            .expect("cache mutex not poisoned")
+            .remove(id);
         self.outbox
             .lock()
-            .unwrap()
+            .expect("outbox mutex not poisoned")
             .push(StreamMessage::unsubscribe(id));
     }
 
     /// Get subscription by ID.
     #[must_use]
     pub fn get_subscription(&self, id: &str) -> Option<StreamSubscription> {
-        self.subscriptions.lock().unwrap().get(id).cloned()
+        self.subscriptions
+            .lock()
+            .expect("subscriptions mutex not poisoned")
+            .get(id)
+            .cloned()
     }
 
     /// Get all active subscriptions.
@@ -518,7 +531,7 @@ impl DataStream {
     pub fn subscriptions(&self) -> Vec<StreamSubscription> {
         self.subscriptions
             .lock()
-            .unwrap()
+            .expect("subscriptions mutex not poisoned")
             .values()
             .cloned()
             .collect()
@@ -527,7 +540,11 @@ impl DataStream {
     /// Get cached data for a subscription.
     #[must_use]
     pub fn get_data(&self, id: &str) -> Option<serde_json::Value> {
-        self.data_cache.lock().unwrap().get(id).cloned()
+        self.data_cache
+            .lock()
+            .expect("cache mutex not poisoned")
+            .get(id)
+            .cloned()
     }
 
     /// Handle an incoming message.
@@ -537,24 +554,42 @@ impl DataStream {
                 id, payload, seq, ..
             } => {
                 // Update subscription state
-                if let Some(sub) = self.subscriptions.lock().unwrap().get_mut(&id) {
+                if let Some(sub) = self
+                    .subscriptions
+                    .lock()
+                    .expect("subscriptions mutex not poisoned")
+                    .get_mut(&id)
+                {
                     sub.last_seq = seq;
                     sub.active = true;
                     sub.error_count = 0;
                 }
                 // Cache data
-                self.data_cache.lock().unwrap().insert(id, payload);
+                self.data_cache
+                    .lock()
+                    .expect("cache mutex not poisoned")
+                    .insert(id, payload);
                 None
             }
             StreamMessage::Ack { id, .. } => {
-                if let Some(sub) = self.subscriptions.lock().unwrap().get_mut(&id) {
+                if let Some(sub) = self
+                    .subscriptions
+                    .lock()
+                    .expect("subscriptions mutex not poisoned")
+                    .get_mut(&id)
+                {
                     sub.active = true;
                 }
                 None
             }
             StreamMessage::Error { id, .. } => {
                 if let Some(ref id) = id {
-                    if let Some(sub) = self.subscriptions.lock().unwrap().get_mut(id) {
+                    if let Some(sub) = self
+                        .subscriptions
+                        .lock()
+                        .expect("subscriptions mutex not poisoned")
+                        .get_mut(id)
+                    {
                         sub.error_count += 1;
                     }
                 }
@@ -569,42 +604,61 @@ impl DataStream {
     /// Take pending outbound messages.
     #[must_use]
     pub fn take_outbox(&self) -> Vec<StreamMessage> {
-        std::mem::take(&mut *self.outbox.lock().unwrap())
+        std::mem::take(&mut *self.outbox.lock().expect("outbox mutex not poisoned"))
     }
 
     /// Queue an outbound message.
     pub fn send(&self, msg: StreamMessage) {
-        self.outbox.lock().unwrap().push(msg);
+        self.outbox
+            .lock()
+            .expect("outbox mutex not poisoned")
+            .push(msg);
     }
 
     /// Get reconnection delay based on current attempts.
     #[must_use]
     pub fn reconnect_delay(&self) -> Duration {
-        let attempts = *self.reconnect_attempts.lock().unwrap();
+        let attempts = *self
+            .reconnect_attempts
+            .lock()
+            .expect("reconnect mutex not poisoned");
         self.config.reconnect.delay_for_attempt(attempts)
     }
 
     /// Increment reconnection attempts.
     pub fn increment_reconnect_attempts(&self) {
-        *self.reconnect_attempts.lock().unwrap() += 1;
+        *self
+            .reconnect_attempts
+            .lock()
+            .expect("reconnect mutex not poisoned") += 1;
     }
 
     /// Reset reconnection attempts.
     pub fn reset_reconnect_attempts(&self) {
-        *self.reconnect_attempts.lock().unwrap() = 0;
+        *self
+            .reconnect_attempts
+            .lock()
+            .expect("reconnect mutex not poisoned") = 0;
     }
 
     /// Check if we should try to reconnect.
     #[must_use]
     pub fn should_reconnect(&self) -> bool {
-        let attempts = *self.reconnect_attempts.lock().unwrap();
+        let attempts = *self
+            .reconnect_attempts
+            .lock()
+            .expect("reconnect mutex not poisoned");
         self.config.reconnect.should_reconnect(attempts)
     }
 
     /// Resubscribe all subscriptions (after reconnect).
     pub fn resubscribe_all(&self) {
-        let subs = self.subscriptions.lock().unwrap().clone();
-        let mut outbox = self.outbox.lock().unwrap();
+        let subs = self
+            .subscriptions
+            .lock()
+            .expect("subscriptions mutex not poisoned")
+            .clone();
+        let mut outbox = self.outbox.lock().expect("outbox mutex not poisoned");
         for sub in subs.values() {
             outbox.push(sub.to_message());
         }
@@ -613,14 +667,26 @@ impl DataStream {
     /// Number of active subscriptions.
     #[must_use]
     pub fn subscription_count(&self) -> usize {
-        self.subscriptions.lock().unwrap().len()
+        self.subscriptions
+            .lock()
+            .expect("subscriptions mutex not poisoned")
+            .len()
     }
 
     /// Clear all subscriptions and cache.
     pub fn clear(&self) {
-        self.subscriptions.lock().unwrap().clear();
-        self.data_cache.lock().unwrap().clear();
-        self.outbox.lock().unwrap().clear();
+        self.subscriptions
+            .lock()
+            .expect("subscriptions mutex not poisoned")
+            .clear();
+        self.data_cache
+            .lock()
+            .expect("cache mutex not poisoned")
+            .clear();
+        self.outbox
+            .lock()
+            .expect("outbox mutex not poisoned")
+            .clear();
     }
 }
 
