@@ -16,6 +16,7 @@ pub mod showcase;
 pub mod websocket;
 
 // Cross-platform modules (work on native for testing)
+pub mod notebook;
 pub mod router;
 pub mod shell_autocomplete;
 pub mod storage;
@@ -33,3 +34,6 @@ pub use showcase::ShowcaseDemo;
 pub use storage::{ScopedStorage, Storage, StorageError, StorageType};
 #[cfg(target_arch = "wasm32")]
 pub use websocket::{WebSocketClient, WebSocketError};
+
+// Notebook runtime
+pub use notebook::{Cell, CellGraph, CellId, CellOutput, NotebookRuntime};

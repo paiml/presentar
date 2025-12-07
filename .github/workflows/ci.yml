@@ -91,3 +91,13 @@ jobs:
 
       - name: Run benchmarks
         run: cargo bench -p presentar-core --no-run
+
+  deny:
+    name: Dependency Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@cargo-deny
+      - name: Check dependencies
+        run: cargo deny check || true
