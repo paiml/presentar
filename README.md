@@ -16,6 +16,22 @@
 
 ---
 
+Presentar provides a WASM-first UI framework for building high-performance visualization and application components. Built on the Sovereign AI Stack, it enables 60fps GPU-accelerated rendering with zero Python dependencies.
+
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [YAML Configuration](#yaml-configuration)
+- [Widgets](#widgets)
+- [Architecture](#architecture)
+- [Testing](#testing)
+- [Documentation](#documentation)
+- [Related Crates](#related-crates)
+- [License](#license)
+- [Contributing](#contributing)
+
 ## Features
 
 - **WASM-First**: Primary target is `wasm32-unknown-unknown`
@@ -88,6 +104,21 @@ make serve
 
 See [docs/specifications/showcase-demo-aprender-shell-apr.md](docs/specifications/showcase-demo-aprender-shell-apr.md) for full specification.
 
+## Widgets
+
+| Widget | Description |
+|--------|-------------|
+| `Button` | Interactive button with hover/press states |
+| `Text` | Text rendering with font configuration |
+| `Container` | Layout container with padding/margins |
+| `Column` | Vertical flex layout |
+| `Row` | Horizontal flex layout |
+| `Checkbox` | Toggle checkbox with label |
+| `TextInput` | Single-line text input field |
+| `Tabs` | Tabbed navigation container |
+| `Grid` | CSS Grid-compatible layout |
+| `Chart` | Data visualization charts |
+
 ## Architecture
 
 ```
@@ -114,6 +145,17 @@ cargo bench -p presentar-core
 
 - [Book](book/) - Comprehensive documentation
 - [API Docs](https://docs.rs/presentar) - Rustdoc API reference
+
+## Related Crates
+
+| Crate | Description |
+|-------|-------------|
+| [`trueno`](https://crates.io/crates/trueno) | SIMD-accelerated tensor operations |
+| [`trueno-viz`](https://crates.io/crates/trueno-viz) | GPU rendering primitives |
+| [`aprender`](https://crates.io/crates/aprender) | Machine learning algorithms |
+| [`presentar-core`](https://crates.io/crates/presentar-core) | Core types and traits |
+| [`presentar-widgets`](https://crates.io/crates/presentar-widgets) | Widget library |
+| [`presentar-layout`](https://crates.io/crates/presentar-layout) | Layout engine |
 
 ## License
 

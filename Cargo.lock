@@ -1191,7 +1191,7 @@ dependencies = [
 
 [[package]]
 name = "presentar"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "bincode",
  "bytemuck",
@@ -1220,7 +1220,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-cli"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "clap",
  "notify",
@@ -1231,7 +1231,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "criterion",
  "proptest",
@@ -1242,7 +1242,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-layout"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "criterion",
  "presentar-core",
@@ -1253,7 +1253,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-test"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "presentar-core",
  "presentar-test-macros",
@@ -1264,7 +1264,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-test-macros"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1273,7 +1273,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-widgets"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "criterion",
  "presentar-core",
@@ -1285,7 +1285,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-yaml"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "presentar-core",
  "proptest",
