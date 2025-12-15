@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2025-12-15
+
+### Changed
+- Updated trueno from v0.7.4 to v0.8.5 (simulation testing framework)
+
+## [0.1.2] - 2025-12-01
+
 ### Added
 - Integration tests directory with end-to-end tests
 - Criterion benchmarks for layout operations
