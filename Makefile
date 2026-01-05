@@ -63,15 +63,11 @@ coverage: ## Generate HTML coverage report
 	@echo "📊 Running coverage analysis..."
 	@echo "🔍 Checking for cargo-llvm-cov..."
 	@which cargo-llvm-cov > /dev/null 2>&1 || (echo "📦 Installing cargo-llvm-cov..." && cargo install cargo-llvm-cov --locked)
-	@echo "⚙️  Temporarily disabling global cargo config (sccache/mold break coverage)..."
-	@test -f ~/.cargo/config.toml && mv ~/.cargo/config.toml ~/.cargo/config.toml.cov-backup || true
 	@echo "🧪 Running tests with coverage instrumentation..."
 	@cargo llvm-cov --workspace --html --quiet || { \
-		test -f ~/.cargo/config.toml.cov-backup && mv ~/.cargo/config.toml.cov-backup ~/.cargo/config.toml; \
 		exit 1; \
 	}
 	@echo "⚙️  Restoring cargo config..."
-	@test -f ~/.cargo/config.toml.cov-backup && mv ~/.cargo/config.toml.cov-backup ~/.cargo/config.toml || true
 	@echo ""
 	@echo "📈 Coverage Summary:"
 	@cargo llvm-cov report --summary-only 2>/dev/null | grep -E "TOTAL|Region|Function|Line" || true
