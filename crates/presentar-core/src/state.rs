@@ -69,7 +69,7 @@ pub enum Command<M> {
     #[default]
     None,
     /// Execute multiple commands
-    Batch(Vec<Command<M>>),
+    Batch(Vec<Self>),
     /// Execute an async task
     Task(Pin<Box<dyn Future<Output = M> + Send>>),
     /// Navigate to a route

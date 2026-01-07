@@ -16,9 +16,9 @@ pub enum Value {
     /// String value
     String(String),
     /// Array of values
-    Array(Vec<Value>),
+    Array(Vec<Self>),
     /// Object (key-value map)
-    Object(HashMap<String, Value>),
+    Object(HashMap<String, Self>),
 }
 
 impl Value {

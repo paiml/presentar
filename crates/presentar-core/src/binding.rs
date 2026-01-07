@@ -496,7 +496,7 @@ pub enum ActionBinding {
     /// Execute multiple actions
     Batch {
         /// Actions to execute
-        actions: Vec<ActionBinding>,
+        actions: Vec<Self>,
     },
 }
 

@@ -42,7 +42,7 @@ pub enum MenuItem {
         /// Submenu label
         label: String,
         /// Child items
-        items: Vec<MenuItem>,
+        items: Vec<Self>,
         /// Whether disabled
         disabled: bool,
     },

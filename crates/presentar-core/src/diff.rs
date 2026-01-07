@@ -50,7 +50,7 @@ pub struct DiffNode {
     /// Widget properties hash (for detecting changes)
     pub props_hash: u64,
     /// Child nodes
-    pub children: Vec<DiffNode>,
+    pub children: Vec<Self>,
     /// Position in parent's children list
     pub index: usize,
 }

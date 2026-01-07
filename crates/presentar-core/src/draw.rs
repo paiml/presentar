@@ -320,7 +320,7 @@ pub enum DrawCommand {
     /// Group of commands with transform
     Group {
         /// Child commands
-        children: Vec<DrawCommand>,
+        children: Vec<Self>,
         /// Transform to apply
         transform: Transform2D,
     },
@@ -330,7 +330,7 @@ pub enum DrawCommand {
         /// Clip bounds
         bounds: Rect,
         /// Child command
-        child: Box<DrawCommand>,
+        child: Box<Self>,
     },
 
     /// Apply opacity
@@ -338,7 +338,7 @@ pub enum DrawCommand {
         /// Alpha value (0.0 - 1.0)
         alpha: f32,
         /// Child command
-        child: Box<DrawCommand>,
+        child: Box<Self>,
     },
 }
 
