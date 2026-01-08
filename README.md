@@ -23,6 +23,8 @@ Presentar provides a WASM-first UI framework for building high-performance visua
 - [Features](#features)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [Brick Architecture](#brick-architecture-probar-spec-009)
+- [Examples](#examples)
 - [YAML Configuration](#yaml-configuration)
 - [Widgets](#widgets)
 - [Architecture](#architecture)
@@ -75,6 +77,10 @@ let size = ui.measure(&constraints);
 
 ## Brick Architecture (PROBAR-SPEC-009)
 
+<p align="center">
+  <img src=".github/presentar-brick-hero.svg" alt="Brick Computer - SIMD Visualization" width="800">
+</p>
+
 All widgets implement the `Brick` trait, enforcing "tests define interface":
 
 ```rust
@@ -100,6 +106,61 @@ println!("Can render: {}", button.can_render());
 - Widgets declare their contracts as falsifiable assertions
 - Verification happens before rendering, not after bugs ship
 - Performance budgets are enforced at the framework level
+
+### SIMD Visualization Demo
+
+The `brick_computer` example demonstrates Brick Architecture with SIMD lane visualization:
+
+```bash
+cargo run --example brick_computer -p presentar
+```
+
+**Visual Features (trueno-viz polish):**
+- 8 SIMD lanes as colored bricks (green=success, yellow=warning, gray=idle)
+- True-color ANSI with perceptually distinct status colors
+- Unicode box drawing (╭╮╰╯│─) for professional TUI panels
+- Block characters (█▓░) for budget utilization meters
+- Braille sparklines (⣀⣄⣤⣦⣶⣷⣿⡿) for history visualization
+- Real-time throughput, latency, and operation metrics
+- JIDOKA verification status: rendering blocked if any brick fails
+
+```
+╭─ SIMD LANES (AVX-256) ───────────────────╮╭─ PERFORMANCE ─────────────╮
+│ ████  ████  ████  ████  ████  ▓▓▓▓  ▓▓▓▓  ░░░░ ││ Throughput:  80,000 ops/s │
+│  0     1     2     3     4     5     6     7   ││ Avg Latency:      85 μs   │
+│ 50μs  60μs  70μs  80μs  90μs 110μs 120μs idle ││ Total Ops:   1,024,000    │
+╰──────────────────────────────────────────╯╰────────────────────────────╯
+╭─ BUDGET UTILIZATION ─────────────────────────────────────────────────╮
+│ Frame ████████████████░░░░░░░░░░░░░░░░░░░░  40.2% (healthy)         │
+│ History: ⣀⣄⣤⣦⣶⣷⣿⡿⣿⣷⣶⣦⣤⣄⣀⣄⣤⣦⣶⣷⣿⡿⣿⣷⣶⣦⣤⣄⣀⣄⣤⣦⣶⣷⣿⡿⣿⣷⣶⣦⣤         │
+╰──────────────────────────────────────────────────────────────────────╯
+╭─ BRICK VERIFICATION ─────────────────────────────────────────────────╮
+│ ● ALL BRICKS LIT - JIDOKA: Render allowed                            │
+╰──────────────────────────────────────────────────────────────────────╯
+```
+
+## Examples
+
+Run examples with `cargo run --example <name> -p presentar`:
+
+| Example | Description |
+|---------|-------------|
+| `brick_computer` | SIMD visualization with bricks lighting up - trueno-viz polish |
+| `dashboard` | Full dashboard with charts, metrics, and navigation |
+| `cht_sparkline` | Compact sparkline charts for inline metrics |
+| `cht_heatmap_basic` | Heatmap visualization |
+| `cht_donut` | Donut/pie chart |
+| `cht_scatter_bubble` | Scatter plots with bubble sizing |
+| `hello_world` | Minimal widget tree example |
+| `visual_demo` | Widget gallery demonstrating all components |
+| `showcase_shell` | Shell autocomplete demo (WASM) |
+
+**Dashboard Categories:**
+- `dsh_*` - Dashboard examples (alerts, infrastructure, performance, pipeline, research)
+- `cht_*` - Chart examples (sparkline, heatmap, donut, boxplot, scatter)
+- `edg_*` - Edge case testing (a11y, unicode, RTL, high cardinality, memory soak)
+- `apr_*` - APR model visualization (architecture, weights, version history)
+- `ald_*` - ALD data pipeline (lineage, correlation, batch upload)
 
 ## YAML Configuration
 
