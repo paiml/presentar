@@ -12,10 +12,15 @@ rust-version.workspace = true
 serde = { workspace = true }
 serde_json = { workspace = true }
 trueno = { workspace = true, optional = true }
+# Brick Architecture: Tests define interface (PROBAR-SPEC-009)
+jugar-probar = { path = "/home/noah/src/probar/crates/probar", default-features = false, optional = true }
 
 [features]
 default = ["simd"]
 simd = ["dep:trueno"]
+# Brick Architecture: Tests define interface (PROBAR-SPEC-009)
+# Enable this to require all Widgets to implement Brick trait
+brick = ["dep:jugar-probar"]
 
 [dev-dependencies]
 proptest = { workspace = true }

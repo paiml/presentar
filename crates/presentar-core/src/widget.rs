@@ -3,13 +3,23 @@
 //! This module defines the core `Widget` trait and supporting types for building
 //! UI components in Presentar.
 //!
-//! # Widget Lifecycle
+//! # Widget Lifecycle (Brick Architecture - PROBAR-SPEC-009)
 //!
-//! Widgets follow a measure-layout-paint cycle:
+//! Widgets follow a verify-measure-layout-paint cycle:
 //!
-//! 1. **Measure**: Compute intrinsic size given constraints
-//! 2. **Layout**: Position self and children within allocated bounds
-//! 3. **Paint**: Generate draw commands for rendering
+//! 1. **Verify**: Check all Brick assertions pass (Popperian falsification)
+//! 2. **Measure**: Compute intrinsic size given constraints
+//! 3. **Layout**: Position self and children within allocated bounds
+//! 4. **Paint**: Generate draw commands for rendering (only if verified)
+//!
+//! # Brick Integration
+//!
+//! When the `brick` feature is enabled, all Widgets must implement the `Brick`
+//! trait from `jugar_probar`. This enforces the "tests define interface" philosophy:
+//!
+//! - Assertions are verified before every paint
+//! - Budget violations trigger Jidoka (stop-the-line)
+//! - Rendering is blocked if any assertion fails
 //!
 //! # Examples
 //!
@@ -35,6 +45,13 @@ use crate::event::Event;
 use crate::geometry::{Rect, Size};
 use serde::{Deserialize, Serialize};
 use std::any::Any;
+
+// Re-export Brick types when feature is enabled
+#[cfg(feature = "brick")]
+pub use jugar_probar::brick::{
+    Brick, BrickAssertion, BrickBudget, BrickError, BrickPhase, BrickResult, BrickVerification,
+    BudgetViolation,
+};
 
 /// Unique identifier for a widget instance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -69,10 +86,84 @@ pub struct LayoutResult {
 
 /// Core widget trait that all UI elements implement.
 ///
-/// Widgets follow a measure-layout-paint cycle:
-/// 1. `measure`: Compute intrinsic size given constraints
-/// 2. `layout`: Position self and children within allocated bounds
-/// 3. `paint`: Generate draw commands
+/// # Brick Architecture (PROBAR-SPEC-009)
+///
+/// When the `brick` feature is enabled, Widget requires the `Brick` trait,
+/// enforcing the "tests define interface" philosophy:
+///
+/// - Every Widget has assertions that define its contract
+/// - Every Widget has a performance budget
+/// - Rendering is blocked if assertions fail (Popperian falsification)
+///
+/// # Lifecycle
+///
+/// 1. `verify`: Check Brick assertions (when `brick` feature enabled)
+/// 2. `measure`: Compute intrinsic size given constraints
+/// 3. `layout`: Position self and children within allocated bounds
+/// 4. `paint`: Generate draw commands (only if verified)
+#[cfg(feature = "brick")]
+pub trait Widget: Brick + Send + Sync {
+    /// Get the type identifier for this widget type.
+    fn type_id(&self) -> TypeId;
+
+    /// Compute intrinsic size constraints.
+    fn measure(&self, constraints: Constraints) -> Size;
+
+    /// Position children within allocated bounds.
+    fn layout(&mut self, bounds: Rect) -> LayoutResult;
+
+    /// Generate draw commands for rendering.
+    ///
+    /// # Panics
+    ///
+    /// Panics if called when `can_render()` returns false (Brick verification failed).
+    fn paint(&self, canvas: &mut dyn Canvas);
+
+    /// Handle input events.
+    fn event(&mut self, event: &Event) -> Option<Box<dyn Any + Send>>;
+
+    /// Get child widgets for tree traversal.
+    fn children(&self) -> &[Box<dyn Widget>];
+
+    /// Get mutable child widgets.
+    fn children_mut(&mut self) -> &mut [Box<dyn Widget>];
+
+    /// Check if this widget is interactive (can receive focus/events).
+    fn is_interactive(&self) -> bool {
+        false
+    }
+
+    /// Check if this widget can receive keyboard focus.
+    fn is_focusable(&self) -> bool {
+        false
+    }
+
+    /// Get the accessible name for screen readers.
+    fn accessible_name(&self) -> Option<&str> {
+        None
+    }
+
+    /// Get the accessible role.
+    fn accessible_role(&self) -> AccessibleRole {
+        AccessibleRole::Generic
+    }
+
+    /// Get the test ID for this widget (if any).
+    fn test_id(&self) -> Option<&str> {
+        None
+    }
+
+    /// Get the current bounds of this widget.
+    fn bounds(&self) -> Rect {
+        Rect::new(0.0, 0.0, 0.0, 0.0)
+    }
+}
+
+/// Core widget trait (non-Brick version for backwards compatibility).
+///
+/// When the `brick` feature is disabled, Widget does not require Brick.
+/// This is for backwards compatibility only - new code should use the Brick-enabled version.
+#[cfg(not(feature = "brick"))]
 pub trait Widget: Send + Sync {
     /// Get the type identifier for this widget type.
     fn type_id(&self) -> TypeId;
