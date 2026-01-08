@@ -242,4 +242,106 @@ mod tests {
         let brick = SimpleBrick::new("TestBrick");
         assert!(brick.verify_for_render().is_ok());
     }
+
+    #[test]
+    fn test_simple_brick_with_custom_verify_pass() {
+        let brick = SimpleBrick::new("TestBrick").with_custom_verify(|| true);
+        let verification = brick.verify();
+        assert!(verification.is_valid());
+        assert!(verification.failed.is_empty());
+    }
+
+    #[test]
+    fn test_simple_brick_with_custom_verify_fail() {
+        let brick = SimpleBrick::new("TestBrick").with_custom_verify(|| false);
+        let verification = brick.verify();
+        assert!(!verification.is_valid());
+        assert_eq!(verification.failed.len(), 1);
+        assert!(verification.failed[0]
+            .1
+            .contains("Custom verification failed"));
+    }
+
+    #[test]
+    fn test_simple_brick_to_html() {
+        let brick = SimpleBrick::new("MyWidget");
+        let html = brick.to_html();
+        assert!(html.contains("brick-MyWidget"));
+        assert!(html.starts_with("<div"));
+    }
+
+    #[test]
+    fn test_simple_brick_to_css() {
+        let brick = SimpleBrick::new("MyWidget");
+        let css = brick.to_css();
+        assert!(css.contains(".brick-MyWidget"));
+        assert!(css.contains("display: block"));
+    }
+
+    #[test]
+    fn test_default_brick_to_html() {
+        let brick = DefaultBrick;
+        assert!(brick.to_html().is_empty());
+    }
+
+    #[test]
+    fn test_default_brick_to_css() {
+        let brick = DefaultBrick;
+        assert!(brick.to_css().is_empty());
+    }
+
+    #[test]
+    fn test_default_brick_assertions_empty() {
+        let brick = DefaultBrick;
+        assert!(brick.assertions().is_empty());
+    }
+
+    #[test]
+    fn test_default_brick_budget() {
+        let brick = DefaultBrick;
+        assert_eq!(brick.budget().total_ms, 16);
+    }
+
+    #[test]
+    fn test_default_brick_verify() {
+        let brick = DefaultBrick;
+        let verification = brick.verify();
+        assert!(verification.passed.is_empty());
+        assert!(verification.failed.is_empty());
+    }
+
+    #[test]
+    fn test_verify_for_render_with_custom_fail() {
+        let brick = SimpleBrick::new("FailBrick").with_custom_verify(|| false);
+        let result = brick.verify_for_render();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("FailBrick"));
+        assert!(err.contains("failed verification"));
+    }
+
+    #[test]
+    fn test_simple_brick_clone() {
+        let brick = SimpleBrick::new("CloneTest")
+            .with_assertion(BrickAssertion::TextVisible)
+            .with_budget(BrickBudget::uniform(32));
+        let cloned = brick.clone();
+        assert_eq!(cloned.brick_name(), brick.brick_name());
+        assert_eq!(cloned.assertions().len(), brick.assertions().len());
+    }
+
+    #[test]
+    fn test_simple_brick_debug() {
+        let brick = SimpleBrick::new("DebugTest");
+        let debug = format!("{brick:?}");
+        assert!(debug.contains("SimpleBrick"));
+        assert!(debug.contains("DebugTest"));
+    }
+
+    #[test]
+    fn test_default_brick_copy() {
+        let brick = DefaultBrick;
+        let copied = brick;
+        assert_eq!(copied.brick_name(), brick.brick_name());
+    }
 }
