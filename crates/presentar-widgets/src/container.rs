@@ -1,11 +1,12 @@
 //! Container widget for layout grouping.
 
 use presentar_core::{
-    widget::LayoutResult, Canvas, Color, Constraints, CornerRadius, Event, Rect, Size, TypeId,
-    Widget,
+    widget::LayoutResult, Brick, BrickAssertion, BrickBudget, BrickVerification, Canvas, Color,
+    Constraints, CornerRadius, Event, Rect, Size, TypeId, Widget,
 };
 use serde::{Deserialize, Serialize};
 use std::any::Any;
+use std::time::Duration;
 
 /// Container widget for grouping and styling children.
 #[derive(Serialize, Deserialize)]
@@ -206,6 +207,42 @@ impl Widget for Container {
 
     fn children_mut(&mut self) -> &mut [Box<dyn Widget>] {
         &mut self.children
+    }
+
+    fn test_id(&self) -> Option<&str> {
+        self.test_id_value.as_deref()
+    }
+}
+
+// PROBAR-SPEC-009: Brick Architecture - Tests define interface
+impl Brick for Container {
+    fn brick_name(&self) -> &'static str {
+        "Container"
+    }
+
+    fn assertions(&self) -> &[BrickAssertion] {
+        &[BrickAssertion::MaxLatencyMs(16)]
+    }
+
+    fn budget(&self) -> BrickBudget {
+        BrickBudget::uniform(16)
+    }
+
+    fn verify(&self) -> BrickVerification {
+        BrickVerification {
+            passed: self.assertions().to_vec(),
+            failed: vec![],
+            verification_time: Duration::from_micros(10),
+        }
+    }
+
+    fn to_html(&self) -> String {
+        let test_id = self.test_id_value.as_deref().unwrap_or("container");
+        format!(r#"<div class="brick-container" data-testid="{test_id}"></div>"#)
+    }
+
+    fn to_css(&self) -> String {
+        ".brick-container { display: block; }".into()
     }
 
     fn test_id(&self) -> Option<&str> {

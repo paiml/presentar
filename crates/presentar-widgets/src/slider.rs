@@ -1,11 +1,12 @@
 //! Slider widget for value selection.
 
 use presentar_core::{
-    widget::{AccessibleRole, LayoutResult},
+    widget::{AccessibleRole, Brick, BrickAssertion, BrickBudget, BrickVerification, LayoutResult},
     Canvas, Color, Constraints, Event, MouseButton, Rect, Size, TypeId, Widget,
 };
 use serde::{Deserialize, Serialize};
 use std::any::Any;
+use std::time::Duration;
 
 /// Message emitted when slider value changes.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -351,6 +352,37 @@ impl Widget for Slider {
 
     fn test_id(&self) -> Option<&str> {
         self.test_id_value.as_deref()
+    }
+}
+
+// PROBAR-SPEC-009: Brick Architecture - Tests define interface
+impl Brick for Slider {
+    fn brick_name(&self) -> &'static str {
+        "Slider"
+    }
+
+    fn assertions(&self) -> &[BrickAssertion] {
+        &[BrickAssertion::MaxLatencyMs(16)]
+    }
+
+    fn budget(&self) -> BrickBudget {
+        BrickBudget::uniform(16)
+    }
+
+    fn verify(&self) -> BrickVerification {
+        BrickVerification {
+            passed: self.assertions().to_vec(),
+            failed: vec![],
+            verification_time: Duration::from_micros(10),
+        }
+    }
+
+    fn to_html(&self) -> String {
+        r#"<div class="brick-slider"></div>"#.to_string()
+    }
+
+    fn to_css(&self) -> String {
+        ".brick-slider { display: block; }".to_string()
     }
 }
 

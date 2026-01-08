@@ -299,6 +299,36 @@ mod tests {
         }
     }
 
+    impl Brick for MockWidget {
+        fn brick_name(&self) -> &'static str {
+            "MockWidget"
+        }
+
+        fn assertions(&self) -> &[BrickAssertion] {
+            &[]
+        }
+
+        fn budget(&self) -> BrickBudget {
+            BrickBudget::uniform(16)
+        }
+
+        fn verify(&self) -> BrickVerification {
+            BrickVerification {
+                passed: vec![],
+                failed: vec![],
+                verification_time: Duration::from_micros(1),
+            }
+        }
+
+        fn to_html(&self) -> String {
+            String::new()
+        }
+
+        fn to_css(&self) -> String {
+            String::new()
+        }
+    }
+
     impl Widget for MockWidget {
         fn type_id(&self) -> TypeId {
             TypeId::of::<Self>()

@@ -3,9 +3,13 @@
 //! These tests verify the layout engine works correctly with widget trees.
 
 use presentar_core::widget::{AccessibleRole, LayoutResult};
-use presentar_core::{Canvas, Constraints, Event, Rect, Size, TypeId, Widget};
+use presentar_core::{
+    Brick, BrickAssertion, BrickBudget, BrickVerification, Canvas, Constraints, Event, Rect, Size,
+    TypeId, Widget,
+};
 use presentar_layout::LayoutEngine;
 use std::any::Any;
+use std::time::Duration;
 
 // =============================================================================
 // Test Widgets
@@ -28,6 +32,36 @@ impl Box {
     fn with_child(mut self, child: impl Widget + 'static) -> Self {
         self.children.push(std::boxed::Box::new(child));
         self
+    }
+}
+
+impl Brick for Box {
+    fn brick_name(&self) -> &'static str {
+        "Box"
+    }
+
+    fn assertions(&self) -> &[BrickAssertion] {
+        &[]
+    }
+
+    fn budget(&self) -> BrickBudget {
+        BrickBudget::uniform(16)
+    }
+
+    fn verify(&self) -> BrickVerification {
+        BrickVerification {
+            passed: vec![],
+            failed: vec![],
+            verification_time: Duration::from_micros(1),
+        }
+    }
+
+    fn to_html(&self) -> String {
+        String::new()
+    }
+
+    fn to_css(&self) -> String {
+        String::new()
     }
 }
 
@@ -78,6 +112,36 @@ impl Flexible {
             flex,
             children: Vec::new(),
         }
+    }
+}
+
+impl Brick for Flexible {
+    fn brick_name(&self) -> &'static str {
+        "Flexible"
+    }
+
+    fn assertions(&self) -> &[BrickAssertion] {
+        &[]
+    }
+
+    fn budget(&self) -> BrickBudget {
+        BrickBudget::uniform(16)
+    }
+
+    fn verify(&self) -> BrickVerification {
+        BrickVerification {
+            passed: vec![],
+            failed: vec![],
+            verification_time: Duration::from_micros(1),
+        }
+    }
+
+    fn to_html(&self) -> String {
+        String::new()
+    }
+
+    fn to_css(&self) -> String {
+        String::new()
     }
 }
 

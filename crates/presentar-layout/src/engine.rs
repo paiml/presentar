@@ -196,8 +196,11 @@ impl LayoutEngine {
 mod tests {
     use super::*;
     use presentar_core::widget::{AccessibleRole, LayoutResult};
-    use presentar_core::{Canvas, Event, TypeId};
+    use presentar_core::{
+        Brick, BrickAssertion, BrickBudget, BrickVerification, Canvas, Event, TypeId,
+    };
     use std::any::Any;
+    use std::time::Duration;
 
     // Test widget for layout testing
     struct TestWidget {
@@ -216,6 +219,36 @@ mod tests {
         fn with_child(mut self, child: TestWidget) -> Self {
             self.children.push(Box::new(child));
             self
+        }
+    }
+
+    impl Brick for TestWidget {
+        fn brick_name(&self) -> &'static str {
+            "TestWidget"
+        }
+
+        fn assertions(&self) -> &[BrickAssertion] {
+            &[]
+        }
+
+        fn budget(&self) -> BrickBudget {
+            BrickBudget::uniform(16)
+        }
+
+        fn verify(&self) -> BrickVerification {
+            BrickVerification {
+                passed: vec![],
+                failed: vec![],
+                verification_time: Duration::from_micros(1),
+            }
+        }
+
+        fn to_html(&self) -> String {
+            String::new()
+        }
+
+        fn to_css(&self) -> String {
+            String::new()
         }
     }
 

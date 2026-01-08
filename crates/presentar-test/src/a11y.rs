@@ -1385,6 +1385,36 @@ mod tests {
         }
     }
 
+    impl Brick for MockButton {
+        fn brick_name(&self) -> &'static str {
+            "MockButton"
+        }
+
+        fn assertions(&self) -> &[BrickAssertion] {
+            &[]
+        }
+
+        fn budget(&self) -> BrickBudget {
+            BrickBudget::uniform(16)
+        }
+
+        fn verify(&self) -> BrickVerification {
+            BrickVerification {
+                passed: vec![],
+                failed: vec![],
+                verification_time: Duration::from_micros(1),
+            }
+        }
+
+        fn to_html(&self) -> String {
+            String::new()
+        }
+
+        fn to_css(&self) -> String {
+            String::new()
+        }
+    }
+
     impl Widget for MockButton {
         fn type_id(&self) -> TypeId {
             TypeId::of::<Self>()
@@ -1816,6 +1846,36 @@ mod tests {
         }
     }
 
+    impl Brick for MockLabel {
+        fn brick_name(&self) -> &'static str {
+            "MockLabel"
+        }
+
+        fn assertions(&self) -> &[BrickAssertion] {
+            &[]
+        }
+
+        fn budget(&self) -> BrickBudget {
+            BrickBudget::uniform(16)
+        }
+
+        fn verify(&self) -> BrickVerification {
+            BrickVerification {
+                passed: vec![],
+                failed: vec![],
+                verification_time: Duration::from_micros(1),
+            }
+        }
+
+        fn to_html(&self) -> String {
+            String::new()
+        }
+
+        fn to_css(&self) -> String {
+            String::new()
+        }
+    }
+
     impl Widget for MockLabel {
         fn type_id(&self) -> TypeId {
             TypeId::of::<Self>()
@@ -1861,6 +1921,36 @@ mod tests {
 
     // Mock generic widget that returns Generic role
     struct MockGenericWidget;
+
+    impl Brick for MockGenericWidget {
+        fn brick_name(&self) -> &'static str {
+            "MockGenericWidget"
+        }
+
+        fn assertions(&self) -> &[BrickAssertion] {
+            &[]
+        }
+
+        fn budget(&self) -> BrickBudget {
+            BrickBudget::uniform(16)
+        }
+
+        fn verify(&self) -> BrickVerification {
+            BrickVerification {
+                passed: vec![],
+                failed: vec![],
+                verification_time: Duration::from_micros(1),
+            }
+        }
+
+        fn to_html(&self) -> String {
+            String::new()
+        }
+
+        fn to_css(&self) -> String {
+            String::new()
+        }
+    }
 
     impl Widget for MockGenericWidget {
         fn type_id(&self) -> TypeId {
@@ -1985,6 +2075,36 @@ mod tests {
         fn with_alt(mut self, alt: &str) -> Self {
             self.alt_text = Some(alt.to_string());
             self
+        }
+    }
+
+    impl Brick for MockImage {
+        fn brick_name(&self) -> &'static str {
+            "MockImage"
+        }
+
+        fn assertions(&self) -> &[BrickAssertion] {
+            &[]
+        }
+
+        fn budget(&self) -> BrickBudget {
+            BrickBudget::uniform(16)
+        }
+
+        fn verify(&self) -> BrickVerification {
+            BrickVerification {
+                passed: vec![],
+                failed: vec![],
+                verification_time: Duration::from_micros(1),
+            }
+        }
+
+        fn to_html(&self) -> String {
+            String::new()
+        }
+
+        fn to_css(&self) -> String {
+            String::new()
         }
     }
 

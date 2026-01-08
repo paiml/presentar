@@ -3,7 +3,7 @@
 use super::canvas2d::Canvas2DRenderer;
 use super::events::{keyboard_event_to_presentar, mouse_event_to_presentar};
 use presentar_core::draw::DrawCommand;
-use presentar_core::{Constraints, Event, RecordingCanvas, Rect, Size, Widget};
+use presentar_core::{Brick, Constraints, Event, RecordingCanvas, Rect, Size, Widget};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{window, HtmlCanvasElement, KeyboardEvent, MouseEvent};
@@ -179,7 +179,28 @@ impl App {
 
 impl App {
     /// Render a widget tree (internal Rust API).
+    ///
+    /// # PROBAR-SPEC-009: Brick Architecture Enforcement
+    ///
+    /// This function enforces the Brick Architecture by calling `can_render()`
+    /// before `paint()`. If verification fails, rendering is blocked (JIDOKA).
     fn render_widget_internal<W: Widget>(&self, widget: &mut W) {
+        // PROBAR-SPEC-009: Verify Brick assertions before rendering
+        if !widget.can_render() {
+            let verification = widget.verify();
+            let errors: Vec<String> = verification
+                .failed
+                .iter()
+                .map(|(assertion, reason)| format!("{:?}: {}", assertion, reason))
+                .collect();
+            web_sys::console::error_1(&wasm_bindgen::JsValue::from_str(&format!(
+                "JIDOKA: Brick '{}' failed verification - rendering blocked: {}",
+                widget.brick_name(),
+                errors.join(", ")
+            )));
+            return; // Block rendering if verification fails
+        }
+
         let constraints = Constraints::loose(Size::new(self.width, self.height));
         let size = widget.measure(constraints);
         let bounds = Rect::new(0.0, 0.0, size.width, size.height);

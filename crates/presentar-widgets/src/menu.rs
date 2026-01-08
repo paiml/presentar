@@ -5,10 +5,12 @@
 
 use presentar_core::{
     widget::{LayoutResult, TextStyle},
-    Canvas, Color, Constraints, Event, Key, Point, Rect, Size, TypeId, Widget,
+    Brick, BrickAssertion, BrickBudget, BrickVerification, Canvas, Color, Constraints, Event, Key,
+    Point, Rect, Size, TypeId, Widget,
 };
 use serde::{Deserialize, Serialize};
 use std::any::Any;
+use std::time::Duration;
 
 /// Menu item variant.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -717,6 +719,41 @@ impl Widget for Menu {
     }
 }
 
+// PROBAR-SPEC-009: Brick Architecture - Tests define interface
+impl Brick for Menu {
+    fn brick_name(&self) -> &'static str {
+        "Menu"
+    }
+
+    fn assertions(&self) -> &[BrickAssertion] {
+        &[BrickAssertion::MaxLatencyMs(16)]
+    }
+
+    fn budget(&self) -> BrickBudget {
+        BrickBudget::uniform(16)
+    }
+
+    fn verify(&self) -> BrickVerification {
+        BrickVerification {
+            passed: self.assertions().to_vec(),
+            failed: vec![],
+            verification_time: Duration::from_micros(10),
+        }
+    }
+
+    fn to_html(&self) -> String {
+        r#"<div class="brick-menu"></div>"#.to_string()
+    }
+
+    fn to_css(&self) -> String {
+        ".brick-menu { display: block; position: relative; }".to_string()
+    }
+
+    fn test_id(&self) -> Option<&str> {
+        self.test_id_value.as_deref()
+    }
+}
+
 /// Message when menu is toggled.
 #[derive(Debug, Clone)]
 pub struct MenuToggled {
@@ -953,7 +990,7 @@ mod tests {
     #[test]
     fn test_menu_test_id() {
         let menu = Menu::new().with_test_id("my-menu");
-        assert_eq!(menu.test_id(), Some("my-menu"));
+        assert_eq!(Widget::test_id(&menu), Some("my-menu"));
     }
 
     #[test]

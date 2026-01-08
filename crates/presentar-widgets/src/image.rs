@@ -2,10 +2,12 @@
 
 use presentar_core::{
     widget::{AccessibleRole, LayoutResult},
-    Canvas, Constraints, Event, Rect, Size, TypeId, Widget,
+    Brick, BrickAssertion, BrickBudget, BrickVerification, Canvas, Constraints, Event, Rect, Size,
+    TypeId, Widget,
 };
 use serde::{Deserialize, Serialize};
 use std::any::Any;
+use std::time::Duration;
 
 /// How the image should be scaled to fit its container.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -305,6 +307,44 @@ impl Widget for Image {
 
     fn accessible_role(&self) -> AccessibleRole {
         AccessibleRole::Image
+    }
+
+    fn test_id(&self) -> Option<&str> {
+        self.test_id_value.as_deref()
+    }
+}
+
+// PROBAR-SPEC-009: Brick Architecture - Tests define interface
+impl Brick for Image {
+    fn brick_name(&self) -> &'static str {
+        "Image"
+    }
+
+    fn assertions(&self) -> &[BrickAssertion] {
+        &[BrickAssertion::MaxLatencyMs(16)]
+    }
+
+    fn budget(&self) -> BrickBudget {
+        BrickBudget::uniform(16)
+    }
+
+    fn verify(&self) -> BrickVerification {
+        BrickVerification {
+            passed: self.assertions().to_vec(),
+            failed: vec![],
+            verification_time: Duration::from_micros(10),
+        }
+    }
+
+    fn to_html(&self) -> String {
+        format!(
+            r#"<img class="brick-image" src="{}" alt="{}" />"#,
+            self.source, self.alt
+        )
+    }
+
+    fn to_css(&self) -> String {
+        ".brick-image { display: block; }".to_string()
     }
 
     fn test_id(&self) -> Option<&str> {

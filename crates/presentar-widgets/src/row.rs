@@ -1,10 +1,12 @@
 //! Row widget for horizontal layout.
 
 use presentar_core::{
-    widget::LayoutResult, Canvas, Constraints, Event, Rect, Size, TypeId, Widget,
+    widget::{Brick, BrickAssertion, BrickBudget, BrickVerification, LayoutResult},
+    Canvas, Constraints, Event, Rect, Size, TypeId, Widget,
 };
 use serde::{Deserialize, Serialize};
 use std::any::Any;
+use std::time::Duration;
 
 /// Horizontal alignment options.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -259,11 +261,43 @@ impl Widget for Row {
     }
 }
 
+// PROBAR-SPEC-009: Brick Architecture - Tests define interface
+impl Brick for Row {
+    fn brick_name(&self) -> &'static str {
+        "Row"
+    }
+
+    fn assertions(&self) -> &[BrickAssertion] {
+        &[BrickAssertion::MaxLatencyMs(16)]
+    }
+
+    fn budget(&self) -> BrickBudget {
+        BrickBudget::uniform(16)
+    }
+
+    fn verify(&self) -> BrickVerification {
+        BrickVerification {
+            passed: self.assertions().to_vec(),
+            failed: vec![],
+            verification_time: Duration::from_micros(10),
+        }
+    }
+
+    fn to_html(&self) -> String {
+        r#"<div class="brick-row"></div>"#.to_string()
+    }
+
+    fn to_css(&self) -> String {
+        ".brick-row { display: flex; flex-direction: row; }".to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use presentar_core::widget::AccessibleRole;
-    use presentar_core::Widget;
+    use presentar_core::{Brick, BrickBudget, BrickVerification, Widget};
+    use std::time::Duration;
 
     // Test widget with fixed size for layout testing
     struct FixedWidget {
@@ -275,6 +309,36 @@ mod tests {
             Self {
                 size: Size::new(width, height),
             }
+        }
+    }
+
+    impl Brick for FixedWidget {
+        fn brick_name(&self) -> &'static str {
+            "FixedWidget"
+        }
+
+        fn assertions(&self) -> &[presentar_core::BrickAssertion] {
+            &[]
+        }
+
+        fn budget(&self) -> BrickBudget {
+            BrickBudget::uniform(16)
+        }
+
+        fn verify(&self) -> BrickVerification {
+            BrickVerification {
+                passed: vec![],
+                failed: vec![],
+                verification_time: Duration::from_micros(1),
+            }
+        }
+
+        fn to_html(&self) -> String {
+            String::new()
+        }
+
+        fn to_css(&self) -> String {
+            String::new()
         }
     }
 

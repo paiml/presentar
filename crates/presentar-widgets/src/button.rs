@@ -2,11 +2,12 @@
 
 use presentar_core::{
     widget::{AccessibleRole, FontWeight, LayoutResult, TextStyle},
-    Canvas, Color, Constraints, CornerRadius, Event, MouseButton, Point, Rect, Size, TypeId,
-    Widget,
+    Brick, BrickAssertion, BrickBudget, BrickVerification, Canvas, Color, Constraints,
+    CornerRadius, Event, MouseButton, Point, Rect, Size, TypeId, Widget,
 };
 use serde::{Deserialize, Serialize};
 use std::any::Any;
+use std::time::Duration;
 
 /// Button widget with label and click handling.
 #[derive(Clone, Serialize, Deserialize)]
@@ -285,6 +286,95 @@ impl Widget for Button {
 
     fn accessible_role(&self) -> AccessibleRole {
         AccessibleRole::Button
+    }
+
+    fn test_id(&self) -> Option<&str> {
+        self.test_id_value.as_deref()
+    }
+}
+
+// PROBAR-SPEC-009: Brick Architecture - Tests define interface
+impl Brick for Button {
+    fn brick_name(&self) -> &'static str {
+        "Button"
+    }
+
+    fn assertions(&self) -> &[BrickAssertion] {
+        // Button must have visible text and adequate contrast
+        &[
+            BrickAssertion::TextVisible,
+            BrickAssertion::ContrastRatio(4.5), // WCAG AA
+        ]
+    }
+
+    fn budget(&self) -> BrickBudget {
+        BrickBudget::uniform(16) // 60fps
+    }
+
+    fn verify(&self) -> BrickVerification {
+        let mut passed = Vec::new();
+        let mut failed = Vec::new();
+
+        // Verify text contrast
+        let bg = self.current_background();
+        let contrast = bg.contrast_ratio(&self.text_color);
+        if contrast >= 4.5 {
+            passed.push(BrickAssertion::ContrastRatio(4.5));
+        } else {
+            failed.push((
+                BrickAssertion::ContrastRatio(4.5),
+                format!("Contrast ratio {contrast:.2}:1 < 4.5:1"),
+            ));
+        }
+
+        // Text visibility
+        if self.label.is_empty() {
+            failed.push((BrickAssertion::TextVisible, "Button has no label".into()));
+        } else {
+            passed.push(BrickAssertion::TextVisible);
+        }
+
+        BrickVerification {
+            passed,
+            failed,
+            verification_time: Duration::from_micros(10),
+        }
+    }
+
+    fn to_html(&self) -> String {
+        let disabled = if self.disabled { " disabled" } else { "" };
+        let test_id = self.test_id_value.as_deref().unwrap_or("button");
+        format!(
+            r#"<button class="brick-button" data-testid="{}" aria-label="{}"{}>{}</button>"#,
+            test_id,
+            self.accessible_name.as_deref().unwrap_or(&self.label),
+            disabled,
+            self.label
+        )
+    }
+
+    fn to_css(&self) -> String {
+        format!(
+            r".brick-button {{
+    background: {};
+    color: {};
+    padding: {}px;
+    font-size: {}px;
+    border: none;
+    border-radius: {}px;
+    cursor: pointer;
+}}
+.brick-button:hover {{ background: {}; }}
+.brick-button:active {{ background: {}; }}
+.brick-button:disabled {{ opacity: 0.5; cursor: not-allowed; }}",
+            self.background.to_hex(),
+            self.text_color.to_hex(),
+            self.padding,
+            self.font_size,
+            self.corner_radius.top_left,
+            self.background_hover.to_hex(),
+            self.background_pressed.to_hex(),
+        )
     }
 
     fn test_id(&self) -> Option<&str> {

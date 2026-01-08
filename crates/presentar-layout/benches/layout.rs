@@ -2,9 +2,13 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use presentar_core::widget::{AccessibleRole, LayoutResult};
-use presentar_core::{Canvas, Constraints, Event, Rect, Size, TypeId, Widget};
+use presentar_core::{
+    Brick, BrickAssertion, BrickBudget, BrickVerification, Canvas, Constraints, Event, Rect, Size,
+    TypeId, Widget,
+};
 use presentar_layout::LayoutEngine;
 use std::any::Any;
+use std::time::Duration;
 
 /// Test widget for benchmarking
 struct BenchWidget {
@@ -31,6 +35,36 @@ impl BenchWidget {
                 .push(Box::new(BenchWidget::new(width, height)));
         }
         self
+    }
+}
+
+impl Brick for BenchWidget {
+    fn brick_name(&self) -> &'static str {
+        "BenchWidget"
+    }
+
+    fn assertions(&self) -> &[BrickAssertion] {
+        &[]
+    }
+
+    fn budget(&self) -> BrickBudget {
+        BrickBudget::uniform(16)
+    }
+
+    fn verify(&self) -> BrickVerification {
+        BrickVerification {
+            passed: vec![],
+            failed: vec![],
+            verification_time: Duration::from_micros(1),
+        }
+    }
+
+    fn to_html(&self) -> String {
+        String::new()
+    }
+
+    fn to_css(&self) -> String {
+        String::new()
     }
 }
 

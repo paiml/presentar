@@ -16,10 +16,10 @@ trueno = { workspace = true, optional = true }
 jugar-probar = { path = "/home/noah/src/probar/crates/probar", default-features = false, optional = true }
 
 [features]
-default = ["simd"]
+# PROBAR-SPEC-009: Brick Architecture is MANDATORY, not optional
+# All widgets MUST implement Brick trait - tests define interface
+default = ["simd", "brick"]
 simd = ["dep:trueno"]
-# Brick Architecture: Tests define interface (PROBAR-SPEC-009)
-# Enable this to require all Widgets to implement Brick trait
 brick = ["dep:jugar-probar"]
 
 [dev-dependencies]

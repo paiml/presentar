@@ -46,8 +46,7 @@ use crate::geometry::{Rect, Size};
 use serde::{Deserialize, Serialize};
 use std::any::Any;
 
-// Re-export Brick types when feature is enabled
-#[cfg(feature = "brick")]
+// Re-export Brick types (PROBAR-SPEC-009: Brick is mandatory)
 pub use jugar_probar::brick::{
     Brick, BrickAssertion, BrickBudget, BrickError, BrickPhase, BrickResult, BrickVerification,
     BudgetViolation,
@@ -88,8 +87,7 @@ pub struct LayoutResult {
 ///
 /// # Brick Architecture (PROBAR-SPEC-009)
 ///
-/// When the `brick` feature is enabled, Widget requires the `Brick` trait,
-/// enforcing the "tests define interface" philosophy:
+/// Widget REQUIRES the `Brick` trait, enforcing the "tests define interface" philosophy:
 ///
 /// - Every Widget has assertions that define its contract
 /// - Every Widget has a performance budget
@@ -97,11 +95,10 @@ pub struct LayoutResult {
 ///
 /// # Lifecycle
 ///
-/// 1. `verify`: Check Brick assertions (when `brick` feature enabled)
+/// 1. `verify`: Check Brick assertions (mandatory)
 /// 2. `measure`: Compute intrinsic size given constraints
 /// 3. `layout`: Position self and children within allocated bounds
-/// 4. `paint`: Generate draw commands (only if verified)
-#[cfg(feature = "brick")]
+/// 4. `paint`: Generate draw commands (only if `can_render()` returns true)
 pub trait Widget: Brick + Send + Sync {
     /// Get the type identifier for this widget type.
     fn type_id(&self) -> TypeId;
@@ -159,74 +156,9 @@ pub trait Widget: Brick + Send + Sync {
     }
 }
 
-/// Core widget trait (non-Brick version for backwards compatibility).
-///
-/// When the `brick` feature is disabled, Widget does not require Brick.
-/// This is for backwards compatibility only - new code should use the Brick-enabled version.
-#[cfg(not(feature = "brick"))]
-pub trait Widget: Send + Sync {
-    /// Get the type identifier for this widget type.
-    fn type_id(&self) -> TypeId;
-
-    /// Compute intrinsic size constraints.
-    ///
-    /// Called during the measure phase to determine the widget's preferred size.
-    fn measure(&self, constraints: Constraints) -> Size;
-
-    /// Position children within allocated bounds.
-    ///
-    /// Called during the layout phase after sizes are known.
-    fn layout(&mut self, bounds: Rect) -> LayoutResult;
-
-    /// Generate draw commands for rendering.
-    ///
-    /// Called during the paint phase to produce GPU draw commands.
-    fn paint(&self, canvas: &mut dyn Canvas);
-
-    /// Handle input events.
-    ///
-    /// Returns a message if the event triggered a state change.
-    fn event(&mut self, event: &Event) -> Option<Box<dyn Any + Send>>;
-
-    /// Get child widgets for tree traversal.
-    fn children(&self) -> &[Box<dyn Widget>];
-
-    /// Get mutable child widgets.
-    fn children_mut(&mut self) -> &mut [Box<dyn Widget>];
-
-    /// Check if this widget is interactive (can receive focus/events).
-    fn is_interactive(&self) -> bool {
-        false
-    }
-
-    /// Check if this widget can receive keyboard focus.
-    fn is_focusable(&self) -> bool {
-        false
-    }
-
-    /// Get the accessible name for screen readers.
-    fn accessible_name(&self) -> Option<&str> {
-        None
-    }
-
-    /// Get the accessible role.
-    fn accessible_role(&self) -> AccessibleRole {
-        AccessibleRole::Generic
-    }
-
-    /// Get the test ID for this widget (if any).
-    fn test_id(&self) -> Option<&str> {
-        None
-    }
-
-    /// Get the current bounds of this widget.
-    ///
-    /// Returns the rectangle set during the last layout phase.
-    /// Default returns zero-sized bounds at origin.
-    fn bounds(&self) -> Rect {
-        Rect::new(0.0, 0.0, 0.0, 0.0)
-    }
-}
+// NOTE: Non-Brick Widget trait has been REMOVED (PROBAR-SPEC-009 Phase 6)
+// All widgets MUST implement Brick trait. There is no backwards compatibility path.
+// This is intentional - "tests define interface" is mandatory, not optional.
 
 /// Canvas trait for paint operations.
 ///

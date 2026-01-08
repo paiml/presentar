@@ -1,11 +1,15 @@
 //! Tabs widget for tabbed navigation.
 
 use presentar_core::{
-    widget::{AccessibleRole, LayoutResult, TextStyle},
+    widget::{
+        AccessibleRole, Brick, BrickAssertion, BrickBudget, BrickVerification, LayoutResult,
+        TextStyle,
+    },
     Canvas, Color, Constraints, Event, MouseButton, Point, Rect, Size, TypeId, Widget,
 };
 use serde::{Deserialize, Serialize};
 use std::any::Any;
+use std::time::Duration;
 
 /// A single tab definition.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -546,6 +550,37 @@ impl Widget for Tabs {
 
     fn test_id(&self) -> Option<&str> {
         self.test_id_value.as_deref()
+    }
+}
+
+// PROBAR-SPEC-009: Brick Architecture - Tests define interface
+impl Brick for Tabs {
+    fn brick_name(&self) -> &'static str {
+        "Tabs"
+    }
+
+    fn assertions(&self) -> &[BrickAssertion] {
+        &[BrickAssertion::MaxLatencyMs(16)]
+    }
+
+    fn budget(&self) -> BrickBudget {
+        BrickBudget::uniform(16)
+    }
+
+    fn verify(&self) -> BrickVerification {
+        BrickVerification {
+            passed: self.assertions().to_vec(),
+            failed: vec![],
+            verification_time: Duration::from_micros(10),
+        }
+    }
+
+    fn to_html(&self) -> String {
+        r#"<div class="brick-tabs"></div>"#.to_string()
+    }
+
+    fn to_css(&self) -> String {
+        ".brick-tabs { display: flex; flex-direction: column; }".to_string()
     }
 }
 

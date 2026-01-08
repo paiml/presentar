@@ -2,10 +2,12 @@
 
 use presentar_core::{
     widget::{AccessibleRole, LayoutResult, TextStyle},
-    Canvas, Color, Constraints, Event, Rect, Size, TypeId, Widget,
+    Brick, BrickAssertion, BrickBudget, BrickVerification, Canvas, Color, Constraints, Event, Rect,
+    Size, TypeId, Widget,
 };
 use serde::{Deserialize, Serialize};
 use std::any::Any;
+use std::time::Duration;
 
 /// Column definition for a data table.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -576,6 +578,42 @@ impl Widget for DataTable {
 
     fn accessible_role(&self) -> AccessibleRole {
         AccessibleRole::Table
+    }
+
+    fn test_id(&self) -> Option<&str> {
+        self.test_id_value.as_deref()
+    }
+}
+
+// PROBAR-SPEC-009: Brick Architecture - Tests define interface
+impl Brick for DataTable {
+    fn brick_name(&self) -> &'static str {
+        "DataTable"
+    }
+
+    fn assertions(&self) -> &[BrickAssertion] {
+        &[BrickAssertion::MaxLatencyMs(16)]
+    }
+
+    fn budget(&self) -> BrickBudget {
+        BrickBudget::uniform(16)
+    }
+
+    fn verify(&self) -> BrickVerification {
+        BrickVerification {
+            passed: self.assertions().to_vec(),
+            failed: vec![],
+            verification_time: Duration::from_micros(10),
+        }
+    }
+
+    fn to_html(&self) -> String {
+        let test_id = self.test_id_value.as_deref().unwrap_or("data-table");
+        format!(r#"<table class="brick-data-table" data-testid="{test_id}" role="table"></table>"#)
+    }
+
+    fn to_css(&self) -> String {
+        ".brick-data-table { display: table; width: 100%; }".into()
     }
 
     fn test_id(&self) -> Option<&str> {

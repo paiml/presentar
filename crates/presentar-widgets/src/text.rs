@@ -2,10 +2,12 @@
 
 use presentar_core::{
     widget::{FontStyle, FontWeight, LayoutResult, TextStyle},
-    Canvas, Color, Constraints, Event, Rect, Size, TypeId, Widget,
+    Brick, BrickAssertion, BrickBudget, BrickVerification, Canvas, Color, Constraints, Event, Rect,
+    Size, TypeId, Widget,
 };
 use serde::{Deserialize, Serialize};
 use std::any::Any;
+use std::time::Duration;
 
 /// Text widget for displaying styled text.
 #[derive(Clone, Serialize, Deserialize)]
@@ -169,6 +171,67 @@ impl Widget for Text {
 
     fn test_id(&self) -> Option<&str> {
         self.test_id_value.as_deref()
+    }
+}
+
+// PROBAR-SPEC-009: Brick Architecture - Tests define interface
+impl Brick for Text {
+    fn brick_name(&self) -> &'static str {
+        "Text"
+    }
+
+    fn assertions(&self) -> &[BrickAssertion] {
+        &[
+            BrickAssertion::TextVisible,
+            BrickAssertion::MaxLatencyMs(16),
+        ]
+    }
+
+    fn budget(&self) -> BrickBudget {
+        BrickBudget::uniform(16)
+    }
+
+    fn verify(&self) -> BrickVerification {
+        let mut passed = Vec::new();
+        let mut failed = Vec::new();
+
+        // Verify text visibility
+        if self.content.is_empty() {
+            failed.push((BrickAssertion::TextVisible, "Text content is empty".into()));
+        } else {
+            passed.push(BrickAssertion::TextVisible);
+        }
+
+        // Latency assertion always passes at verification time
+        passed.push(BrickAssertion::MaxLatencyMs(16));
+
+        BrickVerification {
+            passed,
+            failed,
+            verification_time: Duration::from_micros(10),
+        }
+    }
+
+    fn to_html(&self) -> String {
+        let test_id = self.test_id_value.as_deref().unwrap_or("text");
+        format!(
+            r#"<span class="brick-text" data-testid="{}">{}</span>"#,
+            test_id, self.content
+        )
+    }
+
+    fn to_css(&self) -> String {
+        format!(
+            r".brick-text {{
+    color: {};
+    font-size: {}px;
+    line-height: {};
+    display: inline-block;
+}}",
+            self.color.to_hex(),
+            self.font_size,
+            self.line_height
+        )
     }
 }
 

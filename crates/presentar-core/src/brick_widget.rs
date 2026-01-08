@@ -27,16 +27,13 @@
 //! }
 //! ```
 
-#[cfg(feature = "brick")]
 use crate::widget::{Brick, BrickAssertion, BrickBudget, BrickVerification};
-#[cfg(feature = "brick")]
 use std::time::Duration;
 
 /// Simple Brick implementation for common use cases.
 ///
 /// Provides a straightforward way to define brick assertions and budgets
 /// without implementing the full Brick trait manually.
-#[cfg(feature = "brick")]
 #[derive(Debug, Clone)]
 pub struct SimpleBrick {
     name: &'static str,
@@ -45,9 +42,8 @@ pub struct SimpleBrick {
     custom_verify: Option<fn() -> bool>,
 }
 
-#[cfg(feature = "brick")]
 impl SimpleBrick {
-    /// Create a new SimpleBrick with the given name.
+    /// Create a new `SimpleBrick` with the given name.
     #[must_use]
     pub const fn new(name: &'static str) -> Self {
         Self {
@@ -80,7 +76,6 @@ impl SimpleBrick {
     }
 }
 
-#[cfg(feature = "brick")]
 impl Brick for SimpleBrick {
     fn brick_name(&self) -> &'static str {
         self.name
@@ -136,11 +131,9 @@ impl Brick for SimpleBrick {
 ///
 /// Use this when you need a minimal Brick implementation
 /// that always passes verification.
-#[cfg(feature = "brick")]
 #[derive(Debug, Clone, Copy)]
 pub struct DefaultBrick;
 
-#[cfg(feature = "brick")]
 impl Brick for DefaultBrick {
     fn brick_name(&self) -> &'static str {
         "DefaultBrick"
@@ -172,7 +165,6 @@ impl Brick for DefaultBrick {
 }
 
 /// Extension trait for adding Brick verification to the render pipeline.
-#[cfg(feature = "brick")]
 pub trait BrickWidgetExt: Brick {
     /// Verify this brick before rendering.
     ///
@@ -185,7 +177,7 @@ pub trait BrickWidgetExt: Brick {
             let errors: Vec<String> = verification
                 .failed
                 .iter()
-                .map(|(assertion, reason)| format!("{:?}: {}", assertion, reason))
+                .map(|(assertion, reason)| format!("{assertion:?}: {reason}"))
                 .collect();
             Err(format!(
                 "Brick '{}' failed verification: {}",
@@ -196,11 +188,9 @@ pub trait BrickWidgetExt: Brick {
     }
 }
 
-#[cfg(feature = "brick")]
 impl<T: Brick> BrickWidgetExt for T {}
 
 #[cfg(test)]
-#[cfg(feature = "brick")]
 mod tests {
     use super::*;
 

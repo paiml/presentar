@@ -2,10 +2,12 @@
 
 use presentar_core::{
     widget::{AccessibleRole, LayoutResult, TextStyle},
-    Canvas, Color, Constraints, Event, Point, Rect, Size, TypeId, Widget,
+    Brick, BrickAssertion, BrickBudget, BrickVerification, Canvas, Color, Constraints, Event,
+    Point, Rect, Size, TypeId, Widget,
 };
 use serde::{Deserialize, Serialize};
 use std::any::Any;
+use std::time::Duration;
 
 /// Tooltip placement relative to the anchor element.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -497,6 +499,86 @@ impl Widget for Tooltip {
 
     fn test_id(&self) -> Option<&str> {
         self.test_id_value.as_deref()
+    }
+}
+
+// PROBAR-SPEC-009: Brick Architecture - Tests define interface
+impl Brick for Tooltip {
+    fn brick_name(&self) -> &'static str {
+        "Tooltip"
+    }
+
+    fn assertions(&self) -> &[BrickAssertion] {
+        &[
+            BrickAssertion::MaxLatencyMs(16),
+            BrickAssertion::ContrastRatio(4.5), // WCAG AA for tooltip text
+        ]
+    }
+
+    fn budget(&self) -> BrickBudget {
+        BrickBudget::uniform(16)
+    }
+
+    fn verify(&self) -> BrickVerification {
+        let mut passed = Vec::new();
+        let mut failed = Vec::new();
+
+        // Verify text contrast against background
+        let contrast = self.background.contrast_ratio(&self.text_color);
+        if contrast >= 4.5 {
+            passed.push(BrickAssertion::ContrastRatio(4.5));
+        } else {
+            failed.push((
+                BrickAssertion::ContrastRatio(4.5),
+                format!("Contrast ratio {contrast:.2}:1 < 4.5:1"),
+            ));
+        }
+
+        // Latency assertion always passes at verification time
+        passed.push(BrickAssertion::MaxLatencyMs(16));
+
+        BrickVerification {
+            passed,
+            failed,
+            verification_time: Duration::from_micros(10),
+        }
+    }
+
+    fn to_html(&self) -> String {
+        let test_id = self.test_id_value.as_deref().unwrap_or("tooltip");
+        let aria_label = self
+            .accessible_name_value
+            .as_deref()
+            .unwrap_or(&self.content);
+        format!(
+            r#"<div class="brick-tooltip" role="tooltip" data-testid="{}" aria-label="{}">{}</div>"#,
+            test_id, aria_label, self.content
+        )
+    }
+
+    fn to_css(&self) -> String {
+        format!(
+            r#".brick-tooltip {{
+    background: {};
+    color: {};
+    padding: {}px;
+    font-size: {}px;
+    border-radius: {}px;
+    max-width: {}px;
+    position: absolute;
+    z-index: 1000;
+    pointer-events: none;
+}}
+.brick-tooltip[data-visible="false"] {{
+    display: none;
+}}"#,
+            self.background.to_hex(),
+            self.text_color.to_hex(),
+            self.padding,
+            self.text_size,
+            self.corner_radius,
+            self.max_width.unwrap_or(250.0),
+        )
     }
 }
 

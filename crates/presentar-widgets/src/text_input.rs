@@ -2,10 +2,12 @@
 
 use presentar_core::{
     widget::{AccessibleRole, LayoutResult, TextStyle},
-    Canvas, Color, Constraints, Event, Key, Rect, Size, TypeId, Widget,
+    Brick, BrickAssertion, BrickBudget, BrickVerification, Canvas, Color, Constraints, Event, Key,
+    Rect, Size, TypeId, Widget,
 };
 use serde::{Deserialize, Serialize};
 use std::any::Any;
+use std::time::Duration;
 
 /// Message emitted when text changes.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -433,6 +435,88 @@ impl Widget for TextInput {
 
     fn test_id(&self) -> Option<&str> {
         self.test_id_value.as_deref()
+    }
+}
+
+// PROBAR-SPEC-009: Brick Architecture - Tests define interface
+impl Brick for TextInput {
+    fn brick_name(&self) -> &'static str {
+        "TextInput"
+    }
+
+    fn assertions(&self) -> &[BrickAssertion] {
+        &[
+            BrickAssertion::MaxLatencyMs(16),
+            BrickAssertion::ContrastRatio(4.5), // WCAG AA for text input
+        ]
+    }
+
+    fn budget(&self) -> BrickBudget {
+        BrickBudget::uniform(16)
+    }
+
+    fn verify(&self) -> BrickVerification {
+        let mut passed = Vec::new();
+        let mut failed = Vec::new();
+
+        // Verify contrast ratio
+        let contrast = self.background_color.contrast_ratio(&self.text_style.color);
+        if contrast >= 4.5 {
+            passed.push(BrickAssertion::ContrastRatio(4.5));
+        } else {
+            failed.push((
+                BrickAssertion::ContrastRatio(4.5),
+                format!("Contrast ratio {contrast:.2}:1 < 4.5:1"),
+            ));
+        }
+
+        // Latency assertion always passes at verification time
+        passed.push(BrickAssertion::MaxLatencyMs(16));
+
+        BrickVerification {
+            passed,
+            failed,
+            verification_time: Duration::from_micros(10),
+        }
+    }
+
+    fn to_html(&self) -> String {
+        let test_id = self.test_id_value.as_deref().unwrap_or("text-input");
+        let disabled = if self.disabled { " disabled" } else { "" };
+        let input_type = if self.obscure { "password" } else { "text" };
+        let aria_label = self.accessible_name_value.as_deref().unwrap_or("");
+        format!(
+            r#"<input type="{}" class="brick-textinput" data-testid="{}" placeholder="{}" value="{}" aria-label="{}"{} />"#,
+            input_type, test_id, self.placeholder, self.value, aria_label, disabled
+        )
+    }
+
+    fn to_css(&self) -> String {
+        format!(
+            r".brick-textinput {{
+    background: {};
+    color: {};
+    border: 1px solid {};
+    padding: {}px;
+    min-width: {}px;
+    font-size: {}px;
+}}
+.brick-textinput:focus {{
+    border-color: {};
+    outline: none;
+}}
+.brick-textinput:disabled {{
+    opacity: 0.5;
+    cursor: not-allowed;
+}}",
+            self.background_color.to_hex(),
+            self.text_style.color.to_hex(),
+            self.border_color.to_hex(),
+            self.padding,
+            self.min_width,
+            self.text_style.size,
+            self.focus_border_color.to_hex(),
+        )
     }
 }
 

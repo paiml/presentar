@@ -2,10 +2,12 @@
 
 use presentar_core::{
     widget::{AccessibleRole, LayoutResult},
-    Canvas, Color, Constraints, Event, MouseButton, Rect, Size, TypeId, Widget,
+    Brick, BrickAssertion, BrickBudget, BrickVerification, Canvas, Color, Constraints, Event,
+    MouseButton, Rect, Size, TypeId, Widget,
 };
 use serde::{Deserialize, Serialize};
 use std::any::Any;
+use std::time::Duration;
 
 /// Checkbox state (supports tri-state).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -364,6 +366,54 @@ impl Widget for Checkbox {
 
     fn accessible_role(&self) -> AccessibleRole {
         AccessibleRole::Checkbox
+    }
+
+    fn test_id(&self) -> Option<&str> {
+        self.test_id_value.as_deref()
+    }
+}
+
+// PROBAR-SPEC-009: Brick Architecture - Tests define interface
+impl Brick for Checkbox {
+    fn brick_name(&self) -> &'static str {
+        "Checkbox"
+    }
+
+    fn assertions(&self) -> &[BrickAssertion] {
+        &[BrickAssertion::MaxLatencyMs(16)]
+    }
+
+    fn budget(&self) -> BrickBudget {
+        BrickBudget::uniform(16)
+    }
+
+    fn verify(&self) -> BrickVerification {
+        BrickVerification {
+            passed: self.assertions().to_vec(),
+            failed: vec![],
+            verification_time: Duration::from_micros(10),
+        }
+    }
+
+    fn to_html(&self) -> String {
+        let test_id = self.test_id_value.as_deref().unwrap_or("checkbox");
+        let checked = if self.state.is_checked() {
+            " checked"
+        } else {
+            ""
+        };
+        let disabled = if self.disabled { " disabled" } else { "" };
+        format!(
+            r#"<input type="checkbox" class="brick-checkbox" data-testid="{}" aria-label="{}"{}{}/>"#,
+            test_id,
+            self.accessible_name_value.as_deref().unwrap_or(&self.label),
+            checked,
+            disabled
+        )
+    }
+
+    fn to_css(&self) -> String {
+        ".brick-checkbox { display: inline-block; }".into()
     }
 
     fn test_id(&self) -> Option<&str> {

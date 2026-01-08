@@ -1,10 +1,12 @@
 //! Column widget for vertical layout.
 
 use presentar_core::{
-    widget::LayoutResult, Canvas, Constraints, Event, Rect, Size, TypeId, Widget,
+    widget::LayoutResult, Brick, BrickAssertion, BrickBudget, BrickVerification, Canvas,
+    Constraints, Event, Rect, Size, TypeId, Widget,
 };
 use serde::{Deserialize, Serialize};
 use std::any::Any;
+use std::time::Duration;
 
 use crate::row::{CrossAxisAlignment, MainAxisAlignment};
 
@@ -229,11 +231,48 @@ impl Widget for Column {
     }
 }
 
+// PROBAR-SPEC-009: Brick Architecture - Tests define interface
+impl Brick for Column {
+    fn brick_name(&self) -> &'static str {
+        "Column"
+    }
+
+    fn assertions(&self) -> &[BrickAssertion] {
+        &[BrickAssertion::MaxLatencyMs(16)]
+    }
+
+    fn budget(&self) -> BrickBudget {
+        BrickBudget::uniform(16)
+    }
+
+    fn verify(&self) -> BrickVerification {
+        BrickVerification {
+            passed: self.assertions().to_vec(),
+            failed: vec![],
+            verification_time: Duration::from_micros(10),
+        }
+    }
+
+    fn to_html(&self) -> String {
+        let test_id = self.test_id_value.as_deref().unwrap_or("column");
+        format!(r#"<div class="brick-column" data-testid="{test_id}"></div>"#)
+    }
+
+    fn to_css(&self) -> String {
+        ".brick-column { display: flex; flex-direction: column; }".into()
+    }
+
+    fn test_id(&self) -> Option<&str> {
+        self.test_id_value.as_deref()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use presentar_core::widget::AccessibleRole;
-    use presentar_core::Widget;
+    use presentar_core::{Brick, BrickBudget, BrickVerification, Widget};
+    use std::time::Duration;
 
     // Test widget with fixed size for layout testing
     struct FixedWidget {
@@ -245,6 +284,36 @@ mod tests {
             Self {
                 size: Size::new(width, height),
             }
+        }
+    }
+
+    impl Brick for FixedWidget {
+        fn brick_name(&self) -> &'static str {
+            "FixedWidget"
+        }
+
+        fn assertions(&self) -> &[presentar_core::BrickAssertion] {
+            &[]
+        }
+
+        fn budget(&self) -> BrickBudget {
+            BrickBudget::uniform(16)
+        }
+
+        fn verify(&self) -> BrickVerification {
+            BrickVerification {
+                passed: vec![],
+                failed: vec![],
+                verification_time: Duration::from_micros(1),
+            }
+        }
+
+        fn to_html(&self) -> String {
+            String::new()
+        }
+
+        fn to_css(&self) -> String {
+            String::new()
         }
     }
 

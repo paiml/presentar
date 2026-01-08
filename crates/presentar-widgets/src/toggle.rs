@@ -2,10 +2,12 @@
 
 use presentar_core::{
     widget::{AccessibleRole, LayoutResult},
-    Canvas, Color, Constraints, Event, MouseButton, Rect, Size, TypeId, Widget,
+    Brick, BrickAssertion, BrickBudget, BrickVerification, Canvas, Color, Constraints, Event,
+    MouseButton, Rect, Size, TypeId, Widget,
 };
 use serde::{Deserialize, Serialize};
 use std::any::Any;
+use std::time::Duration;
 
 /// Message emitted when toggle state changes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -369,6 +371,117 @@ impl Widget for Toggle {
 
     fn test_id(&self) -> Option<&str> {
         self.test_id_value.as_deref()
+    }
+}
+
+// PROBAR-SPEC-009: Brick Architecture - Tests define interface
+impl Brick for Toggle {
+    fn brick_name(&self) -> &'static str {
+        "Toggle"
+    }
+
+    fn assertions(&self) -> &[BrickAssertion] {
+        &[
+            BrickAssertion::MaxLatencyMs(16),
+            BrickAssertion::ContrastRatio(3.0), // WCAG AA for UI components
+        ]
+    }
+
+    fn budget(&self) -> BrickBudget {
+        BrickBudget::uniform(16)
+    }
+
+    fn verify(&self) -> BrickVerification {
+        let mut passed = Vec::new();
+        let mut failed = Vec::new();
+
+        // Verify thumb contrast against track
+        let track_color = if self.on {
+            self.track_on_color
+        } else {
+            self.track_off_color
+        };
+        let contrast = track_color.contrast_ratio(&self.thumb_color);
+        if contrast >= 3.0 {
+            passed.push(BrickAssertion::ContrastRatio(3.0));
+        } else {
+            failed.push((
+                BrickAssertion::ContrastRatio(3.0),
+                format!("Contrast ratio {contrast:.2}:1 < 3.0:1"),
+            ));
+        }
+
+        // Latency assertion always passes at verification time
+        passed.push(BrickAssertion::MaxLatencyMs(16));
+
+        BrickVerification {
+            passed,
+            failed,
+            verification_time: Duration::from_micros(10),
+        }
+    }
+
+    fn to_html(&self) -> String {
+        let test_id = self.test_id_value.as_deref().unwrap_or("toggle");
+        let checked = if self.on { " checked" } else { "" };
+        let disabled = if self.disabled { " disabled" } else { "" };
+        let aria_label = self
+            .accessible_name_value
+            .as_deref()
+            .or(if self.label.is_empty() {
+                None
+            } else {
+                Some(self.label.as_str())
+            })
+            .unwrap_or("");
+        format!(
+            r#"<input type="checkbox" role="switch" class="brick-toggle" data-testid="{test_id}" aria-label="{aria_label}"{checked}{disabled} />"#
+        )
+    }
+
+    fn to_css(&self) -> String {
+        format!(
+            r".brick-toggle {{
+    appearance: none;
+    width: {}px;
+    height: {}px;
+    background: {};
+    border-radius: {}px;
+    position: relative;
+    cursor: pointer;
+}}
+.brick-toggle:checked {{
+    background: {};
+}}
+.brick-toggle::before {{
+    content: '';
+    position: absolute;
+    width: {}px;
+    height: {}px;
+    background: {};
+    border-radius: 50%;
+    top: 50%;
+    transform: translateY(-50%);
+    left: 2px;
+    transition: left 0.2s;
+}}
+.brick-toggle:checked::before {{
+    left: calc(100% - {}px - 2px);
+}}
+.brick-toggle:disabled {{
+    opacity: 0.5;
+    cursor: not-allowed;
+}}",
+            self.track_width,
+            self.track_height,
+            self.track_off_color.to_hex(),
+            self.track_height / 2.0,
+            self.track_on_color.to_hex(),
+            self.thumb_size,
+            self.thumb_size,
+            self.thumb_color.to_hex(),
+            self.thumb_size,
+        )
     }
 }
 

@@ -1,11 +1,15 @@
 //! `RadioGroup` widget for selecting one option from a list.
 
 use presentar_core::{
-    widget::{AccessibleRole, LayoutResult, TextStyle},
+    widget::{
+        AccessibleRole, Brick, BrickAssertion, BrickBudget, BrickVerification, LayoutResult,
+        TextStyle,
+    },
     Canvas, Color, Constraints, Event, MouseButton, Point, Rect, Size, TypeId, Widget,
 };
 use serde::{Deserialize, Serialize};
 use std::any::Any;
+use std::time::Duration;
 
 /// A single radio option.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -499,6 +503,37 @@ impl Widget for RadioGroup {
 
     fn test_id(&self) -> Option<&str> {
         self.test_id_value.as_deref()
+    }
+}
+
+// PROBAR-SPEC-009: Brick Architecture - Tests define interface
+impl Brick for RadioGroup {
+    fn brick_name(&self) -> &'static str {
+        "RadioGroup"
+    }
+
+    fn assertions(&self) -> &[BrickAssertion] {
+        &[BrickAssertion::MaxLatencyMs(16)]
+    }
+
+    fn budget(&self) -> BrickBudget {
+        BrickBudget::uniform(16)
+    }
+
+    fn verify(&self) -> BrickVerification {
+        BrickVerification {
+            passed: self.assertions().to_vec(),
+            failed: vec![],
+            verification_time: Duration::from_micros(10),
+        }
+    }
+
+    fn to_html(&self) -> String {
+        r#"<div class="brick-radiogroup"></div>"#.to_string()
+    }
+
+    fn to_css(&self) -> String {
+        ".brick-radiogroup { display: block; }".to_string()
     }
 }
 

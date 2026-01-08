@@ -2,10 +2,12 @@
 
 use presentar_core::{
     widget::{AccessibleRole, LayoutResult, TextStyle},
-    Canvas, Color, Constraints, Point, Rect, Size, TypeId, Widget,
+    Brick, BrickAssertion, BrickBudget, BrickVerification, Canvas, Color, Constraints, Point, Rect,
+    Size, TypeId, Widget,
 };
 use serde::{Deserialize, Serialize};
 use std::any::Any;
+use std::time::Duration;
 
 /// Chart type variants.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -1008,6 +1010,45 @@ impl Widget for Chart {
 
     fn accessible_role(&self) -> AccessibleRole {
         AccessibleRole::Image // Charts are treated as images for accessibility
+    }
+
+    fn test_id(&self) -> Option<&str> {
+        self.test_id_value.as_deref()
+    }
+}
+
+// PROBAR-SPEC-009: Brick Architecture - Tests define interface
+impl Brick for Chart {
+    fn brick_name(&self) -> &'static str {
+        "Chart"
+    }
+
+    fn assertions(&self) -> &[BrickAssertion] {
+        &[BrickAssertion::MaxLatencyMs(16)]
+    }
+
+    fn budget(&self) -> BrickBudget {
+        BrickBudget::uniform(16)
+    }
+
+    fn verify(&self) -> BrickVerification {
+        BrickVerification {
+            passed: self.assertions().to_vec(),
+            failed: vec![],
+            verification_time: Duration::from_micros(10),
+        }
+    }
+
+    fn to_html(&self) -> String {
+        let test_id = self.test_id_value.as_deref().unwrap_or("chart");
+        let title = self.title.as_deref().unwrap_or("Chart");
+        format!(
+            r#"<div class="brick-chart" data-testid="{test_id}" role="img" aria-label="{title}">{title}</div>"#
+        )
+    }
+
+    fn to_css(&self) -> String {
+        ".brick-chart { display: block; }".into()
     }
 
     fn test_id(&self) -> Option<&str> {

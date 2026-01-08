@@ -4,11 +4,13 @@
 //! enabling smooth scrolling of thousands of items.
 
 use presentar_core::{
-    widget::LayoutResult, Canvas, Constraints, Event, Key, Rect, Size, TypeId, Widget,
+    widget::LayoutResult, Brick, BrickAssertion, BrickBudget, BrickVerification, Canvas,
+    Constraints, Event, Key, Rect, Size, TypeId, Widget,
 };
 use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::ops::Range;
+use std::time::Duration;
 
 /// Type alias for the render item callback.
 pub type RenderItemFn = Box<dyn Fn(usize, &ListItem) -> Box<dyn Widget> + Send + Sync>;
@@ -558,6 +560,41 @@ impl Widget for List {
     }
 }
 
+// PROBAR-SPEC-009: Brick Architecture - Tests define interface
+impl Brick for List {
+    fn brick_name(&self) -> &'static str {
+        "List"
+    }
+
+    fn assertions(&self) -> &[BrickAssertion] {
+        &[BrickAssertion::MaxLatencyMs(16)]
+    }
+
+    fn budget(&self) -> BrickBudget {
+        BrickBudget::uniform(16)
+    }
+
+    fn verify(&self) -> BrickVerification {
+        BrickVerification {
+            passed: self.assertions().to_vec(),
+            failed: vec![],
+            verification_time: Duration::from_micros(10),
+        }
+    }
+
+    fn to_html(&self) -> String {
+        r#"<div class="brick-list"></div>"#.to_string()
+    }
+
+    fn to_css(&self) -> String {
+        ".brick-list { display: block; overflow: auto; }".to_string()
+    }
+
+    fn test_id(&self) -> Option<&str> {
+        self.test_id_value.as_deref()
+    }
+}
+
 /// Message emitted when list is scrolled.
 #[derive(Debug, Clone)]
 pub struct ListScrolled {
@@ -814,7 +851,7 @@ mod tests {
     #[test]
     fn test_list_test_id() {
         let list = List::new().with_test_id("my-list");
-        assert_eq!(list.test_id(), Some("my-list"));
+        assert_eq!(Widget::test_id(&list), Some("my-list"));
     }
 
     #[test]

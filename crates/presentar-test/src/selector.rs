@@ -49,14 +49,14 @@ impl Selector {
                 // Would need widget.id() method
                 false
             }
-            Self::TestId(id) => widget.test_id() == Some(id.as_str()),
+            Self::TestId(id) => Widget::test_id(widget) == Some(id.as_str()),
             Self::Class(_class) => {
                 // Would need widget.classes() method
                 false
             }
             Self::Attribute { name, value } => {
                 if name == "data-testid" {
-                    widget.test_id() == Some(value.as_str())
+                    Widget::test_id(widget) == Some(value.as_str())
                 } else if name == "aria-label" {
                     widget.accessible_name() == Some(value.as_str())
                 } else {
