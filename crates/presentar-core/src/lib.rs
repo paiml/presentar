@@ -88,6 +88,10 @@ pub mod validation;
 pub mod virtualization;
 pub mod widget;
 
+// Brick Architecture integration (PROBAR-SPEC-009)
+#[cfg(feature = "brick")]
+pub mod brick_widget;
+
 pub use accessibility::{
     AccessibilityTree, AccessibilityTreeBuilder, AccessibleNode, AccessibleNodeId, CheckedState,
     HitTester, LiveRegion,
@@ -161,6 +165,17 @@ pub use widget::{
     AccessibleRole, Canvas, FontStyle, FontWeight, LayoutResult, TextStyle, Transform2D, TypeId,
     Widget, WidgetId,
 };
+
+// Re-export Brick types when feature is enabled
+#[cfg(feature = "brick")]
+pub use widget::{
+    Brick, BrickAssertion, BrickBudget, BrickError, BrickPhase, BrickResult, BrickVerification,
+    BudgetViolation,
+};
+
+// Re-export brick_widget helpers
+#[cfg(feature = "brick")]
+pub use brick_widget::{BrickWidgetExt, DefaultBrick, SimpleBrick};
 
 #[cfg(test)]
 mod tests {
