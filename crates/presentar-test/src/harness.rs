@@ -264,8 +264,12 @@ impl Harness {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use presentar_core::{widget::LayoutResult, Canvas, Constraints, Size, TypeId};
+    use presentar_core::{
+        widget::LayoutResult, Brick, BrickAssertion, BrickBudget, BrickVerification, Canvas,
+        Constraints, Size, TypeId,
+    };
     use std::any::Any;
+    use std::time::Duration;
 
     // Mock widget for testing
     struct MockWidget {

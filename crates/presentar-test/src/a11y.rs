@@ -1356,9 +1356,11 @@ mod tests {
     use super::*;
     use presentar_core::{
         widget::{AccessibleRole, LayoutResult},
-        Canvas, Constraints, Event, Rect, Size, TypeId,
+        Brick, BrickAssertion, BrickBudget, BrickVerification, Canvas, Constraints, Event, Rect,
+        Size, TypeId,
     };
     use std::any::Any;
+    use std::time::Duration;
 
     // Mock interactive widget
     struct MockButton {

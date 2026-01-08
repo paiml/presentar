@@ -35,8 +35,10 @@ Presentar provides a WASM-first UI framework for building high-performance visua
 ## Features
 
 - **WASM-First**: Primary target is `wasm32-unknown-unknown`
+- **Brick Architecture**: Tests define interface (PROBAR-SPEC-009) - all widgets implement `Brick` trait
 - **Zero Dependencies**: Minimal external crates (winit, fontdue only)
 - **60fps Rendering**: GPU-accelerated via WebGPU/WGSL shaders
+- **JIDOKA Enforcement**: Rendering blocked if Brick verification fails
 - **Accessibility**: Built-in WCAG 2.1 AA compliance checking
 - **Declarative**: YAML-driven application configuration
 - **Testable**: Zero-dependency test harness with visual regression
@@ -55,18 +57,49 @@ presentar-widgets = "0.1"
 
 ```rust
 use presentar::widgets::{Button, Column, Text};
-use presentar::{Constraints, Size, Widget};
+use presentar::{Brick, Constraints, Size, Widget};
 
-// Build UI tree
+// Build UI tree - all widgets implement Brick trait
 let ui = Column::new(vec![
     Box::new(Text::new("Hello, Presentar!")),
     Box::new(Button::new("Click me")),
 ]);
 
+// Verify before rendering (PROBAR-SPEC-009: Brick Architecture)
+assert!(ui.can_render(), "Widget must pass Brick verification");
+
 // Measure and layout
 let constraints = Constraints::new(0.0, 800.0, 0.0, 600.0);
 let size = ui.measure(&constraints);
 ```
+
+## Brick Architecture (PROBAR-SPEC-009)
+
+All widgets implement the `Brick` trait, enforcing "tests define interface":
+
+```rust
+use presentar::{Brick, BrickAssertion, BrickBudget, Widget};
+
+// Every widget has:
+// - assertions(): What the widget promises (TextVisible, ContrastRatio, etc.)
+// - budget(): Performance budget (default 16ms for 60fps)
+// - verify(): Runtime verification of assertions
+// - can_render(): Returns false if verification fails
+
+let button = Button::new("Submit");
+
+// Check assertions
+println!("Brick: {}", button.brick_name());
+println!("Assertions: {:?}", button.assertions());
+println!("Can render: {}", button.can_render());
+
+// JIDOKA: Rendering is blocked if can_render() returns false
+```
+
+**Key Benefits:**
+- Widgets declare their contracts as falsifiable assertions
+- Verification happens before rendering, not after bugs ship
+- Performance budgets are enforced at the framework level
 
 ## YAML Configuration
 
