@@ -1,9 +1,10 @@
-//! Brick Computer Demo - SIMD Visualization
+//! Brick Computer Demo - SIMD Test Visualization
 //!
-//! A polished TUI demonstration of Brick Architecture showing:
-//! - SIMD lanes as visual "bricks" that light up during operations
-//! - Real-time performance metrics (throughput, latency, utilization)
-//! - Budget tracking with visual meters
+//! Dynamic TUI showing Brick Architecture where each brick is a TEST
+//! that runs actual SIMD compute operations:
+//! - Bricks cycle: Idle → Computing → Pass/Fail
+//! - Real SIMD operations (dot product, matrix ops)
+//! - Parallel test execution with varying durations
 //! - Inspired by trueno-viz and btop polish
 //!
 //! Run with: cargo run --example brick_computer -p presentar
@@ -13,34 +14,36 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 // ============================================================================
-// ANSI ESCAPE CODES (Polish: Color System)
+// ANSI ESCAPE CODES
 // ============================================================================
 
 const RESET: &str = "\x1b[0m";
 const BOLD: &str = "\x1b[1m";
 const DIM: &str = "\x1b[2m";
+const BLINK: &str = "\x1b[5m";
 
-// Status colors (perceptually distinct)
-const GREEN: &str = "\x1b[38;2;74;222;128m"; // #4ade80 - success
-const YELLOW: &str = "\x1b[38;2;250;204;21m"; // #facc15 - warning
-const RED: &str = "\x1b[38;2;248;113;113m"; // #f87171 - error
-const CYAN: &str = "\x1b[38;2;34;211;238m"; // #22d3ee - info
-const MAGENTA: &str = "\x1b[38;2;232;121;249m"; // #e879f9 - accent
-const BLUE: &str = "\x1b[38;2;96;165;250m"; // #60a5fa - primary
-const GRAY: &str = "\x1b[38;2;107;114;128m"; // #6b7280 - muted
+// Status colors (24-bit true color)
+const GREEN: &str = "\x1b[38;2;74;222;128m";
+const YELLOW: &str = "\x1b[38;2;250;204;21m";
+const RED: &str = "\x1b[38;2;248;113;113m";
+const CYAN: &str = "\x1b[38;2;34;211;238m";
+const MAGENTA: &str = "\x1b[38;2;232;121;249m";
+const BLUE: &str = "\x1b[38;2;96;165;250m";
+const GRAY: &str = "\x1b[38;2;107;114;128m";
+const WHITE: &str = "\x1b[38;2;248;250;252m";
+const ORANGE: &str = "\x1b[38;2;251;146;60m";
 
 // Background colors
-const BG_GREEN: &str = "\x1b[48;2;22;163;74m"; // #16a34a
-const BG_YELLOW: &str = "\x1b[48;2;202;138;4m"; // #ca8a04
-const BG_RED: &str = "\x1b[48;2;220;38;38m"; // #dc2626
-const BG_BLUE: &str = "\x1b[48;2;37;99;235m"; // #2563eb
-const BG_DARK: &str = "\x1b[48;2;17;24;39m"; // #111827
-const WHITE: &str = "\x1b[38;2;255;255;255m";
+const BG_GREEN: &str = "\x1b[48;2;22;163;74m";
+const BG_YELLOW: &str = "\x1b[48;2;202;138;4m";
+const BG_RED: &str = "\x1b[48;2;220;38;38m";
+const BG_BLUE: &str = "\x1b[48;2;59;130;246m";
+#[allow(dead_code)]
+const BG_CYAN: &str = "\x1b[48;2;6;182;212m";
+const BG_DARK: &str = "\x1b[48;2;30;41;59m";
+const BG_DARKER: &str = "\x1b[48;2;15;23;42m";
 
-// ============================================================================
-// UNICODE BOX DRAWING (Polish: Professional TUI)
-// ============================================================================
-
+// Box drawing
 const BOX_TL: &str = "╭";
 const BOX_TR: &str = "╮";
 const BOX_BL: &str = "╰";
@@ -48,298 +51,636 @@ const BOX_BR: &str = "╯";
 const BOX_H: &str = "─";
 const BOX_V: &str = "│";
 
-// Block characters for meters (keeping full set for reference)
-const BLOCK_FULL: &str = "█";
-const BLOCK_EMPTY: &str = "░";
+// Block and progress characters
 #[allow(dead_code)]
-const BLOCK_CHARS: [&str; 8] = ["▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"];
+const BLOCK_FULL: &str = "█";
+const BLOCK_LIGHT: &str = "░";
+const SPINNER: [&str; 8] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"];
+const PROGRESS: [&str; 8] = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
 
 // Braille for sparklines
-const BRAILLE_DOTS: [char; 8] = ['⣀', '⣄', '⣤', '⣦', '⣶', '⣷', '⣿', '⡿'];
+const BRAILLE: [char; 8] = ['⣀', '⣄', '⣤', '⣦', '⣶', '⣷', '⣿', '⡿'];
 
 // ============================================================================
-// SIMD BRICK REPRESENTATION
+// SIMD COMPUTE (Actual operations)
+// ============================================================================
+
+/// Actual SIMD dot product computation
+fn simd_dot_product(a: &[f32; 8], b: &[f32; 8]) -> f32 {
+    // Manual SIMD-style: process 8 lanes
+    let mut sum = 0.0f32;
+    for i in 0..8 {
+        sum += a[i] * b[i];
+    }
+    sum
+}
+
+/// SIMD matrix-vector multiply (8x8 * 8)
+fn simd_matvec(matrix: &[[f32; 8]; 8], vec: &[f32; 8]) -> [f32; 8] {
+    let mut result = [0.0f32; 8];
+    for i in 0..8 {
+        result[i] = simd_dot_product(&matrix[i], vec);
+    }
+    result
+}
+
+/// SIMD reduction (sum all lanes)
+fn simd_reduce_sum(v: &[f32; 8]) -> f32 {
+    v.iter().sum()
+}
+
+// ============================================================================
+// TEST BRICK REPRESENTATION
 // ============================================================================
 
 #[derive(Clone, Copy, PartialEq)]
-enum BrickState {
+enum TestState {
     Idle,
-    Computing,
-    Success,
-    Warning,
-    Error,
+    Queued,
+    Running,
+    Pass,
+    Fail,
+    Flaky,
 }
 
-struct SimdLane {
-    id: usize,
-    state: BrickState,
-    value: f32,
-    latency_us: u32,
-    operations: u64,
+#[derive(Clone, Copy, PartialEq)]
+enum TestKind {
+    DotProduct,
+    MatVec,
+    Reduce,
+    Softmax,
+    Attention,
+    LayerNorm,
+    Gelu,
+    Transpose,
 }
 
-impl SimdLane {
-    fn new(id: usize) -> Self {
-        Self {
-            id,
-            state: BrickState::Idle,
-            value: 0.0,
-            latency_us: 0,
-            operations: 0,
+impl TestKind {
+    fn name(&self) -> &'static str {
+        match self {
+            TestKind::DotProduct => "dot",
+            TestKind::MatVec => "mvec",
+            TestKind::Reduce => "red",
+            TestKind::Softmax => "soft",
+            TestKind::Attention => "attn",
+            TestKind::LayerNorm => "norm",
+            TestKind::Gelu => "gelu",
+            TestKind::Transpose => "T",
         }
     }
 
-    fn compute(&mut self, input: f32) {
-        self.state = BrickState::Computing;
-        // Simulate SIMD operation
-        self.value = input * 2.0 + (self.id as f32);
-        self.latency_us = 50 + (self.id as u32 * 10);
-        self.operations += 1;
-        self.state = if self.latency_us < 100 {
-            BrickState::Success
-        } else if self.latency_us < 150 {
-            BrickState::Warning
-        } else {
-            BrickState::Error
-        };
+    fn from_index(i: usize) -> Self {
+        match i % 8 {
+            0 => TestKind::DotProduct,
+            1 => TestKind::MatVec,
+            2 => TestKind::Reduce,
+            3 => TestKind::Softmax,
+            4 => TestKind::Attention,
+            5 => TestKind::LayerNorm,
+            6 => TestKind::Gelu,
+            _ => TestKind::Transpose,
+        }
     }
 }
 
+struct TestBrick {
+    id: usize,
+    kind: TestKind,
+    state: TestState,
+    progress: u8,        // 0-100
+    duration_ms: u32,    // How long this test takes
+    elapsed_ms: u32,     // Time spent so far
+    result: Option<f32>, // Computed result
+    expected: f32,       // Expected result
+    run_count: u32,
+    pass_count: u32,
+    fail_count: u32,
+}
+
+impl TestBrick {
+    fn new(id: usize) -> Self {
+        let kind = TestKind::from_index(id);
+        Self {
+            id,
+            kind,
+            state: TestState::Idle,
+            progress: 0,
+            duration_ms: 50 + ((id * 17) % 100) as u32, // Varying durations
+            elapsed_ms: 0,
+            result: None,
+            expected: 0.0,
+            run_count: 0,
+            pass_count: 0,
+            fail_count: 0,
+        }
+    }
+
+    fn start(&mut self) {
+        self.state = TestState::Running;
+        self.progress = 0;
+        self.elapsed_ms = 0;
+        self.result = None;
+        self.run_count += 1;
+    }
+
+    fn tick(&mut self, delta_ms: u32, frame: u64) {
+        match self.state {
+            TestState::Idle => {
+                // Random chance to queue
+                if pseudo_random(frame + self.id as u64) % 20 == 0 {
+                    self.state = TestState::Queued;
+                }
+            }
+            TestState::Queued => {
+                // Random chance to start
+                if pseudo_random(frame + self.id as u64 * 3) % 5 == 0 {
+                    self.start();
+                }
+            }
+            TestState::Running => {
+                self.elapsed_ms += delta_ms;
+                self.progress =
+                    ((self.elapsed_ms as f32 / self.duration_ms as f32) * 100.0).min(100.0) as u8;
+
+                if self.elapsed_ms >= self.duration_ms {
+                    // Execute actual SIMD compute
+                    let (result, expected) = self.execute_simd(frame);
+                    self.result = Some(result);
+                    self.expected = expected;
+
+                    // Check if test passed (with small epsilon)
+                    let passed = (result - expected).abs() < 0.001;
+
+                    // 5% flaky rate for drama
+                    let is_flaky = pseudo_random(frame * 7 + self.id as u64) % 20 == 0;
+
+                    if is_flaky {
+                        self.state = TestState::Flaky;
+                        self.fail_count += 1;
+                    } else if passed {
+                        self.state = TestState::Pass;
+                        self.pass_count += 1;
+                    } else {
+                        self.state = TestState::Fail;
+                        self.fail_count += 1;
+                    }
+                }
+            }
+            TestState::Pass | TestState::Fail | TestState::Flaky => {
+                // Stay in terminal state for a bit, then reset
+                if pseudo_random(frame + self.id as u64 * 11) % 30 == 0 {
+                    self.state = TestState::Idle;
+                    self.progress = 0;
+                }
+            }
+        }
+    }
+
+    fn execute_simd(&self, seed: u64) -> (f32, f32) {
+        // Generate test data based on seed
+        let mut a = [0.0f32; 8];
+        let mut b = [0.0f32; 8];
+        for i in 0..8 {
+            a[i] = ((seed + i as u64) % 100) as f32 / 10.0;
+            b[i] = ((seed * 3 + i as u64) % 100) as f32 / 10.0;
+        }
+
+        match self.kind {
+            TestKind::DotProduct => {
+                let result = simd_dot_product(&a, &b);
+                let expected: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+                (result, expected)
+            }
+            TestKind::Reduce => {
+                let result = simd_reduce_sum(&a);
+                let expected: f32 = a.iter().sum();
+                (result, expected)
+            }
+            TestKind::MatVec => {
+                let matrix = [[1.0f32; 8]; 8]; // Identity-ish
+                let result = simd_matvec(&matrix, &a);
+                (result[0], a.iter().sum())
+            }
+            TestKind::Softmax => {
+                // Simplified softmax check
+                let max_val = a.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+                let sum: f32 = a.iter().map(|x| (x - max_val).exp()).sum();
+                (sum, sum) // Always passes
+            }
+            TestKind::Attention => {
+                let qk = simd_dot_product(&a, &b);
+                let scaled = qk / 8.0f32.sqrt();
+                (scaled, scaled)
+            }
+            TestKind::LayerNorm => {
+                let mean = simd_reduce_sum(&a) / 8.0;
+                let variance: f32 = a.iter().map(|x| (x - mean).powi(2)).sum::<f32>() / 8.0;
+                (variance.sqrt(), variance.sqrt())
+            }
+            TestKind::Gelu => {
+                let x = a[0];
+                let gelu = 0.5 * x * (1.0 + (0.7978845608 * (x + 0.044715 * x.powi(3))).tanh());
+                (gelu, gelu)
+            }
+            TestKind::Transpose => {
+                // Check identity
+                (a[0], a[0])
+            }
+        }
+    }
+}
+
+/// Simple PRNG for animation variation
+fn pseudo_random(seed: u64) -> u64 {
+    let mut x = seed;
+    x ^= x << 13;
+    x ^= x >> 7;
+    x ^= x << 17;
+    x
+}
+
+// ============================================================================
+// BRICK COMPUTER (Test Runner)
+// ============================================================================
+
 struct BrickComputer {
-    lanes: Vec<SimdLane>,
-    total_ops: u64,
+    bricks: Vec<TestBrick>,
+    frame: u64,
     start_time: Instant,
-    history: Vec<f64>,
-    budget_ms: u32,
-    used_ms: u32,
+    history: Vec<f64>, // Pass rate history for sparkline
+    total_pass: u64,
+    total_fail: u64,
 }
 
 impl BrickComputer {
-    fn new(lane_count: usize) -> Self {
+    fn new(count: usize) -> Self {
         Self {
-            lanes: (0..lane_count).map(SimdLane::new).collect(),
-            total_ops: 0,
+            bricks: (0..count).map(TestBrick::new).collect(),
+            frame: 0,
             start_time: Instant::now(),
             history: Vec::with_capacity(60),
-            budget_ms: 16, // 60fps
-            used_ms: 0,
+            total_pass: 0,
+            total_fail: 0,
         }
     }
 
-    fn step(&mut self, inputs: &[f32]) {
-        let step_start = Instant::now();
+    fn tick(&mut self, delta_ms: u32) {
+        self.frame += 1;
 
-        for (lane, &input) in self.lanes.iter_mut().zip(inputs.iter()) {
-            lane.compute(input);
+        for brick in &mut self.bricks {
+            let prev_state = brick.state;
+            brick.tick(delta_ms, self.frame);
+
+            // Track completions
+            if prev_state == TestState::Running {
+                match brick.state {
+                    TestState::Pass => {
+                        self.total_pass += 1;
+                    }
+                    TestState::Fail | TestState::Flaky => {
+                        self.total_fail += 1;
+                    }
+                    _ => {}
+                }
+            }
         }
 
-        self.total_ops += self.lanes.len() as u64;
-        self.used_ms = step_start.elapsed().as_millis() as u32;
-
-        // Track utilization history
-        let utilization = (self.used_ms as f64 / self.budget_ms as f64).min(1.0);
-        self.history.push(utilization);
+        // Update history
+        let total = self.total_pass + self.total_fail;
+        let pass_rate = if total > 0 {
+            self.total_pass as f64 / total as f64
+        } else {
+            1.0
+        };
+        self.history.push(pass_rate);
         if self.history.len() > 60 {
             self.history.remove(0);
         }
     }
 
-    fn throughput(&self) -> f64 {
+    fn running_count(&self) -> usize {
+        self.bricks
+            .iter()
+            .filter(|b| b.state == TestState::Running)
+            .count()
+    }
+
+    fn pass_count(&self) -> usize {
+        self.bricks
+            .iter()
+            .filter(|b| b.state == TestState::Pass)
+            .count()
+    }
+
+    fn fail_count(&self) -> usize {
+        self.bricks
+            .iter()
+            .filter(|b| matches!(b.state, TestState::Fail | TestState::Flaky))
+            .count()
+    }
+
+    fn tests_per_second(&self) -> f64 {
         let elapsed = self.start_time.elapsed().as_secs_f64();
         if elapsed > 0.0 {
-            self.total_ops as f64 / elapsed
+            (self.total_pass + self.total_fail) as f64 / elapsed
         } else {
             0.0
         }
     }
-
-    fn avg_latency_us(&self) -> u32 {
-        if self.lanes.is_empty() {
-            return 0;
-        }
-        self.lanes.iter().map(|l| l.latency_us).sum::<u32>() / self.lanes.len() as u32
-    }
 }
 
 // ============================================================================
-// RENDERING FUNCTIONS
+// RENDERING
 // ============================================================================
 
 fn clear_screen() {
     print!("\x1b[2J\x1b[H");
-    io::stdout().flush().ok();
 }
 
-fn draw_box(title: &str, x: usize, y: usize, width: usize, height: usize, color: &str) {
-    // Move to position
+fn move_to(x: usize, y: usize) {
     print!("\x1b[{};{}H", y, x);
+}
 
-    // Top border
-    print!("{}{}{}", color, BOX_TL, RESET);
-    print!("{}{}", color, BOX_H.repeat(width - 2));
-    print!("{}{}", color, BOX_TR);
-    print!("{}", RESET);
+fn draw_box(title: &str, x: usize, y: usize, w: usize, h: usize, color: &str) {
+    move_to(x, y);
+    print!("{}{}{}{}", color, BOX_TL, BOX_H.repeat(w - 2), BOX_TR);
 
-    // Title
     if !title.is_empty() {
-        print!("\x1b[{};{}H", y, x + 2);
+        move_to(x + 2, y);
         print!("{}{} {} {}", BOLD, color, title, RESET);
     }
 
-    // Sides
-    for row in 1..height - 1 {
-        print!("\x1b[{};{}H", y + row, x);
-        print!("{}{}{}", color, BOX_V, RESET);
-        print!("\x1b[{};{}H", y + row, x + width - 1);
-        print!("{}{}{}", color, BOX_V, RESET);
+    for row in 1..h - 1 {
+        move_to(x, y + row);
+        print!("{}{}", color, BOX_V);
+        move_to(x + w - 1, y + row);
+        print!("{}{}", color, BOX_V);
     }
 
-    // Bottom border
-    print!("\x1b[{};{}H", y + height - 1, x);
-    print!("{}{}{}", color, BOX_BL, RESET);
-    print!("{}{}", color, BOX_H.repeat(width - 2));
-    print!("{}{}", color, BOX_BR);
-    print!("{}", RESET);
+    move_to(x, y + h - 1);
+    print!(
+        "{}{}{}{}{}",
+        color,
+        BOX_BL,
+        BOX_H.repeat(w - 2),
+        BOX_BR,
+        RESET
+    );
 }
 
-fn draw_brick(lane: &SimdLane, x: usize, y: usize) {
-    let (bg, fg, symbol) = match lane.state {
-        BrickState::Idle => (BG_DARK, GRAY, "░░"),
-        BrickState::Computing => (BG_BLUE, WHITE, "▓▓"),
-        BrickState::Success => (BG_GREEN, WHITE, "██"),
-        BrickState::Warning => (BG_YELLOW, WHITE, "▓▓"),
-        BrickState::Error => (BG_RED, WHITE, "XX"),
+fn draw_brick(brick: &TestBrick, x: usize, y: usize, frame: u64) {
+    let spinner_idx = ((frame / 2) % 8) as usize;
+    let progress_idx = (brick.progress as usize * 7 / 100).min(7);
+
+    let (bg, fg, line1, line2, line3) = match brick.state {
+        TestState::Idle => (
+            BG_DARKER,
+            GRAY,
+            format!("  {}  ", BLOCK_LIGHT),
+            format!(" {:^4}", brick.kind.name()),
+            format!("  {}  ", BLOCK_LIGHT),
+        ),
+        TestState::Queued => (
+            BG_DARK,
+            YELLOW,
+            format!("  ◌  "),
+            format!(" {:^4}", brick.kind.name()),
+            format!(" wait"),
+        ),
+        TestState::Running => (
+            BG_BLUE,
+            WHITE,
+            format!("  {}  ", SPINNER[spinner_idx]),
+            format!(" {:^4}", brick.kind.name()),
+            format!(" {:>3}%", brick.progress),
+        ),
+        TestState::Pass => (
+            BG_GREEN,
+            WHITE,
+            format!("  ✓  "),
+            format!(" {:^4}", brick.kind.name()),
+            format!(" PASS"),
+        ),
+        TestState::Fail => (
+            BG_RED,
+            WHITE,
+            format!("  ✗  "),
+            format!(" {:^4}", brick.kind.name()),
+            format!(" FAIL"),
+        ),
+        TestState::Flaky => (
+            BG_YELLOW,
+            WHITE,
+            format!("  ⚡ "),
+            format!(" {:^4}", brick.kind.name()),
+            format!("FLAKY"),
+        ),
     };
 
-    // Draw 3x2 brick
-    print!("\x1b[{};{}H", y, x);
-    print!("{}{}{}{}{}", bg, fg, symbol, symbol, RESET);
-    print!("\x1b[{};{}H", y + 1, x);
-    print!("{}{} {:2} {}", bg, fg, lane.id, RESET);
-    print!("\x1b[{};{}H", y + 2, x);
-    print!("{}{}{}{}{}", bg, fg, symbol, symbol, RESET);
-}
-
-fn draw_meter(label: &str, value: f64, x: usize, y: usize, width: usize) {
-    let bar_width = width - label.len() - 8;
-    let filled = ((value * bar_width as f64) as usize).min(bar_width);
-
-    let color = if value > 0.9 {
-        RED
-    } else if value > 0.7 {
-        YELLOW
-    } else {
-        GREEN
-    };
-
-    print!("\x1b[{};{}H", y, x);
-    print!("{}{:>6}{} ", BOLD, label, RESET);
-    print!("{}", color);
-
-    for i in 0..bar_width {
-        if i < filled {
-            print!("{}", BLOCK_FULL);
+    // Draw 3-line brick with pulsing for running state
+    let pulse = if brick.state == TestState::Running {
+        if (frame / 4) % 2 == 0 {
+            BOLD
         } else {
-            print!("{}{}", GRAY, BLOCK_EMPTY);
-            print!("{}", color);
+            ""
         }
-    }
+    } else {
+        ""
+    };
 
-    print!("{} {:>5.1}%{}", RESET, value * 100.0, RESET);
+    move_to(x, y);
+    print!("{}{}{}{}{}", bg, fg, pulse, line1, RESET);
+    move_to(x, y + 1);
+    print!("{}{}{}{}{}", bg, fg, pulse, line2, RESET);
+    move_to(x, y + 2);
+    print!("{}{}{}{}{}", bg, fg, pulse, line3, RESET);
+
+    // Progress bar under brick when running
+    if brick.state == TestState::Running {
+        move_to(x, y + 3);
+        print!("{}", CYAN);
+        for i in 0..6 {
+            if i * 100 / 6 < brick.progress as usize {
+                print!("{}", PROGRESS[progress_idx]);
+            } else {
+                print!("{}", BLOCK_LIGHT);
+            }
+        }
+        print!("{}", RESET);
+    } else {
+        move_to(x, y + 3);
+        print!("      ");
+    }
 }
 
 fn draw_sparkline(data: &[f64], x: usize, y: usize, width: usize) {
-    print!("\x1b[{};{}H", y, x);
+    move_to(x, y);
 
-    let step = data.len().max(1) / width.max(1);
+    if data.is_empty() {
+        for _ in 0..width {
+            print!("{}{}{}", GRAY, BRAILLE[0], RESET);
+        }
+        return;
+    }
+
+    let start = data.len().saturating_sub(width);
     for i in 0..width {
-        let idx = (i * step).min(data.len().saturating_sub(1));
-        let val = data.get(idx).copied().unwrap_or(0.0);
+        let idx = start + i;
+        let val = data.get(idx).copied().unwrap_or(1.0);
         let level = ((val * 7.0) as usize).min(7);
 
-        let color = if val > 0.9 {
-            RED
-        } else if val > 0.7 {
+        let color = if val >= 0.95 {
+            GREEN
+        } else if val >= 0.80 {
             YELLOW
         } else {
-            GREEN
+            RED
         };
 
-        print!("{}{}{}", color, BRAILLE_DOTS[level], RESET);
+        print!("{}{}{}", color, BRAILLE[level], RESET);
     }
 }
 
-fn draw_stats(computer: &BrickComputer, x: usize, y: usize) {
-    let success = computer
-        .lanes
-        .iter()
-        .filter(|l| l.state == BrickState::Success)
-        .count();
-    let warning = computer
-        .lanes
-        .iter()
-        .filter(|l| l.state == BrickState::Warning)
-        .count();
-    let error = computer
-        .lanes
-        .iter()
-        .filter(|l| l.state == BrickState::Error)
-        .count();
+#[allow(dead_code)]
+fn draw_meter(label: &str, value: f64, max: f64, x: usize, y: usize, width: usize, color: &str) {
+    move_to(x, y);
+    let bar_w = width - 12;
+    let filled = ((value / max) * bar_w as f64).min(bar_w as f64) as usize;
 
-    print!("\x1b[{};{}H", y, x);
-    print!(
-        "{}Throughput:{} {:>12.0} ops/s",
-        BOLD,
-        RESET,
-        computer.throughput()
-    );
-
-    print!("\x1b[{};{}H", y + 1, x);
-    print!(
-        "{}Avg Latency:{} {:>10}μs",
-        BOLD,
-        RESET,
-        computer.avg_latency_us()
-    );
-
-    print!("\x1b[{};{}H", y + 2, x);
-    print!("{}Total Ops:{} {:>13}", BOLD, RESET, computer.total_ops);
-
-    print!("\x1b[{};{}H", y + 4, x);
-    print!("{}Lanes: {}", BOLD, RESET);
-    print!("{}{}{} ", GREEN, BLOCK_FULL, RESET);
-    print!("{}{} ", success, RESET);
-    print!("{}{}{} ", YELLOW, BLOCK_FULL, RESET);
-    print!("{}{} ", warning, RESET);
-    print!("{}{}{} ", RED, BLOCK_FULL, RESET);
-    print!("{}", error);
+    print!("{}{:>8}{} ", BOLD, label, RESET);
+    print!("{}", color);
+    for i in 0..bar_w {
+        if i < filled {
+            print!("{}", BLOCK_FULL);
+        } else {
+            print!("{}{}", GRAY, BLOCK_LIGHT);
+        }
+    }
+    print!("{}", RESET);
 }
 
-fn draw_header() {
-    print!("\x1b[1;1H");
-    print!("{}{}  BRICK COMPUTER  {}", BOLD, MAGENTA, RESET);
-    print!("{}  SIMD Visualization Demo  {}", DIM, RESET);
+fn draw_stats(computer: &BrickComputer, x: usize, y: usize, frame: u64) {
+    let running = computer.running_count();
+    let passed = computer.pass_count();
+    let failed = computer.fail_count();
+
+    move_to(x, y);
+    print!(
+        "{}Tests/sec:{} {:>8.1}",
+        BOLD,
+        RESET,
+        computer.tests_per_second()
+    );
+
+    move_to(x, y + 1);
+    print!(
+        "{}Total:{} {:>12}",
+        BOLD,
+        RESET,
+        computer.total_pass + computer.total_fail
+    );
+
+    move_to(x, y + 3);
+    let spinner = SPINNER[((frame / 2) % 8) as usize];
+    print!("{}Running:{} ", BOLD, RESET);
+    if running > 0 {
+        print!("{}{} {}{}", CYAN, spinner, running, RESET);
+    } else {
+        print!("{}0{}", GRAY, RESET);
+    }
+
+    move_to(x, y + 4);
+    print!(
+        "{}Pass:{} {}{}{} {}Fail:{} {}{}{}",
+        BOLD,
+        RESET,
+        GREEN,
+        passed,
+        RESET,
+        BOLD,
+        RESET,
+        if failed > 0 { RED } else { GRAY },
+        failed,
+        RESET
+    );
+
+    // Pass rate
+    let total = computer.total_pass + computer.total_fail;
+    let rate = if total > 0 {
+        computer.total_pass as f64 / total as f64 * 100.0
+    } else {
+        100.0
+    };
+    move_to(x, y + 6);
+    let rate_color = if rate >= 95.0 {
+        GREEN
+    } else if rate >= 80.0 {
+        YELLOW
+    } else {
+        RED
+    };
+    print!(
+        "{}Pass Rate:{} {}{:.1}%{}",
+        BOLD, RESET, rate_color, rate, RESET
+    );
+}
+
+fn draw_header(frame: u64) {
+    move_to(1, 1);
+    let pulse = if (frame / 8) % 2 == 0 { BOLD } else { "" };
+    print!("{}{}  BRICK COMPUTER  {}", pulse, MAGENTA, RESET);
+    print!("{}  SIMD Test Runner  {}", DIM, RESET);
     print!("{}  presentar v0.2  {}", CYAN, RESET);
 }
 
-fn draw_legend(y: usize) {
-    print!("\x1b[{};2H", y);
+fn draw_legend(y: usize, frame: u64) {
+    move_to(2, y);
     print!("{}Legend:{} ", BOLD, RESET);
-    print!("{}{}{} Idle  ", BG_DARK, GRAY, BLOCK_EMPTY.repeat(2));
-    print!("{}", RESET);
-    print!("{}{}{} Computing  ", BG_BLUE, WHITE, "▓▓");
-    print!("{}", RESET);
-    print!("{}{}{} Success  ", BG_GREEN, WHITE, BLOCK_FULL.repeat(2));
-    print!("{}", RESET);
-    print!("{}{}{} Warning  ", BG_YELLOW, WHITE, "▓▓");
-    print!("{}", RESET);
-    print!("{}{}{} Error", BG_RED, WHITE, "XX");
-    print!("{}", RESET);
+
+    let spinner = SPINNER[((frame / 2) % 8) as usize];
+
+    print!("{}{} ◌ {} Queue ", BG_DARK, YELLOW, RESET);
+    print!("{}{} {} {} Run ", BG_BLUE, WHITE, spinner, RESET);
+    print!("{}{} ✓ {} Pass ", BG_GREEN, WHITE, RESET);
+    print!("{}{} ✗ {} Fail ", BG_RED, WHITE, RESET);
+    print!("{}{} ⚡{} Flaky", BG_YELLOW, WHITE, RESET);
 }
 
-fn draw_footer(y: usize) {
-    print!("\x1b[{};2H", y);
-    print!("{}Press Ctrl+C to exit{}", DIM, RESET);
+fn draw_jidoka(computer: &BrickComputer, x: usize, y: usize, frame: u64) {
+    let any_fail = computer.fail_count() > 0;
+    let any_running = computer.running_count() > 0;
+
+    move_to(x, y);
+    if any_fail {
+        let blink = if (frame / 4) % 2 == 0 { BLINK } else { "" };
+        print!(
+            "{}{}● JIDOKA HALT{} - Test failure detected, investigating...",
+            blink, RED, RESET
+        );
+    } else if any_running {
+        let spinner = SPINNER[((frame / 2) % 8) as usize];
+        print!(
+            "{}{} JIDOKA{} - {} Tests executing SIMD compute...",
+            CYAN,
+            spinner,
+            RESET,
+            computer.running_count()
+        );
+    } else {
+        print!(
+            "{}{}● JIDOKA PASS{} - All bricks lit, render allowed",
+            BOLD, GREEN, RESET
+        );
+    }
+
+    // Show what SIMD ops are running
+    move_to(x, y + 1);
+    print!("{}SIMD Ops:{} ", DIM, RESET);
+    for brick in &computer.bricks {
+        if brick.state == TestState::Running {
+            print!("{}{}{} ", ORANGE, brick.kind.name(), RESET);
+        }
+    }
 }
 
 // ============================================================================
@@ -347,133 +688,66 @@ fn draw_footer(y: usize) {
 // ============================================================================
 
 fn main() {
-    // 8-wide SIMD (AVX-256 style)
-    let lane_count = 8;
-    let mut computer = BrickComputer::new(lane_count);
-
-    // Random-ish inputs
-    let inputs: Vec<f32> = (0..lane_count).map(|i| (i as f32) * 0.1 + 0.5).collect();
-
-    clear_screen();
+    // 16 test bricks (2 rows of 8)
+    let brick_count = 16;
+    let mut computer = BrickComputer::new(brick_count);
 
     // Hide cursor
     print!("\x1b[?25l");
-    io::stdout().flush().ok();
+    clear_screen();
 
-    let frame_count = 100;
+    let tick_ms = 50u32; // 20 FPS
+    let mut frame = 0u64;
 
-    for frame in 0..frame_count {
+    // Run until Ctrl+C
+    loop {
         clear_screen();
 
         // Header
-        draw_header();
+        draw_header(frame);
 
-        // SIMD Lanes panel
-        draw_box("SIMD LANES (AVX-256)", 2, 3, 50, 8, CYAN);
+        // SIMD Test Bricks - 2 rows of 8
+        draw_box("SIMD TEST BRICKS", 2, 3, 58, 12, CYAN);
 
-        // Draw bricks
-        for (i, lane) in computer.lanes.iter().enumerate() {
-            let bx = 4 + (i * 6);
-            draw_brick(lane, bx, 5);
+        // Row 1: Bricks 0-7
+        for i in 0..8 {
+            let bx = 4 + (i * 7);
+            draw_brick(&computer.bricks[i], bx, 5, frame);
+        }
+
+        // Row 2: Bricks 8-15
+        for i in 8..16 {
+            let bx = 4 + ((i - 8) * 7);
+            draw_brick(&computer.bricks[i], bx, 10, frame);
         }
 
         // Stats panel
-        draw_box("PERFORMANCE", 54, 3, 28, 8, MAGENTA);
-        draw_stats(&computer, 56, 5);
+        draw_box("PERFORMANCE", 62, 3, 24, 12, MAGENTA);
+        draw_stats(&computer, 64, 5, frame);
 
-        // Budget panel
-        draw_box("BUDGET UTILIZATION", 2, 12, 80, 6, BLUE);
-        let utilization = computer.used_ms as f64 / computer.budget_ms as f64;
-        draw_meter("Frame", utilization, 4, 14, 40);
+        // Sparkline panel
+        draw_box("PASS RATE HISTORY", 2, 16, 84, 4, BLUE);
+        move_to(4, 18);
+        print!("{}Rate:{} ", DIM, RESET);
+        draw_sparkline(&computer.history, 11, 18, 70);
 
-        print!("\x1b[14;50H");
-        print!(
-            "{}Budget:{} {}ms  {}Used:{} {}ms",
-            BOLD, RESET, computer.budget_ms, BOLD, RESET, computer.used_ms
-        );
+        // JIDOKA status
+        draw_box("VERIFICATION STATUS", 2, 21, 84, 4, GREEN);
+        draw_jidoka(&computer, 4, 23, frame);
 
-        // Sparkline history
-        print!("\x1b[16;4H");
-        print!("{}History: {}", DIM, RESET);
-        draw_sparkline(&computer.history, 14, 16, 60);
+        // Legend
+        draw_legend(26, frame);
 
-        // Brick verification panel
-        draw_box("BRICK VERIFICATION", 2, 19, 80, 5, GREEN);
-
-        let all_pass = computer
-            .lanes
-            .iter()
-            .all(|l| l.state == BrickState::Success);
-        print!("\x1b[21;4H");
-        if all_pass {
-            print!(
-                "{}{}ALL BRICKS LIT{} - JIDOKA: Render allowed",
-                BOLD, GREEN, RESET
-            );
-        } else {
-            print!(
-                "{}{}SOME BRICKS DARK{} - JIDOKA: Investigating...",
-                BOLD, YELLOW, RESET
-            );
-        }
-
-        print!("\x1b[22;4H");
-        print!(
-            "{}Assertions:{} TextVisible ✓  ContrastRatio ✓  MaxLatency ",
-            DIM, RESET
-        );
-        if computer.avg_latency_us() < 100 {
-            print!("{}✓{}", GREEN, RESET);
-        } else {
-            print!("{}✗{}", RED, RESET);
-        }
-
-        // Legend and footer
-        draw_legend(25);
-        draw_footer(27);
-
-        // Frame counter
-        print!("\x1b[27;70H");
-        print!("{}Frame {}/{}{}", DIM, frame + 1, frame_count, RESET);
+        // Footer
+        move_to(2, 28);
+        print!("{}Frame {} │ Press Ctrl+C to exit{}", DIM, frame, RESET);
 
         io::stdout().flush().ok();
 
-        // Step the simulation
-        computer.step(&inputs);
+        // Tick simulation
+        computer.tick(tick_ms);
+        frame += 1;
 
-        // Animate
-        thread::sleep(Duration::from_millis(100));
+        thread::sleep(Duration::from_millis(tick_ms as u64));
     }
-
-    // Show cursor
-    print!("\x1b[?25h");
-
-    // Final summary
-    println!("\n\n{}{}=== SIMULATION COMPLETE ==={}", BOLD, CYAN, RESET);
-    println!();
-    println!("{}Total Operations:{} {}", BOLD, RESET, computer.total_ops);
-    println!(
-        "{}Final Throughput:{} {:.0} ops/s",
-        BOLD,
-        RESET,
-        computer.throughput()
-    );
-    println!(
-        "{}Average Latency:{} {}μs",
-        BOLD,
-        RESET,
-        computer.avg_latency_us()
-    );
-    println!();
-
-    let success_rate = computer
-        .lanes
-        .iter()
-        .filter(|l| l.state == BrickState::Success)
-        .count() as f64
-        / computer.lanes.len() as f64
-        * 100.0;
-
-    println!("{}Brick Success Rate:{} {:.1}%", BOLD, RESET, success_rate);
-    println!();
 }
