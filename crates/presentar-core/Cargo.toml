@@ -13,7 +13,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 trueno = { workspace = true, optional = true }
 # Brick Architecture: Tests define interface (PROBAR-SPEC-009)
-jugar-probar = { path = "/home/noah/src/probar/crates/probar", default-features = false, optional = true }
+jugar-probar = { version = "1.0", default-features = false, optional = true }
 
 [features]
 # PROBAR-SPEC-009: Brick Architecture is MANDATORY, not optional
