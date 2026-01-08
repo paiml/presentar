@@ -10,7 +10,7 @@
   <a href="https://crates.io/crates/presentar"><img src="https://img.shields.io/crates/v/presentar.svg" alt="Crates.io"></a>
   <a href="https://docs.rs/presentar"><img src="https://docs.rs/presentar/badge.svg" alt="Documentation"></a>
   <a href="https://github.com/paiml/presentar/actions/workflows/ci.yml"><img src="https://github.com/paiml/presentar/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://img.shields.io/badge/coverage-91%25-brightgreen"><img src="https://img.shields.io/badge/coverage-91%25-brightgreen" alt="Coverage"></a>
+  <a href="https://img.shields.io/badge/coverage-95%25-brightgreen"><img src="https://img.shields.io/badge/coverage-95%25-brightgreen" alt="Coverage"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
 </p>
 
@@ -49,8 +49,8 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-presentar = "0.1"
-presentar-widgets = "0.1"
+presentar = "0.2"
+presentar-widgets = "0.2"
 ```
 
 ## Quick Start

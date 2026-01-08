@@ -1201,7 +1201,7 @@ dependencies = [
 
 [[package]]
 name = "jugar-probar"
-version = "1.0.0-rc.1"
+version = "1.0.0"
 dependencies = [
  "base64",
  "bincode",
@@ -1759,7 +1759,7 @@ dependencies = [
 
 [[package]]
 name = "presentar"
-version = "0.1.5"
+version = "0.2.0"
 dependencies = [
  "bincode",
  "bytemuck",
@@ -1788,7 +1788,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-cli"
-version = "0.1.5"
+version = "0.2.0"
 dependencies = [
  "clap",
  "notify",
@@ -1799,7 +1799,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-core"
-version = "0.1.5"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "jugar-probar",
@@ -1811,7 +1811,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-layout"
-version = "0.1.5"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "presentar-core",
@@ -1822,7 +1822,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-test"
-version = "0.1.5"
+version = "0.2.0"
 dependencies = [
  "presentar-core",
  "presentar-test-macros",
@@ -1833,7 +1833,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-test-macros"
-version = "0.1.5"
+version = "0.2.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1842,7 +1842,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-widgets"
-version = "0.1.5"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "presentar-core",
@@ -1854,7 +1854,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-yaml"
-version = "0.1.5"
+version = "0.2.0"
 dependencies = [
  "presentar-core",
  "proptest",

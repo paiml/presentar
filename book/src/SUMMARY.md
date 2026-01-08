@@ -23,6 +23,7 @@
 
 # Widget System
 
+- [Brick Architecture](./widgets/brick-architecture.md)
 - [Widget Trait](./widgets/widget-trait.md)
 - [Core Widgets](./widgets/core-widgets.md)
   - [Container](./widgets/container.md)
