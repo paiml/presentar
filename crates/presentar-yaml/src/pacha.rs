@@ -1256,4 +1256,229 @@ mod tests {
         let uri2 = PachaUri::parse("pacha://server.com/data?limit=10").unwrap();
         assert!(loader.build_http_url(&uri2).contains("limit=10"));
     }
+
+    // ===== Additional Coverage Tests =====
+
+    #[test]
+    fn test_pacha_error_display_all_variants() {
+        assert!(PachaError::InvalidProtocol("http://x".to_string())
+            .to_string()
+            .contains("Invalid protocol"));
+        assert!(PachaError::NotFound("path".to_string())
+            .to_string()
+            .contains("not found"));
+        assert!(PachaError::ConnectionError("timeout".to_string())
+            .to_string()
+            .contains("Connection error"));
+        assert!(PachaError::ParseError("bad json".to_string())
+            .to_string()
+            .contains("Parse error"));
+        assert!(PachaError::IoError("disk full".to_string())
+            .to_string()
+            .contains("IO error"));
+        assert!(PachaError::UnsupportedFormat("xyz".to_string())
+            .to_string()
+            .contains("Unsupported format"));
+    }
+
+    #[test]
+    fn test_pacha_error_is_error_trait() {
+        let err = PachaError::NotFound("test".to_string());
+        // Just verify it implements std::error::Error
+        let _: &dyn std::error::Error = &err;
+    }
+
+    #[test]
+    fn test_loader_current_dir() {
+        let loader = PachaLoader::current_dir();
+        // Just verify it doesn't panic
+        assert!(!loader.is_cached("pacha://data/nonexistent"));
+    }
+
+    #[test]
+    fn test_loader_cache_operations() {
+        let mut loader = PachaLoader::new(PathBuf::from("/tmp"));
+        assert!(!loader.is_cached("pacha://data/test"));
+        assert!(loader.get_cached("pacha://data/test").is_none());
+    }
+
+    #[test]
+    fn test_resource_type_clone() {
+        let rt = ResourceType::Model;
+        let cloned = rt;
+        assert_eq!(cloned, ResourceType::Model);
+    }
+
+    #[test]
+    fn test_resource_type_debug() {
+        let rt = ResourceType::Api;
+        let debug = format!("{:?}", rt);
+        assert!(debug.contains("Api"));
+    }
+
+    #[test]
+    fn test_pacha_uri_clone() {
+        let uri = PachaUri::parse("pacha://data/test").unwrap();
+        let cloned = uri.clone();
+        assert_eq!(cloned.path, "/data/test");
+    }
+
+    #[test]
+    fn test_loaded_resource_clone() {
+        let resource = LoadedResource {
+            uri: "pacha://data/test".to_string(),
+            data: vec![1, 2, 3],
+            content_type: ContentType::Json,
+            last_modified: Some(12345),
+        };
+        let cloned = resource.clone();
+        assert_eq!(cloned.uri, "pacha://data/test");
+        assert_eq!(cloned.data, vec![1, 2, 3]);
+        assert_eq!(cloned.content_type, ContentType::Json);
+        assert_eq!(cloned.last_modified, Some(12345));
+    }
+
+    #[test]
+    fn test_content_type_clone() {
+        let ct = ContentType::Csv;
+        let cloned = ct;
+        assert_eq!(cloned, ContentType::Csv);
+    }
+
+    #[test]
+    fn test_content_type_from_extension_uppercase() {
+        assert_eq!(ContentType::from_extension("JSON"), ContentType::Json);
+        assert_eq!(ContentType::from_extension("CSV"), ContentType::Csv);
+        assert_eq!(ContentType::from_extension("ALD"), ContentType::Ald);
+        assert_eq!(ContentType::from_extension("APR"), ContentType::Apr);
+    }
+
+    #[test]
+    fn test_http_response_content_type() {
+        let mut headers = HashMap::new();
+        headers.insert("Content-Type".to_string(), "text/plain".to_string());
+        let response = HttpResponse {
+            status: 200,
+            headers,
+            body: vec![],
+        };
+        assert_eq!(response.content_type(), Some("text/plain"));
+    }
+
+    #[test]
+    fn test_http_response_no_content_type() {
+        let response = HttpResponse {
+            status: 200,
+            headers: HashMap::new(),
+            body: vec![],
+        };
+        assert!(response.content_type().is_none());
+        assert_eq!(response.detect_content_type(), ContentType::Binary);
+    }
+
+    #[test]
+    fn test_noop_http_client_default() {
+        let client = NoopHttpClient::default();
+        let req = HttpRequest::get("http://test.com");
+        assert!(client.request(req).is_err());
+    }
+
+    #[test]
+    fn test_http_method_clone() {
+        let method = HttpMethod::Put;
+        let cloned = method;
+        assert_eq!(cloned, HttpMethod::Put);
+    }
+
+    #[test]
+    fn test_http_method_debug() {
+        let method = HttpMethod::Delete;
+        let debug = format!("{:?}", method);
+        assert!(debug.contains("Delete"));
+    }
+
+    #[test]
+    fn test_http_request_clone() {
+        let req = HttpRequest::get("http://test.com")
+            .with_header("X-Test", "value")
+            .with_timeout(5000);
+        let cloned = req.clone();
+        assert_eq!(cloned.url, "http://test.com");
+        assert_eq!(cloned.timeout_ms, Some(5000));
+    }
+
+    #[test]
+    fn test_retry_config_clone() {
+        let config = RetryConfig {
+            max_attempts: 5,
+            ..RetryConfig::default()
+        };
+        let cloned = config.clone();
+        assert_eq!(cloned.max_attempts, 5);
+    }
+
+    #[test]
+    fn test_parse_absolute_path() {
+        let uri = PachaUri::parse("pacha:///absolute/path").unwrap();
+        assert_eq!(uri.path, "/absolute/path");
+        assert!(uri.is_local());
+    }
+
+    #[test]
+    fn test_remote_loader_4xx_no_retry() {
+        struct Mock4xx;
+        impl HttpClient for Mock4xx {
+            fn request(&self, _req: HttpRequest) -> Result<HttpResponse, PachaError> {
+                Ok(HttpResponse {
+                    status: 404,
+                    headers: HashMap::new(),
+                    body: vec![],
+                })
+            }
+        }
+
+        let loader = RemotePachaLoader::new(Mock4xx).with_retry(RetryConfig {
+            max_attempts: 3,
+            ..RetryConfig::default()
+        });
+
+        let result = loader.load_fresh("pacha://remote.server.com:8080/api/data");
+        assert!(matches!(result, Err(PachaError::ConnectionError(_))));
+    }
+
+    #[test]
+    fn test_remote_loader_5xx_retries() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        use std::sync::Arc;
+
+        struct Mock5xx {
+            attempts: Arc<AtomicU32>,
+        }
+
+        impl HttpClient for Mock5xx {
+            fn request(&self, _req: HttpRequest) -> Result<HttpResponse, PachaError> {
+                self.attempts.fetch_add(1, Ordering::SeqCst);
+                Ok(HttpResponse {
+                    status: 500,
+                    headers: HashMap::new(),
+                    body: vec![],
+                })
+            }
+        }
+
+        let attempts = Arc::new(AtomicU32::new(0));
+        let loader = RemotePachaLoader::new(Mock5xx {
+            attempts: attempts.clone(),
+        })
+        .with_retry(RetryConfig {
+            max_attempts: 3,
+            initial_delay_ms: 0,
+            max_delay_ms: 0,
+            backoff_multiplier: 1.0,
+        });
+
+        let _ = loader.load_fresh("pacha://remote.server.com:8080/api/data");
+        // Should attempt max_attempts times
+        assert_eq!(attempts.load(Ordering::SeqCst), 3);
+    }
 }

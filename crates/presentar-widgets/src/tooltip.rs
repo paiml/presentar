@@ -956,4 +956,495 @@ mod tests {
         assert_eq!(tooltip.text_color, Color::RED);
         assert_eq!(tooltip.border_color, Color::GREEN);
     }
+
+    // ===== Additional Position Tests =====
+
+    #[test]
+    fn test_tooltip_position_top_left() {
+        let tooltip = Tooltip::new("Text")
+            .placement(TooltipPlacement::TopLeft)
+            .anchor(Rect::new(100.0, 100.0, 80.0, 30.0))
+            .show_arrow(true)
+            .arrow_size(6.0);
+
+        let size = Size::new(50.0, 24.0);
+        let pos = tooltip.calculate_position(size);
+
+        // Should be aligned to left edge of anchor
+        assert_eq!(pos.x, 100.0);
+        assert!(pos.y < 100.0); // Above anchor
+    }
+
+    #[test]
+    fn test_tooltip_position_top_right() {
+        let tooltip = Tooltip::new("Text")
+            .placement(TooltipPlacement::TopRight)
+            .anchor(Rect::new(100.0, 100.0, 80.0, 30.0))
+            .show_arrow(true)
+            .arrow_size(6.0);
+
+        let size = Size::new(50.0, 24.0);
+        let pos = tooltip.calculate_position(size);
+
+        // Should be aligned to right edge of anchor (100 + 80 - 50 = 130)
+        assert_eq!(pos.x, 130.0);
+        assert!(pos.y < 100.0);
+    }
+
+    #[test]
+    fn test_tooltip_position_bottom_left() {
+        let tooltip = Tooltip::new("Text")
+            .placement(TooltipPlacement::BottomLeft)
+            .anchor(Rect::new(100.0, 100.0, 80.0, 30.0))
+            .show_arrow(true)
+            .arrow_size(6.0);
+
+        let size = Size::new(50.0, 24.0);
+        let pos = tooltip.calculate_position(size);
+
+        // Should be aligned to left edge of anchor
+        assert_eq!(pos.x, 100.0);
+        assert!(pos.y > 130.0); // Below anchor (100 + 30 + arrow)
+    }
+
+    #[test]
+    fn test_tooltip_position_bottom_right() {
+        let tooltip = Tooltip::new("Text")
+            .placement(TooltipPlacement::BottomRight)
+            .anchor(Rect::new(100.0, 100.0, 80.0, 30.0))
+            .show_arrow(true)
+            .arrow_size(6.0);
+
+        let size = Size::new(50.0, 24.0);
+        let pos = tooltip.calculate_position(size);
+
+        // Should be aligned to right edge of anchor
+        assert_eq!(pos.x, 130.0);
+        assert!(pos.y > 130.0);
+    }
+
+    #[test]
+    fn test_tooltip_position_no_arrow() {
+        let tooltip = Tooltip::new("Text")
+            .placement(TooltipPlacement::Top)
+            .anchor(Rect::new(100.0, 100.0, 80.0, 30.0))
+            .show_arrow(false);
+
+        let size = Size::new(50.0, 24.0);
+        let pos = tooltip.calculate_position(size);
+
+        // Should be directly above without arrow offset
+        assert_eq!(pos.y, 100.0 - 24.0); // anchor.y - size.height
+    }
+
+    // ===== Calculate Size Tests =====
+
+    #[test]
+    fn test_calculate_size_no_max_width() {
+        let tooltip = Tooltip::new("Short text")
+            .padding(8.0)
+            .text_size(12.0)
+            .no_max_width();
+
+        let size = tooltip.calculate_size();
+        assert!(size.width > 0.0);
+        assert!(size.height > 0.0);
+    }
+
+    #[test]
+    fn test_calculate_size_wraps_long_text() {
+        let tooltip = Tooltip::new("This is a very long tooltip text that should wrap")
+            .padding(8.0)
+            .text_size(12.0)
+            .max_width(100.0);
+
+        let size = tooltip.calculate_size();
+        // Width should be capped at max_width
+        assert!(size.width <= 100.0);
+        // Height should increase due to wrapping
+        assert!(size.height > 12.0 * 1.2 + 16.0); // More than single line
+    }
+
+    // ===== Paint Tests =====
+
+    #[test]
+    fn test_tooltip_paint_invisible() {
+        use presentar_core::RecordingCanvas;
+
+        let tooltip = Tooltip::new("Text").visible(false);
+        let mut canvas = RecordingCanvas::new();
+        tooltip.paint(&mut canvas);
+
+        // Should not draw anything when invisible
+        assert_eq!(canvas.command_count(), 0);
+    }
+
+    #[test]
+    fn test_tooltip_paint_empty_content() {
+        use presentar_core::RecordingCanvas;
+
+        let tooltip = Tooltip::default().visible(true);
+        let mut canvas = RecordingCanvas::new();
+        tooltip.paint(&mut canvas);
+
+        // Should not draw anything when content is empty
+        assert_eq!(canvas.command_count(), 0);
+    }
+
+    #[test]
+    fn test_tooltip_paint_visible() {
+        use presentar_core::RecordingCanvas;
+
+        let mut tooltip = Tooltip::new("Help text")
+            .visible(true)
+            .anchor(Rect::new(100.0, 100.0, 80.0, 30.0))
+            .placement(TooltipPlacement::Top);
+
+        tooltip.layout(Rect::new(0.0, 0.0, 500.0, 500.0));
+
+        let mut canvas = RecordingCanvas::new();
+        tooltip.paint(&mut canvas);
+
+        // Should draw: background rect + arrow rect + text
+        assert!(canvas.command_count() >= 2);
+    }
+
+    #[test]
+    fn test_tooltip_paint_with_border() {
+        use presentar_core::RecordingCanvas;
+
+        let mut tooltip = Tooltip::new("Help text")
+            .visible(true)
+            .anchor(Rect::new(100.0, 100.0, 80.0, 30.0))
+            .border_width(2.0);
+
+        tooltip.layout(Rect::new(0.0, 0.0, 500.0, 500.0));
+
+        let mut canvas = RecordingCanvas::new();
+        tooltip.paint(&mut canvas);
+
+        // Should draw border when border_width > 0
+        assert!(canvas.command_count() >= 3); // bg + border + text + possibly arrow
+    }
+
+    #[test]
+    fn test_tooltip_paint_without_arrow() {
+        use presentar_core::RecordingCanvas;
+
+        let mut tooltip = Tooltip::new("Help text")
+            .visible(true)
+            .anchor(Rect::new(100.0, 100.0, 80.0, 30.0))
+            .show_arrow(false);
+
+        tooltip.layout(Rect::new(0.0, 0.0, 500.0, 500.0));
+
+        let mut canvas = RecordingCanvas::new();
+        tooltip.paint(&mut canvas);
+
+        // Should draw bg + text but no arrow
+        assert!(canvas.command_count() >= 2);
+    }
+
+    #[test]
+    fn test_tooltip_paint_bottom_arrow() {
+        use presentar_core::RecordingCanvas;
+
+        let mut tooltip = Tooltip::new("Help text")
+            .visible(true)
+            .anchor(Rect::new(100.0, 100.0, 80.0, 30.0))
+            .placement(TooltipPlacement::Bottom);
+
+        tooltip.layout(Rect::new(0.0, 0.0, 500.0, 500.0));
+
+        let mut canvas = RecordingCanvas::new();
+        tooltip.paint(&mut canvas);
+
+        assert!(canvas.command_count() >= 3);
+    }
+
+    #[test]
+    fn test_tooltip_paint_left_arrow() {
+        use presentar_core::RecordingCanvas;
+
+        let mut tooltip = Tooltip::new("Help text")
+            .visible(true)
+            .anchor(Rect::new(100.0, 100.0, 80.0, 30.0))
+            .placement(TooltipPlacement::Left);
+
+        tooltip.layout(Rect::new(0.0, 0.0, 500.0, 500.0));
+
+        let mut canvas = RecordingCanvas::new();
+        tooltip.paint(&mut canvas);
+
+        assert!(canvas.command_count() >= 3);
+    }
+
+    #[test]
+    fn test_tooltip_paint_right_arrow() {
+        use presentar_core::RecordingCanvas;
+
+        let mut tooltip = Tooltip::new("Help text")
+            .visible(true)
+            .anchor(Rect::new(100.0, 100.0, 80.0, 30.0))
+            .placement(TooltipPlacement::Right);
+
+        tooltip.layout(Rect::new(0.0, 0.0, 500.0, 500.0));
+
+        let mut canvas = RecordingCanvas::new();
+        tooltip.paint(&mut canvas);
+
+        assert!(canvas.command_count() >= 3);
+    }
+
+    // ===== Brick Trait Tests =====
+
+    #[test]
+    fn test_tooltip_brick_name() {
+        let tooltip = Tooltip::new("Text");
+        assert_eq!(tooltip.brick_name(), "Tooltip");
+    }
+
+    #[test]
+    fn test_tooltip_brick_assertions() {
+        let tooltip = Tooltip::new("Text");
+        let assertions = tooltip.assertions();
+        assert_eq!(assertions.len(), 2);
+        assert!(assertions.contains(&BrickAssertion::MaxLatencyMs(16)));
+        assert!(assertions.contains(&BrickAssertion::ContrastRatio(4.5)));
+    }
+
+    #[test]
+    fn test_tooltip_brick_budget() {
+        let tooltip = Tooltip::new("Text");
+        let budget = tooltip.budget();
+        // BrickBudget::uniform(16) sets internal values
+        assert!(budget.measure_ms > 0);
+        assert!(budget.layout_ms > 0);
+        assert!(budget.paint_ms > 0);
+    }
+
+    #[test]
+    fn test_tooltip_brick_verify_good_contrast() {
+        // Dark background with white text should pass
+        let tooltip = Tooltip::new("Text")
+            .background(Color::BLACK)
+            .text_color(Color::WHITE);
+
+        let verification = tooltip.verify();
+        assert!(verification
+            .passed
+            .contains(&BrickAssertion::ContrastRatio(4.5)));
+        assert!(verification.failed.is_empty());
+    }
+
+    #[test]
+    fn test_tooltip_brick_verify_bad_contrast() {
+        // Light background with white text should fail
+        let tooltip = Tooltip::new("Text")
+            .background(Color::WHITE)
+            .text_color(Color::rgb(0.9, 0.9, 0.9)); // Very light gray
+
+        let verification = tooltip.verify();
+        assert!(!verification.failed.is_empty());
+        assert!(verification
+            .failed
+            .iter()
+            .any(|(a, _)| *a == BrickAssertion::ContrastRatio(4.5)));
+    }
+
+    #[test]
+    fn test_tooltip_to_html() {
+        let tooltip = Tooltip::new("Help text")
+            .test_id("help-tooltip")
+            .accessible_name("Help information");
+
+        let html = tooltip.to_html();
+        assert!(html.contains("role=\"tooltip\""));
+        assert!(html.contains("data-testid=\"help-tooltip\""));
+        assert!(html.contains("aria-label=\"Help information\""));
+        assert!(html.contains("Help text"));
+    }
+
+    #[test]
+    fn test_tooltip_to_html_default_values() {
+        let tooltip = Tooltip::new("Text");
+        let html = tooltip.to_html();
+
+        // Should use default test_id and content as aria-label
+        assert!(html.contains("data-testid=\"tooltip\""));
+        assert!(html.contains("aria-label=\"Text\""));
+    }
+
+    #[test]
+    fn test_tooltip_to_css() {
+        let tooltip = Tooltip::new("Text")
+            .padding(12.0)
+            .text_size(14.0)
+            .corner_radius(6.0)
+            .max_width(300.0);
+
+        let css = tooltip.to_css();
+        assert!(css.contains("padding: 12px"));
+        assert!(css.contains("font-size: 14px"));
+        assert!(css.contains("border-radius: 6px"));
+        assert!(css.contains("max-width: 300px"));
+    }
+
+    // ===== Widget Children Tests =====
+
+    #[test]
+    fn test_tooltip_children_mut() {
+        let mut tooltip = Tooltip::new("Text");
+        assert!(tooltip.children_mut().is_empty());
+    }
+
+    // ===== Event Tests =====
+
+    #[test]
+    fn test_tooltip_event_other_events() {
+        let mut tooltip = Tooltip::new("Text").visible(true);
+
+        // Other events should not affect visibility or return a message
+        let result = tooltip.event(&Event::MouseEnter);
+        assert!(result.is_none());
+        assert!(tooltip.is_visible());
+    }
+
+    // ===== Additional Coverage Tests =====
+
+    #[test]
+    fn test_tooltip_paint_topleft_arrow() {
+        use presentar_core::RecordingCanvas;
+
+        let mut tooltip = Tooltip::new("Help text")
+            .visible(true)
+            .anchor(Rect::new(100.0, 100.0, 80.0, 30.0))
+            .placement(TooltipPlacement::TopLeft);
+
+        tooltip.layout(Rect::new(0.0, 0.0, 500.0, 500.0));
+
+        let mut canvas = RecordingCanvas::new();
+        tooltip.paint(&mut canvas);
+
+        assert!(canvas.command_count() >= 3);
+    }
+
+    #[test]
+    fn test_tooltip_paint_topright_arrow() {
+        use presentar_core::RecordingCanvas;
+
+        let mut tooltip = Tooltip::new("Help text")
+            .visible(true)
+            .anchor(Rect::new(100.0, 100.0, 80.0, 30.0))
+            .placement(TooltipPlacement::TopRight);
+
+        tooltip.layout(Rect::new(0.0, 0.0, 500.0, 500.0));
+
+        let mut canvas = RecordingCanvas::new();
+        tooltip.paint(&mut canvas);
+
+        assert!(canvas.command_count() >= 3);
+    }
+
+    #[test]
+    fn test_tooltip_paint_bottomleft_arrow() {
+        use presentar_core::RecordingCanvas;
+
+        let mut tooltip = Tooltip::new("Help text")
+            .visible(true)
+            .anchor(Rect::new(100.0, 100.0, 80.0, 30.0))
+            .placement(TooltipPlacement::BottomLeft);
+
+        tooltip.layout(Rect::new(0.0, 0.0, 500.0, 500.0));
+
+        let mut canvas = RecordingCanvas::new();
+        tooltip.paint(&mut canvas);
+
+        assert!(canvas.command_count() >= 3);
+    }
+
+    #[test]
+    fn test_tooltip_paint_bottomright_arrow() {
+        use presentar_core::RecordingCanvas;
+
+        let mut tooltip = Tooltip::new("Help text")
+            .visible(true)
+            .anchor(Rect::new(100.0, 100.0, 80.0, 30.0))
+            .placement(TooltipPlacement::BottomRight);
+
+        tooltip.layout(Rect::new(0.0, 0.0, 500.0, 500.0));
+
+        let mut canvas = RecordingCanvas::new();
+        tooltip.paint(&mut canvas);
+
+        assert!(canvas.command_count() >= 3);
+    }
+
+    #[test]
+    fn test_tooltip_layout_empty() {
+        let mut tooltip = Tooltip::default().visible(true);
+        let result = tooltip.layout(Rect::new(0.0, 0.0, 200.0, 100.0));
+        assert_eq!(result.size, Size::ZERO);
+    }
+
+    #[test]
+    fn test_tooltip_placement_clone() {
+        let placement = TooltipPlacement::Bottom;
+        let cloned = placement;
+        assert_eq!(cloned, TooltipPlacement::Bottom);
+    }
+
+    #[test]
+    fn test_tooltip_placement_debug() {
+        let placement = TooltipPlacement::Right;
+        let debug = format!("{:?}", placement);
+        assert!(debug.contains("Right"));
+    }
+
+    #[test]
+    fn test_tooltip_clone() {
+        let tooltip = Tooltip::new("Text")
+            .placement(TooltipPlacement::Left)
+            .delay_ms(500);
+        let cloned = tooltip.clone();
+        assert_eq!(cloned.get_content(), "Text");
+        assert_eq!(cloned.get_placement(), TooltipPlacement::Left);
+        assert_eq!(cloned.get_delay_ms(), 500);
+    }
+
+    #[test]
+    fn test_tooltip_serde() {
+        let tooltip = Tooltip::new("Help")
+            .placement(TooltipPlacement::Bottom)
+            .delay_ms(300);
+
+        let json = serde_json::to_string(&tooltip).unwrap();
+        let deserialized: Tooltip = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.get_content(), "Help");
+        assert_eq!(deserialized.get_placement(), TooltipPlacement::Bottom);
+        assert_eq!(deserialized.get_delay_ms(), 300);
+    }
+
+    #[test]
+    fn test_tooltip_placement_serde() {
+        let placement = TooltipPlacement::TopRight;
+        let json = serde_json::to_string(&placement).unwrap();
+        let deserialized: TooltipPlacement = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, TooltipPlacement::TopRight);
+    }
+
+    #[test]
+    fn test_tooltip_bounds_after_layout() {
+        let mut tooltip = Tooltip::new("Test tooltip text")
+            .visible(true)
+            .anchor(Rect::new(100.0, 100.0, 80.0, 30.0))
+            .placement(TooltipPlacement::Top);
+
+        tooltip.layout(Rect::new(0.0, 0.0, 500.0, 500.0));
+
+        // bounds should be set after layout
+        assert!(tooltip.bounds.width > 0.0);
+        assert!(tooltip.bounds.height > 0.0);
+    }
 }

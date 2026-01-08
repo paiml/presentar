@@ -1274,4 +1274,526 @@ mod tests {
         menu.event(&Event::KeyDown { key: Key::Up });
         assert_eq!(menu.highlighted_index, Some(0));
     }
+
+    // =========================================================================
+    // Brick Trait Tests
+    // =========================================================================
+
+    #[test]
+    fn test_menu_brick_name() {
+        let menu = Menu::new();
+        assert_eq!(menu.brick_name(), "Menu");
+    }
+
+    #[test]
+    fn test_menu_brick_assertions() {
+        let menu = Menu::new();
+        let assertions = menu.assertions();
+        assert!(!assertions.is_empty());
+        assert!(matches!(assertions[0], BrickAssertion::MaxLatencyMs(16)));
+    }
+
+    #[test]
+    fn test_menu_brick_budget() {
+        let menu = Menu::new();
+        let budget = menu.budget();
+        // Verify budget has reasonable values
+        assert!(budget.layout_ms > 0);
+        assert!(budget.paint_ms > 0);
+    }
+
+    #[test]
+    fn test_menu_brick_verify() {
+        let menu = Menu::new();
+        let verification = menu.verify();
+        assert!(!verification.passed.is_empty());
+        assert!(verification.failed.is_empty());
+    }
+
+    #[test]
+    fn test_menu_brick_to_html() {
+        let menu = Menu::new();
+        let html = menu.to_html();
+        assert!(html.contains("brick-menu"));
+    }
+
+    #[test]
+    fn test_menu_brick_to_css() {
+        let menu = Menu::new();
+        let css = menu.to_css();
+        assert!(css.contains(".brick-menu"));
+        assert!(css.contains("display: block"));
+        assert!(css.contains("position: relative"));
+    }
+
+    #[test]
+    fn test_menu_brick_test_id() {
+        let menu = Menu::new().with_test_id("my-menu");
+        assert_eq!(Brick::test_id(&menu), Some("my-menu"));
+    }
+
+    #[test]
+    fn test_menu_brick_test_id_none() {
+        let menu = Menu::new();
+        assert!(Brick::test_id(&menu).is_none());
+    }
+
+    // =========================================================================
+    // Item at Position Tests
+    // =========================================================================
+
+    #[test]
+    fn test_menu_item_at_position_valid() {
+        let mut menu = Menu::new().items(vec![
+            MenuItem::action("Cut", "cut"),
+            MenuItem::action("Copy", "copy"),
+            MenuItem::action("Paste", "paste"),
+        ]);
+        menu.open = true;
+        menu.layout(Rect::new(0.0, 0.0, 200.0, 32.0));
+
+        // Item 0 starts at y = panel_bounds.y + 8.0
+        // Each action item is 32px tall
+        let item = menu.item_at_position(menu.panel_bounds.y + 8.0 + 10.0);
+        assert_eq!(item, Some(0));
+
+        let item = menu.item_at_position(menu.panel_bounds.y + 8.0 + 40.0);
+        assert_eq!(item, Some(1));
+
+        let item = menu.item_at_position(menu.panel_bounds.y + 8.0 + 72.0);
+        assert_eq!(item, Some(2));
+    }
+
+    #[test]
+    fn test_menu_item_at_position_above_menu() {
+        let mut menu = Menu::new().items(vec![MenuItem::action("Cut", "cut")]);
+        menu.open = true;
+        menu.layout(Rect::new(0.0, 0.0, 200.0, 32.0));
+
+        // Y position above the menu
+        let item = menu.item_at_position(menu.panel_bounds.y - 10.0);
+        assert!(item.is_none());
+    }
+
+    #[test]
+    fn test_menu_item_at_position_below_items() {
+        let mut menu = Menu::new().items(vec![MenuItem::action("Cut", "cut")]);
+        menu.open = true;
+        menu.layout(Rect::new(0.0, 0.0, 200.0, 32.0));
+
+        // Y position far below the item
+        let item = menu.item_at_position(menu.panel_bounds.y + 500.0);
+        assert!(item.is_none());
+    }
+
+    // =========================================================================
+    // Mouse Event Tests
+    // =========================================================================
+
+    #[test]
+    fn test_menu_click_on_trigger_opens() {
+        let mut menu = Menu::new().items(vec![MenuItem::action("Cut", "cut")]);
+        menu.layout(Rect::new(10.0, 10.0, 200.0, 32.0));
+
+        // Click inside trigger area
+        let result = menu.event(&Event::MouseDown {
+            position: Point::new(50.0, 20.0),
+            button: presentar_core::MouseButton::Left,
+        });
+
+        assert!(result.is_some());
+        assert!(menu.is_open());
+    }
+
+    #[test]
+    fn test_menu_click_outside_closes() {
+        let mut menu = Menu::new().items(vec![MenuItem::action("Cut", "cut")]);
+        menu.show();
+        menu.layout(Rect::new(10.0, 10.0, 200.0, 32.0));
+
+        // Click far outside menu area
+        let result = menu.event(&Event::MouseDown {
+            position: Point::new(500.0, 500.0),
+            button: presentar_core::MouseButton::Left,
+        });
+
+        assert!(result.is_some());
+        assert!(!menu.is_open());
+    }
+
+    #[test]
+    fn test_menu_click_on_action_item() {
+        let mut menu = Menu::new().items(vec![MenuItem::action("Cut", "cut")]);
+        menu.show();
+        menu.layout(Rect::new(0.0, 0.0, 200.0, 32.0));
+
+        // Click on the action item
+        let click_y = menu.panel_bounds.y + 8.0 + 16.0; // Middle of first item
+        let result = menu.event(&Event::MouseDown {
+            position: Point::new(menu.panel_bounds.x + 50.0, click_y),
+            button: presentar_core::MouseButton::Left,
+        });
+
+        assert!(result.is_some());
+        assert!(!menu.is_open()); // Menu closes after action
+    }
+
+    #[test]
+    fn test_menu_click_on_checkbox_item() {
+        let mut menu = Menu::new().items(vec![MenuItem::checkbox("Show Grid", "show", false)]);
+        menu.show();
+        menu.layout(Rect::new(0.0, 0.0, 200.0, 32.0));
+
+        // Click on the checkbox item
+        let click_y = menu.panel_bounds.y + 8.0 + 16.0;
+        let result = menu.event(&Event::MouseDown {
+            position: Point::new(menu.panel_bounds.x + 50.0, click_y),
+            button: presentar_core::MouseButton::Left,
+        });
+
+        assert!(result.is_some());
+        // Checkbox should be toggled
+        if let MenuItem::Checkbox { checked, .. } = &menu.items[0] {
+            assert!(*checked);
+        } else {
+            panic!("Expected Checkbox item");
+        }
+    }
+
+    #[test]
+    fn test_menu_click_on_disabled_action() {
+        let mut menu = Menu::new().items(vec![MenuItem::action("Cut", "cut").disabled(true)]);
+        menu.show();
+        menu.layout(Rect::new(0.0, 0.0, 200.0, 32.0));
+
+        // Click on the disabled item
+        let click_y = menu.panel_bounds.y + 8.0 + 16.0;
+        let result = menu.event(&Event::MouseDown {
+            position: Point::new(menu.panel_bounds.x + 50.0, click_y),
+            button: presentar_core::MouseButton::Left,
+        });
+
+        assert!(result.is_none()); // No action taken
+        assert!(menu.is_open()); // Menu stays open
+    }
+
+    #[test]
+    fn test_menu_click_on_submenu_opens_it() {
+        let mut menu = Menu::new().items(vec![MenuItem::submenu(
+            "More",
+            vec![MenuItem::action("Sub", "sub")],
+        )]);
+        menu.show();
+        menu.layout(Rect::new(0.0, 0.0, 200.0, 32.0));
+
+        // Click on the submenu item
+        let click_y = menu.panel_bounds.y + 8.0 + 16.0;
+        let result = menu.event(&Event::MouseDown {
+            position: Point::new(menu.panel_bounds.x + 50.0, click_y),
+            button: presentar_core::MouseButton::Left,
+        });
+
+        assert!(result.is_none()); // No message, just opens submenu
+        assert_eq!(menu.open_submenu, Some(0));
+    }
+
+    #[test]
+    fn test_menu_mouse_move_updates_highlight() {
+        let mut menu = Menu::new().items(vec![
+            MenuItem::action("Cut", "cut"),
+            MenuItem::action("Copy", "copy"),
+        ]);
+        menu.show();
+        menu.layout(Rect::new(0.0, 0.0, 200.0, 32.0));
+
+        // Move over first item
+        let y1 = menu.panel_bounds.y + 8.0 + 16.0;
+        menu.event(&Event::MouseMove {
+            position: Point::new(menu.panel_bounds.x + 50.0, y1),
+        });
+        assert_eq!(menu.highlighted_index, Some(0));
+
+        // Move over second item
+        let y2 = menu.panel_bounds.y + 8.0 + 48.0;
+        menu.event(&Event::MouseMove {
+            position: Point::new(menu.panel_bounds.x + 50.0, y2),
+        });
+        assert_eq!(menu.highlighted_index, Some(1));
+    }
+
+    #[test]
+    fn test_menu_mouse_move_outside_clears_highlight() {
+        let mut menu = Menu::new().items(vec![MenuItem::action("Cut", "cut")]);
+        menu.show();
+        menu.layout(Rect::new(0.0, 0.0, 200.0, 32.0));
+        menu.highlighted_index = Some(0);
+
+        // Move outside menu
+        menu.event(&Event::MouseMove {
+            position: Point::new(500.0, 500.0),
+        });
+        assert!(menu.highlighted_index.is_none());
+    }
+
+    // =========================================================================
+    // Keyboard Navigation Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_menu_up_from_none_selects_last() {
+        let mut menu =
+            Menu::new().items(vec![MenuItem::action("A", "a"), MenuItem::action("B", "b")]);
+        menu.show();
+
+        menu.event(&Event::KeyDown { key: Key::Up });
+        assert_eq!(menu.highlighted_index, Some(1)); // Wraps to last
+    }
+
+    #[test]
+    fn test_menu_down_from_last_wraps_to_first() {
+        let mut menu =
+            Menu::new().items(vec![MenuItem::action("A", "a"), MenuItem::action("B", "b")]);
+        menu.show();
+        menu.highlighted_index = Some(1);
+
+        menu.event(&Event::KeyDown { key: Key::Down });
+        assert_eq!(menu.highlighted_index, Some(0)); // Wraps to first
+    }
+
+    #[test]
+    fn test_menu_up_skips_separator() {
+        let mut menu = Menu::new().items(vec![
+            MenuItem::action("A", "a"),
+            MenuItem::separator(),
+            MenuItem::action("B", "b"),
+        ]);
+        menu.show();
+        menu.highlighted_index = Some(2);
+
+        menu.event(&Event::KeyDown { key: Key::Up });
+        assert_eq!(menu.highlighted_index, Some(0)); // Skips separator
+    }
+
+    #[test]
+    fn test_menu_down_skips_disabled() {
+        let mut menu = Menu::new().items(vec![
+            MenuItem::action("A", "a"),
+            MenuItem::action("B", "b").disabled(true),
+            MenuItem::action("C", "c"),
+        ]);
+        menu.show();
+        menu.highlighted_index = Some(0);
+
+        menu.event(&Event::KeyDown { key: Key::Down });
+        assert_eq!(menu.highlighted_index, Some(2)); // Skips disabled
+    }
+
+    #[test]
+    fn test_menu_other_key_does_nothing() {
+        let mut menu = Menu::new().items(vec![MenuItem::action("A", "a")]);
+        menu.show();
+        menu.highlighted_index = Some(0);
+
+        let result = menu.event(&Event::KeyDown { key: Key::Tab });
+        assert!(result.is_none());
+        assert_eq!(menu.highlighted_index, Some(0));
+    }
+
+    #[test]
+    fn test_menu_enter_on_separator_does_nothing() {
+        let mut menu = Menu::new().items(vec![MenuItem::separator(), MenuItem::action("A", "a")]);
+        menu.show();
+        menu.highlighted_index = Some(0); // Manually set to separator (shouldn't happen in practice)
+
+        let result = menu.event(&Event::KeyDown { key: Key::Enter });
+        assert!(result.is_none());
+        assert!(menu.is_open());
+    }
+
+    #[test]
+    fn test_menu_enter_on_submenu_does_nothing() {
+        let mut menu = Menu::new().items(vec![MenuItem::submenu(
+            "More",
+            vec![MenuItem::action("Sub", "sub")],
+        )]);
+        menu.show();
+        menu.highlighted_index = Some(0);
+
+        let result = menu.event(&Event::KeyDown { key: Key::Enter });
+        assert!(result.is_none());
+        assert!(menu.is_open());
+    }
+
+    #[test]
+    fn test_menu_space_on_checkbox_toggles() {
+        let mut menu = Menu::new().items(vec![MenuItem::checkbox("Show", "show", false)]);
+        menu.show();
+        menu.highlighted_index = Some(0);
+        menu.layout(Rect::new(0.0, 0.0, 200.0, 32.0));
+
+        let result = menu.event(&Event::KeyDown { key: Key::Space });
+        assert!(result.is_some());
+        // Checkbox should be toggled
+        if let MenuItem::Checkbox { checked, .. } = &menu.items[0] {
+            assert!(*checked);
+        }
+    }
+
+    // =========================================================================
+    // MenuItem Methods Tests
+    // =========================================================================
+
+    #[test]
+    fn test_menu_item_height_action() {
+        let item = MenuItem::action("Test", "test");
+        assert_eq!(item.height(), 32.0);
+    }
+
+    #[test]
+    fn test_menu_item_height_checkbox() {
+        let item = MenuItem::checkbox("Test", "test", false);
+        assert_eq!(item.height(), 32.0);
+    }
+
+    #[test]
+    fn test_menu_item_height_submenu() {
+        let item = MenuItem::submenu("More", vec![]);
+        assert_eq!(item.height(), 32.0);
+    }
+
+    #[test]
+    fn test_menu_item_is_selectable_submenu() {
+        let item = MenuItem::submenu("More", vec![]);
+        assert!(item.is_selectable());
+    }
+
+    #[test]
+    fn test_menu_item_is_selectable_disabled_checkbox() {
+        let item = MenuItem::checkbox("Test", "test", false).disabled(true);
+        assert!(!item.is_selectable());
+    }
+
+    // =========================================================================
+    // Menu Trigger Tests
+    // =========================================================================
+
+    #[test]
+    fn test_menu_trigger_hover_no_click_open() {
+        let mut menu = Menu::new()
+            .trigger(MenuTrigger::Hover)
+            .items(vec![MenuItem::action("Cut", "cut")]);
+        menu.layout(Rect::new(10.0, 10.0, 200.0, 32.0));
+
+        // Click with hover trigger should not toggle
+        let result = menu.event(&Event::MouseDown {
+            position: Point::new(50.0, 20.0),
+            button: presentar_core::MouseButton::Left,
+        });
+
+        assert!(result.is_none());
+        assert!(!menu.is_open());
+    }
+
+    #[test]
+    fn test_menu_trigger_context_menu_no_click_open() {
+        let mut menu = Menu::new()
+            .trigger(MenuTrigger::ContextMenu)
+            .items(vec![MenuItem::action("Cut", "cut")]);
+        menu.layout(Rect::new(10.0, 10.0, 200.0, 32.0));
+
+        // Regular click with context trigger should not toggle
+        let result = menu.event(&Event::MouseDown {
+            position: Point::new(50.0, 20.0),
+            button: presentar_core::MouseButton::Left,
+        });
+
+        assert!(result.is_none());
+        assert!(!menu.is_open());
+    }
+
+    // =========================================================================
+    // Message Clone Tests
+    // =========================================================================
+
+    #[test]
+    fn test_menu_toggled_clone() {
+        let msg = MenuToggled { open: true };
+        let cloned = msg.clone();
+        assert_eq!(cloned.open, msg.open);
+    }
+
+    #[test]
+    fn test_menu_item_selected_clone() {
+        let msg = MenuItemSelected {
+            action: "test".to_string(),
+        };
+        let cloned = msg.clone();
+        assert_eq!(cloned.action, msg.action);
+    }
+
+    #[test]
+    fn test_menu_checkbox_toggled_clone() {
+        let msg = MenuCheckboxToggled {
+            action: "test".to_string(),
+            checked: true,
+        };
+        let cloned = msg.clone();
+        assert_eq!(cloned.action, msg.action);
+        assert_eq!(cloned.checked, msg.checked);
+    }
+
+    #[test]
+    fn test_menu_closed_clone() {
+        let msg = MenuClosed;
+        let _cloned = msg.clone();
+    }
+
+    // =========================================================================
+    // Default Trait Tests
+    // =========================================================================
+
+    #[test]
+    fn test_menu_default() {
+        let menu = Menu::default();
+        assert!(menu.items.is_empty());
+        assert!(!menu.open);
+        assert_eq!(menu.trigger, MenuTrigger::Click);
+        assert_eq!(menu.width, 200.0);
+    }
+
+    #[test]
+    fn test_menu_trigger_eq() {
+        assert_eq!(MenuTrigger::Click, MenuTrigger::Click);
+        assert_ne!(MenuTrigger::Click, MenuTrigger::Hover);
+        assert_ne!(MenuTrigger::Hover, MenuTrigger::ContextMenu);
+    }
+
+    #[test]
+    fn test_menu_hide_clears_submenu() {
+        let mut menu = Menu::new().items(vec![MenuItem::submenu(
+            "More",
+            vec![MenuItem::action("Sub", "sub")],
+        )]);
+        menu.show();
+        menu.open_submenu = Some(0);
+
+        menu.hide();
+        assert!(!menu.is_open());
+        assert!(menu.open_submenu.is_none());
+        assert!(menu.highlighted_index.is_none());
+    }
+
+    #[test]
+    fn test_menu_debug() {
+        let item = MenuItem::action("Test", "test");
+        let debug_str = format!("{:?}", item);
+        assert!(debug_str.contains("Test"));
+    }
+
+    #[test]
+    fn test_menu_toggled_debug() {
+        let msg = MenuToggled { open: true };
+        let debug_str = format!("{:?}", msg);
+        assert!(debug_str.contains("true"));
+    }
 }

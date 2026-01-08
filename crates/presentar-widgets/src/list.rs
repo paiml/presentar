@@ -963,4 +963,459 @@ mod tests {
         let result = list.event(&Event::KeyDown { key: Key::Down });
         assert!(result.is_none());
     }
+
+    // =========================================================================
+    // Event Handling Tests
+    // =========================================================================
+
+    #[test]
+    fn test_list_scroll_event() {
+        let items: Vec<_> = (0..20).map(|i| ListItem::new(format!("{i}"))).collect();
+        let mut list = List::new().item_height(50.0).items(items);
+        list.layout(Rect::new(0.0, 0.0, 300.0, 200.0));
+
+        // Scroll down
+        let result = list.event(&Event::Scroll {
+            delta_x: 0.0,
+            delta_y: -2.0,
+        });
+        assert!(result.is_some());
+        assert!(list.scroll_offset > 0.0);
+    }
+
+    #[test]
+    fn test_list_scroll_event_clamp() {
+        let items: Vec<_> = (0..5).map(|i| ListItem::new(format!("{i}"))).collect();
+        let mut list = List::new().item_height(50.0).items(items);
+        list.layout(Rect::new(0.0, 0.0, 300.0, 500.0)); // Viewport larger than content
+
+        // Try to scroll down
+        let _ = list.event(&Event::Scroll {
+            delta_x: 0.0,
+            delta_y: -10.0,
+        });
+        // Should clamp to 0 since content fits in viewport
+        assert_eq!(list.scroll_offset, 0.0);
+    }
+
+    #[test]
+    fn test_list_key_down_focused() {
+        let items: Vec<_> = (0..10).map(|i| ListItem::new(format!("{i}"))).collect();
+        let mut list = List::new()
+            .selection_mode(SelectionMode::Single)
+            .item_height(50.0)
+            .items(items);
+        list.layout(Rect::new(0.0, 0.0, 300.0, 200.0));
+        list.focused_index = Some(5);
+
+        // Press Down
+        let _ = list.event(&Event::KeyDown { key: Key::Down });
+        assert_eq!(list.focused_index, Some(6));
+
+        // Press Up
+        let _ = list.event(&Event::KeyDown { key: Key::Up });
+        assert_eq!(list.focused_index, Some(5));
+    }
+
+    #[test]
+    fn test_list_key_left_right() {
+        let items: Vec<_> = (0..10).map(|i| ListItem::new(format!("{i}"))).collect();
+        let mut list = List::new()
+            .direction(ListDirection::Horizontal)
+            .selection_mode(SelectionMode::Single)
+            .item_height(50.0)
+            .items(items);
+        list.layout(Rect::new(0.0, 0.0, 300.0, 200.0));
+        list.focused_index = Some(5);
+
+        // Press Right
+        let _ = list.event(&Event::KeyDown { key: Key::Right });
+        assert_eq!(list.focused_index, Some(6));
+
+        // Press Left
+        let _ = list.event(&Event::KeyDown { key: Key::Left });
+        assert_eq!(list.focused_index, Some(5));
+    }
+
+    #[test]
+    fn test_list_key_home_end() {
+        let items: Vec<_> = (0..10).map(|i| ListItem::new(format!("{i}"))).collect();
+        let mut list = List::new()
+            .selection_mode(SelectionMode::Single)
+            .item_height(50.0)
+            .items(items);
+        list.layout(Rect::new(0.0, 0.0, 300.0, 200.0));
+        list.focused_index = Some(5);
+
+        // Press Home
+        let _ = list.event(&Event::KeyDown { key: Key::Home });
+        assert_eq!(list.focused_index, Some(0));
+
+        // Press End
+        let _ = list.event(&Event::KeyDown { key: Key::End });
+        assert_eq!(list.focused_index, Some(9));
+    }
+
+    #[test]
+    fn test_list_key_enter_selects() {
+        let items: Vec<_> = (0..5).map(|i| ListItem::new(format!("{i}"))).collect();
+        let mut list = List::new()
+            .selection_mode(SelectionMode::Single)
+            .item_height(50.0)
+            .items(items);
+        list.layout(Rect::new(0.0, 0.0, 300.0, 200.0));
+        list.focused_index = Some(2);
+
+        let result = list.event(&Event::KeyDown { key: Key::Enter });
+        assert!(result.is_some());
+        assert_eq!(list.selected_indices(), &[2]);
+    }
+
+    #[test]
+    fn test_list_key_space_selects() {
+        let items: Vec<_> = (0..5).map(|i| ListItem::new(format!("{i}"))).collect();
+        let mut list = List::new()
+            .selection_mode(SelectionMode::Single)
+            .item_height(50.0)
+            .items(items);
+        list.layout(Rect::new(0.0, 0.0, 300.0, 200.0));
+        list.focused_index = Some(3);
+
+        let result = list.event(&Event::KeyDown { key: Key::Space });
+        assert!(result.is_some());
+        assert_eq!(list.selected_indices(), &[3]);
+    }
+
+    #[test]
+    fn test_list_mouse_down_click() {
+        let items: Vec<_> = (0..5).map(|i| ListItem::new(format!("{i}"))).collect();
+        let mut list = List::new()
+            .selection_mode(SelectionMode::Single)
+            .item_height(50.0)
+            .items(items);
+        list.layout(Rect::new(0.0, 0.0, 300.0, 300.0));
+
+        // Click on item at y=75 (should be item 1, which is at 50-100)
+        let result = list.event(&Event::MouseDown {
+            position: presentar_core::Point::new(150.0, 75.0),
+            button: presentar_core::MouseButton::Left,
+        });
+        assert!(result.is_some());
+        assert_eq!(list.focused_index, Some(1));
+    }
+
+    #[test]
+    fn test_list_mouse_down_horizontal() {
+        let items: Vec<_> = (0..5).map(|i| ListItem::new(format!("{i}"))).collect();
+        let mut list = List::new()
+            .direction(ListDirection::Horizontal)
+            .selection_mode(SelectionMode::Single)
+            .item_height(50.0)
+            .items(items);
+        list.layout(Rect::new(0.0, 0.0, 300.0, 100.0));
+
+        // Click on item at x=75 (should be item 1)
+        let result = list.event(&Event::MouseDown {
+            position: presentar_core::Point::new(75.0, 50.0),
+            button: presentar_core::MouseButton::Left,
+        });
+        assert!(result.is_some());
+        assert_eq!(list.focused_index, Some(1));
+    }
+
+    #[test]
+    fn test_list_mouse_down_miss() {
+        let items: Vec<_> = (0..2).map(|i| ListItem::new(format!("{i}"))).collect();
+        let mut list = List::new()
+            .selection_mode(SelectionMode::Single)
+            .item_height(50.0)
+            .items(items);
+        list.layout(Rect::new(0.0, 0.0, 300.0, 300.0));
+
+        // Click below all items
+        let result = list.event(&Event::MouseDown {
+            position: presentar_core::Point::new(150.0, 200.0),
+            button: presentar_core::MouseButton::Left,
+        });
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_list_other_event() {
+        let mut list = List::new();
+        list.layout(Rect::new(0.0, 0.0, 300.0, 200.0));
+
+        // Unknown event propagates to children (empty)
+        let result = list.event(&Event::MouseMove {
+            position: presentar_core::Point::new(100.0, 100.0),
+        });
+        assert!(result.is_none());
+    }
+
+    // =========================================================================
+    // Paint Tests
+    // =========================================================================
+
+    use presentar_core::RecordingCanvas;
+
+    #[test]
+    fn test_list_paint_empty() {
+        let list = List::new();
+        let mut canvas = RecordingCanvas::new();
+        // Should not panic when painting empty list
+        list.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_list_paint_with_items() {
+        let items: Vec<_> = (0..5).map(|i| ListItem::new(format!("{i}"))).collect();
+        let mut list = List::new().item_height(50.0).items(items);
+        list.bounds = Rect::new(0.0, 0.0, 300.0, 200.0);
+
+        let mut canvas = RecordingCanvas::new();
+        // Should not panic when painting list with items
+        list.paint(&mut canvas);
+    }
+
+    // =========================================================================
+    // Edge Case Tests
+    // =========================================================================
+
+    #[test]
+    fn test_list_scroll_to_out_of_bounds() {
+        let items: Vec<_> = (0..5).map(|i| ListItem::new(format!("{i}"))).collect();
+        let mut list = List::new().item_height(50.0).items(items);
+        list.bounds = Rect::new(0.0, 0.0, 300.0, 200.0);
+
+        // Try to scroll to non-existent item
+        list.scroll_to(100);
+        // Should not crash, offset unchanged
+        assert_eq!(list.scroll_offset, 0.0);
+    }
+
+    #[test]
+    fn test_list_scroll_into_view_out_of_bounds() {
+        let items: Vec<_> = (0..5).map(|i| ListItem::new(format!("{i}"))).collect();
+        let mut list = List::new().item_height(50.0).items(items);
+        list.bounds = Rect::new(0.0, 0.0, 300.0, 200.0);
+
+        // Try to scroll to non-existent item
+        list.scroll_into_view(100);
+        // Should not crash
+        assert_eq!(list.scroll_offset, 0.0);
+    }
+
+    #[test]
+    fn test_list_scroll_into_view_item_above() {
+        let items: Vec<_> = (0..10).map(|i| ListItem::new(format!("{i}"))).collect();
+        let mut list = List::new().item_height(50.0).items(items);
+        list.bounds = Rect::new(0.0, 0.0, 300.0, 200.0);
+        list.scroll_offset = 200.0; // Start scrolled down
+
+        // Item 0 is above viewport
+        list.scroll_into_view(0);
+        assert_eq!(list.scroll_offset, 0.0);
+    }
+
+    #[test]
+    fn test_list_select_none_mode() {
+        let items: Vec<_> = (0..5).map(|i| ListItem::new(format!("{i}"))).collect();
+        let mut list = List::new().selection_mode(SelectionMode::None).items(items);
+
+        list.select(0);
+        assert!(list.selected_indices().is_empty());
+    }
+
+    #[test]
+    fn test_list_select_out_of_bounds() {
+        let items: Vec<_> = (0..5).map(|i| ListItem::new(format!("{i}"))).collect();
+        let mut list = List::new()
+            .selection_mode(SelectionMode::Single)
+            .items(items);
+
+        list.select(100);
+        assert!(list.selected_indices().is_empty());
+    }
+
+    #[test]
+    fn test_list_select_multiple_same_item() {
+        let items: Vec<_> = (0..5).map(|i| ListItem::new(format!("{i}"))).collect();
+        let mut list = List::new()
+            .selection_mode(SelectionMode::Multiple)
+            .items(items);
+
+        list.select(0);
+        list.select(0); // Try to select same item again
+        assert_eq!(list.selected_indices().len(), 1);
+    }
+
+    #[test]
+    fn test_list_deselect_nonexistent() {
+        let items: Vec<_> = (0..5).map(|i| ListItem::new(format!("{i}"))).collect();
+        let mut list = List::new()
+            .selection_mode(SelectionMode::Multiple)
+            .items(items);
+
+        list.select(0);
+        list.deselect(1); // Not selected
+        assert_eq!(list.selected_indices(), &[0]);
+    }
+
+    #[test]
+    fn test_list_clear_selection_with_invalid_indices() {
+        let items: Vec<_> = (0..5).map(|i| ListItem::new(format!("{i}"))).collect();
+        let mut list = List::new()
+            .selection_mode(SelectionMode::Multiple)
+            .items(items);
+
+        list.select(0);
+        list.selected.push(100); // Add invalid index manually
+        list.clear_selection();
+        assert!(list.selected_indices().is_empty());
+    }
+
+    #[test]
+    fn test_list_horizontal_layout() {
+        let items: Vec<_> = (0..5).map(|i| ListItem::new(format!("{i}"))).collect();
+        let mut list = List::new()
+            .direction(ListDirection::Horizontal)
+            .item_height(50.0)
+            .items(items);
+
+        let result = list.layout(Rect::new(0.0, 0.0, 300.0, 100.0));
+        assert_eq!(result.size, Size::new(300.0, 100.0));
+    }
+
+    #[test]
+    fn test_list_horizontal_scroll() {
+        let items: Vec<_> = (0..20).map(|i| ListItem::new(format!("{i}"))).collect();
+        let mut list = List::new()
+            .direction(ListDirection::Horizontal)
+            .item_height(50.0)
+            .items(items);
+        list.layout(Rect::new(0.0, 0.0, 200.0, 100.0));
+
+        list.scroll_to(10);
+        assert_eq!(list.scroll_offset, 500.0);
+    }
+
+    #[test]
+    fn test_list_horizontal_scroll_into_view() {
+        let items: Vec<_> = (0..10).map(|i| ListItem::new(format!("{i}"))).collect();
+        let mut list = List::new()
+            .direction(ListDirection::Horizontal)
+            .item_height(50.0)
+            .items(items);
+        list.bounds = Rect::new(0.0, 0.0, 200.0, 100.0);
+        list.scroll_offset = 0.0;
+
+        list.scroll_into_view(5);
+        assert!(list.scroll_offset > 0.0);
+    }
+
+    #[test]
+    fn test_list_visible_range_empty() {
+        let mut list = List::new();
+        list.calculate_visible_range(200.0);
+        assert_eq!(list.visible_range(), 0..0);
+    }
+
+    #[test]
+    fn test_list_get_item_size_variable() {
+        let items = vec![ListItem::new("1").size(30.0), ListItem::new("2").size(50.0)];
+        let mut list = List::new();
+        list.item_height = None;
+        list = list.items(items);
+
+        // Private method test via content_size
+        assert_eq!(list.content_size(), 80.0);
+    }
+
+    #[test]
+    fn test_list_key_boundary_checks() {
+        let items: Vec<_> = (0..3).map(|i| ListItem::new(format!("{i}"))).collect();
+        let mut list = List::new()
+            .selection_mode(SelectionMode::Single)
+            .item_height(50.0)
+            .items(items);
+        list.layout(Rect::new(0.0, 0.0, 300.0, 200.0));
+
+        // At first item, press Up
+        list.focused_index = Some(0);
+        let _ = list.event(&Event::KeyDown { key: Key::Up });
+        assert_eq!(list.focused_index, Some(0)); // Should stay at 0
+
+        // At last item, press Down
+        list.focused_index = Some(2);
+        let _ = list.event(&Event::KeyDown { key: Key::Down });
+        assert_eq!(list.focused_index, Some(2)); // Should stay at 2
+    }
+
+    #[test]
+    fn test_list_other_key_no_action() {
+        let items: Vec<_> = (0..3).map(|i| ListItem::new(format!("{i}"))).collect();
+        let mut list = List::new()
+            .selection_mode(SelectionMode::Single)
+            .item_height(50.0)
+            .items(items);
+        list.layout(Rect::new(0.0, 0.0, 300.0, 200.0));
+        list.focused_index = Some(1);
+
+        // Press a key that's not handled
+        let result = list.event(&Event::KeyDown { key: Key::Tab });
+        assert!(result.is_none());
+        assert_eq!(list.focused_index, Some(1));
+    }
+
+    // =========================================================================
+    // Brick Trait Tests
+    // =========================================================================
+
+    #[test]
+    fn test_list_brick_name() {
+        let list = List::new();
+        assert_eq!(list.brick_name(), "List");
+    }
+
+    #[test]
+    fn test_list_brick_assertions() {
+        let list = List::new();
+        let assertions = list.assertions();
+        assert!(!assertions.is_empty());
+    }
+
+    #[test]
+    fn test_list_brick_budget() {
+        let list = List::new();
+        let budget = list.budget();
+        assert!(budget.layout_ms > 0);
+    }
+
+    #[test]
+    fn test_list_brick_verify() {
+        let list = List::new();
+        let verification = list.verify();
+        assert!(!verification.passed.is_empty());
+        assert!(verification.failed.is_empty());
+    }
+
+    #[test]
+    fn test_list_brick_to_html() {
+        let list = List::new();
+        let html = list.to_html();
+        assert!(html.contains("brick-list"));
+    }
+
+    #[test]
+    fn test_list_brick_to_css() {
+        let list = List::new();
+        let css = list.to_css();
+        assert!(css.contains("brick-list"));
+    }
+
+    #[test]
+    fn test_list_brick_test_id() {
+        let list = List::new().with_test_id("test-list");
+        assert_eq!(Brick::test_id(&list), Some("test-list"));
+    }
 }

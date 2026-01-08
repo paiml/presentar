@@ -896,4 +896,383 @@ mod tests {
         assert_eq!(ModalSize::Medium, ModalSize::Medium);
         assert_ne!(ModalSize::Small, ModalSize::Large);
     }
+
+    // =========================================================================
+    // Brick Trait Tests
+    // =========================================================================
+
+    #[test]
+    fn test_modal_brick_name() {
+        let modal = Modal::new();
+        assert_eq!(modal.brick_name(), "Modal");
+    }
+
+    #[test]
+    fn test_modal_brick_assertions() {
+        let modal = Modal::new();
+        let assertions = modal.assertions();
+        assert!(!assertions.is_empty());
+        assert!(matches!(assertions[0], BrickAssertion::MaxLatencyMs(16)));
+    }
+
+    #[test]
+    fn test_modal_brick_budget() {
+        let modal = Modal::new();
+        let budget = modal.budget();
+        // Verify budget has reasonable values
+        assert!(budget.layout_ms > 0);
+        assert!(budget.paint_ms > 0);
+    }
+
+    #[test]
+    fn test_modal_brick_verify() {
+        let modal = Modal::new();
+        let verification = modal.verify();
+        assert!(!verification.passed.is_empty());
+        assert!(verification.failed.is_empty());
+    }
+
+    #[test]
+    fn test_modal_brick_to_html() {
+        let modal = Modal::new();
+        let html = modal.to_html();
+        assert!(html.contains("brick-modal"));
+    }
+
+    #[test]
+    fn test_modal_brick_to_css() {
+        let modal = Modal::new();
+        let css = modal.to_css();
+        assert!(css.contains(".brick-modal"));
+        assert!(css.contains("display: block"));
+        assert!(css.contains("position: fixed"));
+    }
+
+    #[test]
+    fn test_modal_brick_test_id() {
+        let modal = Modal::new().with_test_id("my-modal");
+        assert_eq!(Brick::test_id(&modal), Some("my-modal"));
+    }
+
+    #[test]
+    fn test_modal_brick_test_id_none() {
+        let modal = Modal::new();
+        assert!(Brick::test_id(&modal).is_none());
+    }
+
+    // =========================================================================
+    // Backdrop Click Tests
+    // =========================================================================
+
+    #[test]
+    fn test_modal_backdrop_click_closes() {
+        let mut modal = Modal::new().open(true);
+        modal.layout(Rect::new(0.0, 0.0, 1024.0, 768.0));
+
+        // Click outside the modal content (on backdrop)
+        let result = modal.event(&Event::MouseDown {
+            position: Point::new(10.0, 10.0),
+            button: presentar_core::MouseButton::Left,
+        });
+
+        assert!(result.is_some());
+        assert!(!modal.is_open());
+    }
+
+    #[test]
+    fn test_modal_backdrop_static_no_close() {
+        let mut modal = Modal::new().open(true).backdrop(BackdropBehavior::Static);
+        modal.layout(Rect::new(0.0, 0.0, 1024.0, 768.0));
+
+        // Click outside the modal content
+        let result = modal.event(&Event::MouseDown {
+            position: Point::new(10.0, 10.0),
+            button: presentar_core::MouseButton::Left,
+        });
+
+        assert!(result.is_none());
+        assert!(modal.is_open());
+    }
+
+    #[test]
+    fn test_modal_click_inside_does_not_close() {
+        let mut modal = Modal::new().open(true);
+        modal.layout(Rect::new(0.0, 0.0, 1024.0, 768.0));
+
+        // Click inside the modal content
+        let center_x = modal.content_bounds.x + modal.content_bounds.width / 2.0;
+        let center_y = modal.content_bounds.y + modal.content_bounds.height / 2.0;
+
+        let result = modal.event(&Event::MouseDown {
+            position: Point::new(center_x, center_y),
+            button: presentar_core::MouseButton::Left,
+        });
+
+        // No close message, modal stays open
+        assert!(result.is_none());
+        assert!(modal.is_open());
+    }
+
+    // =========================================================================
+    // Close Button Tests
+    // =========================================================================
+
+    #[test]
+    fn test_modal_close_button_click() {
+        let mut modal = Modal::new().open(true);
+        modal.layout(Rect::new(0.0, 0.0, 1024.0, 768.0));
+
+        // Calculate close button position
+        let close_x = modal.content_bounds.x + modal.content_bounds.width - 40.0 - modal.padding;
+        let close_y = modal.content_bounds.y + modal.padding;
+
+        let result = modal.event(&Event::MouseDown {
+            position: Point::new(close_x + 10.0, close_y + 10.0),
+            button: presentar_core::MouseButton::Left,
+        });
+
+        assert!(result.is_some());
+        assert!(!modal.is_open());
+    }
+
+    #[test]
+    fn test_modal_close_button_hidden() {
+        let mut modal = Modal::new().open(true).show_close_button(false);
+        modal.layout(Rect::new(0.0, 0.0, 1024.0, 768.0));
+
+        // Click where close button would be
+        let close_x = modal.content_bounds.x + modal.content_bounds.width - 40.0 - modal.padding;
+        let close_y = modal.content_bounds.y + modal.padding;
+
+        let result = modal.event(&Event::MouseDown {
+            position: Point::new(close_x + 10.0, close_y + 10.0),
+            button: presentar_core::MouseButton::Left,
+        });
+
+        // Should not close because button is hidden
+        assert!(result.is_none());
+        assert!(modal.is_open());
+    }
+
+    // =========================================================================
+    // Animation Tests
+    // =========================================================================
+
+    #[test]
+    fn test_modal_animation_opens() {
+        let mut modal = Modal::new().open(true);
+        modal.layout(Rect::new(0.0, 0.0, 1024.0, 768.0));
+        assert!(modal.animation_progress > 0.0);
+
+        // Another layout call should increase progress further
+        modal.layout(Rect::new(0.0, 0.0, 1024.0, 768.0));
+        assert!(modal.animation_progress >= 0.15);
+    }
+
+    #[test]
+    fn test_modal_animation_caps_at_one() {
+        let mut modal = Modal::new().open(true);
+        // Run layout multiple times
+        for _ in 0..20 {
+            modal.layout(Rect::new(0.0, 0.0, 1024.0, 768.0));
+        }
+        assert!((modal.animation_progress - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_modal_animation_closes_to_zero() {
+        let mut modal = Modal::new().open(true);
+        // Open fully
+        for _ in 0..20 {
+            modal.layout(Rect::new(0.0, 0.0, 1024.0, 768.0));
+        }
+
+        modal.open = false;
+        // Close animation
+        for _ in 0..20 {
+            modal.layout(Rect::new(0.0, 0.0, 1024.0, 768.0));
+        }
+        assert!(modal.animation_progress < 0.01);
+    }
+
+    // =========================================================================
+    // Calculate Bounds Tests
+    // =========================================================================
+
+    #[test]
+    fn test_modal_calculate_bounds_centered() {
+        let modal = Modal::new().size(ModalSize::Medium);
+        let viewport = Rect::new(0.0, 0.0, 1024.0, 768.0);
+        let bounds = modal.calculate_modal_bounds(viewport);
+
+        // Modal should be horizontally centered
+        let expected_x = (1024.0 - bounds.width) / 2.0;
+        assert!((bounds.x - expected_x).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_modal_calculate_bounds_small_viewport() {
+        let modal = Modal::new().size(ModalSize::Large); // 800px wide
+        let viewport = Rect::new(0.0, 0.0, 400.0, 300.0); // Smaller than modal
+        let bounds = modal.calculate_modal_bounds(viewport);
+
+        // Modal should be constrained to viewport minus margins
+        assert!(bounds.width <= 400.0 - 32.0);
+    }
+
+    #[test]
+    fn test_modal_calculate_bounds_with_footer() {
+        let modal = Modal::new().title("Test");
+        let viewport = Rect::new(0.0, 0.0, 1024.0, 768.0);
+        let bounds = modal.calculate_modal_bounds(viewport);
+
+        // Height should include header
+        assert!(bounds.height > 0.0);
+    }
+
+    // =========================================================================
+    // Size Variant Tests
+    // =========================================================================
+
+    #[test]
+    fn test_modal_size_large() {
+        assert_eq!(ModalSize::Large.max_width(), 800.0);
+    }
+
+    #[test]
+    fn test_modal_size_custom_zero() {
+        // Custom size of 0 should still work
+        assert_eq!(ModalSize::Custom(0).max_width(), 0.0);
+    }
+
+    // =========================================================================
+    // CloseReason Tests
+    // =========================================================================
+
+    #[test]
+    fn test_close_reason_copy() {
+        let reason = CloseReason::Escape;
+        let copied: CloseReason = reason;
+        assert_eq!(copied, CloseReason::Escape);
+    }
+
+    #[test]
+    fn test_close_reason_all_variants() {
+        let reasons = [
+            CloseReason::Escape,
+            CloseReason::Backdrop,
+            CloseReason::CloseButton,
+            CloseReason::Programmatic,
+        ];
+        assert_eq!(reasons.len(), 4);
+    }
+
+    // =========================================================================
+    // Message Tests
+    // =========================================================================
+
+    #[test]
+    fn test_modal_closed_clone() {
+        let msg = ModalClosed {
+            reason: CloseReason::Escape,
+        };
+        let cloned = msg.clone();
+        assert_eq!(cloned.reason, CloseReason::Escape);
+    }
+
+    #[test]
+    fn test_modal_opened_clone() {
+        let msg = ModalOpened;
+        let _cloned = msg.clone();
+    }
+
+    #[test]
+    fn test_modal_closed_debug() {
+        let msg = ModalClosed {
+            reason: CloseReason::Backdrop,
+        };
+        let debug_str = format!("{:?}", msg);
+        assert!(debug_str.contains("Backdrop"));
+    }
+
+    #[test]
+    fn test_modal_opened_debug() {
+        let msg = ModalOpened;
+        let debug_str = format!("{:?}", msg);
+        assert!(debug_str.contains("ModalOpened"));
+    }
+
+    // =========================================================================
+    // Default Trait Tests
+    // =========================================================================
+
+    #[test]
+    fn test_modal_default_values() {
+        let modal = Modal::default();
+        assert!(!modal.open);
+        assert_eq!(modal.size, ModalSize::Medium);
+        assert_eq!(modal.backdrop, BackdropBehavior::CloseOnClick);
+        assert!(modal.close_on_escape);
+        assert!(modal.title.is_none());
+        assert!(modal.show_close_button);
+        assert_eq!(modal.border_radius, 8.0);
+        assert_eq!(modal.padding, 24.0);
+    }
+
+    // =========================================================================
+    // Widget Trait Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_modal_measure_constraints() {
+        let modal = Modal::new();
+        let size = modal.measure(Constraints::tight(Size::new(800.0, 600.0)));
+        assert_eq!(size.width, 800.0);
+        assert_eq!(size.height, 600.0);
+    }
+
+    #[test]
+    fn test_modal_children_mut() {
+        let mut modal = Modal::new();
+        assert!(modal.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_modal_mouse_move_does_nothing() {
+        let mut modal = Modal::new().open(true);
+        modal.layout(Rect::new(0.0, 0.0, 1024.0, 768.0));
+
+        let result = modal.event(&Event::MouseMove {
+            position: Point::new(100.0, 100.0),
+        });
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_modal_title_setter() {
+        let modal = Modal::new().title("Test Modal");
+        // Modal doesn't derive Debug, just test it exists
+        let _ = modal;
+    }
+
+    #[test]
+    fn test_backdrop_behavior_copy() {
+        let behavior = BackdropBehavior::Static;
+        let copied: BackdropBehavior = behavior;
+        assert_eq!(copied, BackdropBehavior::Static);
+    }
+
+    #[test]
+    fn test_modal_size_copy() {
+        let size = ModalSize::Large;
+        let copied: ModalSize = size;
+        assert_eq!(copied, ModalSize::Large);
+    }
+
+    #[test]
+    fn test_close_reason_debug() {
+        let reason = CloseReason::CloseButton;
+        let debug_str = format!("{:?}", reason);
+        assert!(debug_str.contains("CloseButton"));
+    }
 }

@@ -1030,4 +1030,329 @@ mod tests {
         let card = ModelCard::new("Initial").name("Changed");
         assert_eq!(card.get_name(), "Changed");
     }
+
+    // =========================================================================
+    // Brick Trait Tests
+    // =========================================================================
+
+    #[test]
+    fn test_model_card_brick_name() {
+        let card = ModelCard::new("test");
+        assert_eq!(card.brick_name(), "ModelCard");
+    }
+
+    #[test]
+    fn test_model_card_brick_assertions() {
+        let card = ModelCard::new("test");
+        let assertions = card.assertions();
+        assert!(!assertions.is_empty());
+        assert!(matches!(assertions[0], BrickAssertion::MaxLatencyMs(16)));
+    }
+
+    #[test]
+    fn test_model_card_brick_budget() {
+        let card = ModelCard::new("test");
+        let budget = card.budget();
+        // Verify budget has reasonable values
+        assert!(budget.layout_ms > 0);
+        assert!(budget.paint_ms > 0);
+    }
+
+    #[test]
+    fn test_model_card_brick_verify() {
+        let card = ModelCard::new("test");
+        let verification = card.verify();
+        assert!(!verification.passed.is_empty());
+        assert!(verification.failed.is_empty());
+    }
+
+    #[test]
+    fn test_model_card_brick_to_html() {
+        let card = ModelCard::new("test");
+        let html = card.to_html();
+        assert!(html.contains("brick-modelcard"));
+    }
+
+    #[test]
+    fn test_model_card_brick_to_css() {
+        let card = ModelCard::new("test");
+        let css = card.to_css();
+        assert!(css.contains(".brick-modelcard"));
+        assert!(css.contains("display: block"));
+    }
+
+    #[test]
+    fn test_model_card_brick_test_id() {
+        let card = ModelCard::new("test").test_id("card-1");
+        assert_eq!(Brick::test_id(&card), Some("card-1"));
+    }
+
+    #[test]
+    fn test_model_card_brick_test_id_none() {
+        let card = ModelCard::new("test");
+        assert!(Brick::test_id(&card).is_none());
+    }
+
+    // =========================================================================
+    // ModelStatus Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_model_status_debug() {
+        let status = ModelStatus::Published;
+        let debug_str = format!("{:?}", status);
+        assert!(debug_str.contains("Published"));
+    }
+
+    #[test]
+    fn test_model_status_eq() {
+        assert_eq!(ModelStatus::Draft, ModelStatus::Draft);
+        assert_ne!(ModelStatus::Draft, ModelStatus::Published);
+    }
+
+    #[test]
+    fn test_model_status_clone() {
+        let status = ModelStatus::Review;
+        let cloned = status;
+        assert_eq!(cloned, ModelStatus::Review);
+    }
+
+    #[test]
+    fn test_model_status_serde() {
+        let status = ModelStatus::Deprecated;
+        let serialized = serde_json::to_string(&status).unwrap();
+        let deserialized: ModelStatus = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized, ModelStatus::Deprecated);
+    }
+
+    #[test]
+    fn test_model_status_color_all_variants_detailed() {
+        // Draft is gray
+        let draft_color = ModelStatus::Draft.color();
+        assert!((draft_color.r - 0.6).abs() < 0.01);
+
+        // Review is yellow/orange
+        let review_color = ModelStatus::Review.color();
+        assert!(review_color.r > 0.8);
+        assert!(review_color.g > 0.6);
+
+        // Published is green
+        let published_color = ModelStatus::Published.color();
+        assert!(published_color.g > published_color.r);
+
+        // Deprecated is orange
+        let deprecated_color = ModelStatus::Deprecated.color();
+        assert!(deprecated_color.r > 0.8);
+
+        // Archived is gray
+        let archived_color = ModelStatus::Archived.color();
+        assert!((archived_color.r - 0.5).abs() < 0.01);
+    }
+
+    // =========================================================================
+    // ModelMetric Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_model_metric_debug() {
+        let metric = ModelMetric::new("Accuracy", 0.95);
+        let debug_str = format!("{:?}", metric);
+        assert!(debug_str.contains("Accuracy"));
+        assert!(debug_str.contains("0.95"));
+    }
+
+    #[test]
+    fn test_model_metric_clone() {
+        let metric = ModelMetric::new("F1", 0.88).unit("%").lower_is_better();
+        let cloned = metric.clone();
+        assert_eq!(cloned.name, "F1");
+        assert_eq!(cloned.value, 0.88);
+        assert_eq!(cloned.unit, Some("%".to_string()));
+        assert!(!cloned.higher_is_better);
+    }
+
+    #[test]
+    fn test_model_metric_serde() {
+        let metric = ModelMetric::new("Loss", 0.05).lower_is_better();
+        let serialized = serde_json::to_string(&metric).unwrap();
+        let deserialized: ModelMetric = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized.name, "Loss");
+        assert_eq!(deserialized.value, 0.05);
+        assert!(!deserialized.higher_is_better);
+    }
+
+    #[test]
+    fn test_model_metric_formatted_value_negative() {
+        let metric = ModelMetric::new("Correlation", -0.5);
+        let formatted = metric.formatted_value();
+        assert!(formatted.contains("-50.00%"));
+    }
+
+    #[test]
+    fn test_model_metric_formatted_value_zero() {
+        let metric = ModelMetric::new("Bias", 0.0);
+        assert_eq!(metric.formatted_value(), "0.00%");
+    }
+
+    #[test]
+    fn test_model_metric_formatted_value_exactly_one() {
+        let metric = ModelMetric::new("Perfect", 1.0);
+        assert_eq!(metric.formatted_value(), "1.00");
+    }
+
+    // =========================================================================
+    // ModelCard Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_model_card_debug() {
+        let card = ModelCard::new("GPT-4");
+        let debug_str = format!("{:?}", card);
+        assert!(debug_str.contains("GPT-4"));
+    }
+
+    #[test]
+    fn test_model_card_clone() {
+        let card = ModelCard::new("BERT")
+            .version("2.0.0")
+            .status(ModelStatus::Published)
+            .framework("PyTorch");
+        let cloned = card.clone();
+        assert_eq!(cloned.get_name(), "BERT");
+        assert_eq!(cloned.get_version(), "2.0.0");
+        assert_eq!(cloned.get_status(), ModelStatus::Published);
+        assert_eq!(cloned.get_framework(), Some("PyTorch"));
+    }
+
+    #[test]
+    fn test_model_card_serde() {
+        let card = ModelCard::new("ResNet")
+            .version("1.0.0")
+            .status(ModelStatus::Draft);
+        let serialized = serde_json::to_string(&card).unwrap();
+        let deserialized: ModelCard = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized.get_name(), "ResNet");
+        assert_eq!(deserialized.get_version(), "1.0.0");
+        assert_eq!(deserialized.get_status(), ModelStatus::Draft);
+    }
+
+    // =========================================================================
+    // Getter Tests (ensure all getters are covered)
+    // =========================================================================
+
+    #[test]
+    fn test_model_card_getters_none() {
+        let card = ModelCard::new("test");
+        assert!(card.get_description().is_none());
+        assert!(card.get_framework().is_none());
+        assert!(card.get_task().is_none());
+        assert!(card.get_parameters().is_none());
+        assert!(card.get_dataset().is_none());
+        assert!(card.get_author().is_none());
+        assert!(card.get_metadata("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_model_card_getters_some() {
+        let card = ModelCard::new("test")
+            .description("desc")
+            .framework("TensorFlow")
+            .task("classification")
+            .parameters(1_000_000)
+            .dataset("CIFAR-10")
+            .author("ML Team")
+            .metadata_entry("license", "Apache-2.0");
+
+        assert_eq!(card.get_description(), Some("desc"));
+        assert_eq!(card.get_framework(), Some("TensorFlow"));
+        assert_eq!(card.get_task(), Some("classification"));
+        assert_eq!(card.get_parameters(), Some(1_000_000));
+        assert_eq!(card.get_dataset(), Some("CIFAR-10"));
+        assert_eq!(card.get_author(), Some("ML Team"));
+        assert_eq!(card.get_metadata("license"), Some("Apache-2.0"));
+    }
+
+    // =========================================================================
+    // Widget Trait Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_model_card_measure_with_tight_constraints() {
+        let card = ModelCard::new("test").width(400.0).height(300.0);
+        let size = card.measure(Constraints::tight(Size::new(200.0, 150.0)));
+        assert_eq!(size.width, 200.0);
+        assert_eq!(size.height, 150.0);
+    }
+
+    // =========================================================================
+    // Edge Case Tests
+    // =========================================================================
+
+    #[test]
+    fn test_model_card_empty_metrics() {
+        let card = ModelCard::new("test").metrics(vec![]);
+        assert!(!card.has_metrics());
+        assert!(card.get_metrics().is_empty());
+    }
+
+    #[test]
+    fn test_model_card_many_metrics() {
+        let metrics: Vec<ModelMetric> = (0..5)
+            .map(|i| ModelMetric::new(format!("metric_{i}"), i as f64 * 0.1))
+            .collect();
+        let card = ModelCard::new("test").metrics(metrics);
+        assert!(card.has_metrics());
+        assert_eq!(card.get_metrics().len(), 5);
+    }
+
+    #[test]
+    fn test_model_card_empty_tags() {
+        let tags: [&str; 0] = [];
+        let card = ModelCard::new("test").tags(tags);
+        assert!(card.get_tags().is_empty());
+    }
+
+    #[test]
+    fn test_model_card_show_metrics_chart_false() {
+        let card = ModelCard::new("test")
+            .metric(ModelMetric::new("acc", 0.95))
+            .show_metrics_chart(false);
+        assert!(card.has_metrics());
+        // show_metrics_chart only affects paint, not has_metrics
+    }
+
+    #[test]
+    fn test_model_card_default_colors() {
+        let card = ModelCard::default();
+        assert_eq!(card.background, Color::WHITE);
+    }
+
+    #[test]
+    fn test_model_card_default_values() {
+        let card = ModelCard::default();
+        assert!(card.name.is_empty());
+        assert_eq!(card.version, "1.0.0");
+        assert_eq!(card.status, ModelStatus::Draft);
+        assert!(card.show_metrics_chart);
+        assert_eq!(card.corner_radius, 8.0);
+    }
+
+    // =========================================================================
+    // Formatted Parameters Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_formatted_parameters_edge_cases() {
+        // Exactly 1000 parameters
+        let card = ModelCard::new("test").parameters(1000);
+        assert_eq!(card.formatted_parameters(), Some("1.0K".to_string()));
+
+        // Exactly 1 million
+        let card = ModelCard::new("test").parameters(1_000_000);
+        assert_eq!(card.formatted_parameters(), Some("1.0M".to_string()));
+
+        // Exactly 1 billion
+        let card = ModelCard::new("test").parameters(1_000_000_000);
+        assert_eq!(card.formatted_parameters(), Some("1.0B".to_string()));
+    }
 }

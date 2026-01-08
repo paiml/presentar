@@ -441,4 +441,453 @@ mod tests {
         let result = stack.event(&Event::MouseEnter);
         assert!(result.is_none());
     }
+
+    // =========================================================================
+    // Brick Trait Tests
+    // =========================================================================
+
+    #[test]
+    fn test_stack_brick_name() {
+        let stack = Stack::new();
+        assert_eq!(stack.brick_name(), "Stack");
+    }
+
+    #[test]
+    fn test_stack_brick_assertions() {
+        let stack = Stack::new();
+        let assertions = stack.assertions();
+        assert!(!assertions.is_empty());
+        assert!(matches!(assertions[0], BrickAssertion::MaxLatencyMs(16)));
+    }
+
+    #[test]
+    fn test_stack_brick_budget() {
+        let stack = Stack::new();
+        let budget = stack.budget();
+        // Verify budget has reasonable values
+        assert!(budget.layout_ms > 0);
+        assert!(budget.paint_ms > 0);
+    }
+
+    #[test]
+    fn test_stack_brick_verify() {
+        let stack = Stack::new();
+        let verification = stack.verify();
+        assert!(!verification.passed.is_empty());
+        assert!(verification.failed.is_empty());
+    }
+
+    #[test]
+    fn test_stack_brick_to_html() {
+        let stack = Stack::new();
+        let html = stack.to_html();
+        assert!(html.contains("brick-stack"));
+    }
+
+    #[test]
+    fn test_stack_brick_to_css() {
+        let stack = Stack::new();
+        let css = stack.to_css();
+        assert!(css.contains(".brick-stack"));
+        assert!(css.contains("display: block"));
+        assert!(css.contains("position: relative"));
+    }
+
+    // =========================================================================
+    // StackAlignment Comprehensive Tests
+    // =========================================================================
+
+    #[test]
+    fn test_stack_alignment_all_variants() {
+        let alignments = [
+            StackAlignment::TopLeft,
+            StackAlignment::TopCenter,
+            StackAlignment::TopRight,
+            StackAlignment::CenterLeft,
+            StackAlignment::Center,
+            StackAlignment::CenterRight,
+            StackAlignment::BottomLeft,
+            StackAlignment::BottomCenter,
+            StackAlignment::BottomRight,
+        ];
+        assert_eq!(alignments.len(), 9);
+    }
+
+    #[test]
+    fn test_stack_alignment_debug() {
+        let alignment = StackAlignment::Center;
+        let debug_str = format!("{:?}", alignment);
+        assert!(debug_str.contains("Center"));
+    }
+
+    #[test]
+    fn test_stack_alignment_eq() {
+        assert_eq!(StackAlignment::Center, StackAlignment::Center);
+        assert_ne!(StackAlignment::TopLeft, StackAlignment::BottomRight);
+    }
+
+    #[test]
+    fn test_stack_alignment_clone() {
+        let alignment = StackAlignment::BottomCenter;
+        let cloned = alignment;
+        assert_eq!(cloned, StackAlignment::BottomCenter);
+    }
+
+    // =========================================================================
+    // StackFit Tests
+    // =========================================================================
+
+    #[test]
+    fn test_stack_fit_eq() {
+        assert_eq!(StackFit::Loose, StackFit::Loose);
+        assert_ne!(StackFit::Loose, StackFit::Expand);
+    }
+
+    #[test]
+    fn test_stack_fit_debug() {
+        let fit = StackFit::Expand;
+        let debug_str = format!("{:?}", fit);
+        assert!(debug_str.contains("Expand"));
+    }
+
+    #[test]
+    fn test_stack_fit_clone() {
+        let fit = StackFit::Expand;
+        let cloned = fit;
+        assert_eq!(cloned, StackFit::Expand);
+    }
+
+    // =========================================================================
+    // Measure with Children (requires mock widget)
+    // =========================================================================
+
+    // Simple mock widget for testing
+    struct MockWidget {
+        size: Size,
+    }
+
+    impl Brick for MockWidget {
+        fn brick_name(&self) -> &'static str {
+            "MockWidget"
+        }
+
+        fn assertions(&self) -> &[BrickAssertion] {
+            &[]
+        }
+
+        fn budget(&self) -> BrickBudget {
+            BrickBudget::uniform(16)
+        }
+
+        fn verify(&self) -> BrickVerification {
+            BrickVerification {
+                passed: vec![],
+                failed: vec![],
+                verification_time: Duration::from_micros(1),
+            }
+        }
+
+        fn to_html(&self) -> String {
+            String::new()
+        }
+
+        fn to_css(&self) -> String {
+            String::new()
+        }
+    }
+
+    impl Widget for MockWidget {
+        fn type_id(&self) -> TypeId {
+            TypeId::of::<Self>()
+        }
+
+        fn measure(&self, _constraints: Constraints) -> Size {
+            self.size
+        }
+
+        fn layout(&mut self, _bounds: Rect) -> LayoutResult {
+            LayoutResult { size: self.size }
+        }
+
+        fn paint(&self, _canvas: &mut dyn Canvas) {}
+
+        fn event(&mut self, _event: &Event) -> Option<Box<dyn std::any::Any + Send>> {
+            None
+        }
+
+        fn children(&self) -> &[Box<dyn Widget>] {
+            &[]
+        }
+
+        fn children_mut(&mut self) -> &mut [Box<dyn Widget>] {
+            &mut []
+        }
+    }
+
+    #[test]
+    fn test_stack_measure_with_children_loose() {
+        let stack = Stack::new()
+            .fit(StackFit::Loose)
+            .child(MockWidget {
+                size: Size::new(50.0, 30.0),
+            })
+            .child(MockWidget {
+                size: Size::new(100.0, 60.0),
+            });
+
+        let size = stack.measure(Constraints::loose(Size::new(500.0, 500.0)));
+        // Should be the largest child
+        assert_eq!(size.width, 100.0);
+        assert_eq!(size.height, 60.0);
+    }
+
+    #[test]
+    fn test_stack_measure_with_children_expand() {
+        let stack = Stack::new().fit(StackFit::Expand).child(MockWidget {
+            size: Size::new(50.0, 30.0),
+        });
+
+        let size = stack.measure(Constraints::loose(Size::new(500.0, 400.0)));
+        // Should expand to fill available space
+        assert_eq!(size.width, 500.0);
+        assert_eq!(size.height, 400.0);
+    }
+
+    #[test]
+    fn test_stack_layout_with_children_top_left() {
+        let mut stack = Stack::new()
+            .alignment(StackAlignment::TopLeft)
+            .child(MockWidget {
+                size: Size::new(50.0, 30.0),
+            });
+
+        stack.layout(Rect::new(0.0, 0.0, 200.0, 150.0));
+
+        // Child should be at top-left corner
+        // (Verified through layout result, can't directly access child bounds)
+        assert_eq!(stack.bounds, Rect::new(0.0, 0.0, 200.0, 150.0));
+    }
+
+    #[test]
+    fn test_stack_layout_with_children_center() {
+        let mut stack = Stack::new()
+            .alignment(StackAlignment::Center)
+            .child(MockWidget {
+                size: Size::new(50.0, 30.0),
+            });
+
+        let result = stack.layout(Rect::new(0.0, 0.0, 200.0, 150.0));
+        assert_eq!(result.size, Size::new(200.0, 150.0));
+    }
+
+    #[test]
+    fn test_stack_layout_with_children_bottom_right() {
+        let mut stack = Stack::new()
+            .alignment(StackAlignment::BottomRight)
+            .child(MockWidget {
+                size: Size::new(50.0, 30.0),
+            });
+
+        let result = stack.layout(Rect::new(0.0, 0.0, 200.0, 150.0));
+        assert_eq!(result.size, Size::new(200.0, 150.0));
+    }
+
+    #[test]
+    fn test_stack_children_count() {
+        let stack = Stack::new()
+            .child(MockWidget {
+                size: Size::new(50.0, 30.0),
+            })
+            .child(MockWidget {
+                size: Size::new(100.0, 60.0),
+            })
+            .child(MockWidget {
+                size: Size::new(75.0, 45.0),
+            });
+
+        assert_eq!(stack.children().len(), 3);
+    }
+
+    #[test]
+    fn test_stack_children_mut_count() {
+        let mut stack = Stack::new()
+            .child(MockWidget {
+                size: Size::new(50.0, 30.0),
+            })
+            .child(MockWidget {
+                size: Size::new(100.0, 60.0),
+            });
+
+        assert_eq!(stack.children_mut().len(), 2);
+    }
+
+    // =========================================================================
+    // Test ID Tests
+    // =========================================================================
+
+    #[test]
+    fn test_stack_widget_test_id() {
+        let stack = Stack::new().with_test_id("stack-1");
+        assert_eq!(Brick::test_id(&stack), None); // Brick::test_id is different method
+    }
+
+    #[test]
+    fn test_stack_debug() {
+        let stack = Stack::new();
+        // Stack doesn't derive Debug, but we can test it compiles
+        let _ = stack;
+    }
+
+    // =========================================================================
+    // Default Implementation Tests
+    // =========================================================================
+
+    #[test]
+    fn test_stack_default_impl() {
+        let stack = Stack::default();
+        assert_eq!(stack.get_alignment(), StackAlignment::TopLeft);
+        assert_eq!(stack.get_fit(), StackFit::Loose);
+        assert!(stack.children().is_empty());
+    }
+
+    // =========================================================================
+    // Event Handling Tests
+    // =========================================================================
+
+    struct EventCapturingWidget {
+        size: Size,
+    }
+
+    impl Brick for EventCapturingWidget {
+        fn brick_name(&self) -> &'static str {
+            "EventCapturingWidget"
+        }
+
+        fn assertions(&self) -> &[BrickAssertion] {
+            &[]
+        }
+
+        fn budget(&self) -> BrickBudget {
+            BrickBudget::uniform(16)
+        }
+
+        fn verify(&self) -> BrickVerification {
+            BrickVerification {
+                passed: vec![],
+                failed: vec![],
+                verification_time: Duration::from_micros(1),
+            }
+        }
+
+        fn to_html(&self) -> String {
+            String::new()
+        }
+
+        fn to_css(&self) -> String {
+            String::new()
+        }
+    }
+
+    impl Widget for EventCapturingWidget {
+        fn type_id(&self) -> TypeId {
+            TypeId::of::<Self>()
+        }
+
+        fn measure(&self, _constraints: Constraints) -> Size {
+            self.size
+        }
+
+        fn layout(&mut self, _bounds: Rect) -> LayoutResult {
+            LayoutResult { size: self.size }
+        }
+
+        fn paint(&self, _canvas: &mut dyn Canvas) {}
+
+        fn event(&mut self, _event: &Event) -> Option<Box<dyn std::any::Any + Send>> {
+            // Return a message to indicate event was handled
+            Some(Box::new("handled".to_string()))
+        }
+
+        fn children(&self) -> &[Box<dyn Widget>] {
+            &[]
+        }
+
+        fn children_mut(&mut self) -> &mut [Box<dyn Widget>] {
+            &mut []
+        }
+    }
+
+    #[test]
+    fn test_stack_event_propagates_to_children() {
+        let mut stack = Stack::new().child(EventCapturingWidget {
+            size: Size::new(50.0, 30.0),
+        });
+
+        stack.layout(Rect::new(0.0, 0.0, 200.0, 150.0));
+        let result = stack.event(&Event::MouseEnter);
+
+        // Event should be captured by child
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_stack_event_reverse_order() {
+        // Events should be processed in reverse order (top-most child first)
+        let mut stack = Stack::new()
+            .child(MockWidget {
+                size: Size::new(50.0, 30.0),
+            })
+            .child(EventCapturingWidget {
+                size: Size::new(50.0, 30.0),
+            });
+
+        stack.layout(Rect::new(0.0, 0.0, 200.0, 150.0));
+        let result = stack.event(&Event::MouseEnter);
+
+        // Last child (EventCapturingWidget) should handle it first
+        assert!(result.is_some());
+    }
+
+    // =========================================================================
+    // Measure Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_stack_measure_loose_with_constraints() {
+        let stack = Stack::new().fit(StackFit::Loose).child(MockWidget {
+            size: Size::new(500.0, 400.0),
+        });
+
+        // Constraint smaller than child
+        let size = stack.measure(Constraints {
+            min_width: 0.0,
+            min_height: 0.0,
+            max_width: 200.0,
+            max_height: 150.0,
+        });
+
+        // Should be constrained
+        assert_eq!(size.width, 200.0);
+        assert_eq!(size.height, 150.0);
+    }
+
+    #[test]
+    fn test_stack_measure_multiple_children_different_sizes() {
+        let stack = Stack::new()
+            .fit(StackFit::Loose)
+            .child(MockWidget {
+                size: Size::new(50.0, 100.0),
+            })
+            .child(MockWidget {
+                size: Size::new(100.0, 50.0),
+            })
+            .child(MockWidget {
+                size: Size::new(75.0, 75.0),
+            });
+
+        let size = stack.measure(Constraints::loose(Size::new(500.0, 500.0)));
+        // Should take maximum of each dimension
+        assert_eq!(size.width, 100.0);
+        assert_eq!(size.height, 100.0);
+    }
 }

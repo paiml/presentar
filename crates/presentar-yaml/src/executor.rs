@@ -2510,4 +2510,2024 @@ mod tests {
             Transform::Suggest { prefix, count } if prefix == "git" && *count == 8
         ));
     }
+
+    // ===== Additional Value Tests for Coverage =====
+
+    #[test]
+    fn test_value_from_i64() {
+        let v: Value = 123i64.into();
+        assert_eq!(v.as_number(), Some(123.0));
+    }
+
+    #[test]
+    fn test_value_as_array_mut() {
+        let mut v = Value::array(vec![Value::number(1.0), Value::number(2.0)]);
+        if let Some(arr) = v.as_array_mut() {
+            arr.push(Value::number(3.0));
+        }
+        assert_eq!(v.len(), 3);
+    }
+
+    #[test]
+    fn test_value_as_array_mut_non_array() {
+        let mut v = Value::string("hello");
+        assert!(v.as_array_mut().is_none());
+    }
+
+    #[test]
+    fn test_value_as_object() {
+        let mut map = HashMap::new();
+        map.insert("key".to_string(), Value::string("value"));
+        let v = Value::object(map);
+        assert!(v.as_object().is_some());
+        assert_eq!(v.as_object().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_value_as_object_non_object() {
+        let v = Value::string("hello");
+        assert!(v.as_object().is_none());
+    }
+
+    #[test]
+    fn test_value_len_string() {
+        let v = Value::string("hello");
+        assert_eq!(v.len(), 5);
+    }
+
+    #[test]
+    fn test_value_len_null() {
+        let v = Value::Null;
+        assert_eq!(v.len(), 0);
+    }
+
+    #[test]
+    fn test_value_is_empty_string() {
+        assert!(Value::string("").is_empty());
+        assert!(!Value::string("a").is_empty());
+    }
+
+    #[test]
+    fn test_value_get_non_object() {
+        let v = Value::array(vec![]);
+        assert!(v.get("key").is_none());
+    }
+
+    #[test]
+    fn test_value_as_bool_non_bool() {
+        let v = Value::string("true");
+        assert!(v.as_bool().is_none());
+    }
+
+    #[test]
+    fn test_value_as_number_non_number() {
+        let v = Value::string("42");
+        assert!(v.as_number().is_none());
+    }
+
+    #[test]
+    fn test_value_as_str_non_string() {
+        let v = Value::number(42.0);
+        assert!(v.as_str().is_none());
+    }
+
+    #[test]
+    fn test_value_as_array_non_array() {
+        let v = Value::string("hello");
+        assert!(v.as_array().is_none());
+    }
+
+    #[test]
+    fn test_value_from_vec() {
+        let v: Value = vec![1i32, 2, 3].into();
+        assert!(v.is_array());
+        assert_eq!(v.len(), 3);
+    }
+
+    // ===== ExecutionError Display Tests =====
+
+    #[test]
+    fn test_error_display_expected_object() {
+        assert_eq!(
+            ExecutionError::ExpectedObject.to_string(),
+            "expected an object"
+        );
+    }
+
+    #[test]
+    fn test_error_display_field_not_found() {
+        assert_eq!(
+            ExecutionError::FieldNotFound("missing".to_string()).to_string(),
+            "field not found: missing"
+        );
+    }
+
+    #[test]
+    fn test_error_display_type_mismatch() {
+        assert_eq!(
+            ExecutionError::TypeMismatch("expected number".to_string()).to_string(),
+            "type mismatch: expected number"
+        );
+    }
+
+    #[test]
+    fn test_error_display_invalid_transform() {
+        assert_eq!(
+            ExecutionError::InvalidTransform("bad window".to_string()).to_string(),
+            "invalid transform: bad window"
+        );
+    }
+
+    // ===== Window Parsing Tests =====
+
+    #[test]
+    fn test_parse_window_seconds() {
+        let executor = ExpressionExecutor::new();
+        assert_eq!(executor.parse_window("5s").unwrap(), 5000);
+    }
+
+    #[test]
+    fn test_parse_window_minutes() {
+        let executor = ExpressionExecutor::new();
+        assert_eq!(executor.parse_window("2m").unwrap(), 120000);
+    }
+
+    #[test]
+    fn test_parse_window_hours() {
+        let executor = ExpressionExecutor::new();
+        assert_eq!(executor.parse_window("1h").unwrap(), 3600000);
+    }
+
+    #[test]
+    fn test_parse_window_days() {
+        let executor = ExpressionExecutor::new();
+        assert_eq!(executor.parse_window("1d").unwrap(), 86400000);
+    }
+
+    #[test]
+    fn test_parse_window_milliseconds() {
+        let executor = ExpressionExecutor::new();
+        assert_eq!(executor.parse_window("500ms").unwrap(), 500);
+    }
+
+    #[test]
+    fn test_parse_window_no_unit() {
+        let executor = ExpressionExecutor::new();
+        // No unit defaults to milliseconds
+        assert_eq!(executor.parse_window("1000").unwrap(), 1000);
+    }
+
+    #[test]
+    fn test_parse_window_empty() {
+        let executor = ExpressionExecutor::new();
+        let result = executor.parse_window("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_window_invalid() {
+        let executor = ExpressionExecutor::new();
+        let result = executor.parse_window("abc");
+        assert!(result.is_err());
+    }
+
+    // ===== Compare Values Tests =====
+
+    #[test]
+    fn test_compare_values_gte() {
+        let executor = ExpressionExecutor::new();
+        assert!(executor.compare_values(&Value::Number(50.0), ">=", "50"));
+        assert!(executor.compare_values(&Value::Number(51.0), "gte", "50"));
+        assert!(!executor.compare_values(&Value::Number(49.0), ">=", "50"));
+    }
+
+    #[test]
+    fn test_compare_values_lte() {
+        let executor = ExpressionExecutor::new();
+        assert!(executor.compare_values(&Value::Number(50.0), "<=", "50"));
+        assert!(executor.compare_values(&Value::Number(49.0), "lte", "50"));
+        assert!(!executor.compare_values(&Value::Number(51.0), "<=", "50"));
+    }
+
+    #[test]
+    fn test_compare_values_starts_with() {
+        let executor = ExpressionExecutor::new();
+        assert!(executor.compare_values(
+            &Value::String("hello world".to_string()),
+            "starts_with",
+            "hello"
+        ));
+        assert!(!executor.compare_values(
+            &Value::String("world hello".to_string()),
+            "starts_with",
+            "hello"
+        ));
+        assert!(!executor.compare_values(&Value::Number(123.0), "starts_with", "hello"));
+    }
+
+    #[test]
+    fn test_compare_values_ends_with() {
+        let executor = ExpressionExecutor::new();
+        assert!(executor.compare_values(
+            &Value::String("hello world".to_string()),
+            "ends_with",
+            "world"
+        ));
+        assert!(!executor.compare_values(
+            &Value::String("world hello".to_string()),
+            "ends_with",
+            "world"
+        ));
+        assert!(!executor.compare_values(&Value::Number(123.0), "ends_with", "world"));
+    }
+
+    #[test]
+    fn test_compare_values_unknown_op() {
+        let executor = ExpressionExecutor::new();
+        assert!(!executor.compare_values(&Value::Number(50.0), "unknown", "50"));
+    }
+
+    #[test]
+    fn test_compare_values_non_numeric_gt() {
+        let executor = ExpressionExecutor::new();
+        assert!(!executor.compare_values(&Value::String("abc".to_string()), ">", "50"));
+    }
+
+    // ===== Value Matching Tests =====
+
+    #[test]
+    fn test_value_matches_bool_true() {
+        let executor = ExpressionExecutor::new();
+        assert!(executor.value_matches(&Value::Bool(true), "true"));
+        assert!(!executor.value_matches(&Value::Bool(true), "false"));
+    }
+
+    #[test]
+    fn test_value_matches_bool_false() {
+        let executor = ExpressionExecutor::new();
+        assert!(executor.value_matches(&Value::Bool(false), "false"));
+        assert!(!executor.value_matches(&Value::Bool(false), "true"));
+    }
+
+    #[test]
+    fn test_value_matches_number_parse_failure() {
+        let executor = ExpressionExecutor::new();
+        assert!(!executor.value_matches(&Value::Number(42.0), "not_a_number"));
+    }
+
+    #[test]
+    fn test_value_matches_null() {
+        let executor = ExpressionExecutor::new();
+        assert!(!executor.value_matches(&Value::Null, "null"));
+    }
+
+    #[test]
+    fn test_value_matches_array() {
+        let executor = ExpressionExecutor::new();
+        assert!(!executor.value_matches(&Value::Array(vec![]), "[]"));
+    }
+
+    // ===== Value To String Tests =====
+
+    #[test]
+    fn test_value_to_string_null() {
+        let executor = ExpressionExecutor::new();
+        assert_eq!(executor.value_to_string(&Value::Null), "_null");
+    }
+
+    #[test]
+    fn test_value_to_string_bool() {
+        let executor = ExpressionExecutor::new();
+        assert_eq!(executor.value_to_string(&Value::Bool(true)), "true");
+        assert_eq!(executor.value_to_string(&Value::Bool(false)), "false");
+    }
+
+    #[test]
+    fn test_value_to_string_array() {
+        let executor = ExpressionExecutor::new();
+        assert_eq!(executor.value_to_string(&Value::Array(vec![])), "_array");
+    }
+
+    #[test]
+    fn test_value_to_string_object() {
+        let executor = ExpressionExecutor::new();
+        assert_eq!(
+            executor.value_to_string(&Value::Object(HashMap::new())),
+            "_object"
+        );
+    }
+
+    // ===== Apply Transform Tests =====
+
+    #[test]
+    fn test_apply_count_object() {
+        let executor = ExpressionExecutor::new();
+        let mut obj = HashMap::new();
+        obj.insert("a".to_string(), Value::number(1.0));
+        obj.insert("b".to_string(), Value::number(2.0));
+        let value = Value::Object(obj);
+        let result = executor.apply_count(&value);
+        assert_eq!(result.as_number(), Some(2.0));
+    }
+
+    #[test]
+    fn test_apply_count_string() {
+        let executor = ExpressionExecutor::new();
+        let result = executor.apply_count(&Value::String("hello".to_string()));
+        assert_eq!(result.as_number(), Some(5.0));
+    }
+
+    #[test]
+    fn test_apply_count_null() {
+        let executor = ExpressionExecutor::new();
+        let result = executor.apply_count(&Value::Null);
+        assert_eq!(result.as_number(), Some(0.0));
+    }
+
+    #[test]
+    fn test_apply_percentage_non_number() {
+        let executor = ExpressionExecutor::new();
+        let result = executor.apply_percentage(&Value::String("hello".to_string()));
+        assert!(result.is_err());
+    }
+
+    // ===== Map Transform Tests =====
+
+    #[test]
+    fn test_apply_map_field_extract() {
+        let mut ctx = DataContext::new();
+        let items = Value::Array(vec![
+            {
+                let mut obj = HashMap::new();
+                obj.insert("name".to_string(), Value::String("Alice".to_string()));
+                obj.insert("age".to_string(), Value::Number(30.0));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("name".to_string(), Value::String("Bob".to_string()));
+                obj.insert("age".to_string(), Value::Number(25.0));
+                Value::Object(obj)
+            },
+        ]);
+        ctx.insert("users", items);
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "users".to_string(),
+            transforms: vec![Transform::Map {
+                expr: "item.name".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr[0].as_str(), Some("Alice"));
+        assert_eq!(arr[1].as_str(), Some("Bob"));
+    }
+
+    #[test]
+    fn test_apply_map_non_field() {
+        let mut ctx = DataContext::new();
+        ctx.insert(
+            "items",
+            Value::Array(vec![Value::Number(1.0), Value::Number(2.0)]),
+        );
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "items".to_string(),
+            transforms: vec![Transform::Map {
+                expr: "unknown".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+        // Items returned unchanged when expression can't be parsed
+        assert_eq!(arr[0].as_number(), Some(1.0));
+    }
+
+    #[test]
+    fn test_apply_map_missing_field() {
+        let mut ctx = DataContext::new();
+        let items = Value::Array(vec![{
+            let mut obj = HashMap::new();
+            obj.insert("x".to_string(), Value::Number(1.0));
+            Value::Object(obj)
+        }]);
+        ctx.insert("items", items);
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "items".to_string(),
+            transforms: vec![Transform::Map {
+                expr: "item.missing".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+        assert!(arr[0].is_null());
+    }
+
+    // ===== Reduce Transform Tests =====
+
+    #[test]
+    fn test_apply_reduce() {
+        let mut ctx = DataContext::new();
+        ctx.insert(
+            "numbers",
+            Value::Array(vec![
+                Value::Number(1.0),
+                Value::Number(2.0),
+                Value::Number(3.0),
+            ]),
+        );
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "numbers".to_string(),
+            transforms: vec![Transform::Reduce {
+                initial: "0".to_string(),
+                expr: "acc + item".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        assert_eq!(result.as_number(), Some(6.0));
+    }
+
+    #[test]
+    fn test_apply_reduce_with_initial() {
+        let mut ctx = DataContext::new();
+        ctx.insert("numbers", Value::Array(vec![Value::Number(5.0)]));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "numbers".to_string(),
+            transforms: vec![Transform::Reduce {
+                initial: "10".to_string(),
+                expr: "acc + item".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        assert_eq!(result.as_number(), Some(15.0));
+    }
+
+    #[test]
+    fn test_apply_reduce_non_numeric() {
+        let mut ctx = DataContext::new();
+        ctx.insert(
+            "items",
+            Value::Array(vec![
+                Value::String("a".to_string()),
+                Value::String("b".to_string()),
+            ]),
+        );
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "items".to_string(),
+            transforms: vec![Transform::Reduce {
+                initial: "0".to_string(),
+                expr: "acc".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        // Non-numeric items are skipped
+        assert_eq!(result.as_number(), Some(0.0));
+    }
+
+    // ===== Aggregate Transform Tests =====
+
+    #[test]
+    fn test_apply_aggregate_sum() {
+        let ctx = make_test_data();
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "data.transactions".to_string(),
+            transforms: vec![Transform::Aggregate {
+                field: "amount".to_string(),
+                op: AggregateOp::Sum,
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        assert_eq!(result.as_number(), Some(225.0));
+    }
+
+    #[test]
+    fn test_apply_aggregate_count() {
+        let ctx = make_test_data();
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "data.transactions".to_string(),
+            transforms: vec![Transform::Aggregate {
+                field: "amount".to_string(),
+                op: AggregateOp::Count,
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        assert_eq!(result.as_number(), Some(3.0));
+    }
+
+    #[test]
+    fn test_apply_aggregate_mean() {
+        let ctx = make_test_data();
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "data.transactions".to_string(),
+            transforms: vec![Transform::Aggregate {
+                field: "amount".to_string(),
+                op: AggregateOp::Mean,
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        assert_eq!(result.as_number(), Some(75.0));
+    }
+
+    #[test]
+    fn test_apply_aggregate_min() {
+        let ctx = make_test_data();
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "data.transactions".to_string(),
+            transforms: vec![Transform::Aggregate {
+                field: "amount".to_string(),
+                op: AggregateOp::Min,
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        assert_eq!(result.as_number(), Some(50.0));
+    }
+
+    #[test]
+    fn test_apply_aggregate_max() {
+        let ctx = make_test_data();
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "data.transactions".to_string(),
+            transforms: vec![Transform::Aggregate {
+                field: "amount".to_string(),
+                op: AggregateOp::Max,
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        assert_eq!(result.as_number(), Some(100.0));
+    }
+
+    #[test]
+    fn test_apply_aggregate_first() {
+        let ctx = make_test_data();
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "data.transactions".to_string(),
+            transforms: vec![Transform::Aggregate {
+                field: "amount".to_string(),
+                op: AggregateOp::First,
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        assert_eq!(result.as_number(), Some(100.0));
+    }
+
+    #[test]
+    fn test_apply_aggregate_last() {
+        let ctx = make_test_data();
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "data.transactions".to_string(),
+            transforms: vec![Transform::Aggregate {
+                field: "amount".to_string(),
+                op: AggregateOp::Last,
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        assert_eq!(result.as_number(), Some(75.0));
+    }
+
+    #[test]
+    fn test_apply_aggregate_mean_empty() {
+        let mut ctx = DataContext::new();
+        ctx.insert("items", Value::Array(vec![]));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "items".to_string(),
+            transforms: vec![Transform::Aggregate {
+                field: "value".to_string(),
+                op: AggregateOp::Mean,
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        assert_eq!(result.as_number(), Some(0.0));
+    }
+
+    // ===== Pivot Transform Tests =====
+
+    #[test]
+    fn test_apply_pivot() {
+        let mut ctx = DataContext::new();
+        let sales = Value::Array(vec![
+            {
+                let mut obj = HashMap::new();
+                obj.insert("region".to_string(), Value::String("North".to_string()));
+                obj.insert("product".to_string(), Value::String("A".to_string()));
+                obj.insert("revenue".to_string(), Value::Number(100.0));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("region".to_string(), Value::String("North".to_string()));
+                obj.insert("product".to_string(), Value::String("B".to_string()));
+                obj.insert("revenue".to_string(), Value::Number(150.0));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("region".to_string(), Value::String("South".to_string()));
+                obj.insert("product".to_string(), Value::String("A".to_string()));
+                obj.insert("revenue".to_string(), Value::Number(200.0));
+                Value::Object(obj)
+            },
+        ]);
+        ctx.insert("sales", sales);
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "sales".to_string(),
+            transforms: vec![Transform::Pivot {
+                row_field: "region".to_string(),
+                col_field: "product".to_string(),
+                value_field: "revenue".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2); // Two regions
+    }
+
+    // ===== Cumulative Sum Tests =====
+
+    #[test]
+    fn test_apply_cumsum() {
+        let mut ctx = DataContext::new();
+        let items = Value::Array(vec![
+            {
+                let mut obj = HashMap::new();
+                obj.insert("value".to_string(), Value::Number(10.0));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("value".to_string(), Value::Number(20.0));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("value".to_string(), Value::Number(30.0));
+                Value::Object(obj)
+            },
+        ]);
+        ctx.insert("items", items);
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "items".to_string(),
+            transforms: vec![Transform::CumulativeSum {
+                field: "value".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+
+        assert_eq!(arr[0].get("value_cumsum").unwrap().as_number(), Some(10.0));
+        assert_eq!(arr[1].get("value_cumsum").unwrap().as_number(), Some(30.0));
+        assert_eq!(arr[2].get("value_cumsum").unwrap().as_number(), Some(60.0));
+    }
+
+    #[test]
+    fn test_apply_cumsum_non_object() {
+        let mut ctx = DataContext::new();
+        ctx.insert(
+            "items",
+            Value::Array(vec![Value::Number(1.0), Value::Number(2.0)]),
+        );
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "items".to_string(),
+            transforms: vec![Transform::CumulativeSum {
+                field: "x".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+        // Non-objects returned as-is
+        assert_eq!(arr[0].as_number(), Some(1.0));
+    }
+
+    // ===== Rank Transform Tests =====
+
+    #[test]
+    fn test_apply_rank_dense() {
+        let mut ctx = DataContext::new();
+        let items = Value::Array(vec![
+            {
+                let mut obj = HashMap::new();
+                obj.insert("score".to_string(), Value::Number(100.0));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("score".to_string(), Value::Number(90.0));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("score".to_string(), Value::Number(100.0));
+                Value::Object(obj)
+            },
+        ]);
+        ctx.insert("items", items);
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "items".to_string(),
+            transforms: vec![Transform::Rank {
+                field: "score".to_string(),
+                method: RankMethod::Dense,
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+
+        // Both 100s should have rank 1, 90 should have rank 2
+        assert_eq!(arr[0].get("score_rank").unwrap().as_number(), Some(1.0));
+        assert_eq!(arr[1].get("score_rank").unwrap().as_number(), Some(2.0));
+        assert_eq!(arr[2].get("score_rank").unwrap().as_number(), Some(1.0));
+    }
+
+    #[test]
+    fn test_apply_rank_ordinal() {
+        let mut ctx = DataContext::new();
+        let items = Value::Array(vec![
+            {
+                let mut obj = HashMap::new();
+                obj.insert("score".to_string(), Value::Number(100.0));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("score".to_string(), Value::Number(90.0));
+                Value::Object(obj)
+            },
+        ]);
+        ctx.insert("items", items);
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "items".to_string(),
+            transforms: vec![Transform::Rank {
+                field: "score".to_string(),
+                method: RankMethod::Ordinal,
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+
+        assert_eq!(arr[0].get("score_rank").unwrap().as_number(), Some(1.0));
+        assert_eq!(arr[1].get("score_rank").unwrap().as_number(), Some(2.0));
+    }
+
+    #[test]
+    fn test_apply_rank_average() {
+        let mut ctx = DataContext::new();
+        let items = Value::Array(vec![
+            {
+                let mut obj = HashMap::new();
+                obj.insert("score".to_string(), Value::Number(100.0));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("score".to_string(), Value::Number(100.0));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("score".to_string(), Value::Number(80.0));
+                Value::Object(obj)
+            },
+        ]);
+        ctx.insert("items", items);
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "items".to_string(),
+            transforms: vec![Transform::Rank {
+                field: "score".to_string(),
+                method: RankMethod::Average,
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+
+        // Ties at 100 get average of ranks 1 and 2 = 1.5
+        assert_eq!(arr[0].get("score_rank").unwrap().as_number(), Some(1.5));
+        assert_eq!(arr[1].get("score_rank").unwrap().as_number(), Some(1.5));
+        assert_eq!(arr[2].get("score_rank").unwrap().as_number(), Some(3.0));
+    }
+
+    #[test]
+    fn test_apply_rank_non_object() {
+        let mut ctx = DataContext::new();
+        ctx.insert(
+            "items",
+            Value::Array(vec![Value::Number(1.0), Value::Number(2.0)]),
+        );
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "items".to_string(),
+            transforms: vec![Transform::Rank {
+                field: "x".to_string(),
+                method: RankMethod::Dense,
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+        // Non-objects returned as-is
+        assert_eq!(arr[0].as_number(), Some(1.0));
+    }
+
+    // ===== Moving Average Tests =====
+
+    #[test]
+    fn test_apply_moving_average() {
+        let mut ctx = DataContext::new();
+        let items = Value::Array(vec![
+            {
+                let mut obj = HashMap::new();
+                obj.insert("value".to_string(), Value::Number(10.0));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("value".to_string(), Value::Number(20.0));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("value".to_string(), Value::Number(30.0));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("value".to_string(), Value::Number(40.0));
+                Value::Object(obj)
+            },
+        ]);
+        ctx.insert("items", items);
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "items".to_string(),
+            transforms: vec![Transform::MovingAverage {
+                field: "value".to_string(),
+                window: 2,
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+
+        // First: just 10 (window of 1)
+        assert_eq!(arr[0].get("value_ma2").unwrap().as_number(), Some(10.0));
+        // Second: (10 + 20) / 2 = 15
+        assert_eq!(arr[1].get("value_ma2").unwrap().as_number(), Some(15.0));
+        // Third: (20 + 30) / 2 = 25
+        assert_eq!(arr[2].get("value_ma2").unwrap().as_number(), Some(25.0));
+    }
+
+    #[test]
+    fn test_apply_moving_average_non_object() {
+        let mut ctx = DataContext::new();
+        ctx.insert("items", Value::Array(vec![Value::Number(1.0)]));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "items".to_string(),
+            transforms: vec![Transform::MovingAverage {
+                field: "x".to_string(),
+                window: 3,
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr[0].as_number(), Some(1.0));
+    }
+
+    // ===== Percent Change Tests =====
+
+    #[test]
+    fn test_apply_percent_change() {
+        let mut ctx = DataContext::new();
+        let items = Value::Array(vec![
+            {
+                let mut obj = HashMap::new();
+                obj.insert("price".to_string(), Value::Number(100.0));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("price".to_string(), Value::Number(110.0));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("price".to_string(), Value::Number(99.0));
+                Value::Object(obj)
+            },
+        ]);
+        ctx.insert("items", items);
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "items".to_string(),
+            transforms: vec![Transform::PercentChange {
+                field: "price".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+
+        // First: 0% (no previous)
+        assert_eq!(
+            arr[0].get("price_pct_change").unwrap().as_number(),
+            Some(0.0)
+        );
+        // Second: (110 - 100) / 100 * 100 = 10%
+        assert_eq!(
+            arr[1].get("price_pct_change").unwrap().as_number(),
+            Some(10.0)
+        );
+        // Third: (99 - 110) / 110 * 100 = -10%
+        let pct = arr[2].get("price_pct_change").unwrap().as_number().unwrap();
+        assert!((pct - (-10.0)).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_apply_percent_change_zero_prev() {
+        let mut ctx = DataContext::new();
+        let items = Value::Array(vec![
+            {
+                let mut obj = HashMap::new();
+                obj.insert("value".to_string(), Value::Number(0.0));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("value".to_string(), Value::Number(10.0));
+                Value::Object(obj)
+            },
+        ]);
+        ctx.insert("items", items);
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "items".to_string(),
+            transforms: vec![Transform::PercentChange {
+                field: "value".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+
+        // When previous is 0, return 0 to avoid division by zero
+        assert_eq!(
+            arr[1].get("value_pct_change").unwrap().as_number(),
+            Some(0.0)
+        );
+    }
+
+    #[test]
+    fn test_apply_percent_change_non_object() {
+        let mut ctx = DataContext::new();
+        ctx.insert("items", Value::Array(vec![Value::Number(1.0)]));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "items".to_string(),
+            transforms: vec![Transform::PercentChange {
+                field: "x".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr[0].as_number(), Some(1.0));
+    }
+
+    // ===== Sort Tests =====
+
+    #[test]
+    fn test_sort_by_string() {
+        let mut ctx = DataContext::new();
+        let items = Value::Array(vec![
+            {
+                let mut obj = HashMap::new();
+                obj.insert("name".to_string(), Value::String("Charlie".to_string()));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("name".to_string(), Value::String("Alice".to_string()));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("name".to_string(), Value::String("Bob".to_string()));
+                Value::Object(obj)
+            },
+        ]);
+        ctx.insert("items", items);
+
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser.parse("{{ items | sort(name) }}").unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+
+        assert_eq!(arr[0].get("name").unwrap().as_str(), Some("Alice"));
+        assert_eq!(arr[1].get("name").unwrap().as_str(), Some("Bob"));
+        assert_eq!(arr[2].get("name").unwrap().as_str(), Some("Charlie"));
+    }
+
+    #[test]
+    fn test_sort_missing_field() {
+        let mut ctx = DataContext::new();
+        let items = Value::Array(vec![
+            {
+                let mut obj = HashMap::new();
+                obj.insert("x".to_string(), Value::Number(1.0));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("y".to_string(), Value::Number(2.0));
+                Value::Object(obj)
+            },
+        ]);
+        ctx.insert("items", items);
+
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser.parse("{{ items | sort(z) }}").unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+        // Should not crash, items remain in original order when field missing
+        assert_eq!(result.len(), 2);
+    }
+
+    // ===== Select Tests =====
+
+    #[test]
+    fn test_select_non_object_items() {
+        let mut ctx = DataContext::new();
+        ctx.insert(
+            "items",
+            Value::Array(vec![Value::Number(1.0), Value::Number(2.0)]),
+        );
+
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser.parse("{{ items | select(x) }}").unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+        // Non-objects returned as-is
+        assert_eq!(arr[0].as_number(), Some(1.0));
+    }
+
+    // ===== Rate Edge Cases =====
+
+    #[test]
+    fn test_rate_insufficient_data() {
+        let mut ctx = DataContext::new();
+        ctx.insert(
+            "events",
+            Value::Array(vec![{
+                let mut e = HashMap::new();
+                e.insert("timestamp".to_string(), Value::Number(1000.0));
+                Value::Object(e)
+            }]),
+        );
+
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser.parse("{{ events | rate(1s) }}").unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+        // With only 1 data point, rate should be 0
+        assert_eq!(result.as_number(), Some(0.0));
+    }
+
+    #[test]
+    fn test_rate_with_time_field() {
+        let mut ctx = DataContext::new();
+        let events: Vec<Value> = vec![
+            {
+                let mut e = HashMap::new();
+                e.insert("time".to_string(), Value::Number(1000.0));
+                e.insert("count".to_string(), Value::Number(5.0));
+                Value::Object(e)
+            },
+            {
+                let mut e = HashMap::new();
+                e.insert("time".to_string(), Value::Number(2000.0));
+                e.insert("count".to_string(), Value::Number(10.0));
+                Value::Object(e)
+            },
+        ];
+        ctx.insert("events", Value::Array(events));
+
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser.parse("{{ events | rate(5s) }}").unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+        assert!(result.is_number());
+    }
+
+    // ===== Suggest Edge Cases =====
+
+    #[test]
+    fn test_suggest_count_limit() {
+        let mut ctx = DataContext::new();
+        let suggestions = Value::Array(vec![
+            {
+                let mut obj = HashMap::new();
+                obj.insert("text".to_string(), Value::String("git status".to_string()));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("text".to_string(), Value::String("git commit".to_string()));
+                Value::Object(obj)
+            },
+            {
+                let mut obj = HashMap::new();
+                obj.insert("text".to_string(), Value::String("git push".to_string()));
+                Value::Object(obj)
+            },
+        ]);
+        ctx.insert("suggestions", suggestions);
+
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser.parse("{{ suggestions | suggest(git, 2) }}").unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2); // Limited to 2
+    }
+
+    #[test]
+    fn test_suggest_with_source_field() {
+        let mut ctx = DataContext::new();
+        let mut model = HashMap::new();
+        model.insert("source".to_string(), Value::String("model.apr".to_string()));
+        ctx.insert("model", Value::Object(model));
+
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser.parse("{{ model | suggest(git, 5) }}").unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+        // Model with source but no _suggestions returns empty
+        assert!(arr.is_empty());
+    }
+
+    #[test]
+    fn test_suggest_non_array_non_object() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser.parse("{{ value | suggest(x, 5) }}").unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+        assert!(arr.is_empty());
+    }
+
+    // ===== Additional Coverage Tests =====
+
+    #[test]
+    fn test_value_from_string_owned() {
+        let s = String::from("owned");
+        let v: Value = s.into();
+        assert_eq!(v.as_str(), Some("owned"));
+    }
+
+    #[test]
+    fn test_value_is_type_methods() {
+        assert!(Value::Null.is_null());
+        assert!(!Value::Null.is_bool());
+        assert!(!Value::Null.is_number());
+        assert!(!Value::Null.is_string());
+        assert!(!Value::Null.is_array());
+        assert!(!Value::Null.is_object());
+
+        assert!(Value::Bool(true).is_bool());
+        assert!(Value::Number(1.0).is_number());
+        assert!(Value::String("s".to_string()).is_string());
+        assert!(Value::Array(vec![]).is_array());
+        assert!(Value::Object(HashMap::new()).is_object());
+    }
+
+    #[test]
+    fn test_execution_error_is_error_trait() {
+        let err = ExecutionError::SourceNotFound("test".to_string());
+        let _: &dyn std::error::Error = &err;
+    }
+
+    #[test]
+    fn test_data_context_get_nested_path() {
+        let mut ctx = DataContext::new();
+        let mut inner = HashMap::new();
+        let mut deep = HashMap::new();
+        deep.insert("value".to_string(), Value::number(42.0));
+        inner.insert("nested".to_string(), Value::Object(deep));
+        ctx.insert("data", Value::Object(inner));
+
+        assert_eq!(
+            ctx.get("data.nested.value").unwrap().as_number(),
+            Some(42.0)
+        );
+        assert!(ctx.get("data.nonexistent").is_none());
+        assert!(ctx.get("nonexistent.path").is_none());
+    }
+
+    #[test]
+    fn test_filter_on_non_object_items() {
+        let mut ctx = DataContext::new();
+        ctx.insert(
+            "items",
+            Value::Array(vec![Value::Number(1.0), Value::String("test".to_string())]),
+        );
+
+        let parser = ExpressionParser::new();
+        let executor = ExpressionExecutor::new();
+
+        let expr = parser.parse("{{ items | filter(x=1) }}").unwrap();
+        let result = executor.execute(&expr, &ctx).unwrap();
+        // Non-objects should be filtered out
+        assert!(result.as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_filter_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::Filter {
+                field: "x".to_string(),
+                value: "1".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_select_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::Select {
+                fields: vec!["x".to_string()],
+            }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_sort_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::Sort {
+                field: "x".to_string(),
+                desc: false,
+            }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_limit_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::Limit { n: 5 }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_sum_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::Sum {
+                field: "x".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_mean_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::Mean {
+                field: "x".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_sample_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::Sample { n: 5 }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_rate_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::Rate {
+                window: "1s".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_join_non_array_left() {
+        let mut ctx = DataContext::new();
+        ctx.insert("left", Value::Number(42.0));
+        ctx.insert("right", Value::Array(vec![]));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "left".to_string(),
+            transforms: vec![Transform::Join {
+                other: "right".to_string(),
+                on: "id".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_join_non_array_right() {
+        let mut ctx = DataContext::new();
+        ctx.insert("left", Value::Array(vec![]));
+        ctx.insert("right", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "left".to_string(),
+            transforms: vec![Transform::Join {
+                other: "right".to_string(),
+                on: "id".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_group_by_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::GroupBy {
+                field: "x".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_group_by_non_object_items() {
+        let mut ctx = DataContext::new();
+        ctx.insert(
+            "items",
+            Value::Array(vec![Value::Number(1.0), Value::Number(2.0)]),
+        );
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "items".to_string(),
+            transforms: vec![Transform::GroupBy {
+                field: "x".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+        // All non-objects go to "_null" group
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0].get("key").unwrap().as_str(), Some("_null"));
+    }
+
+    #[test]
+    fn test_group_by_missing_field() {
+        let mut ctx = DataContext::new();
+        let items = Value::Array(vec![{
+            let mut obj = HashMap::new();
+            obj.insert("x".to_string(), Value::Number(1.0));
+            Value::Object(obj)
+        }]);
+        ctx.insert("items", items);
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "items".to_string(),
+            transforms: vec![Transform::GroupBy {
+                field: "missing".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+        // Missing field goes to "_null" group
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0].get("key").unwrap().as_str(), Some("_null"));
+    }
+
+    #[test]
+    fn test_distinct_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::Distinct { field: None }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_distinct_with_field_non_object() {
+        let mut ctx = DataContext::new();
+        ctx.insert(
+            "items",
+            Value::Array(vec![
+                Value::Number(1.0),
+                Value::Number(1.0),
+                Value::Number(2.0),
+            ]),
+        );
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "items".to_string(),
+            transforms: vec![Transform::Distinct {
+                field: Some("x".to_string()),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+        // Uses value_to_string on non-objects
+        assert_eq!(arr.len(), 2);
+    }
+
+    #[test]
+    fn test_where_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::Where {
+                field: "x".to_string(),
+                op: "eq".to_string(),
+                value: "1".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_offset_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::Offset { n: 5 }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_min_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::Min {
+                field: "x".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_max_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::Max {
+                field: "x".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_max_empty() {
+        let mut ctx = DataContext::new();
+        ctx.insert("items", Value::Array(vec![]));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "items".to_string(),
+            transforms: vec![Transform::Max {
+                field: "x".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        assert!(result.is_null());
+    }
+
+    #[test]
+    fn test_first_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::First { n: 5 }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_last_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::Last { n: 5 }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_flatten_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::Flatten],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_reverse_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::Reverse],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_map_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::Map {
+                expr: "item.x".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_reduce_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::Reduce {
+                initial: "0".to_string(),
+                expr: "acc + item".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_reduce_invalid_initial() {
+        let mut ctx = DataContext::new();
+        ctx.insert("items", Value::Array(vec![Value::Number(1.0)]));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "items".to_string(),
+            transforms: vec![Transform::Reduce {
+                initial: "not_a_number".to_string(),
+                expr: "acc + item".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        // Invalid initial defaults to 0
+        assert_eq!(result.as_number(), Some(1.0));
+    }
+
+    #[test]
+    fn test_aggregate_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::Aggregate {
+                field: "x".to_string(),
+                op: AggregateOp::Sum,
+            }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_aggregate_with_grouped_data() {
+        let mut ctx = DataContext::new();
+        let grouped = Value::Array(vec![{
+            let mut obj = HashMap::new();
+            obj.insert("key".to_string(), Value::String("A".to_string()));
+            obj.insert(
+                "values".to_string(),
+                Value::Array(vec![
+                    {
+                        let mut v = HashMap::new();
+                        v.insert("amount".to_string(), Value::Number(10.0));
+                        Value::Object(v)
+                    },
+                    {
+                        let mut v = HashMap::new();
+                        v.insert("amount".to_string(), Value::Number(20.0));
+                        Value::Object(v)
+                    },
+                ]),
+            );
+            Value::Object(obj)
+        }]);
+        ctx.insert("groups", grouped);
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "groups".to_string(),
+            transforms: vec![Transform::Aggregate {
+                field: "amount".to_string(),
+                op: AggregateOp::Sum,
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        assert_eq!(result.as_number(), Some(30.0));
+    }
+
+    #[test]
+    fn test_aggregate_first_empty() {
+        let mut ctx = DataContext::new();
+        ctx.insert("items", Value::Array(vec![]));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "items".to_string(),
+            transforms: vec![Transform::Aggregate {
+                field: "x".to_string(),
+                op: AggregateOp::First,
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        assert_eq!(result.as_number(), Some(0.0));
+    }
+
+    #[test]
+    fn test_aggregate_last_empty() {
+        let mut ctx = DataContext::new();
+        ctx.insert("items", Value::Array(vec![]));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "items".to_string(),
+            transforms: vec![Transform::Aggregate {
+                field: "x".to_string(),
+                op: AggregateOp::Last,
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        assert_eq!(result.as_number(), Some(0.0));
+    }
+
+    #[test]
+    fn test_pivot_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::Pivot {
+                row_field: "r".to_string(),
+                col_field: "c".to_string(),
+                value_field: "v".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_pivot_non_object_items() {
+        let mut ctx = DataContext::new();
+        ctx.insert("items", Value::Array(vec![Value::Number(1.0)]));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "items".to_string(),
+            transforms: vec![Transform::Pivot {
+                row_field: "r".to_string(),
+                col_field: "c".to_string(),
+                value_field: "v".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        // Non-objects are skipped
+        assert!(result.as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_cumsum_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::CumulativeSum {
+                field: "x".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_rank_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::Rank {
+                field: "x".to_string(),
+                method: RankMethod::Dense,
+            }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_moving_average_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::MovingAverage {
+                field: "x".to_string(),
+                window: 3,
+            }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_pct_change_non_array() {
+        let mut ctx = DataContext::new();
+        ctx.insert("value", Value::Number(42.0));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "value".to_string(),
+            transforms: vec![Transform::PercentChange {
+                field: "x".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx);
+        assert!(matches!(result, Err(ExecutionError::ExpectedArray)));
+    }
+
+    #[test]
+    fn test_compare_values_invalid_target() {
+        let executor = ExpressionExecutor::new();
+        // Invalid numeric comparison when target can't be parsed
+        assert!(!executor.compare_values(&Value::Number(50.0), ">", "not_number"));
+        assert!(!executor.compare_values(&Value::Number(50.0), "<", "not_number"));
+        assert!(!executor.compare_values(&Value::Number(50.0), ">=", "not_number"));
+        assert!(!executor.compare_values(&Value::Number(50.0), "<=", "not_number"));
+    }
+
+    #[test]
+    fn test_compare_values_contains_non_string() {
+        let executor = ExpressionExecutor::new();
+        assert!(!executor.compare_values(&Value::Number(123.0), "contains", "12"));
+    }
+
+    #[test]
+    fn test_join_left_item_not_object() {
+        let mut ctx = DataContext::new();
+        ctx.insert("left", Value::Array(vec![Value::Number(1.0)]));
+        ctx.insert(
+            "right",
+            Value::Array(vec![{
+                let mut obj = HashMap::new();
+                obj.insert("id".to_string(), Value::Number(1.0));
+                Value::Object(obj)
+            }]),
+        );
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "left".to_string(),
+            transforms: vec![Transform::Join {
+                other: "right".to_string(),
+                on: "id".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+        // Non-object left items kept as-is
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0].as_number(), Some(1.0));
+    }
+
+    #[test]
+    fn test_join_left_item_missing_key() {
+        let mut ctx = DataContext::new();
+        ctx.insert(
+            "left",
+            Value::Array(vec![{
+                let mut obj = HashMap::new();
+                obj.insert("other".to_string(), Value::Number(1.0));
+                Value::Object(obj)
+            }]),
+        );
+        ctx.insert(
+            "right",
+            Value::Array(vec![{
+                let mut obj = HashMap::new();
+                obj.insert("id".to_string(), Value::Number(1.0));
+                Value::Object(obj)
+            }]),
+        );
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "left".to_string(),
+            transforms: vec![Transform::Join {
+                other: "right".to_string(),
+                on: "id".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+        // Left items without join key kept as-is
+        assert_eq!(arr.len(), 1);
+    }
+
+    #[test]
+    fn test_join_right_item_not_object() {
+        let mut ctx = DataContext::new();
+        ctx.insert(
+            "left",
+            Value::Array(vec![{
+                let mut obj = HashMap::new();
+                obj.insert("id".to_string(), Value::Number(1.0));
+                Value::Object(obj)
+            }]),
+        );
+        ctx.insert("right", Value::Array(vec![Value::Number(1.0)]));
+
+        let executor = ExpressionExecutor::new();
+        let expr = Expression {
+            source: "left".to_string(),
+            transforms: vec![Transform::Join {
+                other: "right".to_string(),
+                on: "id".to_string(),
+            }],
+        };
+        let result = executor.execute(&expr, &ctx).unwrap();
+        let arr = result.as_array().unwrap();
+        // No match found for non-object right items
+        assert_eq!(arr.len(), 1);
+    }
 }

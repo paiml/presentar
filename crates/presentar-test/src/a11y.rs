@@ -2620,4 +2620,974 @@ mod tests {
             report.violations
         );
     }
+
+    // ===== Additional Coverage Tests =====
+
+    #[test]
+    fn test_aria_attributes_with_range() {
+        let attrs = AriaAttributes::new().with_range(0.0, 100.0, 50.0);
+        assert_eq!(attrs.value_min, Some(0.0));
+        assert_eq!(attrs.value_max, Some(100.0));
+        assert_eq!(attrs.value_now, Some(50.0));
+    }
+
+    #[test]
+    fn test_aria_attributes_with_pos_in_set() {
+        let attrs = AriaAttributes::new().with_pos_in_set(3, 10);
+        assert_eq!(attrs.pos_in_set, Some(3));
+        assert_eq!(attrs.set_size, Some(10));
+    }
+
+    #[test]
+    fn test_to_html_attrs_pos_in_set() {
+        let attrs = AriaAttributes::new().with_pos_in_set(2, 5);
+        let html_attrs = attrs.to_html_attrs();
+        assert!(html_attrs.contains(&("aria-posinset".to_string(), "2".to_string())));
+        assert!(html_attrs.contains(&("aria-setsize".to_string(), "5".to_string())));
+    }
+
+    #[test]
+    fn test_to_html_attrs_level() {
+        let attrs = AriaAttributes::new().with_level(3);
+        let html_attrs = attrs.to_html_attrs();
+        assert!(html_attrs.contains(&("aria-level".to_string(), "3".to_string())));
+    }
+
+    #[test]
+    fn test_to_html_attrs_selected() {
+        let attrs = AriaAttributes::new().with_selected(true);
+        let html_attrs = attrs.to_html_attrs();
+        assert!(html_attrs.contains(&("aria-selected".to_string(), "true".to_string())));
+    }
+
+    #[test]
+    fn test_to_html_attrs_pressed() {
+        let attrs = AriaAttributes::new().with_pressed(AriaChecked::True);
+        let html_attrs = attrs.to_html_attrs();
+        assert!(html_attrs.contains(&("aria-pressed".to_string(), "true".to_string())));
+    }
+
+    #[test]
+    fn test_to_html_attrs_busy() {
+        let attrs = AriaAttributes::new().with_busy(true);
+        let html_attrs = attrs.to_html_attrs();
+        assert!(html_attrs.contains(&("aria-busy".to_string(), "true".to_string())));
+    }
+
+    #[test]
+    fn test_to_html_attrs_atomic() {
+        let attrs = AriaAttributes::new().with_atomic(true);
+        let html_attrs = attrs.to_html_attrs();
+        assert!(html_attrs.contains(&("aria-atomic".to_string(), "true".to_string())));
+    }
+
+    #[test]
+    fn test_to_html_attrs_controls() {
+        let attrs = AriaAttributes::new().with_controls("panel-2");
+        let html_attrs = attrs.to_html_attrs();
+        assert!(html_attrs.contains(&("aria-controls".to_string(), "panel-2".to_string())));
+    }
+
+    #[test]
+    fn test_to_html_attrs_describedby() {
+        let attrs = AriaAttributes::new().with_described_by("desc-id");
+        let html_attrs = attrs.to_html_attrs();
+        assert!(html_attrs.contains(&("aria-describedby".to_string(), "desc-id".to_string())));
+    }
+
+    #[test]
+    fn test_to_html_attrs_haspopup() {
+        let attrs = AriaAttributes::new().with_has_popup("dialog");
+        let html_attrs = attrs.to_html_attrs();
+        assert!(html_attrs.contains(&("aria-haspopup".to_string(), "dialog".to_string())));
+    }
+
+    #[test]
+    fn test_to_html_string_escapes_ampersand() {
+        let attrs = AriaAttributes::new().with_label("Terms & Conditions");
+        let html = attrs.to_html_string();
+        assert!(html.contains("aria-label=\"Terms &amp; Conditions\""));
+    }
+
+    #[test]
+    fn test_to_html_string_escapes_less_than() {
+        let attrs = AriaAttributes::new().with_label("Value < 5");
+        let html = attrs.to_html_string();
+        assert!(html.contains("aria-label=\"Value &lt; 5\""));
+    }
+
+    #[test]
+    fn test_to_html_string_escapes_greater_than() {
+        let attrs = AriaAttributes::new().with_label("Value > 5");
+        let html = attrs.to_html_string();
+        assert!(html.contains("aria-label=\"Value &gt; 5\""));
+    }
+
+    #[test]
+    fn test_to_html_attrs_required() {
+        let mut attrs = AriaAttributes::new();
+        attrs.required = true;
+        let html_attrs = attrs.to_html_attrs();
+        assert!(html_attrs.contains(&("aria-required".to_string(), "true".to_string())));
+    }
+
+    #[test]
+    fn test_to_html_attrs_invalid() {
+        let mut attrs = AriaAttributes::new();
+        attrs.invalid = true;
+        let html_attrs = attrs.to_html_attrs();
+        assert!(html_attrs.contains(&("aria-invalid".to_string(), "true".to_string())));
+    }
+
+    #[test]
+    fn test_to_html_attrs_value_text() {
+        let mut attrs = AriaAttributes::new();
+        attrs.value_text = Some("50%".to_string());
+        let html_attrs = attrs.to_html_attrs();
+        assert!(html_attrs.contains(&("aria-valuetext".to_string(), "50%".to_string())));
+    }
+
+    // ===== Additional AutocompleteValue Tests =====
+
+    #[test]
+    fn test_autocomplete_value_all_variants() {
+        assert_eq!(AutocompleteValue::Name.as_str(), "name");
+        assert_eq!(AutocompleteValue::FamilyName.as_str(), "family-name");
+        assert_eq!(AutocompleteValue::Tel.as_str(), "tel");
+        assert_eq!(AutocompleteValue::StreetAddress.as_str(), "street-address");
+        assert_eq!(AutocompleteValue::AddressLevel1.as_str(), "address-level1");
+        assert_eq!(AutocompleteValue::AddressLevel2.as_str(), "address-level2");
+        assert_eq!(AutocompleteValue::PostalCode.as_str(), "postal-code");
+        assert_eq!(AutocompleteValue::Country.as_str(), "country");
+        assert_eq!(AutocompleteValue::Organization.as_str(), "organization");
+        assert_eq!(AutocompleteValue::Username.as_str(), "username");
+        assert_eq!(AutocompleteValue::NewPassword.as_str(), "new-password");
+        assert_eq!(AutocompleteValue::CcNumber.as_str(), "cc-number");
+        assert_eq!(AutocompleteValue::CcExp.as_str(), "cc-exp");
+        assert_eq!(AutocompleteValue::CcCsc.as_str(), "cc-csc");
+        assert_eq!(AutocompleteValue::OneTimeCode.as_str(), "one-time-code");
+    }
+
+    // ===== Additional FormA11yRule Tests =====
+
+    #[test]
+    fn test_form_a11y_rule_all_names() {
+        assert_eq!(
+            FormA11yRule::MissingVisualRequired.name(),
+            "missing-visual-required"
+        );
+        assert_eq!(
+            FormA11yRule::MissingErrorState.name(),
+            "missing-error-state"
+        );
+        assert_eq!(
+            FormA11yRule::MissingErrorMessage.name(),
+            "missing-error-message"
+        );
+        assert_eq!(
+            FormA11yRule::ErrorNotAssociated.name(),
+            "error-not-associated"
+        );
+        assert_eq!(
+            FormA11yRule::MissingAutocomplete.name(),
+            "missing-autocomplete"
+        );
+        assert_eq!(
+            FormA11yRule::RelatedFieldsNotGrouped.name(),
+            "related-fields-not-grouped"
+        );
+        assert_eq!(
+            FormA11yRule::GroupMissingLegend.name(),
+            "group-missing-legend"
+        );
+        assert_eq!(FormA11yRule::FormMissingName.name(), "form-missing-name");
+    }
+
+    // ===== Additional InputType Tests =====
+
+    #[test]
+    fn test_input_type_autocomplete_coverage() {
+        assert!(InputType::Url.should_have_autocomplete());
+        assert!(InputType::Number.should_have_autocomplete());
+        assert!(!InputType::Time.should_have_autocomplete());
+        assert!(!InputType::Search.should_have_autocomplete());
+        assert!(!InputType::Select.should_have_autocomplete());
+        assert!(!InputType::Textarea.should_have_autocomplete());
+        assert!(!InputType::Hidden.should_have_autocomplete());
+    }
+
+    // ===== FormA11yReport assert_pass Test =====
+
+    #[test]
+    #[should_panic(expected = "Form accessibility check failed")]
+    fn test_form_report_assert_pass_fails() {
+        let form = FormAccessibility::new()
+            .with_name("Test Form")
+            .field(FormFieldA11y::new("email").with_type(InputType::Email));
+
+        let report = FormA11yChecker::check(&form);
+        report.assert_pass();
+    }
+
+    // ===== Heading Level Tests =====
+
+    #[test]
+    fn test_heading_level_h1() {
+        let widget = MockLabel::new("h1 Main Title");
+        // Heading level extraction should find 'h1' pattern
+        let level = A11yChecker::heading_level(&widget);
+        assert_eq!(level, Some(1));
+    }
+
+    #[test]
+    fn test_heading_level_h3() {
+        let widget = MockLabel::new("h3 Subsection");
+        let level = A11yChecker::heading_level(&widget);
+        assert_eq!(level, Some(3));
+    }
+
+    #[test]
+    fn test_heading_level_capital_h() {
+        let widget = MockLabel::new("H2 Section");
+        let level = A11yChecker::heading_level(&widget);
+        assert_eq!(level, Some(2));
+    }
+
+    #[test]
+    fn test_heading_level_invalid_number() {
+        let widget = MockLabel::new("h9 Invalid Level");
+        let level = A11yChecker::heading_level(&widget);
+        // Falls back to default level 2 for invalid levels
+        assert_eq!(level, Some(2));
+    }
+
+    // ===== Touch Target Size Tests =====
+
+    struct MockTouchTarget {
+        bounds: Rect,
+        name: String,
+    }
+
+    impl MockTouchTarget {
+        fn new(width: f32, height: f32, name: &str) -> Self {
+            Self {
+                bounds: Rect::new(0.0, 0.0, width, height),
+                name: name.to_string(),
+            }
+        }
+    }
+
+    impl Brick for MockTouchTarget {
+        fn brick_name(&self) -> &'static str {
+            "MockTouchTarget"
+        }
+
+        fn assertions(&self) -> &[BrickAssertion] {
+            &[]
+        }
+
+        fn budget(&self) -> BrickBudget {
+            BrickBudget::uniform(16)
+        }
+
+        fn verify(&self) -> BrickVerification {
+            BrickVerification {
+                passed: vec![],
+                failed: vec![],
+                verification_time: Duration::from_micros(1),
+            }
+        }
+
+        fn to_html(&self) -> String {
+            String::new()
+        }
+
+        fn to_css(&self) -> String {
+            String::new()
+        }
+    }
+
+    impl Widget for MockTouchTarget {
+        fn type_id(&self) -> TypeId {
+            TypeId::of::<Self>()
+        }
+        fn measure(&self, _: Constraints) -> Size {
+            self.bounds.size()
+        }
+        fn layout(&mut self, _: Rect) -> LayoutResult {
+            LayoutResult {
+                size: self.bounds.size(),
+            }
+        }
+        fn paint(&self, _: &mut dyn Canvas) {}
+        fn event(&mut self, _: &Event) -> Option<Box<dyn Any + Send>> {
+            None
+        }
+        fn children(&self) -> &[Box<dyn Widget>] {
+            &[]
+        }
+        fn children_mut(&mut self) -> &mut [Box<dyn Widget>] {
+            &mut []
+        }
+        fn is_interactive(&self) -> bool {
+            true
+        }
+        fn is_focusable(&self) -> bool {
+            true
+        }
+        fn accessible_name(&self) -> Option<&str> {
+            Some(&self.name)
+        }
+        fn accessible_role(&self) -> AccessibleRole {
+            AccessibleRole::Button
+        }
+        fn bounds(&self) -> Rect {
+            self.bounds
+        }
+    }
+
+    #[test]
+    fn test_touch_target_too_small() {
+        let widget = MockTouchTarget::new(30.0, 30.0, "Small Button");
+        let config = A11yConfig {
+            check_touch_targets: true,
+            check_heading_hierarchy: false,
+            check_focus_indicators: false,
+            min_contrast_normal: 4.5,
+            min_contrast_large: 3.0,
+        };
+        let report = A11yChecker::check_with_config(&widget, &config);
+        assert!(report.violations.iter().any(|v| v.rule == "touch-target"));
+    }
+
+    #[test]
+    fn test_touch_target_sufficient() {
+        let widget = MockTouchTarget::new(48.0, 48.0, "Good Button");
+        let config = A11yConfig {
+            check_touch_targets: true,
+            check_heading_hierarchy: false,
+            check_focus_indicators: false,
+            min_contrast_normal: 4.5,
+            min_contrast_large: 3.0,
+        };
+        let report = A11yChecker::check_with_config(&widget, &config);
+        assert!(!report.violations.iter().any(|v| v.rule == "touch-target"));
+    }
+
+    // ===== Group aria-label Test =====
+
+    #[test]
+    fn test_form_group_with_aria_label() {
+        let mut group = FormFieldGroup::new("address");
+        group.aria_label = Some("Shipping Address".to_string());
+        group.field_ids = vec!["street".to_string(), "city".to_string()];
+
+        let form = FormAccessibility::new().with_name("Test Form").group(group);
+
+        let report = FormA11yChecker::check(&form);
+        // Group with aria-label should not trigger missing legend
+        assert!(!report
+            .violations
+            .iter()
+            .any(|v| v.rule == FormA11yRule::GroupMissingLegend));
+    }
+
+    // ===== aria_from_widget Additional Roles =====
+
+    struct MockCheckbox {
+        label: String,
+    }
+
+    impl Brick for MockCheckbox {
+        fn brick_name(&self) -> &'static str {
+            "MockCheckbox"
+        }
+        fn assertions(&self) -> &[BrickAssertion] {
+            &[]
+        }
+        fn budget(&self) -> BrickBudget {
+            BrickBudget::uniform(16)
+        }
+        fn verify(&self) -> BrickVerification {
+            BrickVerification {
+                passed: vec![],
+                failed: vec![],
+                verification_time: Duration::from_micros(1),
+            }
+        }
+        fn to_html(&self) -> String {
+            String::new()
+        }
+        fn to_css(&self) -> String {
+            String::new()
+        }
+    }
+
+    impl Widget for MockCheckbox {
+        fn type_id(&self) -> TypeId {
+            TypeId::of::<Self>()
+        }
+        fn measure(&self, c: Constraints) -> Size {
+            c.smallest()
+        }
+        fn layout(&mut self, b: Rect) -> LayoutResult {
+            LayoutResult { size: b.size() }
+        }
+        fn paint(&self, _: &mut dyn Canvas) {}
+        fn event(&mut self, _: &Event) -> Option<Box<dyn Any + Send>> {
+            None
+        }
+        fn children(&self) -> &[Box<dyn Widget>] {
+            &[]
+        }
+        fn children_mut(&mut self) -> &mut [Box<dyn Widget>] {
+            &mut []
+        }
+        fn is_interactive(&self) -> bool {
+            true
+        }
+        fn is_focusable(&self) -> bool {
+            true
+        }
+        fn accessible_name(&self) -> Option<&str> {
+            Some(&self.label)
+        }
+        fn accessible_role(&self) -> AccessibleRole {
+            AccessibleRole::Checkbox
+        }
+    }
+
+    #[test]
+    fn test_aria_from_widget_checkbox() {
+        let widget = MockCheckbox {
+            label: "Accept terms".to_string(),
+        };
+        let attrs = aria_from_widget(&widget);
+        assert_eq!(attrs.role, Some("checkbox".to_string()));
+        assert_eq!(attrs.label, Some("Accept terms".to_string()));
+        assert!(!attrs.disabled);
+    }
+
+    // ===== FormFieldA11y aria_labelledby Test =====
+
+    #[test]
+    fn test_form_field_aria_labelledby() {
+        let mut field = FormFieldA11y::new("search");
+        field.aria_labelledby = Some("search-label".to_string());
+
+        let form = FormAccessibility::new().with_name("Test Form").field(field);
+
+        let report = FormA11yChecker::check(&form);
+        // aria-labelledby should satisfy label requirement
+        assert!(!report
+            .violations
+            .iter()
+            .any(|v| v.rule == FormA11yRule::MissingLabel));
+    }
+
+    // ===== FormFieldA11y aria_errormessage Test =====
+
+    #[test]
+    fn test_form_error_with_aria_errormessage() {
+        let mut field = FormFieldA11y::new("email")
+            .with_label("Email")
+            .with_type(InputType::Email)
+            .with_autocomplete(AutocompleteValue::Email);
+        field.has_error = true;
+        field.aria_invalid = true;
+        field.error_message = Some("Invalid email".to_string());
+        field.aria_errormessage = Some("email-error".to_string());
+
+        let form = FormAccessibility::new().with_name("Test Form").field(field);
+
+        let report = FormA11yChecker::check(&form);
+        // aria-errormessage should satisfy error association
+        assert!(!report
+            .violations
+            .iter()
+            .any(|v| v.rule == FormA11yRule::ErrorNotAssociated));
+    }
+
+    // ===== Additional Coverage Tests =====
+
+    // Test all AccessibleRole mappings in aria_from_widget
+    macro_rules! test_role_widget {
+        ($name:ident, $role:expr, $expected:expr) => {
+            struct $name;
+            impl Brick for $name {
+                fn brick_name(&self) -> &'static str {
+                    stringify!($name)
+                }
+                fn assertions(&self) -> &[BrickAssertion] {
+                    &[]
+                }
+                fn budget(&self) -> BrickBudget {
+                    BrickBudget::uniform(16)
+                }
+                fn verify(&self) -> BrickVerification {
+                    BrickVerification {
+                        passed: vec![],
+                        failed: vec![],
+                        verification_time: Duration::from_micros(1),
+                    }
+                }
+                fn to_html(&self) -> String {
+                    String::new()
+                }
+                fn to_css(&self) -> String {
+                    String::new()
+                }
+            }
+            impl Widget for $name {
+                fn type_id(&self) -> TypeId {
+                    TypeId::of::<Self>()
+                }
+                fn measure(&self, c: Constraints) -> Size {
+                    c.smallest()
+                }
+                fn layout(&mut self, b: Rect) -> LayoutResult {
+                    LayoutResult { size: b.size() }
+                }
+                fn paint(&self, _: &mut dyn Canvas) {}
+                fn event(&mut self, _: &Event) -> Option<Box<dyn Any + Send>> {
+                    None
+                }
+                fn children(&self) -> &[Box<dyn Widget>] {
+                    &[]
+                }
+                fn children_mut(&mut self) -> &mut [Box<dyn Widget>] {
+                    &mut []
+                }
+                fn is_interactive(&self) -> bool {
+                    true
+                }
+                fn is_focusable(&self) -> bool {
+                    true
+                }
+                fn accessible_name(&self) -> Option<&str> {
+                    Some("test")
+                }
+                fn accessible_role(&self) -> AccessibleRole {
+                    $role
+                }
+            }
+        };
+    }
+
+    test_role_widget!(MockTextInput, AccessibleRole::TextInput, "textbox");
+    test_role_widget!(MockLink, AccessibleRole::Link, "link");
+    test_role_widget!(MockList, AccessibleRole::List, "list");
+    test_role_widget!(MockListItem, AccessibleRole::ListItem, "listitem");
+    test_role_widget!(MockTable, AccessibleRole::Table, "table");
+    test_role_widget!(MockTableRow, AccessibleRole::TableRow, "row");
+    test_role_widget!(MockTableCell, AccessibleRole::TableCell, "cell");
+    test_role_widget!(MockMenu, AccessibleRole::Menu, "menu");
+    test_role_widget!(MockMenuItem, AccessibleRole::MenuItem, "menuitem");
+    test_role_widget!(MockComboBox, AccessibleRole::ComboBox, "combobox");
+    test_role_widget!(MockSlider, AccessibleRole::Slider, "slider");
+    test_role_widget!(MockProgressBar, AccessibleRole::ProgressBar, "progressbar");
+    test_role_widget!(MockTab, AccessibleRole::Tab, "tab");
+    test_role_widget!(MockTabPanel, AccessibleRole::TabPanel, "tabpanel");
+    test_role_widget!(MockRadioGroup, AccessibleRole::RadioGroup, "radiogroup");
+    test_role_widget!(MockRadio, AccessibleRole::Radio, "radio");
+
+    #[test]
+    fn test_aria_from_widget_textinput() {
+        let attrs = aria_from_widget(&MockTextInput);
+        assert_eq!(attrs.role, Some("textbox".to_string()));
+    }
+
+    #[test]
+    fn test_aria_from_widget_link() {
+        let attrs = aria_from_widget(&MockLink);
+        assert_eq!(attrs.role, Some("link".to_string()));
+    }
+
+    #[test]
+    fn test_aria_from_widget_list() {
+        let attrs = aria_from_widget(&MockList);
+        assert_eq!(attrs.role, Some("list".to_string()));
+    }
+
+    #[test]
+    fn test_aria_from_widget_listitem() {
+        let attrs = aria_from_widget(&MockListItem);
+        assert_eq!(attrs.role, Some("listitem".to_string()));
+    }
+
+    #[test]
+    fn test_aria_from_widget_table() {
+        let attrs = aria_from_widget(&MockTable);
+        assert_eq!(attrs.role, Some("table".to_string()));
+    }
+
+    #[test]
+    fn test_aria_from_widget_tablerow() {
+        let attrs = aria_from_widget(&MockTableRow);
+        assert_eq!(attrs.role, Some("row".to_string()));
+    }
+
+    #[test]
+    fn test_aria_from_widget_tablecell() {
+        let attrs = aria_from_widget(&MockTableCell);
+        assert_eq!(attrs.role, Some("cell".to_string()));
+    }
+
+    #[test]
+    fn test_aria_from_widget_menu() {
+        let attrs = aria_from_widget(&MockMenu);
+        assert_eq!(attrs.role, Some("menu".to_string()));
+    }
+
+    #[test]
+    fn test_aria_from_widget_menuitem() {
+        let attrs = aria_from_widget(&MockMenuItem);
+        assert_eq!(attrs.role, Some("menuitem".to_string()));
+    }
+
+    #[test]
+    fn test_aria_from_widget_combobox() {
+        let attrs = aria_from_widget(&MockComboBox);
+        assert_eq!(attrs.role, Some("combobox".to_string()));
+    }
+
+    #[test]
+    fn test_aria_from_widget_slider() {
+        let attrs = aria_from_widget(&MockSlider);
+        assert_eq!(attrs.role, Some("slider".to_string()));
+    }
+
+    #[test]
+    fn test_aria_from_widget_progressbar() {
+        let attrs = aria_from_widget(&MockProgressBar);
+        assert_eq!(attrs.role, Some("progressbar".to_string()));
+    }
+
+    #[test]
+    fn test_aria_from_widget_tab() {
+        let attrs = aria_from_widget(&MockTab);
+        assert_eq!(attrs.role, Some("tab".to_string()));
+    }
+
+    #[test]
+    fn test_aria_from_widget_tabpanel() {
+        let attrs = aria_from_widget(&MockTabPanel);
+        assert_eq!(attrs.role, Some("tabpanel".to_string()));
+    }
+
+    #[test]
+    fn test_aria_from_widget_radiogroup() {
+        let attrs = aria_from_widget(&MockRadioGroup);
+        assert_eq!(attrs.role, Some("radiogroup".to_string()));
+    }
+
+    #[test]
+    fn test_aria_from_widget_radio() {
+        let attrs = aria_from_widget(&MockRadio);
+        assert_eq!(attrs.role, Some("radio".to_string()));
+    }
+
+    #[test]
+    fn test_aria_from_widget_image() {
+        let attrs = aria_from_widget(&MockImage::new().with_alt("Test Image"));
+        assert_eq!(attrs.role, Some("img".to_string()));
+    }
+
+    // Test heading hierarchy check
+    struct MockHeadingWidget {
+        children: Vec<Box<dyn Widget>>,
+        name: String,
+    }
+
+    impl MockHeadingWidget {
+        fn new(name: &str) -> Self {
+            Self {
+                children: Vec::new(),
+                name: name.to_string(),
+            }
+        }
+
+        fn with_child(mut self, child: impl Widget + 'static) -> Self {
+            self.children.push(Box::new(child));
+            self
+        }
+    }
+
+    impl Brick for MockHeadingWidget {
+        fn brick_name(&self) -> &'static str {
+            "MockHeadingWidget"
+        }
+        fn assertions(&self) -> &[BrickAssertion] {
+            &[]
+        }
+        fn budget(&self) -> BrickBudget {
+            BrickBudget::uniform(16)
+        }
+        fn verify(&self) -> BrickVerification {
+            BrickVerification {
+                passed: vec![],
+                failed: vec![],
+                verification_time: Duration::from_micros(1),
+            }
+        }
+        fn to_html(&self) -> String {
+            String::new()
+        }
+        fn to_css(&self) -> String {
+            String::new()
+        }
+    }
+
+    impl Widget for MockHeadingWidget {
+        fn type_id(&self) -> TypeId {
+            TypeId::of::<Self>()
+        }
+        fn measure(&self, c: Constraints) -> Size {
+            c.smallest()
+        }
+        fn layout(&mut self, b: Rect) -> LayoutResult {
+            LayoutResult { size: b.size() }
+        }
+        fn paint(&self, _: &mut dyn Canvas) {}
+        fn event(&mut self, _: &Event) -> Option<Box<dyn Any + Send>> {
+            None
+        }
+        fn children(&self) -> &[Box<dyn Widget>] {
+            &self.children
+        }
+        fn children_mut(&mut self) -> &mut [Box<dyn Widget>] {
+            &mut self.children
+        }
+        fn is_interactive(&self) -> bool {
+            false
+        }
+        fn is_focusable(&self) -> bool {
+            false
+        }
+        fn accessible_name(&self) -> Option<&str> {
+            Some(&self.name)
+        }
+        fn accessible_role(&self) -> AccessibleRole {
+            AccessibleRole::Heading
+        }
+    }
+
+    #[test]
+    fn test_heading_hierarchy_skipped() {
+        // h1 followed by h3 should trigger violation
+        let h1 = MockHeadingWidget::new("h1 Main");
+        let h3 = MockHeadingWidget::new("h3 Skipped");
+
+        // Create a container that has h1 then h3
+        struct MockContainer {
+            children: Vec<Box<dyn Widget>>,
+        }
+        impl Brick for MockContainer {
+            fn brick_name(&self) -> &'static str {
+                "MockContainer"
+            }
+            fn assertions(&self) -> &[BrickAssertion] {
+                &[]
+            }
+            fn budget(&self) -> BrickBudget {
+                BrickBudget::uniform(16)
+            }
+            fn verify(&self) -> BrickVerification {
+                BrickVerification {
+                    passed: vec![],
+                    failed: vec![],
+                    verification_time: Duration::from_micros(1),
+                }
+            }
+            fn to_html(&self) -> String {
+                String::new()
+            }
+            fn to_css(&self) -> String {
+                String::new()
+            }
+        }
+        impl Widget for MockContainer {
+            fn type_id(&self) -> TypeId {
+                TypeId::of::<Self>()
+            }
+            fn measure(&self, c: Constraints) -> Size {
+                c.smallest()
+            }
+            fn layout(&mut self, b: Rect) -> LayoutResult {
+                LayoutResult { size: b.size() }
+            }
+            fn paint(&self, _: &mut dyn Canvas) {}
+            fn event(&mut self, _: &Event) -> Option<Box<dyn Any + Send>> {
+                None
+            }
+            fn children(&self) -> &[Box<dyn Widget>] {
+                &self.children
+            }
+            fn children_mut(&mut self) -> &mut [Box<dyn Widget>] {
+                &mut self.children
+            }
+            fn is_interactive(&self) -> bool {
+                false
+            }
+            fn is_focusable(&self) -> bool {
+                false
+            }
+            fn accessible_name(&self) -> Option<&str> {
+                None
+            }
+            fn accessible_role(&self) -> AccessibleRole {
+                AccessibleRole::Generic
+            }
+        }
+
+        let container = MockContainer {
+            children: vec![Box::new(h1), Box::new(h3)],
+        };
+
+        let config = A11yConfig {
+            check_touch_targets: false,
+            check_heading_hierarchy: true,
+            check_focus_indicators: false,
+            min_contrast_normal: 4.5,
+            min_contrast_large: 3.0,
+        };
+        let report = A11yChecker::check_with_config(&container, &config);
+        assert!(report.violations.iter().any(|v| v.rule == "heading-order"));
+    }
+
+    #[test]
+    fn test_heading_level_no_name() {
+        // Widget with no accessible_name
+        let level = A11yChecker::heading_level(&MockGenericWidget);
+        // Should default to level 2
+        assert_eq!(level, Some(2));
+    }
+
+    #[test]
+    fn test_heading_level_non_heading_pattern() {
+        // Widget with name that doesn't start with 'h' or 'H'
+        let widget = MockLabel::new("Welcome Section");
+        let level = A11yChecker::heading_level(&widget);
+        // Should default to level 2
+        assert_eq!(level, Some(2));
+    }
+
+    // Test FormAccessibility with aria_labelledby
+    #[test]
+    fn test_form_with_aria_labelledby() {
+        let mut form = FormAccessibility::new();
+        form.aria_labelledby = Some("form-title".to_string());
+        form.fields.push(
+            FormFieldA11y::new("email")
+                .with_label("Email")
+                .with_type(InputType::Email)
+                .with_autocomplete(AutocompleteValue::Email),
+        );
+
+        let report = FormA11yChecker::check(&form);
+        // aria-labelledby should satisfy form name requirement
+        assert!(!report
+            .violations
+            .iter()
+            .any(|v| v.rule == FormA11yRule::FormMissingName));
+    }
+
+    // Test focus indicator check
+    #[test]
+    fn test_focus_indicator_check() {
+        let widget = MockButton::new().with_name("Test Button");
+        let config = A11yConfig {
+            check_touch_targets: false,
+            check_heading_hierarchy: false,
+            check_focus_indicators: true,
+            min_contrast_normal: 4.5,
+            min_contrast_large: 3.0,
+        };
+        let report = A11yChecker::check_with_config(&widget, &config);
+        // MockButton returns true for is_focusable, so has_visible_focus_indicator returns true
+        assert!(!report.violations.iter().any(|v| v.rule == "focus-visible"));
+    }
+
+    // Test default CheckContext values
+    #[test]
+    fn test_check_default_context() {
+        let widget = MockButton::new().with_name("Test Button");
+        // Default check (no config) should not check touch targets by default
+        // because CheckContext::default() has check_touch_targets: false
+        let report = A11yChecker::check(&widget);
+        // Just verify it runs without error
+        assert!(report.is_passing());
+    }
+
+    // Test A11yViolation clone
+    #[test]
+    fn test_violation_clone() {
+        let violation = A11yViolation {
+            rule: "test".to_string(),
+            message: "test message".to_string(),
+            wcag: "1.1.1".to_string(),
+            impact: Impact::Minor,
+        };
+        let cloned = violation.clone();
+        assert_eq!(cloned.rule, "test");
+        assert_eq!(cloned.impact, Impact::Minor);
+    }
+
+    // Test FormViolation clone
+    #[test]
+    fn test_form_violation_clone() {
+        let violation = FormViolation {
+            field_id: "test".to_string(),
+            rule: FormA11yRule::MissingLabel,
+            message: "test".to_string(),
+            wcag: "1.3.1".to_string(),
+            impact: Impact::Critical,
+        };
+        let cloned = violation.clone();
+        assert_eq!(cloned.field_id, "test");
+        assert_eq!(cloned.rule, FormA11yRule::MissingLabel);
+    }
+
+    // Test AriaAttributes Default
+    #[test]
+    fn test_aria_attributes_default() {
+        let attrs = AriaAttributes::default();
+        assert!(attrs.role.is_none());
+        assert!(attrs.label.is_none());
+        assert!(!attrs.hidden);
+        assert!(!attrs.disabled);
+        assert!(!attrs.required);
+        assert!(!attrs.invalid);
+        assert!(!attrs.busy);
+        assert!(!attrs.atomic);
+    }
+
+    // Test ContrastResult fields
+    #[test]
+    fn test_contrast_result_clone() {
+        let result = ContrastResult {
+            ratio: 4.5,
+            passes_aa: true,
+            passes_aaa: false,
+        };
+        let cloned = result.clone();
+        assert!((cloned.ratio - 4.5).abs() < f32::EPSILON);
+        assert!(cloned.passes_aa);
+        assert!(!cloned.passes_aaa);
+    }
+
+    // Test FormFieldGroup builder
+    #[test]
+    fn test_form_field_group_builder() {
+        let group = FormFieldGroup::new("personal-info")
+            .with_legend("Personal Information")
+            .with_field("first_name")
+            .with_field("last_name");
+
+        assert_eq!(group.id, "personal-info");
+        assert_eq!(group.legend, Some("Personal Information".to_string()));
+        assert_eq!(group.field_ids.len(), 2);
+        assert!(group.field_ids.contains(&"first_name".to_string()));
+        assert!(group.field_ids.contains(&"last_name".to_string()));
+    }
 }

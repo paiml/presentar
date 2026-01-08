@@ -1048,4 +1048,404 @@ mod tests {
         let result = tabs.event(&event);
         assert!(result.is_none());
     }
+
+    // ===== Additional Tab Rect Tests =====
+
+    #[test]
+    fn test_tab_rect_left() {
+        let mut tabs = Tabs::new()
+            .tab(Tab::new("a", "A"))
+            .tab(Tab::new("b", "B"))
+            .orientation(TabOrientation::Left)
+            .tab_size(48.0)
+            .min_tab_width(80.0);
+        tabs.bounds = Rect::new(0.0, 0.0, 200.0, 200.0);
+
+        let rect0 = tabs.tab_rect(0, 80.0);
+        assert_eq!(rect0.x, 0.0);
+        assert_eq!(rect0.y, 0.0);
+        assert_eq!(rect0.width, 80.0);
+        assert_eq!(rect0.height, 48.0);
+
+        let rect1 = tabs.tab_rect(1, 80.0);
+        assert_eq!(rect1.y, 48.0);
+    }
+
+    #[test]
+    fn test_tab_rect_right() {
+        let mut tabs = Tabs::new()
+            .tab(Tab::new("a", "A"))
+            .orientation(TabOrientation::Right)
+            .tab_size(48.0)
+            .min_tab_width(80.0);
+        tabs.bounds = Rect::new(0.0, 0.0, 200.0, 200.0);
+
+        let rect = tabs.tab_rect(0, 80.0);
+        assert_eq!(rect.x, 120.0); // 200 - 80
+    }
+
+    #[test]
+    fn test_tab_rect_with_spacing() {
+        let mut tabs = Tabs::new()
+            .tab(Tab::new("a", "A"))
+            .tab(Tab::new("b", "B"))
+            .orientation(TabOrientation::Top)
+            .spacing(10.0)
+            .tab_size(48.0);
+        tabs.bounds = Rect::new(0.0, 0.0, 300.0, 48.0);
+
+        let rect0 = tabs.tab_rect(0, 100.0);
+        assert_eq!(rect0.x, 0.0);
+
+        let rect1 = tabs.tab_rect(1, 100.0);
+        assert_eq!(rect1.x, 110.0); // 100 + 10 spacing
+    }
+
+    // ===== Calculate Tab Width Tests =====
+
+    #[test]
+    fn test_calculate_tab_width_empty() {
+        let tabs = Tabs::new().min_tab_width(80.0);
+        assert_eq!(tabs.calculate_tab_width(500.0), 80.0);
+    }
+
+    #[test]
+    fn test_calculate_tab_width_narrow_space() {
+        let tabs = Tabs::new()
+            .tab(Tab::new("a", "A"))
+            .tab(Tab::new("b", "B"))
+            .min_tab_width(100.0);
+
+        // Space so narrow that we need to use min_tab_width
+        assert_eq!(tabs.calculate_tab_width(50.0), 100.0);
+    }
+
+    // ===== Tab At Point Tests =====
+
+    #[test]
+    fn test_tab_at_point_found() {
+        let mut tabs = Tabs::new()
+            .tab(Tab::new("a", "A"))
+            .tab(Tab::new("b", "B"))
+            .min_tab_width(100.0)
+            .tab_size(48.0);
+        tabs.bounds = Rect::new(0.0, 0.0, 200.0, 48.0);
+
+        assert_eq!(tabs.tab_at_point(50.0, 24.0), Some(0));
+        assert_eq!(tabs.tab_at_point(150.0, 24.0), Some(1));
+    }
+
+    #[test]
+    fn test_tab_at_point_not_found() {
+        let mut tabs = Tabs::new()
+            .tab(Tab::new("a", "A"))
+            .min_tab_width(100.0)
+            .tab_size(48.0);
+        tabs.bounds = Rect::new(0.0, 0.0, 200.0, 48.0);
+
+        // Click outside tabs area
+        assert_eq!(tabs.tab_at_point(50.0, 100.0), None);
+        assert_eq!(tabs.tab_at_point(-10.0, 24.0), None);
+    }
+
+    // ===== Navigation Edge Cases =====
+
+    #[test]
+    fn test_tabs_next_tab_all_disabled() {
+        let mut tabs = Tabs::new()
+            .tab(Tab::new("a", "A").disabled())
+            .tab(Tab::new("b", "B").disabled())
+            .tab(Tab::new("c", "C").disabled());
+        tabs.active = 0; // Start position
+
+        tabs.next_tab();
+        assert_eq!(tabs.get_active(), 0); // Unchanged - all disabled
+    }
+
+    #[test]
+    fn test_tabs_prev_tab_all_disabled() {
+        let mut tabs = Tabs::new()
+            .tab(Tab::new("a", "A").disabled())
+            .tab(Tab::new("b", "B").disabled());
+        tabs.active = 0;
+
+        tabs.prev_tab();
+        assert_eq!(tabs.get_active(), 0); // Unchanged - all disabled
+    }
+
+    #[test]
+    fn test_tabs_prev_tab_empty() {
+        let mut tabs = Tabs::new();
+        tabs.prev_tab(); // Should not panic
+        assert_eq!(tabs.get_active(), 0);
+    }
+
+    #[test]
+    fn test_tabs_set_active_id_not_found() {
+        let mut tabs = Tabs::new().tab(Tab::new("a", "A")).tab(Tab::new("b", "B"));
+
+        tabs.set_active_id("nonexistent");
+        assert_eq!(tabs.get_active(), 0); // Unchanged
+    }
+
+    #[test]
+    fn test_tabs_set_active_id_disabled() {
+        let mut tabs = Tabs::new()
+            .tab(Tab::new("a", "A"))
+            .tab(Tab::new("b", "B").disabled());
+
+        tabs.set_active_id("b");
+        assert_eq!(tabs.get_active(), 0); // Unchanged - disabled
+    }
+
+    // ===== Color Setters =====
+
+    #[test]
+    fn test_tabs_tab_bg() {
+        let tabs = Tabs::new().tab_bg(Color::RED);
+        assert_eq!(tabs.tab_bg, Color::RED);
+    }
+
+    #[test]
+    fn test_tabs_active_bg() {
+        let tabs = Tabs::new().active_bg(Color::BLUE);
+        assert_eq!(tabs.active_bg, Color::BLUE);
+    }
+
+    #[test]
+    fn test_tabs_inactive_color() {
+        let tabs = Tabs::new().inactive_color(Color::GREEN);
+        assert_eq!(tabs.inactive_color, Color::GREEN);
+    }
+
+    #[test]
+    fn test_tabs_active_color() {
+        let tabs = Tabs::new().active_color(Color::WHITE);
+        assert_eq!(tabs.active_color, Color::WHITE);
+    }
+
+    // ===== Get Tabs Tests =====
+
+    #[test]
+    fn test_tabs_get_tabs() {
+        let tabs = Tabs::new().tab(Tab::new("a", "A")).tab(Tab::new("b", "B"));
+
+        let items = tabs.get_tabs();
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].id, "a");
+        assert_eq!(items[1].id, "b");
+    }
+
+    #[test]
+    fn test_tabs_get_active_id_none() {
+        let tabs = Tabs::new();
+        assert!(tabs.get_active_id().is_none());
+    }
+
+    // ===== Paint Tests =====
+
+    #[test]
+    fn test_tabs_paint() {
+        use presentar_core::RecordingCanvas;
+
+        let mut tabs = Tabs::new()
+            .tab(Tab::new("a", "A"))
+            .tab(Tab::new("b", "B"))
+            .orientation(TabOrientation::Top)
+            .show_border(true);
+        tabs.layout(Rect::new(0.0, 0.0, 200.0, 48.0));
+
+        let mut canvas = RecordingCanvas::new();
+        tabs.paint(&mut canvas);
+
+        // Should draw: tab bar bg + tab 1 bg + tab 1 text + tab 2 bg + tab 2 text + active indicator + border
+        assert!(canvas.command_count() >= 5);
+    }
+
+    #[test]
+    fn test_tabs_paint_no_border() {
+        use presentar_core::RecordingCanvas;
+
+        let mut tabs = Tabs::new().tab(Tab::new("a", "A")).show_border(false);
+        tabs.layout(Rect::new(0.0, 0.0, 200.0, 48.0));
+
+        let mut canvas = RecordingCanvas::new();
+        tabs.paint(&mut canvas);
+
+        // Should still draw tabs, just no border
+        assert!(canvas.command_count() >= 2);
+    }
+
+    #[test]
+    fn test_tabs_paint_disabled_tab() {
+        use presentar_core::RecordingCanvas;
+
+        let mut tabs = Tabs::new()
+            .tab(Tab::new("a", "A"))
+            .tab(Tab::new("b", "B").disabled())
+            .active(0);
+        tabs.layout(Rect::new(0.0, 0.0, 200.0, 48.0));
+
+        let mut canvas = RecordingCanvas::new();
+        tabs.paint(&mut canvas);
+
+        // Should paint both tabs, disabled with different color
+        assert!(canvas.command_count() >= 4);
+    }
+
+    #[test]
+    fn test_tabs_paint_vertical_left() {
+        use presentar_core::RecordingCanvas;
+
+        let mut tabs = Tabs::new()
+            .tab(Tab::new("a", "A"))
+            .tab(Tab::new("b", "B"))
+            .orientation(TabOrientation::Left)
+            .show_border(true);
+        tabs.layout(Rect::new(0.0, 0.0, 100.0, 200.0));
+
+        let mut canvas = RecordingCanvas::new();
+        tabs.paint(&mut canvas);
+
+        assert!(canvas.command_count() >= 5);
+    }
+
+    #[test]
+    fn test_tabs_paint_vertical_right() {
+        use presentar_core::RecordingCanvas;
+
+        let mut tabs = Tabs::new()
+            .tab(Tab::new("a", "A"))
+            .tab(Tab::new("b", "B"))
+            .orientation(TabOrientation::Right)
+            .show_border(true);
+        tabs.layout(Rect::new(0.0, 0.0, 100.0, 200.0));
+
+        let mut canvas = RecordingCanvas::new();
+        tabs.paint(&mut canvas);
+
+        assert!(canvas.command_count() >= 5);
+    }
+
+    #[test]
+    fn test_tabs_paint_bottom() {
+        use presentar_core::RecordingCanvas;
+
+        let mut tabs = Tabs::new()
+            .tab(Tab::new("a", "A"))
+            .tab(Tab::new("b", "B"))
+            .orientation(TabOrientation::Bottom)
+            .show_border(true);
+        tabs.layout(Rect::new(0.0, 0.0, 200.0, 100.0));
+
+        let mut canvas = RecordingCanvas::new();
+        tabs.paint(&mut canvas);
+
+        assert!(canvas.command_count() >= 5);
+    }
+
+    // ===== Brick Trait Tests =====
+
+    #[test]
+    fn test_tabs_brick_name() {
+        let tabs = Tabs::new();
+        assert_eq!(tabs.brick_name(), "Tabs");
+    }
+
+    #[test]
+    fn test_tabs_brick_assertions() {
+        let tabs = Tabs::new();
+        let assertions = tabs.assertions();
+        assert_eq!(assertions.len(), 1);
+        assert!(assertions.contains(&BrickAssertion::MaxLatencyMs(16)));
+    }
+
+    #[test]
+    fn test_tabs_brick_budget() {
+        let tabs = Tabs::new();
+        let budget = tabs.budget();
+        // BrickBudget::uniform(16) sets internal values
+        assert!(budget.measure_ms > 0);
+        assert!(budget.layout_ms > 0);
+        assert!(budget.paint_ms > 0);
+    }
+
+    #[test]
+    fn test_tabs_brick_verify() {
+        let tabs = Tabs::new();
+        let verification = tabs.verify();
+        assert!(verification.failed.is_empty());
+        assert!(!verification.passed.is_empty());
+    }
+
+    #[test]
+    fn test_tabs_to_html() {
+        let tabs = Tabs::new();
+        let html = tabs.to_html();
+        assert!(html.contains("brick-tabs"));
+    }
+
+    #[test]
+    fn test_tabs_to_css() {
+        let tabs = Tabs::new();
+        let css = tabs.to_css();
+        assert!(css.contains("brick-tabs"));
+        assert!(css.contains("display: flex"));
+    }
+
+    // ===== Widget Children Mut Tests =====
+
+    #[test]
+    fn test_tabs_children_mut() {
+        let mut tabs = Tabs::new();
+        assert!(tabs.children_mut().is_empty());
+    }
+
+    // ===== Event Edge Cases =====
+
+    #[test]
+    fn test_tabs_click_outside() {
+        let mut tabs = Tabs::new()
+            .tab(Tab::new("a", "A"))
+            .min_tab_width(100.0)
+            .tab_size(48.0);
+        tabs.bounds = Rect::new(0.0, 0.0, 200.0, 48.0);
+
+        // Click outside tabs
+        let event = Event::MouseDown {
+            position: Point::new(500.0, 24.0),
+            button: MouseButton::Left,
+        };
+
+        let result = tabs.event(&event);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_tabs_right_click_no_event() {
+        let mut tabs = Tabs::new()
+            .tab(Tab::new("a", "A"))
+            .tab(Tab::new("b", "B"))
+            .min_tab_width(100.0)
+            .tab_size(48.0);
+        tabs.bounds = Rect::new(0.0, 0.0, 200.0, 48.0);
+
+        // Right click should not change tabs
+        let event = Event::MouseDown {
+            position: Point::new(150.0, 24.0),
+            button: MouseButton::Right,
+        };
+
+        let result = tabs.event(&event);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_tabs_other_event_no_effect() {
+        let mut tabs = Tabs::new().tab(Tab::new("a", "A")).tab(Tab::new("b", "B"));
+        tabs.bounds = Rect::new(0.0, 0.0, 200.0, 48.0);
+
+        let result = tabs.event(&Event::MouseEnter);
+        assert!(result.is_none());
+    }
 }

@@ -239,7 +239,8 @@ impl Brick for Text {
 mod tests {
     use super::*;
     use presentar_core::draw::DrawCommand;
-    use presentar_core::{Point, RecordingCanvas, Widget};
+    use presentar_core::widget::AccessibleRole;
+    use presentar_core::{Brick, BrickAssertion, Point, RecordingCanvas, Widget};
 
     #[test]
     fn test_text_new() {
@@ -453,5 +454,143 @@ mod tests {
     fn test_text_content_accessor() {
         let t = Text::new("Hello World");
         assert_eq!(t.content(), "Hello World");
+    }
+
+    // ===== Additional Coverage Tests =====
+
+    #[test]
+    fn test_text_is_interactive() {
+        let t = Text::new("Test");
+        assert!(!t.is_interactive());
+    }
+
+    #[test]
+    fn test_text_is_focusable() {
+        let t = Text::new("Test");
+        assert!(!t.is_focusable());
+    }
+
+    #[test]
+    fn test_text_accessible_role() {
+        let t = Text::new("Test");
+        assert_eq!(t.accessible_role(), AccessibleRole::Generic);
+    }
+
+    #[test]
+    fn test_text_accessible_name() {
+        let t = Text::new("Accessible Text");
+        // Text widget doesn't implement custom accessible_name
+        assert!(Widget::accessible_name(&t).is_none());
+    }
+
+    #[test]
+    fn test_text_children_mut() {
+        let mut t = Text::new("Test");
+        assert!(t.children_mut().is_empty());
+    }
+
+    // ===== Brick Trait Tests =====
+
+    #[test]
+    fn test_text_brick_name() {
+        let t = Text::new("Test");
+        assert_eq!(t.brick_name(), "Text");
+    }
+
+    #[test]
+    fn test_text_brick_assertions() {
+        let t = Text::new("Test");
+        let assertions = t.assertions();
+        assert_eq!(assertions.len(), 2);
+        assert!(assertions.contains(&BrickAssertion::MaxLatencyMs(16)));
+        assert!(assertions.contains(&BrickAssertion::TextVisible));
+    }
+
+    #[test]
+    fn test_text_brick_budget() {
+        let t = Text::new("Test");
+        let budget = t.budget();
+        assert!(budget.measure_ms > 0);
+        assert!(budget.layout_ms > 0);
+        assert!(budget.paint_ms > 0);
+    }
+
+    #[test]
+    fn test_text_brick_verify_with_content() {
+        let t = Text::new("Visible Text");
+        let verification = t.verify();
+        assert!(verification.passed.contains(&BrickAssertion::TextVisible));
+        assert!(verification
+            .passed
+            .contains(&BrickAssertion::MaxLatencyMs(16)));
+        assert!(verification.failed.is_empty());
+    }
+
+    #[test]
+    fn test_text_brick_verify_empty_content() {
+        let t = Text::new("");
+        let verification = t.verify();
+        // Empty text should fail TextVisible
+        assert!(verification
+            .failed
+            .iter()
+            .any(|(a, _)| *a == BrickAssertion::TextVisible));
+    }
+
+    #[test]
+    fn test_text_to_html() {
+        let t = Text::new("Hello World").with_test_id("greeting");
+        let html = t.to_html();
+        assert!(html.contains("brick-text"));
+        assert!(html.contains("data-testid=\"greeting\""));
+        assert!(html.contains("Hello World"));
+    }
+
+    #[test]
+    fn test_text_to_html_default_test_id() {
+        let t = Text::new("Hello");
+        let html = t.to_html();
+        assert!(html.contains("data-testid=\"text\""));
+    }
+
+    #[test]
+    fn test_text_to_css() {
+        let t = Text::new("Text")
+            .font_size(20.0)
+            .color(Color::RED)
+            .line_height(1.5);
+        let css = t.to_css();
+        assert!(css.contains("brick-text"));
+        assert!(css.contains("font-size: 20px"));
+        assert!(css.contains("line-height: 1.5"));
+    }
+
+    #[test]
+    fn test_text_default_values() {
+        let t = Text::new("");
+        assert!(t.content.is_empty());
+        assert_eq!(t.font_size, 16.0);
+        assert_eq!(t.line_height, 1.2);
+    }
+
+    #[test]
+    fn test_text_font_weight_default() {
+        let t = Text::new("Test");
+        assert_eq!(t.font_weight, FontWeight::Normal);
+    }
+
+    #[test]
+    fn test_text_font_style_default() {
+        let t = Text::new("Test");
+        assert_eq!(t.font_style, FontStyle::Normal);
+    }
+
+    #[test]
+    fn test_text_clone() {
+        let t = Text::new("Clone Me").font_size(20.0).color(Color::BLUE);
+        let cloned = t.clone();
+        assert_eq!(cloned.content(), "Clone Me");
+        assert_eq!(cloned.font_size, 20.0);
+        assert_eq!(cloned.color, Color::BLUE);
     }
 }

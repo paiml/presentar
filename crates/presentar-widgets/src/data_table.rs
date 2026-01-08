@@ -973,4 +973,245 @@ mod tests {
         assert_eq!(table.row_y(0), 60.0); // 10 + 50
         assert_eq!(table.row_y(1), 100.0); // 10 + 50 + 40
     }
+
+    // ===== Paint Tests =====
+
+    use presentar_core::RecordingCanvas;
+
+    #[test]
+    fn test_data_table_paint_empty() {
+        let mut table = DataTable::new();
+        table.bounds = Rect::new(0.0, 0.0, 400.0, 300.0);
+        let mut canvas = RecordingCanvas::new();
+        table.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_data_table_paint_with_data() {
+        let mut table = DataTable::new()
+            .column(TableColumn::new("name", "Name").width(100.0))
+            .column(TableColumn::new("value", "Value").width(100.0))
+            .row(TableRow::new().cell("name", "Item 1").cell("value", 100))
+            .row(TableRow::new().cell("name", "Item 2").cell("value", 200));
+        table.bounds = Rect::new(0.0, 0.0, 400.0, 200.0);
+        let mut canvas = RecordingCanvas::new();
+        table.paint(&mut canvas);
+        assert!(canvas.commands().len() > 5);
+    }
+
+    #[test]
+    fn test_data_table_paint_with_selection() {
+        let mut table = DataTable::new()
+            .column(TableColumn::new("x", "X"))
+            .row(TableRow::new().cell("x", "A"))
+            .row(TableRow::new().cell("x", "B"))
+            .selectable(true);
+        table.bounds = Rect::new(0.0, 0.0, 200.0, 150.0);
+        table.selected_row = Some(1);
+        let mut canvas = RecordingCanvas::new();
+        table.paint(&mut canvas);
+        assert!(canvas.commands().len() > 5);
+    }
+
+    #[test]
+    fn test_data_table_paint_striped() {
+        let mut table = DataTable::new()
+            .column(TableColumn::new("x", "X"))
+            .row(TableRow::new())
+            .row(TableRow::new())
+            .row(TableRow::new())
+            .striped(true);
+        table.bounds = Rect::new(0.0, 0.0, 200.0, 200.0);
+        let mut canvas = RecordingCanvas::new();
+        table.paint(&mut canvas);
+        assert!(canvas.commands().len() > 5);
+    }
+
+    #[test]
+    fn test_data_table_paint_bordered() {
+        let mut table = DataTable::new()
+            .column(TableColumn::new("x", "X"))
+            .row(TableRow::new())
+            .bordered(true);
+        table.bounds = Rect::new(0.0, 0.0, 200.0, 100.0);
+        let mut canvas = RecordingCanvas::new();
+        // Should not panic when painting bordered table
+        table.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_data_table_paint_sortable_columns() {
+        let mut table = DataTable::new()
+            .column(TableColumn::new("name", "Name").sortable())
+            .row(TableRow::new().cell("name", "A"));
+        table.bounds = Rect::new(0.0, 0.0, 200.0, 100.0);
+        table.sort_column = Some("name".to_string());
+        table.sort_direction = SortDirection::Ascending;
+        let mut canvas = RecordingCanvas::new();
+        table.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_data_table_paint_all_alignments() {
+        let mut table = DataTable::new()
+            .column(TableColumn::new("a", "A").align(TextAlign::Left))
+            .column(TableColumn::new("b", "B").align(TextAlign::Center))
+            .column(TableColumn::new("c", "C").align(TextAlign::Right))
+            .row(TableRow::new().cell("a", "L").cell("b", "C").cell("c", "R"));
+        table.bounds = Rect::new(0.0, 0.0, 300.0, 100.0);
+        let mut canvas = RecordingCanvas::new();
+        table.paint(&mut canvas);
+    }
+
+    // ===== Event Tests =====
+
+    #[test]
+    fn test_data_table_event_mouse_down() {
+        let mut table = DataTable::new()
+            .column(TableColumn::new("name", "Name").sortable())
+            .row(TableRow::new());
+        table.layout(Rect::new(0.0, 0.0, 200.0, 100.0));
+
+        // Should not panic
+        let _ = table.event(&Event::MouseDown {
+            position: presentar_core::Point::new(100.0, 20.0),
+            button: presentar_core::MouseButton::Left,
+        });
+    }
+
+    #[test]
+    fn test_data_table_event_selectable() {
+        let mut table = DataTable::new()
+            .column(TableColumn::new("x", "X"))
+            .row(TableRow::new())
+            .row(TableRow::new())
+            .selectable(true);
+        table.layout(Rect::new(0.0, 0.0, 200.0, 200.0));
+
+        // Click on row area - should not panic
+        let _ = table.event(&Event::MouseDown {
+            position: presentar_core::Point::new(100.0, 80.0),
+            button: presentar_core::MouseButton::Left,
+        });
+    }
+
+    #[test]
+    fn test_data_table_event_not_selectable() {
+        let mut table = DataTable::new()
+            .column(TableColumn::new("x", "X"))
+            .row(TableRow::new())
+            .selectable(false);
+        table.layout(Rect::new(0.0, 0.0, 200.0, 150.0));
+
+        let result = table.event(&Event::MouseDown {
+            position: presentar_core::Point::new(100.0, 80.0),
+            button: presentar_core::MouseButton::Left,
+        });
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_data_table_event_keydown() {
+        let mut table = DataTable::new();
+        table.layout(Rect::new(0.0, 0.0, 200.0, 100.0));
+
+        let result = table.event(&Event::KeyDown {
+            key: presentar_core::Key::Enter,
+        });
+        assert!(result.is_none());
+    }
+
+    // ===== Builder Tests =====
+
+    #[test]
+    fn test_data_table_color_setters() {
+        let table = DataTable::new()
+            .header_bg(Color::RED)
+            .row_bg(Color::GREEN)
+            .row_alt_bg(Color::BLUE)
+            .selected_bg(Color::new(1.0, 1.0, 0.0, 1.0))
+            .text_color(Color::BLACK);
+
+        assert_eq!(table.header_bg, Color::RED);
+        assert_eq!(table.row_bg, Color::GREEN);
+    }
+
+    #[test]
+    fn test_data_table_striped_toggle() {
+        let table = DataTable::new().striped(false);
+        assert!(!table.striped);
+    }
+
+    #[test]
+    fn test_data_table_bordered_toggle() {
+        let table = DataTable::new().bordered(false);
+        assert!(!table.bordered);
+    }
+
+    // ===== Additional CellValue Tests =====
+
+    #[test]
+    fn test_cell_value_from_string() {
+        let s = String::from("hello");
+        let cell: CellValue = s.into();
+        assert!(matches!(cell, CellValue::Text(_)));
+    }
+
+    // ===== Brick Trait Tests =====
+
+    #[test]
+    fn test_data_table_brick_name() {
+        let table = DataTable::new();
+        assert_eq!(table.brick_name(), "DataTable");
+    }
+
+    #[test]
+    fn test_data_table_brick_assertions() {
+        let table = DataTable::new();
+        let assertions = table.assertions();
+        assert!(!assertions.is_empty());
+    }
+
+    #[test]
+    fn test_data_table_brick_budget() {
+        let table = DataTable::new();
+        let budget = table.budget();
+        assert!(budget.layout_ms > 0);
+    }
+
+    #[test]
+    fn test_data_table_brick_verify() {
+        let table = DataTable::new();
+        let verification = table.verify();
+        assert!(!verification.passed.is_empty());
+        assert!(verification.failed.is_empty());
+    }
+
+    #[test]
+    fn test_data_table_brick_to_html() {
+        let table = DataTable::new();
+        let html = table.to_html();
+        assert!(html.contains("brick-data-table"));
+    }
+
+    #[test]
+    fn test_data_table_brick_to_css() {
+        let table = DataTable::new();
+        let css = table.to_css();
+        assert!(css.contains("brick-data-table"));
+    }
+
+    #[test]
+    fn test_data_table_brick_test_id() {
+        let table = DataTable::new().test_id("my-table");
+        assert_eq!(Brick::test_id(&table), Some("my-table"));
+    }
+
+    // ===== Widget Trait Tests =====
+
+    #[test]
+    fn test_data_table_children_mut_empty() {
+        let mut table = DataTable::new();
+        assert!(table.children_mut().is_empty());
+    }
 }
