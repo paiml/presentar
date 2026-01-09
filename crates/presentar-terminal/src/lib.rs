@@ -43,7 +43,11 @@ pub use error::TuiError;
 pub use input::{InputHandler, KeyBinding};
 
 // Re-export widget types
-pub use widgets::{BrailleGraph, GraphMode, Meter, Table};
+pub use widgets::{
+    BoxPlot, BoxStats, BrailleGraph, ConfusionMatrix, Gauge, GaugeMode, GraphMode, Heatmap,
+    HeatmapCell, HeatmapPalette, MatrixPalette, Meter, NodeId, Normalization, Orientation,
+    Sparkline, Table, Tree, TreeNode, TrendDirection,
+};
 
 // Re-export core types for convenience
 pub use presentar_core::{
