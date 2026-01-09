@@ -1,24 +1,473 @@
-# SPEC-024: Pixel-by-Pixel Recreation of cbtop/ttop Using presentar-terminal
+# SPEC-024: ptop - A Pixel-Perfect ttop Clone Using presentar-terminal
 
-**Status**: Draft → **Under Review**
+**Status**: **INCOMPLETE** - Widgets exist, binary does not
 **Author**: Claude Code
 **Date**: 2026-01-09
-**Version**: 1.2.0
-**Revision**: Added Chaos Engineering strategy, expanded checklist to 125 points (Fuzzing/Stress), refined Accessibility specs.
+**Version**: 2.0.0
+**Breaking Change**: Spec rewritten from widget tests to binary requirements
 
 ## 1. Executive Summary
 
-This specification defines the requirements for a pixel-perfect recreation of the `cbtop` (Compute Block Top) terminal UI from `trueno/crates/cbtop` using exclusively `presentar-terminal` widgets. The goal is to prove that presentar-terminal provides complete feature parity with btop/htop-style terminal interfaces.
+### 1.1 What This Spec Requires
 
-## 2. Background and Motivation
+Build `ptop`: a **runnable binary** that is visually indistinguishable from `ttop` when run side-by-side.
 
-### 2.1 Problem Statement
+```bash
+# These two commands must produce identical terminal output:
+ttop
+ptop
+```
 
-Terminal UI frameworks (TUI) must provide:
-1. High-resolution character graphics (braille, block characters)
-2. Perceptually uniform color gradients
-3. Real-time data visualization
-4. Responsive layouts
+### 1.2 Current State (Honest Assessment)
+
+| Component | ttop (reference) | ptop (target) | Status |
+|-----------|------------------|---------------|--------|
+| Binary | `ttop` in PATH | Does not exist | **MISSING** |
+| Event loop | 50ms tick, 1s refresh | N/A | **MISSING** |
+| Data collectors | sysinfo + /proc | N/A | **MISSING** |
+| Keyboard handling | q,h,c,m,p,k,/,↑↓ | N/A | **MISSING** |
+| Widgets | ratatui-based | presentar-terminal | **EXISTS** (196 tests) |
+
+### 1.3 Deliverable
+
+```
+crates/presentar-terminal/
+├── src/bin/ptop.rs          # ← THIS MUST EXIST
+├── src/ptop/
+│   ├── app.rs               # Application state + collectors
+│   ├── ui.rs                # Layout (calls widgets)
+│   └── input.rs             # Keyboard handling
+└── examples/
+    └── system_dashboard.rs  # Demo (already exists, NOT the deliverable)
+```
+
+### 1.4 Acceptance Criteria
+
+```bash
+# 1. Binary compiles and runs
+cargo build --release -p presentar-terminal --bin ptop
+./target/release/ptop
+
+# 2. Visual diff test passes
+./scripts/visual_diff.sh ttop ptop  # <1% pixel difference
+
+# 3. Keyboard parity
+ptop --help  # Same flags as ttop
+# q=quit, h=help, c=sort:cpu, m=sort:mem, k=kill, /=filter
+```
+
+## 2. Reference Implementation: ttop
+
+### 2.1 ttop Source Structure
+
+Location: `/home/noah/src/trueno-viz/crates/ttop/src/`
+
+```
+ttop/src/
+├── main.rs        (147 lines)   # Entry point, terminal setup, event loop
+├── app.rs         (61KB)        # App state, metric collectors, keybindings
+├── panels.rs      (172KB)       # ALL panel rendering code
+├── ui.rs          (37KB)        # Layout logic, draw dispatch
+├── state.rs       (15KB)        # System state types
+├── theme.rs       (7KB)         # Color definitions
+└── ring_buffer.rs (13KB)        # History storage
+```
+
+### 2.2 ttop Event Loop (what ptop must replicate)
+
+```rust
+// From ttop/src/main.rs - THIS IS THE PATTERN
+fn run_app(terminal: &mut Terminal, mut app: App, cli: &Cli) -> Result<()> {
+    let tick_rate = Duration::from_millis(50);      // UI refresh
+    let collect_interval = Duration::from_millis(cli.refresh);  // Data refresh
+
+    loop {
+        terminal.draw(|f| ui::draw(f, &mut app))?;  // Render frame
+
+        if last_frame.elapsed() >= collect_interval {
+            app.collect_metrics();  // Fetch real CPU/mem/disk/net/proc
+        }
+
+        if event::poll(tick_rate)? {
+            if let Event::Key(key) = event::read()? {
+                if app.handle_key(key.code, key.modifiers) {
+                    return Ok(());  // Quit
+                }
+            }
+        }
+    }
+}
+```
+
+### 2.3 ttop Panels (what ptop must render identically)
+
+| Panel | ttop function | Size | presentar widget |
+|-------|---------------|------|------------------|
+| CPU | `panels::draw_cpu()` | ~2000 lines | `BrailleGraph` + `CpuGrid` |
+| Memory | `panels::draw_memory()` | ~800 lines | `MemoryBar` |
+| Disk | `panels::draw_disk()` | ~600 lines | `Gauge` bars |
+| Network | `panels::draw_network()` | ~1000 lines | `NetworkPanel` |
+| GPU | `panels::draw_gpu()` | ~1500 lines | `BrailleGraph` + `Gauge` |
+| Process | `panels::draw_process()` | ~2500 lines | `ProcessTable` |
+
+## 3. ptop Binary Specification
+
+### 3.1 Required Files
+
+```rust
+// crates/presentar-terminal/src/bin/ptop.rs
+use presentar_terminal::ptop::{App, ui};
+use crossterm::{event, terminal};
+
+fn main() -> Result<()> {
+    let cli = Cli::parse();
+    let app = App::new(cli.refresh);
+
+    terminal::enable_raw_mode()?;
+    // ... terminal setup ...
+
+    run_app(&mut terminal, app, &cli)?;
+
+    terminal::disable_raw_mode()?;
+    Ok(())
+}
+```
+
+### 3.2 Data Collectors (MUST use real system data)
+
+```rust
+// crates/presentar-terminal/src/ptop/collectors.rs
+pub struct Collectors {
+    sys: sysinfo::System,  // Or direct /proc parsing
+}
+
+impl Collectors {
+    pub fn cpu(&mut self) -> Vec<f64>;           // Per-core usage %
+    pub fn memory(&mut self) -> MemoryStats;     // Used/cached/swap
+    pub fn disks(&mut self) -> Vec<DiskStats>;   // Mount, used, total
+    pub fn network(&mut self) -> Vec<NetStats>;  // Interface, rx, tx
+    pub fn processes(&mut self) -> Vec<Process>; // PID, user, cpu%, mem%, cmd
+}
+```
+
+**NOT ACCEPTABLE:**
+```rust
+// This is what system_dashboard.rs does - SIMULATED DATA
+fn simulate_cpu(count: usize) -> Vec<f64> {
+    (0..count).map(|i| 45.0 + 25.0 * (i as f64).sin()).collect()
+}
+```
+
+### 3.3 Keyboard Handling (MUST match ttop)
+
+| Key | ttop behavior | ptop requirement |
+|-----|---------------|------------------|
+| `q` | Quit | Quit |
+| `h` / `?` | Show help overlay | Show help overlay |
+| `c` | Sort processes by CPU | Sort processes by CPU |
+| `m` | Sort processes by memory | Sort processes by memory |
+| `p` | Sort processes by PID | Sort processes by PID |
+| `k` | Kill selected process | Kill selected process |
+| `/` | Filter input | Filter input |
+| `↑`/`↓` | Navigate process list | Navigate process list |
+| `Enter` | Expand/collapse panel | Expand/collapse panel |
+| `1-6` | Toggle panel visibility | Toggle panel visibility |
+
+### 3.4 Layout (MUST match ttop exactly)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ptop - Presentar System Monitor                        uptime: Xd HH:MM:SS │
+├────────────────────────────────┬────────────────────────────────────────────┤
+│ CPU (45% of height)            │ Memory                                     │
+│ ├─ BrailleGraph (history)      │ ├─ BrailleGraph (history)                  │
+│ └─ CpuGrid (per-core)          │ └─ MemoryBar (used/cached/swap)            │
+├────────────────────────────────┼────────────────────────────────────────────┤
+│ Network                        │ Disk                                       │
+│ └─ NetworkPanel (eth0, wlan0)  │ └─ Gauge bars per mount                    │
+├────────────────────────────────┴────────────────────────────────────────────┤
+│ Processes (55% of height)                                                   │
+│ └─ ProcessTable (PID, USER, CPU%, MEM%, COMMAND)                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ [q]quit [h]help [c]cpu [m]mem [p]pid [k]kill [/]filter                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## 4. Implementation Checklist
+
+### 4.1 Phase 1: Skeleton (Day 1)
+
+- [ ] Create `src/bin/ptop.rs` with terminal setup
+- [ ] Create `src/ptop/mod.rs` module structure
+- [ ] Implement basic event loop (quit on 'q')
+- [ ] Render empty frame with header/footer
+
+### 4.2 Phase 2: Data Collectors (Day 2)
+
+- [ ] Add `sysinfo` dependency or implement /proc parsing
+- [ ] Implement `Collectors::cpu()` - real per-core usage
+- [ ] Implement `Collectors::memory()` - real used/cached/swap
+- [ ] Implement `Collectors::disks()` - real mount points
+- [ ] Implement `Collectors::network()` - real interface stats
+- [ ] Implement `Collectors::processes()` - real process list
+
+### 4.3 Phase 3: Panel Rendering (Day 3-4)
+
+- [ ] CPU panel: `BrailleGraph` + `CpuGrid` with real data
+- [ ] Memory panel: `BrailleGraph` + `MemoryBar` with real data
+- [ ] Disk panel: `Gauge` bars per mount with real data
+- [ ] Network panel: `NetworkPanel` with real interface data
+- [ ] Process panel: `ProcessTable` with real process data
+
+### 4.4 Phase 4: Interactivity (Day 5)
+
+- [ ] Process selection (↑/↓ navigation)
+- [ ] Sorting (c/m/p keys)
+- [ ] Filtering (/ key + input)
+- [ ] Process signals (k key + confirmation)
+- [ ] Help overlay (h key)
+- [ ] Panel toggle (1-6 keys)
+
+### 4.5 Phase 5: Visual Parity (Day 6)
+
+- [ ] Run `ttop` and `ptop` side-by-side
+- [ ] Screenshot comparison
+- [ ] Fix any layout/color differences
+- [ ] Pixel diff test passes (<1% difference)
+
+---
+
+## 5. EXTREME FALSIFICATION PROTOCOL
+
+**Purpose**: Definitively prove or disprove the claim "ptop is pixel-perfect identical to ttop"
+
+### 5.1 Binary Existence Tests (F200-F204)
+
+| ID | Test | Falsification Criterion | Command |
+|----|------|------------------------|---------|
+| F200 | ptop binary exists | `which ptop` returns empty | `cargo build -p presentar-terminal --bin ptop && test -x target/debug/ptop` |
+| F201 | ptop runs without panic | Exit code != 0 within 1s | `timeout 1 ptop --help` |
+| F202 | ptop accepts --refresh flag | `--refresh 500` rejected | `ptop --refresh 500 --help` |
+| F203 | ptop accepts --deterministic | Flag not recognized | `ptop --deterministic --help` |
+| F204 | ptop version matches spec | Version != "0.1.0" | `ptop --version` |
+
+### 5.2 Terminal Capture Tests (F210-F219)
+
+```bash
+# Capture methodology: render to PTY, dump ANSI sequences
+script -q -c "ttop --deterministic" /tmp/ttop_capture.txt &
+sleep 2 && kill %1
+script -q -c "ptop --deterministic" /tmp/ptop_capture.txt &
+sleep 2 && kill %1
+```
+
+| ID | Test | Falsification Criterion | Threshold |
+|----|------|------------------------|-----------|
+| F210 | Header line matches | First line differs | Exact match required |
+| F211 | Footer keybindings match | Last line differs | Exact match required |
+| F212 | Panel border chars match | Any ─│┌┐└┘├┤┬┴┼ differs | Exact match required |
+| F213 | Braille chars in CPU panel | Any ⠀-⣿ differs | Exact match required |
+| F214 | Block chars in bars | Any ░▒▓█ differs | Exact match required |
+| F215 | Color escape sequences | ANSI codes differ >5% | <5% difference |
+| F216 | Layout dimensions | Panel sizes differ | ±1 char tolerance |
+| F217 | Process table columns | Column headers differ | Exact match required |
+| F218 | Numeric formatting | CPU%/MEM% format differs | Same precision |
+| F219 | Uptime format | "Xd HH:MM:SS" differs | Exact format match |
+
+### 5.3 Pixel Diff Tests (F220-F229)
+
+```bash
+# Methodology: render to virtual framebuffer, screenshot, ImageMagick compare
+Xvfb :99 -screen 0 1920x1080x24 &
+DISPLAY=:99 xterm -e "ttop --deterministic; sleep 2" &
+import -window root /tmp/ttop.png
+DISPLAY=:99 xterm -e "ptop --deterministic; sleep 2" &
+import -window root /tmp/ptop.png
+compare -metric AE /tmp/ttop.png /tmp/ptop.png /tmp/diff.png
+```
+
+| ID | Test | Falsification Criterion | Threshold |
+|----|------|------------------------|-----------|
+| F220 | Full screen pixel diff | >1% pixels differ | <1% (1920x1080 = <20,736 pixels) |
+| F221 | CPU panel region diff | >0.5% pixels differ | <0.5% |
+| F222 | Memory panel region diff | >0.5% pixels differ | <0.5% |
+| F223 | Network panel region diff | >0.5% pixels differ | <0.5% |
+| F224 | Disk panel region diff | >0.5% pixels differ | <0.5% |
+| F225 | Process table region diff | >1% pixels differ | <1% (scrolling variance) |
+| F226 | Header region diff | >0% pixels differ | Exact match (static) |
+| F227 | Footer region diff | >0% pixels differ | Exact match (static) |
+| F228 | Border region diff | >0% pixels differ | Exact match (static) |
+| F229 | Color gradient accuracy | ΔE > 2 in any gradient | ΔE < 2 (perceptual) |
+
+### 5.4 Behavioral Parity Tests (F230-F249)
+
+| ID | Test | Falsification Criterion | Method |
+|----|------|------------------------|--------|
+| F230 | 'q' quits | Does not exit | Send 'q' via PTY, check exit |
+| F231 | 'h' shows help | No overlay appears | Screenshot before/after 'h' |
+| F232 | 'c' sorts by CPU | Order unchanged | Capture process list, verify sort |
+| F233 | 'm' sorts by memory | Order unchanged | Capture process list, verify sort |
+| F234 | 'p' sorts by PID | Order unchanged | Capture process list, verify sort |
+| F235 | '/' enables filter | No input field | Screenshot after '/' |
+| F236 | '↑' moves selection up | Selection unchanged | Capture before/after |
+| F237 | '↓' moves selection down | Selection unchanged | Capture before/after |
+| F238 | '1' toggles CPU panel | Panel not toggled | Screenshot before/after |
+| F239 | '2' toggles Memory panel | Panel not toggled | Screenshot before/after |
+| F240 | '3' toggles Disk panel | Panel not toggled | Screenshot before/after |
+| F241 | '4' toggles Network panel | Panel not toggled | Screenshot before/after |
+| F242 | '5' toggles GPU panel | Panel not toggled | Screenshot before/after |
+| F243 | '6' toggles Process panel | Panel not toggled | Screenshot before/after |
+| F244 | Enter expands panel | Panel not expanded | Screenshot before/after |
+| F245 | Escape closes overlay | Overlay persists | Screenshot before/after |
+| F246 | Resize handling | Crash on SIGWINCH | Send SIGWINCH, check alive |
+| F247 | Ctrl+C handling | Does not exit cleanly | Send SIGINT, check cleanup |
+| F248 | Mouse scroll in process | List doesn't scroll | Send mouse wheel event |
+| F249 | Mouse click on process | Row not selected | Send mouse click event |
+
+### 5.5 Data Accuracy Tests (F250-F259)
+
+| ID | Test | Falsification Criterion | Method |
+|----|------|------------------------|--------|
+| F250 | CPU % matches /proc/stat | Differs >5% from ground truth | Compare to `mpstat 1 1` |
+| F251 | Memory matches /proc/meminfo | Differs >1% from ground truth | Compare to `free -b` |
+| F252 | Disk matches /proc/mounts | Missing mount points | Compare to `df -h` |
+| F253 | Network matches /proc/net/dev | Differs >5% from ground truth | Compare to `ip -s link` |
+| F254 | Process list matches /proc | Missing PIDs | Compare to `ps aux` |
+| F255 | CPU core count correct | Core count wrong | Compare to `nproc` |
+| F256 | Uptime matches /proc/uptime | Differs >1s | Compare to `uptime -p` |
+| F257 | Load average correct | Differs >0.1 | Compare to `uptime` |
+| F258 | Swap usage correct | Differs >1% | Compare to `free -b` |
+| F259 | Network interface names | Missing interfaces | Compare to `ip link` |
+
+### 5.6 Performance Parity Tests (F260-F269)
+
+| ID | Test | Falsification Criterion | Threshold |
+|----|------|------------------------|-----------|
+| F260 | Frame time vs ttop | ptop >2x slower | ptop ≤ 2x ttop frame time |
+| F261 | Memory usage vs ttop | ptop >2x memory | ptop ≤ 2x ttop RSS |
+| F262 | CPU usage vs ttop | ptop >2x CPU | ptop ≤ 2x ttop CPU% |
+| F263 | Startup time | >500ms to first frame | <500ms |
+| F264 | Input latency | >100ms key response | <100ms |
+| F265 | Refresh rate achieved | <30fps at 1s refresh | ≥30fps |
+| F266 | No memory leak (5min) | RSS grows >10% | <10% growth |
+| F267 | No CPU spike on idle | >5% CPU when idle | <5% CPU |
+| F268 | Resize performance | >500ms to re-layout | <500ms |
+| F269 | 1000 process handling | Frame drop <30fps | ≥30fps |
+
+### 5.7 Automated Falsification Script
+
+```bash
+#!/bin/bash
+# scripts/falsify_ptop.sh - Run ALL falsification tests
+
+set -e
+
+PASS=0
+FAIL=0
+
+falsify() {
+    local id=$1
+    local desc=$2
+    local cmd=$3
+
+    echo -n "[$id] $desc... "
+    if eval "$cmd" >/dev/null 2>&1; then
+        echo "PASS"
+        ((PASS++))
+    else
+        echo "FAIL"
+        ((FAIL++))
+        FAILED_TESTS+=("$id: $desc")
+    fi
+}
+
+# F200: Binary exists
+falsify F200 "ptop binary exists" \
+    "cargo build -p presentar-terminal --bin ptop && test -x target/debug/ptop"
+
+# F201: Runs without panic
+falsify F201 "ptop runs without panic" \
+    "timeout 2 ./target/debug/ptop --deterministic --help"
+
+# F210: Header matches
+falsify F210 "Header line matches ttop" \
+    "diff <(ttop --deterministic 2>&1 | head -1) <(ptop --deterministic 2>&1 | head -1)"
+
+# F220: Pixel diff <1%
+falsify F220 "Full screen pixel diff <1%" \
+    "./scripts/pixel_diff.sh ttop ptop 1.0"
+
+# F230: 'q' quits
+falsify F230 "'q' key quits" \
+    "echo 'q' | timeout 2 ./target/debug/ptop --deterministic"
+
+# F250: CPU accuracy
+falsify F250 "CPU % within 5% of mpstat" \
+    "./scripts/verify_cpu_accuracy.sh ptop 5"
+
+echo ""
+echo "================================"
+echo "FALSIFICATION RESULTS: $PASS passed, $FAIL failed"
+echo "================================"
+
+if [ $FAIL -gt 0 ]; then
+    echo "FAILED TESTS:"
+    for t in "${FAILED_TESTS[@]}"; do
+        echo "  - $t"
+    done
+    exit 1
+fi
+```
+
+### 5.8 Falsification Verdicts
+
+| Result | Meaning | Action |
+|--------|---------|--------|
+| **ALL PASS** | ptop is pixel-perfect ttop clone | Spec complete, ship it |
+| **F200-F204 FAIL** | Binary doesn't exist/run | Phase 1 incomplete |
+| **F210-F219 FAIL** | Terminal output differs | Fix rendering |
+| **F220-F229 FAIL** | Visual appearance differs | Fix layout/colors |
+| **F230-F249 FAIL** | Behavior differs | Fix input handling |
+| **F250-F259 FAIL** | Data inaccurate | Fix collectors |
+| **F260-F269 FAIL** | Performance insufficient | Optimize |
+
+### 5.9 Minimum Viable Falsification
+
+Before claiming "ptop complete", these MUST pass:
+
+```bash
+# MANDATORY - No exceptions
+F200  # Binary exists
+F201  # Runs without panic
+F210  # Header matches
+F220  # <1% pixel diff
+F230  # 'q' quits
+F250  # CPU accuracy
+
+# Run: ./scripts/falsify_ptop.sh --minimum
+```
+
+**If ANY of these fail, ptop is NOT complete. Period.**
+
+---
+
+## 6. What Already Exists (Widget Layer)
+
+The following widgets are implemented and tested (196 falsification tests pass):
+
+| Widget | Tests | Status |
+|--------|-------|--------|
+| `BrailleGraph` | F001-F020 | ✓ Renders braille patterns |
+| `CpuGrid` | F041-F043 | ✓ Per-core sparkline grid |
+| `MemoryBar` | F044-F045 | ✓ Segmented memory bar |
+| `NetworkPanel` | F051-F052 | ✓ Interface list with sparklines |
+| `ProcessTable` | F046-F050 | ✓ Sortable process table |
+| `Gauge` | F056 | ✓ Horizontal bar |
+| `Border` | F057 | ✓ Box drawing |
+
+**These widgets are components.** They are not a product. ptop is the product.
+
+## 6. Background (Preserved)
 
 ### 2.2 Academic Foundation
 
@@ -442,173 +891,166 @@ COVERAGE_MODE=1 cargo test -p presentar-terminal
 
 | ID | Test | Falsification Criterion | Pass |
 |----|------|------------------------|------|
-| F001 | Braille empty is space | `BRAILLE_UP[0] != ' '` | [ ] |
-| F002 | Braille full is ⣿ | `BRAILLE_UP[24] != '⣿'` | [ ] |
-| F003 | Braille array length | `BRAILLE_UP.len() != 25` | [ ] |
-| F004 | Block empty is space | `BLOCK_UP[0] != ' '` | [ ] |
-| F005 | Block full is █ | `BLOCK_UP[24] != '█'` | [ ] |
-| F006 | Block array length | `BLOCK_UP.len() != 25` | [ ] |
-| F007 | TTY uses ASCII only | Any non-ASCII in `TTY_UP` | [ ] |
-| F008 | Sparkline 8 levels | `SPARKLINE.len() != 8` | [ ] |
-| F009 | Sparkline range ▁→█ | `SPARKLINE[0] != '▁' \|\| SPARKLINE[7] != '█'` | [ ] |
-| F010 | Superscript 10 digits | `SUPERSCRIPT.len() != 10` | [ ] |
-| F011 | Subscript 10 digits | `SUBSCRIPT.len() != 10` | [ ] |
-| F012 | Braille pair index formula | `idx = left*5 + right` yields wrong char | [ ] |
-| F013 | Braille left=4,right=0 | `BRAILLE_UP[20] != '⡇'` | [ ] |
-| F014 | Braille left=0,right=4 | `BRAILLE_UP[4] != '⢸'` | [ ] |
-| F015 | Block chars progressive | BLOCK_UP not monotonically increasing | [ ] |
-| F016 | Unicode braille range | Any char outside U+2800-U+28FF | [ ] |
-| F017 | Braille down inverted | BRAILLE_DOWN[24] != '⣿' | [ ] |
-| F018 | Custom symbols fallback | Custom with None data uses Braille | [ ] |
-| F019 | Symbol set default | `SymbolSet::default() != SymbolSet::Braille` | [ ] |
-| F020 | Box drawing chars | Missing ─│┌┐└┘├┤┬┴┼ | [ ] |
+| F001 | Braille empty | `BRAILLE_UP[0]` is not `\u{2800}` (Space) | [ ] |
+| F002 | Braille full | `BRAILLE_UP[24]` is not `\u{28FF}` (⣿) | [ ] |
+| F003 | Braille length | `BRAILLE_UP.len() != 25` | [ ] |
+| F004 | Block empty | `BLOCK_UP[0]` is not ` ` | [ ] |
+| F005 | Block full | `BLOCK_UP[24]` is not `\u{2588}` (█) | [ ] |
+| F006 | Block length | `BLOCK_UP.len() != 25` | [ ] |
+| F007 | TTY Purity | Any character in `TTY_UP` has code point > 127 | [ ] |
+| F008 | Sparkline levels | `SPARKLINE.len() != 8` | [ ] |
+| F009 | Sparkline range | `SPARKLINE[0]` != `\u{2581}` or `SPARKLINE[7]` != `\u{2588}` | [ ] |
+| F010 | Superscript | `to_superscript("0123456789")` contains non-superscript chars | [ ] |
+| F011 | Subscript | `to_subscript("0123456789")` contains non-subscript chars | [ ] |
+| F012 | Braille Formula | `left=2, right=3` does not yield `\u{28B6}` (⣦) | [ ] |
+| F013 | Braille Corner L | `left=4, right=0` does not yield `\u{2807}` (⡇) | [ ] |
+| F014 | Braille Corner R | `left=0, right=4` does not yield `\u{2838}` (⢸) | [ ] |
+| F015 | Monotonicity | `BLOCK_UP[i]` visual density <= `BLOCK_UP[i-1]` | [ ] |
+| F016 | Unicode Range | Any `BRAILLE_UP` char outside `U+2800`..`U+28FF` | [ ] |
+| F017 | Inversion | `BRAILLE_DOWN[24]` is not `\u{28FF}` | [ ] |
+| F018 | Custom Fallback | `CustomSet::None` does not render as `SymbolSet::Braille` | [ ] |
+| F019 | Set Default | `SymbolSet::default()` is not `SymbolSet::Braille` | [ ] |
+| F020 | Box Geometry | Missing any of: `─│┌┐└┘├┤┬┴┼╭╮╯╰` | [ ] |
 
 ### Section B: Color System (F021-F040)
 
 | ID | Test | Falsification Criterion | Pass |
 |----|------|------------------------|------|
-| F021 | LAB interpolation midpoint | RGB(red→blue).sample(0.5) differs from LAB(red→blue).sample(0.5) by >ΔE 5 | [ ] |
-| F022 | Gradient 0.0 returns start | `gradient.sample(0.0) != stops[0]` | [ ] |
-| F023 | Gradient 1.0 returns end | `gradient.sample(1.0) != stops[last]` | [ ] |
-| F024 | Gradient clamping | `sample(-0.5)` or `sample(1.5)` panics | [ ] |
-| F025 | 256-color grayscale | Gray not mapped to 232-255 range | [ ] |
-| F026 | 256-color cube | RGB not mapped to 16-231 cube | [ ] |
-| F027 | 16-color mapping | Bright colors not distinguished | [ ] |
-| F028 | ColorMode detection TrueColor | `COLORTERM=truecolor` not detected | [ ] |
-| F029 | ColorMode detection 256 | `TERM=xterm-256color` not detected | [ ] |
-| F030 | ColorMode fallback | Missing TERM defaults to Mono; Unknown TERM defaults to Color16 | [ ] |
-| F031 | RGB to ANSI escape | `Color(1,0,0)` != `\x1b[38;2;255;0;0m` | [ ] |
-| F032 | Theme tokyo_night colors | Any color != spec | [ ] |
-| F033 | Theme dracula colors | Any color != spec | [ ] |
-| F034 | Theme nord colors | Any color != spec | [ ] |
-| F035 | Theme monokai colors | Any color != spec | [ ] |
-| F036 | CPU gradient green→yellow→red | Incorrect interpolation order | [ ] |
-| F037 | Memory gradient distinct | CPU and Memory gradients identical | [ ] |
-| F038 | Gradient for_percent(50) | Returns middle color | [ ] |
-| F039 | Gradient 3-stop correct | `Gradient::three(R,G,B).sample(0.5)` not equal to G ±ΔE 2 | [ ] |
-| F040 | Color alpha handling | Alpha != 1.0 causes rendering issues | [ ] |
+| F021 | LAB Midpoint | `interpolate_lab(Red, Blue, 0.5)` ΔE > 2.0 vs target | [ ] |
+| F022 | Stop 0.0 | `gradient.sample(0.0)` != first stop color | [ ] |
+| F023 | Stop 1.0 | `gradient.sample(1.0)` != last stop color | [ ] |
+| F024 | Clamping | `sample(-1.0)` or `sample(2.0)` does not return edge stops | [ ] |
+| F025 | 256 Grayscale | `Color::gray(0.5)` maps outside `232..255` range | [ ] |
+| F026 | 256 Cube | `Color::RGB(255,0,0)` maps to index != 196 | [ ] |
+| F027 | 16-Color | Bright variant matches normal variant exactly | [ ] |
+| F028 | Env TrueColor | `COLORTERM=truecolor` results in `ColorMode::Color16` | [ ] |
+| F029 | Env 256 | `TERM=xterm-256color` results in `ColorMode::Color16` | [ ] |
+| F030 | Fallback Logic | Missing `TERM` results in anything other than `ColorMode::Mono` | [ ] |
+| F031 | ANSI Sequence | `Color::RED.to_ansi_fg()` != `\x1b[38;2;255;0;0m` | [ ] |
+| F032 | Tokyo Night | `bg` color != `#1a1b26` | [ ] |
+| F033 | Dracula | `bg` color != `#282a36` | [ ] |
+| F034 | Nord | `bg` color != `#2e3440` | [ ] |
+| F035 | Monokai | `bg` color != `#272822` | [ ] |
+| F036 | CPU Grad Order | `gradient.sample(0.1)` luminance < `sample(0.9)` luminance | [ ] |
+| F037 | Gradient Dist | `CpuGrad` and `MemGrad` have same hex values | [ ] |
+| F038 | Percent Match | `gradient.for_percent(50)` != `gradient.sample(0.5)` | [ ] |
+| F039 | 3-Stop Logic | Middle stop at `t=0.5` does not equal input color | [ ] |
+| F040 | Alpha Blending | `Alpha < 1.0` is ignored by `DiffRenderer` | [ ] |
 
 ### Section C: Widget Layout (F041-F060)
 
 | ID | Test | Falsification Criterion | Pass |
 |----|------|------------------------|------|
-| F041 | CpuGrid 8 columns | Default columns != 8 | [ ] |
-| F042 | CpuGrid compact mode | Compact not reducing height | [ ] |
-| F043 | CpuGrid empty data | Empty data causes panic | [ ] |
-| F044 | MemoryBar segments sum | Segments don't sum to 100% | [ ] |
-| F045 | MemoryBar labels visible | Labels outside bounds | [ ] |
-| F046 | ProcessTable header row | No header row rendered | [ ] |
-| F047 | ProcessTable separator | No separator line after header | [ ] |
-| F048 | ProcessTable selection | Selected row not highlighted | [ ] |
-| F049 | ProcessTable sorting | Sort not affecting order | [ ] |
-| F050 | ProcessTable scrolling | Scroll offset incorrect | [ ] |
-| F051 | NetworkPanel compact | Compact mode not single line | [ ] |
-| F052 | NetworkPanel RX/TX colors | RX not green, TX not red | [ ] |
-| F053 | BrailleGraph range | Data outside range clips | [ ] |
-| F054 | BrailleGraph width | Graph exceeds bounds | [ ] |
-| F055 | Sparkline normalization | Max value not mapped to █ | [ ] |
-| F056 | Gauge percentage | 100% not full bar | [ ] |
-| F057 | Border styles | All BorderStyle variants render | [ ] |
-| F058 | Tree indentation | Child nodes not indented | [ ] |
-| F059 | Scrollbar position | Position not matching content | [ ] |
-| F060 | Heatmap cell bounds | Cells overflow grid | [ ] |
+| F041 | CpuGrid Grid | 16 cores with `cols=8` results in height != 2 | [ ] |
+| F042 | CpuGrid Compact | `compact()` does not remove whitespace between bars | [ ] |
+| F043 | CpuGrid Empty | `CpuGrid::new(vec![])` results in panic | [ ] |
+| F044 | Memory Segments | Bar length sum != widget width - labels | [ ] |
+| F045 | Memory Labels | Used/Free labels missing from `MemoryBar` output | [ ] |
+| F046 | Proc Header | First line does not contain `PID` and `COMMAND` | [ ] |
+| F047 | Proc Sep | Second line is not a separator character | [ ] |
+| F048 | Selection | Selected row lacks `\x1b[7m` (Inverse) or unique bg | [ ] |
+| F049 | Proc Sorting | `sort_by(Cpu)` leaves lower CPU usage above higher | [ ] |
+| F050 | Scrolling | `selected=50` in `height=10` leaves `scroll_offset=0` | [ ] |
+| F051 | Net Compact | `NetworkPanel::compact()` height > 1 per interface | [ ] |
+| F052 | Net Directions | RX lacks `↓` or TX lacks `↑` symbol | [ ] |
+| F053 | Graph Clipping | Values > 100.0 or < 0.0 cause crash | [ ] |
+| F054 | Graph Bounds | `paint()` writes outside assigned `Rect` | [ ] |
+| F055 | Spark Normal | `[10, 20, 30]` and `[100, 200, 300]` render different shapes | [ ] |
+| F056 | Gauge 100% | `100%` renders any empty cells (`░`) | [ ] |
+| F057 | Border Join | Adjacent borders show gaps or broken intersections | [ ] |
+| F058 | Tree Nesting | Depth 2 node has same indentation as Depth 1 | [ ] |
+| F059 | Scrollbar | Content at 50% results in thumb at top/bottom | [ ] |
+| F060 | Heatmap | Cell at `(x,y)` rendered at `(y,x)` | [ ] |
 
 ### Section D: Text Rendering (F061-F075)
 
 | ID | Test | Falsification Criterion | Pass |
 |----|------|------------------------|------|
-| F061 | Default text not black | `TextStyle::default().color` is black | [ ] |
-| F062 | PID column visible | PID rendered as black | [ ] |
-| F063 | USER column visible | USER rendered as black | [ ] |
-| F064 | COMMAND column visible | COMMAND rendered as black | [ ] |
-| F065 | Interface name visible | eth0/wlan0 rendered as black | [ ] |
-| F066 | Selected text white | Selected row not white | [ ] |
-| F067 | Header bold | Headers not bold weight | [ ] |
-| F068 | Dim text distinct | Dim same as foreground | [ ] |
-| F069 | Text truncation | Long text overflows | [ ] |
-| F070 | Text alignment | Right-align not working | [ ] |
-| F071 | Superscript rendering | to_superscript(123) != "¹²³" | [ ] |
-| F072 | Subscript rendering | to_subscript(123) != "₁₂₃" | [ ] |
-| F073 | Unicode width | Wide chars break layout | [ ] |
-| F074 | Empty string | Empty text causes panic | [ ] |
-| F075 | Newline handling | Newline chars break layout | [ ] |
+| F061 | Default Style | `TextStyle::default()` uses black foreground on black background | [ ] |
+| F062 | Column: PID | `PID` column values are missing or zero-padded incorrectly | [ ] |
+| F063 | Column: USER | `USER` column contains UID instead of name | [ ] |
+| F064 | Column: CMD | `COMMAND` column is empty for kernel processes | [ ] |
+| F065 | Net Labels | `eth0` label contains non-printable characters | [ ] |
+| F066 | Highlight Text | Selected row text color == non-selected text color | [ ] |
+| F067 | Weight: Bold | `FontWeight::Bold` does not emit `\x1b[1m` | [ ] |
+| F068 | Weight: Dim | `FontWeight::Dim` does not emit `\x1b[2m` | [ ] |
+| F069 | Truncation | String of 100 chars in 10-wide cell doesn't end in `..` | [ ] |
+| F070 | Alignment | Right-aligned numeric "5" is at `x=0` in 5-wide cell | [ ] |
+| F071 | Super Map | `to_superscript('1')` != `¹` (`\u{00B9}`) | [ ] |
+| F072 | Sub Map | `to_subscript('1')` != `₁` (`\u{2081}`) | [ ] |
+| F073 | Unicode Width | `한` (wide) takes only 1 cell in `CellBuffer` | [ ] |
+| F074 | Zero String | `""` results in index out of bounds | [ ] |
+| F075 | Line Breaks | `\n` in string results in vertical line shift during `paint()` | [ ] |
 
 ### Section E: Performance (F076-F085)
 
-**Methodology**: Performance tests use `std::time::Instant` with tolerance multipliers for coverage instrumentation (50x overhead acceptable for P1, 5000x for P2).
-
-| ID | Test | Falsification Criterion | Tolerance |
-|----|------|------------------------|-----------|
-| F076 | Frame budget 16ms | Full 80×24 redraw > 16ms | 50ms w/ coverage |
-| F077 | Steady-state alloc | `#[global_allocator]` counter > 0 after 100 frames | N/A |
-| F078 | Diff render efficiency | `DiffRenderer::stats().cells_written > 0.1 * total` when unchanged | N/A |
-| F079 | Large data handling | BrailleGraph(10K points) paint > 100ms | 500ms w/ coverage |
-| F080 | Process table 1000 rows | ProcessTable(1000).paint() > 100ms | 500ms w/ coverage |
-| F081 | CellBuffer reuse | `CellBuffer::new()` called per frame | N/A |
-| F082 | Color conversion cache | Same RGB→ANSI computed twice in hot path | N/A |
-| F083 | String formatting | `format!()` in Widget::paint() | N/A |
-| F084 | Widget measure cost | Any widget.measure() > 1ms | 5ms w/ coverage |
-| F085 | Paint cost | Full screen paint > 8ms | 40ms w/ coverage |
+| ID | Test | Falsification Criterion | Pass |
+|----|------|------------------------|------|
+| F076 | Frame Budget | `paint()` + `flush()` for 80x24 area > 16.6ms | [ ] |
+| F077 | Warmup Alloc | `GlobalAlloc` counter increases after frame 100 | [ ] |
+| F078 | Diff Efficiency | `flush()` returns > 5% changed cells for static UI | [ ] |
+| F079 | Scalability | `BrailleGraph` with 10^6 points paint() > 50ms | [ ] |
+| F080 | Table Load | `ProcessTable` with 5000 rows paint() > 20ms | [ ] |
+| F081 | Buffer Reuse | `CellBuffer` heap address changes between frames | [ ] |
+| F082 | Color Cache | `RGB -> ANSI` conversion happens > 1 time per unique color | [ ] |
+| F083 | Hot Path Allocs | `std::fmt::format!` called inside any `Widget::paint` | [ ] |
+| F084 | Measurement | `widget.measure()` takes > 1.0ms | [ ] |
+| F085 | Canvas Cost | `fill_rect` cost > 2ns per cell | [ ] |
 
 ### Section F: Integration (F086-F100)
 
 | ID | Test | Falsification Criterion | Pass |
 |----|------|------------------------|------|
-| F086 | system_dashboard runs | Example crashes or panics | [ ] |
-| F087 | All examples compile | Any example fails to build | [ ] |
-| F088 | Widget composition | Nested widgets break layout | [ ] |
-| F089 | Theme switching | Runtime theme change fails | [ ] |
-| F090 | ColorMode runtime | Mode switch causes artifacts | [ ] |
-| F091 | Terminal resize | Resize causes crash | [ ] |
-| F092 | Empty terminal | 0x0 terminal handled | [ ] |
-| F093 | Minimum terminal | 20x10 minimum works | [ ] |
-| F094 | Input handling | Keyboard events processed | [ ] |
-| F095 | Mouse support | Mouse events cause crash | [ ] |
-| F096 | SIGWINCH handling | Window resize signal handled | [ ] |
-| F097 | Raw mode cleanup | Terminal not restored on exit | [ ] |
-| F098 | Alternate screen | Screen not restored on panic | [ ] |
-| F099 | cbtop widget source | Any widget NOT from presentar-terminal | [ ] |
-| F100 | Pixel diff baseline | Output differs from baseline >1% | [ ] |
+| F086 | App Runtime | `ptop` binary panics within 60 seconds of start | [ ] |
+| F087 | Compilation | `cargo build --features ptop` fails | [ ] |
+| F088 | Composition | Nested `Border` in `Border` corrupts inner title | [ ] |
+| F089 | Hot Theme | Changing `Theme` at runtime leaves artifacts | [ ] |
+| F090 | Mode Toggle | Switching `TrueColor -> Mono` requires app restart | [ ] |
+| F091 | Resize Safety | `SIGWINCH` results in `IndexOutOfBounds` | [ ] |
+| F092 | Zero Terminal | `0x0` terminal size results in divide-by-zero | [ ] |
+| F093 | Min Terminal | `20x10` size results in overlapping text | [ ] |
+| F094 | Event Loop | Keypress 'q' does not terminate process | [ ] |
+| F095 | Mouse Trap | Mouse click on CPU graph results in panic | [ ] |
+| F096 | Signal Hold | UI continues drawing during `SIGSTOP` | [ ] |
+| F097 | Terminal Exit | Terminal state (Raw/Alt) not restored on `Ctrl+C` | [ ] |
+| F098 | Panic Clean | App panic leaves terminal in broken state | [ ] |
+| F099 | Widget Origin | `ptop` uses any widget from `tui-rs` or `ratatui` | [ ] |
+| F100 | Pixel Diff | `compare -metric AE` vs `ttop` baseline > 1.0% | [ ] |
 
-### Section G: Edge Cases & Boundary Conditions (F101-F115)
-
-| ID | Test | Falsification Criterion | Pass |
-|----|------|------------------------|------|
-| F101 | NaN data handling | `BrailleGraph::set_data([NaN])` panics | [ ] |
-| F102 | Inf data handling | `Gauge::new(f64::INFINITY, 100.0)` panics | [ ] |
-| F103 | Negative values | `MemoryBar::new(-50.0)` panics | [ ] |
-| F104 | Zero-width terminal | `CellBuffer::new(0, 24)` panics | [ ] |
-| F105 | Zero-height terminal | `CellBuffer::new(80, 0)` panics | [ ] |
-| F106 | Single-cell render | Widget renders incorrectly in 1×1 | [ ] |
-| F107 | UTF-8 boundary | Multi-byte char split causes panic | [ ] |
-| F108 | Emoji handling | 👨‍👩‍👧‍👦 (ZWJ sequence) breaks layout | [ ] |
-| F109 | RTL text | Arabic/Hebrew text renders incorrectly | [ ] |
-| F110 | 100K data points | BrailleGraph with 100K points OOMs | [ ] |
-| F111 | Rapid resize | 100 resize events/sec causes crash | [ ] |
-| F112 | Theme hot-swap | Theme change mid-render causes artifact | [ ] |
-| F113 | Concurrent updates | Race between data update and paint | [ ] |
-| F114 | Signal during render | SIGWINCH during paint() corrupts state | [ ] |
-| F115 | Ctrl+C cleanup | SIGINT leaves terminal in raw mode | [ ] |
-
-### Section H: Accessibility Compliance (F116-F120)
+### Section G: Accessibility & Input (F101-F115)
 
 | ID | Test | Falsification Criterion | Pass |
 |----|------|------------------------|------|
-| F116 | Text contrast ratio | Any theme fg/bg contrast < 4.5:1 | [ ] |
-| F117 | Color-only information | Critical info uses only color (no text/symbol) | [ ] |
-| F118 | Focus indication | Focused widget not visually distinct | [ ] |
-| F119 | Keyboard navigable | Any widget unreachable via keyboard | [ ] |
-| F120 | Screen reader labels | Widget.accessibility().label is None for interactive | [ ] |
+| F101 | Contrast Ratio | `Foreground` vs `Background` contrast < 4.5:1 | [ ] |
+| F102 | UI Contrast | `Border` or `Graph` color vs `Background` contrast < 3.0:1 | [ ] |
+| F103 | Protanopia | Red/Green gradients remain indistinguishable in Protan mode | [ ] |
+| F104 | Deuteranopia | Red/Green gradients remain indistinguishable in Deutan mode | [ ] |
+| F105 | Tab Navigation | `Tab` key does not cycle focus between panels | [ ] |
+| F106 | Focus Cue | Focused panel has same border color as unfocused | [ ] |
+| F107 | Screen Reader | `accessibility().label` is `None` for any visible widget | [ ] |
+| F108 | Motion | `reduce_motion=true` does not disable graph animations | [ ] |
+| F109 | Key Hints | Keybindings footer is missing or incorrect | [ ] |
+| F110 | Font Scale | `TermFontSize=24` results in text truncation | [ ] |
+| F111 | Input Lag | `Key -> Screen` latency > 50ms | [ ] |
+| F112 | Mouse Wheel | `Scroll` event ignored by `ProcessTable` | [ ] |
+| F113 | Selection | `Click` event fails to update `selected` index | [ ] |
+| F114 | Artifacts | Fast dragging of terminal window leaves ghost characters | [ ] |
+| F115 | Clipboard | Copying `BrailleGraph` results in replacement chars () | [ ] |
 
-### Section I: Chaos Engineering (F121-F125)
+### Section H: Stability & Stress (F116-F125)
 
 | ID | Test | Falsification Criterion | Pass |
 |----|------|------------------------|------|
-| F121 | Fuzzing Input | Panic on random bytes > 1MB | [ ] |
-| F122 | Fuzzing Config | Panic on malformed config file | [ ] |
-| F123 | Faulty I/O | Panic when data source hangs/errors | [ ] |
-| F124 | OOM Recovery | Non-graceful exit on allocation failure | [ ] |
-| F125 | Terminal Corrupt | Artifacts persist after random write to stdout | [ ] |
+| F116 | Soak Test | Memory usage increases by > 1MB over 1 hour | [ ] |
+| F117 | Resize Bomb | 1000 resizes/sec results in race condition or crash | [ ] |
+| F118 | Data Flood | `1MHz` data update rate freezes UI thread | [ ] |
+| F119 | Empty State | All widgets fail to render when data is `[]` | [ ] |
+| F120 | Floating Point | `NaN` or `Inf` metrics result in app panic | [ ] |
+| F121 | UTF-8 Fuzz | Random byte input stream crashes `InputHandler` | [ ] |
+| F122 | Config Fuzz | 1KB random noise in `config.toml` causes panic | [ ] |
+| F123 | I/O Timeout | Blocked `stdout` results in unbuffered memory growth | [ ] |
+| F124 | Alt-Tab | App fails to redraw after returning from background | [ ] |
+| F125 | Thread Safety | `App::on_tick` and `UI::draw` on different threads crash | [ ] |
 
 ---
 
@@ -687,5 +1129,6 @@ This specification provides a rigorous framework for proving that `presentar-ter
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-| 1.0.0 | 2026-01-09 | Claude Code | Initial specification |
-| 1.1.0 | 2026-01-09 | Claude Code | Added sections 8-10 (Accessibility, Error Handling, Concurrency); Strengthened falsification criteria (F021, F030, F039, F076-F085); Added tolerance methodology; Fixed ColorMode fallback documentation; Added compliance summary |
+| 1.0.0 | 2026-01-09 | Claude Code | Initial specification - widget-focused |
+| 1.1.0 | 2026-01-09 | Claude Code | Added accessibility, error handling, concurrency sections; 196 widget tests |
+| **2.0.0** | 2026-01-09 | Claude Code | **BREAKING**: Rewrote spec from widget tests to ptop binary requirements. Acknowledged that widgets exist but product (ptop binary) does not. Added: reference implementation analysis (ttop source), binary specification, data collector requirements, keyboard handling matrix, implementation checklist with phases. Status changed to INCOMPLETE. |
