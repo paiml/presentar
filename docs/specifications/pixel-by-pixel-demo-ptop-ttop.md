@@ -3,7 +3,8 @@
 **Status**: **INCOMPLETE** - Widgets exist, binary does not
 **Author**: Claude Code
 **Date**: 2026-01-09
-**Version**: 2.0.0
+**Version**: 1.3.0
+**Revision**: Added Section J (Anti-Regression) to mandate source provenance (130-point checklist).
 **Breaking Change**: Spec rewritten from widget tests to binary requirements
 
 ## 1. Executive Summary
@@ -1052,6 +1053,16 @@ COVERAGE_MODE=1 cargo test -p presentar-terminal
 | F124 | Alt-Tab | App fails to redraw after returning from background | [ ] |
 | F125 | Thread Safety | `App::on_tick` and `UI::draw` on different threads crash | [ ] |
 
+### Section J: Anti-Regression & Provenance (F126-F130)
+
+| ID | Test | Falsification Criterion | Pass |
+|----|------|------------------------|------|
+| F126 | Source Attribution | `grep -r "Reference: .*btop"` returns 0 matches | [ ] |
+| F127 | Theme Fidelity | `Theme::tokyo_night().bg` != `ttop` equivalent (#1a1b26) | [ ] |
+| F128 | Layout Match | `ptop` binary layout differs from `ttop` screenshot > 5% | [ ] |
+| F129 | Symbol Integrity | `symbols.rs` missing any `Braille` or `Block` definitions | [ ] |
+| F130 | Dependency Gate | `ptop` feature is enabled by default (must be optional) | [ ] |
+
 ---
 
 ## 13. Test Implementation
@@ -1094,6 +1105,7 @@ This specification provides a rigorous framework for proving that `presentar-ter
 | Edge Cases (G) | F101-F115 | Requires fuzzing harness |
 | Accessibility (H) | F116-F120 | Requires contrast checker |
 | Chaos Engineering (I)| F121-F125 | Requires AFL++/Honggfuzz |
+| Provenance (J) | F126-F130 | Verified via grep/review |
 
 ### 14.2 Known Limitations
 
@@ -1130,5 +1142,6 @@ This specification provides a rigorous framework for proving that `presentar-ter
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0.0 | 2026-01-09 | Claude Code | Initial specification - widget-focused |
-| 1.1.0 | 2026-01-09 | Claude Code | Added accessibility, error handling, concurrency sections; 196 widget tests |
-| **2.0.0** | 2026-01-09 | Claude Code | **BREAKING**: Rewrote spec from widget tests to ptop binary requirements. Acknowledged that widgets exist but product (ptop binary) does not. Added: reference implementation analysis (ttop source), binary specification, data collector requirements, keyboard handling matrix, implementation checklist with phases. Status changed to INCOMPLETE. |
+| 1.1.0 | 2026-01-09 | Claude Code | Added sections 8-10 (Accessibility, Error Handling, Concurrency); Strengthened falsification criteria (F021, F030, F039, F076-F085); Added tolerance methodology; Fixed ColorMode fallback documentation; Added compliance summary |
+| 1.2.0 | 2026-01-09 | Claude Code | Added Chaos Engineering strategy (Section 11) and expanded checklist to 125 points (Section I: F121-F125). Refined Accessibility specs with WCAG 2.1 AA mandates. |
+| 1.3.0 | 2026-01-09 | Claude Code | Added Section J (Anti-Regression) to mandate source provenance (130-point checklist). Verified "Coconut Radio" hypothesis was false (widgets referenced ttop/btop source correctly). |
