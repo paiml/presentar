@@ -9,6 +9,7 @@ members = [
     "crates/presentar-test-macros",
     "crates/presentar",
     "crates/presentar-cli",
+    "crates/presentar-terminal",
 ]
 
 [workspace.package]

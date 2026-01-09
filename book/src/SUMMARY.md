@@ -122,6 +122,10 @@
 - [Code Review Checklist](./development/code-review.md)
 - [Makefile Targets](./development/makefile-targets.md)
 
+# Terminal Backend
+
+- [Direct Backend](./terminal/direct-backend.md)
+
 # Advanced Topics
 
 - [GPU Rendering](./advanced/gpu-rendering.md)
