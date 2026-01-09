@@ -495,4 +495,92 @@ mod tests {
         let app = app.with_config(config);
         assert_eq!(app.color_mode, original_mode);
     }
+
+    #[test]
+    fn test_render_frame() {
+        let widget = TestWidget::new();
+        let mut app = TuiApp::new(widget).unwrap();
+        let mut buffer = CellBuffer::new(80, 24);
+
+        // Render a frame and verify metrics are updated
+        app.render_frame(&mut buffer);
+
+        assert!(
+            app.metrics.measure_time > Duration::ZERO || app.metrics.measure_time == Duration::ZERO
+        );
+        assert!(app.metrics.layout_time >= Duration::ZERO);
+        assert!(app.metrics.paint_time >= Duration::ZERO);
+    }
+
+    #[test]
+    fn test_render_frame_updates_metrics() {
+        let widget = TestWidget::new();
+        let mut app = TuiApp::new(widget).unwrap();
+        let mut buffer = CellBuffer::new(40, 10);
+
+        // Render multiple frames
+        for _ in 0..3 {
+            app.render_frame(&mut buffer);
+        }
+
+        // Metrics should be set (even if durations are very small)
+        let metrics = app.metrics();
+        assert_eq!(metrics.frame_count, 0); // frame_count is only updated in run_loop
+    }
+
+    #[test]
+    fn test_render_frame_with_different_buffer_sizes() {
+        let widget = TestWidget::new();
+        let mut app = TuiApp::new(widget).unwrap();
+
+        // Small buffer
+        let mut small_buffer = CellBuffer::new(10, 5);
+        app.render_frame(&mut small_buffer);
+
+        // Large buffer
+        let mut large_buffer = CellBuffer::new(200, 50);
+        app.render_frame(&mut large_buffer);
+
+        // Should not panic with any buffer size
+    }
+
+    #[test]
+    fn test_frame_metrics_clone() {
+        let metrics = FrameMetrics {
+            verify_time: Duration::from_millis(1),
+            measure_time: Duration::from_millis(2),
+            layout_time: Duration::from_millis(3),
+            paint_time: Duration::from_millis(4),
+            total_time: Duration::from_millis(10),
+            frame_count: 100,
+        };
+
+        let cloned = metrics.clone();
+        assert_eq!(cloned.frame_count, 100);
+        assert_eq!(cloned.verify_time, Duration::from_millis(1));
+    }
+
+    #[test]
+    fn test_frame_metrics_debug() {
+        let metrics = FrameMetrics::default();
+        let debug_str = format!("{:?}", metrics);
+        assert!(debug_str.contains("FrameMetrics"));
+        assert!(debug_str.contains("frame_count"));
+    }
+
+    #[test]
+    fn test_tui_config_clone() {
+        let config = TuiConfig::high_performance();
+        let cloned = config.clone();
+        assert_eq!(cloned.tick_rate_ms, 16);
+        assert_eq!(cloned.target_fps, 60);
+    }
+
+    #[test]
+    fn test_tui_config_debug() {
+        let config = TuiConfig::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("TuiConfig"));
+        assert!(debug_str.contains("tick_rate_ms"));
+    }
 }

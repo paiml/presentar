@@ -125,6 +125,7 @@
 # Terminal Backend
 
 - [Direct Backend](./terminal/direct-backend.md)
+- [Monitoring Examples](./terminal/monitoring-examples.md)
 
 # Advanced Topics
 
