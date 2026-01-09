@@ -788,4 +788,106 @@ mod tests {
         let leaf = TreeNode::new(1, "Leaf");
         assert_eq!(leaf.depth(), 1);
     }
+
+    #[test]
+    fn test_tree_paint_collapsed_node() {
+        // Test collapsed indicator (▶)
+        let root = TreeNode::new(1, "Root").with_child(TreeNode::new(2, "Child"));
+        let mut tree = Tree::new().with_root(root);
+        tree.collapse(NodeId::new(1)); // Collapse the root
+        tree.bounds = Rect::new(0.0, 0.0, 40.0, 10.0);
+
+        let mut canvas = MockCanvas::new();
+        tree.paint(&mut canvas);
+
+        // Should paint collapsed indicator
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains("▶")));
+    }
+
+    #[test]
+    fn test_tree_paint_with_info() {
+        // Test info display
+        let root = TreeNode::new(1, "Root").with_info("Info text");
+        let mut tree = Tree::new().with_root(root).with_info(true);
+        tree.bounds = Rect::new(0.0, 0.0, 60.0, 10.0);
+
+        let mut canvas = MockCanvas::new();
+        tree.paint(&mut canvas);
+
+        // Should paint info text
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains("Info text")));
+    }
+
+    #[test]
+    fn test_tree_paint_nested_expanded() {
+        // Test branch prefixes with nested children
+        let root = TreeNode::new(1, "Root")
+            .with_child(
+                TreeNode::new(2, "Child1")
+                    .with_child(TreeNode::new(4, "GrandChild1"))
+                    .with_child(TreeNode::new(5, "GrandChild2")),
+            )
+            .with_child(TreeNode::new(3, "Child2"));
+        let mut tree = Tree::new().with_root(root).expand_all();
+        tree.bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+
+        let mut canvas = MockCanvas::new();
+        tree.paint(&mut canvas);
+
+        // Should paint multiple levels with branch characters
+        assert!(canvas.texts.len() > 5);
+    }
+
+    #[test]
+    fn test_tree_paint_not_last_child() {
+        // Test branch tee (├──) for non-last children
+        let root = TreeNode::new(1, "Root")
+            .with_child(TreeNode::new(2, "Child1"))
+            .with_child(TreeNode::new(3, "Child2"))
+            .with_child(TreeNode::new(4, "Child3"));
+        let mut tree = Tree::new().with_root(root);
+        tree.bounds = Rect::new(0.0, 0.0, 40.0, 10.0);
+
+        let mut canvas = MockCanvas::new();
+        tree.paint(&mut canvas);
+
+        // Should paint multiple children (root + 3 children = 4 nodes)
+        // Branch chars are in the same text as the prefix
+        assert!(canvas.texts.len() >= 4);
+    }
+
+    #[test]
+    fn test_tree_paint_scrolled() {
+        // Test paint with scroll offset (y < bounds.y case)
+        let root = TreeNode::new(1, "Root")
+            .with_child(TreeNode::new(2, "Child1"))
+            .with_child(TreeNode::new(3, "Child2"));
+        let mut tree = Tree::new().with_root(root);
+        tree.set_scroll(5);
+        tree.bounds = Rect::new(0.0, 0.0, 40.0, 10.0);
+
+        let mut canvas = MockCanvas::new();
+        tree.paint(&mut canvas);
+        // Should handle scroll offset without panic
+    }
+
+    #[test]
+    fn test_tree_paint_deep_nesting() {
+        // Test deep nesting with branch pipes
+        let grandchild =
+            TreeNode::new(4, "GrandChild").with_child(TreeNode::new(5, "GreatGrandChild"));
+        let child1 = TreeNode::new(2, "Child1").with_child(grandchild);
+        let child2 = TreeNode::new(3, "Child2");
+        let root = TreeNode::new(1, "Root")
+            .with_child(child1)
+            .with_child(child2);
+        let mut tree = Tree::new().with_root(root).expand_all();
+        tree.bounds = Rect::new(0.0, 0.0, 80.0, 20.0);
+
+        let mut canvas = MockCanvas::new();
+        tree.paint(&mut canvas);
+
+        // Should render deep structure
+        assert!(canvas.texts.len() >= 5);
+    }
 }

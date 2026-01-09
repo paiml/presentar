@@ -1,5 +1,6 @@
 //! Time-series graph widget with multiple render modes.
 
+use crate::theme::Gradient;
 use presentar_core::{
     Brick, BrickAssertion, BrickBudget, BrickVerification, Canvas, Color, Constraints, Event,
     LayoutResult, Point, Rect, Size, TextStyle, TypeId, Widget,
@@ -24,6 +25,8 @@ pub enum GraphMode {
 pub struct BrailleGraph {
     data: Vec<f64>,
     color: Color,
+    /// Optional gradient for per-column coloring based on value.
+    gradient: Option<Gradient>,
     min: f64,
     max: f64,
     mode: GraphMode,
@@ -39,6 +42,7 @@ impl BrailleGraph {
         Self {
             data,
             color: Color::GREEN,
+            gradient: None,
             min,
             max,
             mode: GraphMode::default(),
@@ -51,6 +55,14 @@ impl BrailleGraph {
     #[must_use]
     pub fn with_color(mut self, color: Color) -> Self {
         self.color = color;
+        self
+    }
+
+    /// Set a gradient for per-column coloring based on value.
+    /// When set, each column is colored based on its normalized value (0.0-1.0).
+    #[must_use]
+    pub fn with_gradient(mut self, gradient: Gradient) -> Self {
+        self.gradient = Some(gradient);
         self
     }
 
@@ -116,6 +128,15 @@ impl BrailleGraph {
         }
     }
 
+    /// Get color for a normalized value (0.0-1.0).
+    /// Uses gradient if set, otherwise returns the fixed color.
+    fn color_for_value(&self, normalized: f64) -> Color {
+        match &self.gradient {
+            Some(gradient) => gradient.sample(normalized),
+            None => self.color,
+        }
+    }
+
     fn render_braille(&self, canvas: &mut dyn Canvas) {
         let width = self.bounds.width as usize;
         let height = self.bounds.height as usize;
@@ -134,7 +155,9 @@ impl BrailleGraph {
             1.0
         };
 
+        // Track dots and values per column for gradient coloring
         let mut dots = vec![vec![false; total_dots_x]; total_dots_y];
+        let mut column_values: Vec<f64> = vec![0.0; width];
 
         for (i, x) in (0..total_dots_x).enumerate() {
             let data_idx = (i as f64 * step) as usize;
@@ -146,16 +169,15 @@ impl BrailleGraph {
             if y < total_dots_y {
                 dots[y][x] = true;
             }
+            // Track max value for each character column
+            let char_col = x / dots_per_col;
+            if char_col < width && value > column_values[char_col] {
+                column_values[char_col] = value;
+            }
         }
 
-        let style = TextStyle {
-            color: self.color,
-            ..Default::default()
-        };
-
         for cy in 0..height {
-            let mut line = String::new();
-            for cx in 0..width {
+            for (cx, &col_value) in column_values.iter().enumerate().take(width) {
                 let mut code_point = 0x2800u32;
                 let dot_offsets = [
                     (0, 0, 0x01),
@@ -177,14 +199,19 @@ impl BrailleGraph {
                 }
 
                 if let Some(c) = char::from_u32(code_point) {
-                    line.push(c);
+                    // Use per-column color based on value
+                    let color = self.color_for_value(col_value);
+                    let style = TextStyle {
+                        color,
+                        ..Default::default()
+                    };
+                    canvas.draw_text(
+                        &c.to_string(),
+                        Point::new(self.bounds.x + cx as f32, self.bounds.y + cy as f32),
+                        &style,
+                    );
                 }
             }
-            canvas.draw_text(
-                &line,
-                Point::new(self.bounds.x, self.bounds.y + cy as f32),
-                &style,
-            );
         }
     }
 
@@ -196,10 +223,6 @@ impl BrailleGraph {
         }
 
         let total_rows = height * 2;
-        let style = TextStyle {
-            color: self.color,
-            ..Default::default()
-        };
 
         let step = if self.data.len() > width {
             self.data.len() as f64 / width as f64
@@ -207,22 +230,23 @@ impl BrailleGraph {
             1.0
         };
 
-        let mut column_values: Vec<usize> = Vec::with_capacity(width);
+        // Track both row position and normalized value for each column
+        let mut column_data: Vec<(usize, f64)> = Vec::with_capacity(width);
         for x in 0..width {
             let data_idx = (x as f64 * step) as usize;
             if data_idx >= self.data.len() {
-                column_values.push(0);
+                column_data.push((total_rows, 0.0));
                 continue;
             }
             let value = self.normalize(self.data[data_idx]);
             let row = ((1.0 - value) * (total_rows - 1) as f64).round() as usize;
-            column_values.push(row.min(total_rows - 1));
+            column_data.push((row.min(total_rows - 1), value));
         }
 
         for cy in 0..height {
-            let mut line = String::new();
             for cx in 0..width {
-                let value_row = column_values.get(cx).copied().unwrap_or(total_rows);
+                let (value_row, normalized) =
+                    column_data.get(cx).copied().unwrap_or((total_rows, 0.0));
                 let top_row = cy * 2;
                 let bottom_row = cy * 2 + 1;
 
@@ -235,13 +259,19 @@ impl BrailleGraph {
                     (false, true) => '▄',
                     (false, false) => ' ',
                 };
-                line.push(ch);
+
+                // Use per-column color based on value
+                let color = self.color_for_value(normalized);
+                let style = TextStyle {
+                    color,
+                    ..Default::default()
+                };
+                canvas.draw_text(
+                    &ch.to_string(),
+                    Point::new(self.bounds.x + cx as f32, self.bounds.y + cy as f32),
+                    &style,
+                );
             }
-            canvas.draw_text(
-                &line,
-                Point::new(self.bounds.x, self.bounds.y + cy as f32),
-                &style,
-            );
         }
     }
 
@@ -252,41 +282,42 @@ impl BrailleGraph {
             return;
         }
 
-        let style = TextStyle {
-            color: self.color,
-            ..Default::default()
-        };
-
         let step = if self.data.len() > width {
             self.data.len() as f64 / width as f64
         } else {
             1.0
         };
 
-        let mut column_rows: Vec<usize> = Vec::with_capacity(width);
+        // Track both row position and normalized value for each column
+        let mut column_data: Vec<(usize, f64)> = Vec::with_capacity(width);
         for x in 0..width {
             let data_idx = (x as f64 * step) as usize;
             if data_idx >= self.data.len() {
-                column_rows.push(height);
+                column_data.push((height, 0.0));
                 continue;
             }
             let value = self.normalize(self.data[data_idx]);
             let row = ((1.0 - value) * (height - 1) as f64).round() as usize;
-            column_rows.push(row.min(height - 1));
+            column_data.push((row.min(height - 1), value));
         }
 
         for cy in 0..height {
-            let mut line = String::new();
             for cx in 0..width {
-                let value_row = column_rows.get(cx).copied().unwrap_or(height);
+                let (value_row, normalized) = column_data.get(cx).copied().unwrap_or((height, 0.0));
                 let ch = if value_row == cy { '*' } else { ' ' };
-                line.push(ch);
+
+                // Use per-column color based on value
+                let color = self.color_for_value(normalized);
+                let style = TextStyle {
+                    color,
+                    ..Default::default()
+                };
+                canvas.draw_text(
+                    &ch.to_string(),
+                    Point::new(self.bounds.x + cx as f32, self.bounds.y + cy as f32),
+                    &style,
+                );
             }
-            canvas.draw_text(
-                &line,
-                Point::new(self.bounds.x, self.bounds.y + cy as f32),
-                &style,
-            );
         }
     }
 }

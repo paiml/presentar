@@ -214,6 +214,9 @@ impl DiffRenderer {
 
     /// Apply style changes to the writer.
     fn apply_style<W: Write>(&self, writer: &mut W, style: StyleState) -> io::Result<()> {
+        // Reset attributes FIRST (before setting colors!)
+        writer.queue(SetAttribute(Attribute::Reset))?;
+
         // Foreground color
         let fg = self.to_crossterm_color(style.fg);
         writer.queue(SetForegroundColor(fg))?;
@@ -221,9 +224,6 @@ impl DiffRenderer {
         // Background color
         let bg = self.to_crossterm_color(style.bg);
         writer.queue(SetBackgroundColor(bg))?;
-
-        // Reset attributes first
-        writer.queue(SetAttribute(Attribute::Reset))?;
 
         // Apply modifiers
         if style.modifiers.contains(Modifiers::BOLD) {

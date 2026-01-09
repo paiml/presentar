@@ -213,6 +213,39 @@ See [docs/specifications/showcase-demo-aprender-shell-apr.md](docs/specification
 | `Grid` | CSS Grid-compatible layout |
 | `Chart` | Data visualization charts |
 
+## Terminal Widgets (presentar-terminal)
+
+btop/htop-style terminal UI widgets with full Unicode and color support:
+
+| Widget | Description |
+|--------|-------------|
+| `CpuGrid` | Per-core CPU bars with braille graphs |
+| `MemoryBar` | Segmented memory usage (used/cached/available) |
+| `ProcessTable` | Sortable process list with selection |
+| `NetworkPanel` | Interface bandwidth with sparklines |
+| `BrailleGraph` | High-resolution braille charts (2×4 dots/cell) |
+| `Sparkline` | Compact trend visualization (8-level) |
+| `Heatmap` | 2D data visualization with color gradients |
+| `Gauge` | Percentage meters with gradient colors |
+| `BoxPlot` | Statistical distribution visualization |
+| `Tree` | Hierarchical tree view |
+| `Scrollbar` | Vertical/horizontal scrollbars |
+| `Border` | Box drawing with multiple styles |
+
+**Features (matching btop/ratatui):**
+- Braille symbols (⣿), block characters (█▄), TTY-safe ASCII fallback
+- CIELAB perceptual color interpolation for smooth gradients
+- 101-step gradient support with LAB color space
+- Auto color mode detection (TrueColor → 256 → 16 → Mono)
+- Tokyo Night, Dracula, Nord, Monokai themes
+- Superscript (⁰¹²³) and subscript (₀₁₂₃) number formatting
+- Zero-allocation steady-state rendering
+
+```bash
+# Run system dashboard example (cbtop)
+cargo run -p presentar-terminal --example system_dashboard
+```
+
 ## Architecture
 
 ```
@@ -250,6 +283,7 @@ cargo bench -p presentar-core
 | [`presentar-core`](https://crates.io/crates/presentar-core) | Core types and traits |
 | [`presentar-widgets`](https://crates.io/crates/presentar-widgets) | Widget library |
 | [`presentar-layout`](https://crates.io/crates/presentar-layout) | Layout engine |
+| [`presentar-terminal`](https://crates.io/crates/presentar-terminal) | btop-style terminal widgets |
 
 ## License
 

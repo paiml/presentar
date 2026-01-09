@@ -24,15 +24,14 @@ impl BenchWidget {
         }
     }
 
-    fn with_child(mut self, child: BenchWidget) -> Self {
+    fn with_child(mut self, child: Self) -> Self {
         self.children.push(Box::new(child));
         self
     }
 
     fn with_n_children(mut self, n: usize, width: f32, height: f32) -> Self {
         for _ in 0..n {
-            self.children
-                .push(Box::new(BenchWidget::new(width, height)));
+            self.children.push(Box::new(Self::new(width, height)));
         }
         self
     }
@@ -109,8 +108,8 @@ fn bench_layout_single_widget(c: &mut Criterion) {
     c.bench_function("layout_single_widget", |b| {
         b.iter(|| {
             let mut widget = BenchWidget::new(100.0, 50.0);
-            engine.compute(black_box(&mut widget), black_box(viewport))
-        })
+            engine.compute(black_box(&mut widget), black_box(viewport));
+        });
     });
 }
 
@@ -121,8 +120,8 @@ fn bench_layout_10_children(c: &mut Criterion) {
     c.bench_function("layout_10_children", |b| {
         b.iter(|| {
             let mut widget = BenchWidget::new(400.0, 300.0).with_n_children(10, 50.0, 50.0);
-            engine.compute(black_box(&mut widget), black_box(viewport))
-        })
+            engine.compute(black_box(&mut widget), black_box(viewport));
+        });
     });
 }
 
@@ -133,8 +132,8 @@ fn bench_layout_100_children(c: &mut Criterion) {
     c.bench_function("layout_100_children", |b| {
         b.iter(|| {
             let mut widget = BenchWidget::new(800.0, 600.0).with_n_children(100, 30.0, 30.0);
-            engine.compute(black_box(&mut widget), black_box(viewport))
-        })
+            engine.compute(black_box(&mut widget), black_box(viewport));
+        });
     });
 }
 
@@ -151,8 +150,8 @@ fn bench_layout_nested_3_levels(c: &mut Criterion) {
                 .with_child(
                     BenchWidget::new(200.0, 150.0).with_child(BenchWidget::new(100.0, 75.0)),
                 );
-            engine.compute(black_box(&mut widget), black_box(viewport))
-        })
+            engine.compute(black_box(&mut widget), black_box(viewport));
+        });
     });
 }
 
@@ -163,8 +162,8 @@ fn bench_layout_readonly(c: &mut Criterion) {
     c.bench_function("layout_readonly_10_children", |b| {
         b.iter(|| {
             let widget = BenchWidget::new(400.0, 300.0).with_n_children(10, 50.0, 50.0);
-            engine.compute_readonly(black_box(&widget), black_box(viewport))
-        })
+            engine.compute_readonly(black_box(&widget), black_box(viewport));
+        });
     });
 }
 
@@ -173,19 +172,19 @@ fn bench_constraints_operations(c: &mut Criterion) {
     let size = Size::new(500.0, 400.0);
 
     c.bench_function("constraints_constrain", |b| {
-        b.iter(|| constraints.constrain(black_box(size)))
+        b.iter(|| constraints.constrain(black_box(size)));
     });
 
     c.bench_function("constraints_deflate", |b| {
-        b.iter(|| constraints.deflate(black_box(20.0), black_box(20.0)))
+        b.iter(|| constraints.deflate(black_box(20.0), black_box(20.0)));
     });
 
     c.bench_function("constraints_tight", |b| {
-        b.iter(|| Constraints::tight(black_box(size)))
+        b.iter(|| Constraints::tight(black_box(size)));
     });
 
     c.bench_function("constraints_loose", |b| {
-        b.iter(|| Constraints::loose(black_box(size)))
+        b.iter(|| Constraints::loose(black_box(size)));
     });
 }
 
@@ -202,8 +201,8 @@ fn bench_grid_12_column(c: &mut Criterion) {
                 black_box(1200.0),
                 black_box(600.0),
                 black_box(&child_sizes),
-            )
-        })
+            );
+        });
     });
 }
 
@@ -223,8 +222,8 @@ fn bench_grid_auto_placement(c: &mut Criterion) {
                 black_box(&template),
                 black_box(&items),
                 black_box(GridAutoFlow::RowDense),
-            )
-        })
+            );
+        });
     });
 }
 
@@ -251,8 +250,8 @@ fn bench_grid_track_sizing(c: &mut Criterion) {
                 black_box(800.0),
                 black_box(400.0),
                 black_box(&child_sizes),
-            )
-        })
+            );
+        });
     });
 }
 

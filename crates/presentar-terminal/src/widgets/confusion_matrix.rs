@@ -762,4 +762,137 @@ mod tests {
             .iter()
             .any(|(t, _)| t.contains("Classification")));
     }
+
+    #[test]
+    fn test_paint_with_row_normalization() {
+        let mut cm = ConfusionMatrix::new(vec![vec![10, 2], vec![3, 15]])
+            .with_normalization(Normalization::Row);
+        cm.bounds = Rect::new(0.0, 0.0, 50.0, 15.0);
+
+        let mut canvas = MockCanvas::new();
+        cm.paint(&mut canvas);
+
+        // Should have painted cells
+        assert!(!canvas.rects.is_empty());
+    }
+
+    #[test]
+    fn test_paint_with_column_normalization() {
+        let mut cm = ConfusionMatrix::new(vec![vec![10, 2], vec![3, 15]])
+            .with_normalization(Normalization::Column);
+        cm.bounds = Rect::new(0.0, 0.0, 50.0, 15.0);
+
+        let mut canvas = MockCanvas::new();
+        cm.paint(&mut canvas);
+
+        // Should have painted cells
+        assert!(!canvas.rects.is_empty());
+    }
+
+    #[test]
+    fn test_paint_with_total_normalization() {
+        let mut cm = ConfusionMatrix::new(vec![vec![10, 2], vec![3, 15]])
+            .with_normalization(Normalization::Total);
+        cm.bounds = Rect::new(0.0, 0.0, 50.0, 15.0);
+
+        let mut canvas = MockCanvas::new();
+        cm.paint(&mut canvas);
+
+        // Should have painted cells
+        assert!(!canvas.rects.is_empty());
+    }
+
+    #[test]
+    fn test_paint_with_percentages() {
+        let mut cm = ConfusionMatrix::new(vec![vec![10, 2], vec![3, 15]]).with_percentages(true);
+        cm.bounds = Rect::new(0.0, 0.0, 50.0, 15.0);
+
+        let mut canvas = MockCanvas::new();
+        cm.paint(&mut canvas);
+
+        // Should show percentage values
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains('%')));
+    }
+
+    #[test]
+    fn test_normalize_value_none_zero_max() {
+        // Matrix with all zeros - max_val == 0
+        let mut cm = ConfusionMatrix::new(vec![vec![0, 0], vec![0, 0]]);
+        cm.bounds = Rect::new(0.0, 0.0, 50.0, 15.0);
+
+        let mut canvas = MockCanvas::new();
+        cm.paint(&mut canvas);
+
+        // Should still paint without error
+        assert!(!canvas.rects.is_empty());
+    }
+
+    #[test]
+    fn test_normalize_row_zero_sum() {
+        // Row with zero sum
+        let mut cm = ConfusionMatrix::new(vec![vec![0, 0], vec![3, 15]])
+            .with_normalization(Normalization::Row);
+        cm.bounds = Rect::new(0.0, 0.0, 50.0, 15.0);
+
+        let mut canvas = MockCanvas::new();
+        cm.paint(&mut canvas);
+
+        // Should still paint without error
+        assert!(!canvas.rects.is_empty());
+    }
+
+    #[test]
+    fn test_normalize_column_zero_sum() {
+        // Column with zero sum
+        let mut cm = ConfusionMatrix::new(vec![vec![10, 0], vec![3, 0]])
+            .with_normalization(Normalization::Column);
+        cm.bounds = Rect::new(0.0, 0.0, 50.0, 15.0);
+
+        let mut canvas = MockCanvas::new();
+        cm.paint(&mut canvas);
+
+        // Should still paint without error
+        assert!(!canvas.rects.is_empty());
+    }
+
+    #[test]
+    fn test_normalize_total_zero() {
+        // All zeros
+        let mut cm = ConfusionMatrix::new(vec![vec![0, 0], vec![0, 0]])
+            .with_normalization(Normalization::Total);
+        cm.bounds = Rect::new(0.0, 0.0, 50.0, 15.0);
+
+        let mut canvas = MockCanvas::new();
+        cm.paint(&mut canvas);
+
+        // Should still paint without error
+        assert!(!canvas.rects.is_empty());
+    }
+
+    #[test]
+    fn test_paint_without_values() {
+        let mut cm = ConfusionMatrix::new(vec![vec![10, 2], vec![3, 15]]).with_values(false);
+        cm.bounds = Rect::new(0.0, 0.0, 50.0, 15.0);
+
+        let mut canvas = MockCanvas::new();
+        cm.paint(&mut canvas);
+
+        // Cells painted but no value texts in cells
+        assert!(!canvas.rects.is_empty());
+    }
+
+    #[test]
+    fn test_paint_long_labels() {
+        let mut cm = ConfusionMatrix::new(vec![vec![10, 2], vec![3, 15]]).with_labels(vec![
+            "VeryLongLabelName".to_string(),
+            "AnotherLongLabel".to_string(),
+        ]);
+        cm.bounds = Rect::new(0.0, 0.0, 50.0, 15.0);
+
+        let mut canvas = MockCanvas::new();
+        cm.paint(&mut canvas);
+
+        // Should truncate labels
+        assert!(!canvas.texts.is_empty());
+    }
 }

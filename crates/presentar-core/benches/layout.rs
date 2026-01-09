@@ -8,7 +8,7 @@ fn bench_constraints_constrain(c: &mut Criterion) {
     let size = Size::new(50.0, 50.0);
 
     c.bench_function("constraints_constrain", |b| {
-        b.iter(|| constraints.constrain(black_box(size)))
+        b.iter(|| constraints.constrain(black_box(size)));
     });
 }
 
@@ -16,13 +16,13 @@ fn bench_constraints_tight(c: &mut Criterion) {
     let size = Size::new(100.0, 100.0);
 
     c.bench_function("constraints_tight", |b| {
-        b.iter(|| Constraints::tight(black_box(size)))
+        b.iter(|| Constraints::tight(black_box(size)));
     });
 }
 
 fn bench_size_creation(c: &mut Criterion) {
     c.bench_function("size_new", |b| {
-        b.iter(|| Size::new(black_box(100.0), black_box(100.0)))
+        b.iter(|| Size::new(black_box(100.0), black_box(100.0)));
     });
 }
 

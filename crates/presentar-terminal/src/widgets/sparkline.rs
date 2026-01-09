@@ -486,4 +486,57 @@ mod tests {
         let spark = Sparkline::new(vec![]);
         assert!(spark.to_css().is_empty());
     }
+
+    #[test]
+    fn test_sparkline_trend_single_value() {
+        // Test trend with single value (data.len() < 2)
+        let spark = Sparkline::new(vec![5.0]);
+        assert_eq!(spark.trend(), TrendDirection::Flat);
+    }
+
+    #[test]
+    fn test_sparkline_trend_two_values() {
+        // Test trend with exactly 2 values
+        let spark = Sparkline::new(vec![1.0, 2.0]);
+        // With only 2 values, older_start >= older_end triggers
+        assert_eq!(spark.trend(), TrendDirection::Flat);
+    }
+
+    #[test]
+    fn test_sparkline_trend_three_values() {
+        // Test trend with exactly 3 values (boundary case)
+        // With 3 values: recent = 3-3=0, so recent slice is [1,2,3]
+        // older_end = 0, older_start = 0, so older_start >= older_end -> Flat
+        let spark = Sparkline::new(vec![1.0, 2.0, 3.0]);
+        assert_eq!(spark.trend(), TrendDirection::Flat);
+    }
+
+    #[test]
+    fn test_sparkline_normalize_zero_range() {
+        // Test normalize with min == max (zero range)
+        let spark = Sparkline::new(vec![5.0, 5.0, 5.0]);
+        // When all values are the same, range is ~0
+        let normalized = spark.normalize(5.0);
+        assert!((normalized - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_sparkline_paint_zero_available_width() {
+        // Test paint with show_trend taking all width
+        let mut spark = Sparkline::new(vec![1.0, 2.0]).with_trend(true);
+        spark.bounds = Rect::new(0.0, 0.0, 2.0, 1.0); // Width 2, but trend needs 2
+        let mut canvas = MockCanvas::new();
+        spark.paint(&mut canvas);
+        // Should handle gracefully (available_width becomes 0)
+    }
+
+    #[test]
+    fn test_sparkline_paint_narrow_width() {
+        // Test paint with very narrow width
+        let mut spark = Sparkline::new(vec![1.0, 2.0, 3.0]).with_trend(true);
+        spark.bounds = Rect::new(0.0, 0.0, 1.0, 1.0);
+        let mut canvas = MockCanvas::new();
+        spark.paint(&mut canvas);
+        // Should not panic
+    }
 }

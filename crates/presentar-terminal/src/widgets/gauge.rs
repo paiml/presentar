@@ -655,4 +655,148 @@ mod tests {
         let gauge = Gauge::new(50.0, 0.0);
         assert_eq!(gauge.percent(), 0.0);
     }
+
+    #[test]
+    fn test_gauge_arc_fallback_to_compact() {
+        // Arc mode with small bounds should fall back to compact
+        let mut gauge = Gauge::percentage(50.0).with_mode(GaugeMode::Arc);
+        gauge.bounds = Rect::new(0.0, 0.0, 3.0, 2.0); // Too small for arc
+        let mut canvas = MockCanvas::new();
+        gauge.paint(&mut canvas);
+        // Should have rendered compact mode instead
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_gauge_arc_no_value_display() {
+        let mut gauge = Gauge::percentage(50.0)
+            .with_mode(GaugeMode::Arc)
+            .with_value_display(false);
+        gauge.bounds = Rect::new(0.0, 0.0, 10.0, 4.0);
+        let mut canvas = MockCanvas::new();
+        gauge.paint(&mut canvas);
+        // Should render without value text
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_gauge_arc_with_label() {
+        let mut gauge = Gauge::percentage(50.0)
+            .with_mode(GaugeMode::Arc)
+            .with_label("CPU");
+        gauge.bounds = Rect::new(0.0, 0.0, 10.0, 5.0);
+        let mut canvas = MockCanvas::new();
+        gauge.paint(&mut canvas);
+        // Should render with label below arc
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains("CPU")));
+    }
+
+    #[test]
+    fn test_gauge_arc_height_two() {
+        // Arc with only 2 lines height - falls back to compact (height < 3)
+        let mut gauge = Gauge::percentage(50.0).with_mode(GaugeMode::Arc);
+        gauge.bounds = Rect::new(0.0, 0.0, 10.0, 2.0);
+        let mut canvas = MockCanvas::new();
+        gauge.paint(&mut canvas);
+        // Falls back to compact mode
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_gauge_arc_height_three_no_middle() {
+        // Arc with exactly 3 lines height - draws top and bottom
+        let mut gauge = Gauge::percentage(50.0).with_mode(GaugeMode::Arc);
+        gauge.bounds = Rect::new(0.0, 0.0, 10.0, 3.0);
+        let mut canvas = MockCanvas::new();
+        gauge.paint(&mut canvas);
+        // Should draw top and bottom (height > 2 is false, so no middle)
+        assert!(canvas.texts.len() >= 2);
+    }
+
+    #[test]
+    fn test_gauge_arc_height_four() {
+        // Arc with 4 lines - draws all sections
+        let mut gauge = Gauge::percentage(50.0).with_mode(GaugeMode::Arc);
+        gauge.bounds = Rect::new(0.0, 0.0, 10.0, 4.0);
+        let mut canvas = MockCanvas::new();
+        gauge.paint(&mut canvas);
+        // Should draw top, middle, and bottom (height > 2)
+        assert!(canvas.texts.len() >= 3);
+    }
+
+    #[test]
+    fn test_gauge_vertical_zero_height() {
+        let mut gauge = Gauge::percentage(50.0).with_mode(GaugeMode::Vertical);
+        gauge.bounds = Rect::new(0.0, 0.0, 6.0, 1.0); // height - 1 = 0
+        let mut canvas = MockCanvas::new();
+        gauge.paint(&mut canvas);
+        // Early return when height is 0
+        assert!(canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_gauge_vertical_no_value_display() {
+        let mut gauge = Gauge::percentage(50.0)
+            .with_mode(GaugeMode::Vertical)
+            .with_value_display(false);
+        gauge.bounds = Rect::new(0.0, 0.0, 6.0, 8.0);
+        let mut canvas = MockCanvas::new();
+        gauge.paint(&mut canvas);
+        // Should not have value text
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_gauge_verify_invalid() {
+        // Create a gauge and manually set invalid value
+        let mut gauge = Gauge::new(50.0, 100.0);
+        gauge.value = -10.0; // Invalid: outside range
+        let result = gauge.verify();
+        assert!(!result.is_valid());
+        assert!(!result.failed.is_empty());
+    }
+
+    #[test]
+    fn test_gauge_verify_above_max() {
+        let mut gauge = Gauge::new(50.0, 100.0);
+        gauge.value = 150.0; // Invalid: above max
+        let result = gauge.verify();
+        assert!(!result.is_valid());
+    }
+
+    #[test]
+    fn test_gauge_children_mut() {
+        let mut gauge = Gauge::default();
+        assert!(gauge.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_gauge_budget() {
+        let gauge = Gauge::default();
+        let budget = gauge.budget();
+        assert_eq!(budget.total_ms, 16);
+    }
+
+    #[test]
+    fn test_gauge_to_html() {
+        let gauge = Gauge::default();
+        assert!(gauge.to_html().is_empty());
+    }
+
+    #[test]
+    fn test_gauge_to_css() {
+        let gauge = Gauge::default();
+        assert!(gauge.to_css().is_empty());
+    }
+
+    #[test]
+    fn test_gauge_compact_no_label() {
+        // Compact mode without label
+        let mut gauge = Gauge::percentage(75.0).with_mode(GaugeMode::Compact);
+        gauge.bounds = Rect::new(0.0, 0.0, 20.0, 1.0);
+        let mut canvas = MockCanvas::new();
+        gauge.paint(&mut canvas);
+        // Should show value without label prefix
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains("75")));
+    }
 }

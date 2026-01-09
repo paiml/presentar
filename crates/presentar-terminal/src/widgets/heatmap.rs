@@ -611,4 +611,116 @@ mod tests {
         };
         assert!(heatmap.event(&event).is_none());
     }
+
+    #[test]
+    fn test_heatmap_children_mut() {
+        let mut heatmap = Heatmap::default();
+        assert!(heatmap.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_heatmap_to_html() {
+        let heatmap = Heatmap::default();
+        assert!(heatmap.to_html().is_empty());
+    }
+
+    #[test]
+    fn test_heatmap_to_css() {
+        let heatmap = Heatmap::default();
+        assert!(heatmap.to_css().is_empty());
+    }
+
+    #[test]
+    fn test_heatmap_budget() {
+        let heatmap = Heatmap::default();
+        let budget = heatmap.budget();
+        assert_eq!(budget.total_ms, 16);
+    }
+
+    #[test]
+    fn test_heatmap_same_value_range() {
+        // All cells have the same value - edge case for compute_range
+        let heatmap = Heatmap::from_values(vec![vec![5.0, 5.0], vec![5.0, 5.0]]);
+        // Range should be padded to avoid division by zero
+        assert!(heatmap.min < heatmap.max);
+    }
+
+    #[test]
+    fn test_heatmap_with_cell_labels() {
+        let data = vec![vec![
+            HeatmapCell::with_label(1.0, "A"),
+            HeatmapCell::with_label(2.0, "B"),
+        ]];
+        let mut heatmap = Heatmap::new(data).with_values(true);
+        heatmap.bounds = Rect::new(0.0, 0.0, 20.0, 10.0);
+        let mut canvas = MockCanvas::new();
+        heatmap.paint(&mut canvas);
+        // Should show cell labels
+        assert!(canvas.texts.iter().any(|(t, _)| t == "A" || t == "B"));
+    }
+
+    #[test]
+    fn test_heatmap_high_value_contrast() {
+        // High normalized value should use dark text
+        let mut heatmap = Heatmap::from_values(vec![vec![10.0]]).with_values(true);
+        heatmap.bounds = Rect::new(0.0, 0.0, 20.0, 10.0);
+        let mut canvas = MockCanvas::new();
+        heatmap.paint(&mut canvas);
+        // Should have text drawn
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_heatmap_low_value_contrast() {
+        // Low normalized value should use light text
+        let mut heatmap = Heatmap::from_values(vec![vec![1.0, 10.0]]).with_values(true);
+        heatmap.bounds = Rect::new(0.0, 0.0, 20.0, 10.0);
+        let mut canvas = MockCanvas::new();
+        heatmap.paint(&mut canvas);
+        // Should have text drawn
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_palette_blue_red_low() {
+        let palette = HeatmapPalette::BlueRed;
+        let low = palette.color(0.0);
+        // Low value: should be blue-ish
+        assert!(low.b > low.r);
+    }
+
+    #[test]
+    fn test_palette_blue_red_high() {
+        let palette = HeatmapPalette::BlueRed;
+        let high = palette.color(1.0);
+        // High value: should be red-ish
+        assert!(high.r > high.b);
+    }
+
+    #[test]
+    fn test_heatmap_measure_with_labels() {
+        let heatmap = Heatmap::from_values(vec![vec![1.0, 2.0]])
+            .with_row_labels(vec!["LongRowLabel".to_string()])
+            .with_col_labels(vec!["A".to_string(), "B".to_string()]);
+        let size = heatmap.measure(Constraints::loose(Size::new(100.0, 100.0)));
+        // Width should include label width
+        assert!(size.width > 0.0);
+        // Height should include column label row
+        assert!(size.height >= 2.0);
+    }
+
+    #[test]
+    fn test_heatmap_with_range_min_equals_max() {
+        let heatmap = Heatmap::default().with_range(5.0, 5.0);
+        // Max should be adjusted to avoid zero range
+        assert!(heatmap.max > heatmap.min);
+    }
+
+    #[test]
+    fn test_heatmap_cell_size_min() {
+        let heatmap = Heatmap::default().with_cell_size(0, 0);
+        // Should enforce minimum of 1
+        assert_eq!(heatmap.cell_width, 1);
+        assert_eq!(heatmap.cell_height, 1);
+    }
 }

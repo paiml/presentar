@@ -33,6 +33,7 @@ mod color;
 pub mod direct;
 mod error;
 mod input;
+pub mod theme;
 pub mod widgets;
 
 // Re-export main types
@@ -41,11 +42,14 @@ pub use color::ColorMode;
 pub use direct::{Cell, CellBuffer, DiffRenderer, DirectTerminalCanvas, Modifiers};
 pub use error::TuiError;
 pub use input::{InputHandler, KeyBinding};
+pub use theme::{Gradient, Theme};
 
 // Re-export widget types
 pub use widgets::{
-    BoxPlot, BoxStats, BrailleGraph, ConfusionMatrix, Gauge, GaugeMode, GraphMode, Heatmap,
-    HeatmapCell, HeatmapPalette, MatrixPalette, Meter, NodeId, Normalization, Orientation,
+    Border, BorderStyle, BoxPlot, BoxStats, BrailleGraph, ConfusionMatrix, CpuGrid, Gauge,
+    GaugeMode, GraphMode, Heatmap, HeatmapCell, HeatmapPalette, MatrixPalette, MemoryBar,
+    MemorySegment, Meter, MultiBarGraph, MultiBarMode, NetworkInterface, NetworkPanel, NodeId,
+    Normalization, Orientation, ProcessEntry, ProcessSort, ProcessTable, Segment, SegmentedMeter,
     Sparkline, Table, Tree, TreeNode, TrendDirection,
 };
 
