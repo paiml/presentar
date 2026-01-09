@@ -187,18 +187,229 @@ cargo run -p presentar-terminal --example cluster_status
 cargo run -p presentar-terminal --example sensor_dashboard
 ```
 
-## 7. Integration with trueno-viz
+## 7. trueno-viz and trueno Integration
 
-The cbtop patterns complement `trueno-viz` monitor widgets:
+### 7.1 Pure TUI/WASM Primitive Mapping
 
-- `trueno-viz` provides: PNG/SVG output, web rendering
-- `presentar-terminal` provides: Zero-allocation TUI output
+The following table maps trueno-viz primitives to pure TUI/WASM constructs:
 
-Both share common visualization patterns for data science:
-- Loss curves
-- ROC/PR curves
-- Heatmaps
-- Sparklines
+| trueno-viz Type | presentar-terminal TUI | WASM Support |
+|-----------------|------------------------|--------------|
+| `plots::ScatterPlot` | BrailleGraph (scatter mode) | ✅ |
+| `plots::LineChart` | BrailleGraph (line mode) | ✅ |
+| `plots::Histogram` | VerticalBarChart | ✅ |
+| `plots::Heatmap` | TuiHeatmap (block chars) | ✅ |
+| `plots::LossCurve` | BrailleGraph (multi-series) | ✅ |
+| `plots::RocCurve` | BrailleGraph (curve mode) | ✅ |
+| `plots::PrCurve` | BrailleGraph (curve mode) | ✅ |
+| `plots::ConfusionMatrix` | TuiConfusionMatrix | ✅ |
+| `plots::BoxPlot` | TuiBoxPlot (ASCII art) | ✅ |
+| `plots::ForceGraph` | TuiTree (hierarchical) | ✅ |
+| `monitor::Graph` | BrailleGraph | ✅ |
+| `monitor::Meter` | Meter | ✅ |
+| `monitor::Gauge` | TuiGauge (arc chars) | ✅ |
+| `monitor::Table` | Table | ✅ |
+| `monitor::Tree` | TuiTree | ✅ |
+| `monitor::Sparkline` | TuiSparkline | ✅ |
+| `monitor::Heatmap` | TuiHeatmap | ✅ |
+| `widgets::ResourceBar` | Meter | ✅ |
+| `widgets::RunTable` | Table | ✅ |
+
+### 7.2 trueno SIMD Integration
+
+All TUI widgets can leverage trueno's SIMD-accelerated operations for data processing:
+
+```rust
+use trueno::prelude::*;
+use presentar_terminal::BrailleGraph;
+
+// SIMD-accelerated data transformation
+fn process_metrics(raw: &[f64]) -> Vec<f64> {
+    let vec = Vector::from_slice(raw);
+
+    // SIMD normalization
+    let min = vec.min();
+    let max = vec.max();
+    let normalized = vec.sub_scalar(min).div_scalar(max - min);
+
+    normalized.to_vec()
+}
+
+// Use processed data in TUI widget
+let graph = BrailleGraph::new(process_metrics(&cpu_samples))
+    .with_mode(GraphMode::Braille);
+```
+
+### 7.3 WASM-First Architecture
+
+All cbtop primitives compile to `wasm32-unknown-unknown`:
+
+```rust
+#[cfg(target_arch = "wasm32")]
+pub fn render_to_canvas(widget: &impl Widget, canvas_id: &str) {
+    // Direct WebGL/Canvas2D rendering
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn render_to_terminal(widget: &impl Widget, stdout: &mut impl Write) {
+    // crossterm-based rendering
+}
+```
+
+### 7.4 Missing Widget Implementations
+
+The following widgets need implementation in presentar-terminal:
+
+#### 7.4.1 TuiGauge (Arc/Circular)
+
+```rust
+/// Arc gauge using Unicode box-drawing characters.
+pub struct TuiGauge {
+    value: f64,
+    max: f64,
+    radius: u16,
+    label: Option<String>,
+}
+
+impl TuiGauge {
+    /// Render using arc characters: ╭─╮ ╰─╯ │
+    fn render_arc(&self, canvas: &mut impl Canvas, center: Point) {
+        // Arc approximation using box-drawing
+        let chars = ['╭', '─', '╮', '│', '╰', '─', '╯'];
+        // ...
+    }
+}
+```
+
+#### 7.4.2 TuiTree (Collapsible Hierarchy)
+
+```rust
+/// Tree view for process/cluster hierarchies.
+pub struct TuiTree<T> {
+    root: TreeNode<T>,
+    expanded: HashSet<NodeId>,
+}
+
+impl<T: Display> TuiTree<T> {
+    /// Render with tree characters: ├── └── │
+    fn render_node(&self, canvas: &mut impl Canvas, node: &TreeNode<T>, depth: u16) {
+        let prefix = if node.is_last { "└── " } else { "├── " };
+        // ...
+    }
+}
+```
+
+#### 7.4.3 TuiConfusionMatrix
+
+```rust
+/// Confusion matrix visualization.
+pub struct TuiConfusionMatrix {
+    matrix: Vec<Vec<u64>>,
+    labels: Vec<String>,
+    normalization: Normalization,
+}
+
+impl TuiConfusionMatrix {
+    /// Render as colored grid with values.
+    fn render(&self, canvas: &mut impl Canvas, bounds: Rect) {
+        for (i, row) in self.matrix.iter().enumerate() {
+            for (j, &value) in row.iter().enumerate() {
+                let color = self.value_color(value);
+                // Draw cell with value
+            }
+        }
+    }
+}
+```
+
+#### 7.4.4 TuiBoxPlot
+
+```rust
+/// Box plot using ASCII art.
+pub struct TuiBoxPlot {
+    stats: Vec<BoxStats>,
+    labels: Vec<String>,
+    orientation: Orientation,
+}
+
+impl TuiBoxPlot {
+    /// Render: ├──[████|████]──┤
+    fn render_horizontal(&self, canvas: &mut impl Canvas, y: f32, stats: &BoxStats) {
+        // Whiskers: ├──
+        // Box: [████
+        // Median: |
+        // Box: ████]
+        // Whiskers: ──┤
+    }
+}
+```
+
+### 7.5 Shared Color Palettes
+
+Both trueno-viz and presentar-terminal use consistent color schemes:
+
+```rust
+/// Viridis-like palette for heatmaps (TUI-safe).
+pub const VIRIDIS_TUI: [Color; 8] = [
+    Color::new(0.27, 0.00, 0.33, 1.0), // Dark purple
+    Color::new(0.28, 0.14, 0.45, 1.0),
+    Color::new(0.26, 0.24, 0.53, 1.0),
+    Color::new(0.22, 0.34, 0.55, 1.0),
+    Color::new(0.18, 0.44, 0.56, 1.0),
+    Color::new(0.12, 0.56, 0.55, 1.0),
+    Color::new(0.20, 0.72, 0.47, 1.0),
+    Color::new(0.99, 0.91, 0.15, 1.0), // Yellow
+];
+
+/// Plasma palette for diverging data.
+pub const PLASMA_TUI: [Color; 8] = [
+    Color::new(0.05, 0.03, 0.53, 1.0), // Dark blue
+    Color::new(0.42, 0.05, 0.68, 1.0),
+    Color::new(0.70, 0.08, 0.64, 1.0),
+    Color::new(0.89, 0.27, 0.50, 1.0),
+    Color::new(0.98, 0.50, 0.30, 1.0),
+    Color::new(0.99, 0.70, 0.17, 1.0),
+    Color::new(0.94, 0.89, 0.26, 1.0),
+    Color::new(0.94, 0.98, 0.56, 1.0), // Light yellow
+];
+```
+
+### 7.6 Backend Dispatch
+
+```rust
+/// Automatic backend selection for optimal performance.
+pub enum RenderBackend {
+    /// Direct terminal via crossterm (Linux/macOS/Windows).
+    Terminal,
+    /// WebAssembly Canvas2D.
+    WasmCanvas,
+    /// WebAssembly WebGL.
+    WasmWebGL,
+    /// Headless (for testing).
+    Headless,
+}
+
+impl RenderBackend {
+    pub fn detect() -> Self {
+        #[cfg(target_arch = "wasm32")]
+        {
+            if has_webgl_support() {
+                Self::WasmWebGL
+            } else {
+                Self::WasmCanvas
+            }
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if std::env::var("HEADLESS").is_ok() {
+                Self::Headless
+            } else {
+                Self::Terminal
+            }
+        }
+    }
+}
+```
 
 ## 8. Advanced Patterns
 
