@@ -5,11 +5,10 @@
 //!
 //! Reference: SPEC-024 Section G (Edge Cases F101-F115)
 
-use presentar_core::Color as CoreColor;
 use presentar_core::{Canvas, Color, Point, Rect, TextStyle, Widget};
 use presentar_terminal::{
-    BrailleGraph, Cell, CellBuffer, CpuGrid, Gauge, Heatmap, HeatmapCell, Modifiers,
-    NetworkInterface, NetworkPanel, ProcessEntry, ProcessTable, Sparkline, Theme,
+    BrailleGraph, Cell, CellBuffer, CpuGrid, Gauge, Gradient, Heatmap, HeatmapCell, Modifiers,
+    NetworkPanel, ProcessEntry, ProcessTable, Sparkline,
 };
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -306,8 +305,8 @@ fn f107_utf8_multibyte_process_name() {
 fn f107_utf8_cell_set() {
     // CellBuffer with multi-byte character
     let mut buffer = CellBuffer::new(10, 5);
-    let fg = presentar_terminal::Color::rgb(255, 255, 255);
-    let bg = presentar_terminal::Color::rgb(0, 0, 0);
+    let fg = presentar_terminal::Color::rgb(1.0, 1.0, 1.0);
+    let bg = presentar_terminal::Color::rgb(0.0, 0.0, 0.0);
     // Set a cell with multi-byte character
     buffer.set(0, 0, Cell::new("\u{4e2d}", fg, bg, Modifiers::empty())); // Chinese character
     buffer.set(1, 0, Cell::new("\u{2764}", fg, bg, Modifiers::empty())); // Heart emoji
@@ -509,23 +508,26 @@ fn f111_resize_cellbuffer() {
 
 #[test]
 fn f112_theme_hot_swap() {
-    // Test theme switching doesn't cause issues
-    let themes = [
-        Theme::tokyo_night(),
-        Theme::dracula(),
-        Theme::nord(),
-        Theme::monokai(),
+    // Test that widget recreations with different configurations doesn't cause issues
+    // (simulating theme switching by recreating widgets with different colors)
+    let gradients = [
+        Gradient::from_hex(&["#7aa2f7", "#e0af68", "#f7768e"]), // Tokyo Night
+        Gradient::from_hex(&["#50fa7b", "#f1fa8c", "#ff5555"]), // Dracula
+        Gradient::from_hex(&["#a3be8c", "#ebcb8b", "#bf616a"]), // Nord
+        Gradient::from_hex(&["#a6e22e", "#e6db74", "#f92672"]), // Monokai
     ];
 
-    let mut graph = BrailleGraph::new(vec![0.1, 0.5, 0.9]);
     let mut canvas = TestCanvas::new();
 
-    for theme in themes.iter().cycle().take(20) {
-        graph.set_theme(theme.clone());
+    for gradient in gradients.iter().cycle().take(20) {
+        let mut graph = BrailleGraph::new(vec![0.1, 0.5, 0.9]).with_gradient(gradient.clone());
         graph.layout(Rect::new(0.0, 0.0, 20.0, 5.0));
         graph.paint(&mut canvas);
     }
-    assert!(true, "Widget should handle rapid theme switching");
+    assert!(
+        true,
+        "Widget recreation with different gradients should work"
+    );
 }
 
 // =============================================================================
@@ -560,11 +562,13 @@ fn f113_thread_safe_cellbuffer() {
         .map(|thread_id| {
             let buffer_clone = Arc::clone(&buffer);
             thread::spawn(move || {
+                let fg = presentar_terminal::Color::rgb(1.0, 1.0, 1.0);
+                let bg = presentar_terminal::Color::rgb(0.0, 0.0, 0.0);
                 for i in 0..100 {
                     let mut buf = buffer_clone.lock().unwrap();
-                    let x = (thread_id * 20 + i % 20) % 80;
-                    let y = (thread_id * 6) % 24;
-                    buf.set(x, y, Cell::new('X'));
+                    let x = ((thread_id * 20 + i % 20) % 80) as u16;
+                    let y = ((thread_id * 6) % 24) as u16;
+                    buf.set(x, y, Cell::new("X", fg, bg, Modifiers::empty()));
                 }
             })
         })
@@ -610,11 +614,13 @@ fn f114_signal_simulation() {
 fn f115_cleanup_simulation() {
     // Test that buffers can be properly cleared/reset
     let mut buffer = CellBuffer::new(80, 24);
+    let fg = presentar_terminal::Color::rgb(1.0, 1.0, 1.0);
+    let bg = presentar_terminal::Color::rgb(0.0, 0.0, 0.0);
 
     // Fill with data
-    for y in 0..24 {
-        for x in 0..80 {
-            buffer.set(x, y, Cell::new('X'));
+    for y in 0..24u16 {
+        for x in 0..80u16 {
+            buffer.set(x, y, Cell::new("X", fg, bg, Modifiers::empty()));
         }
     }
 
@@ -622,14 +628,17 @@ fn f115_cleanup_simulation() {
     buffer.clear();
 
     // Verify cleared (cells should be spaces)
-    for y in 0..24 {
-        for x in 0..80 {
-            let cell = buffer.get(x, y);
-            assert_eq!(
-                cell.ch, ' ',
-                "Cell should be space after clear at ({}, {})",
-                x, y
-            );
+    for y in 0..24u16 {
+        for x in 0..80u16 {
+            if let Some(cell) = buffer.get(x, y) {
+                assert_eq!(
+                    cell.symbol.as_str(),
+                    " ",
+                    "Cell should be space after clear at ({}, {})",
+                    x,
+                    y
+                );
+            }
         }
     }
 }
