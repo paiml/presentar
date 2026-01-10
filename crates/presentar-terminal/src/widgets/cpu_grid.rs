@@ -356,4 +356,184 @@ mod tests {
         let grid = CpuGrid::new(vec![]);
         assert_eq!(grid.brick_name(), "cpu_grid");
     }
+
+    #[test]
+    fn test_cpu_grid_layout() {
+        let mut grid = CpuGrid::new(vec![50.0; 8]);
+        let result = grid.layout(Rect::new(0.0, 0.0, 80.0, 10.0));
+        assert_eq!(result.size.width, 80.0);
+        assert_eq!(result.size.height, 10.0);
+    }
+
+    #[test]
+    fn test_cpu_grid_event() {
+        let mut grid = CpuGrid::new(vec![50.0]);
+        let event = Event::Resize {
+            width: 80.0,
+            height: 24.0,
+        };
+        assert!(grid.event(&event).is_none());
+    }
+
+    #[test]
+    fn test_cpu_grid_children() {
+        let grid = CpuGrid::new(vec![50.0]);
+        assert!(grid.children().is_empty());
+    }
+
+    #[test]
+    fn test_cpu_grid_children_mut() {
+        let mut grid = CpuGrid::new(vec![50.0]);
+        assert!(grid.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_cpu_grid_assertions() {
+        let grid = CpuGrid::new(vec![50.0]);
+        assert!(!grid.assertions().is_empty());
+    }
+
+    #[test]
+    fn test_cpu_grid_budget() {
+        let grid = CpuGrid::new(vec![50.0]);
+        let budget = grid.budget();
+        assert!(budget.layout_ms > 0);
+    }
+
+    #[test]
+    fn test_cpu_grid_to_html() {
+        let grid = CpuGrid::new(vec![50.0]);
+        assert!(grid.to_html().is_empty());
+    }
+
+    #[test]
+    fn test_cpu_grid_to_css() {
+        let grid = CpuGrid::new(vec![50.0]);
+        assert!(grid.to_css().is_empty());
+    }
+
+    #[test]
+    fn test_cpu_grid_clone() {
+        let grid = CpuGrid::new(vec![50.0, 75.0]).with_columns(4);
+        let cloned = grid.clone();
+        assert_eq!(cloned.core_usage.len(), grid.core_usage.len());
+        assert_eq!(cloned.columns, grid.columns);
+    }
+
+    #[test]
+    fn test_cpu_grid_debug() {
+        let grid = CpuGrid::new(vec![50.0]);
+        let debug = format!("{grid:?}");
+        assert!(debug.contains("CpuGrid"));
+    }
+
+    #[test]
+    fn test_cpu_grid_with_gradient() {
+        let gradient = Gradient::from_hex(&["#00FF00", "#FF0000"]);
+        let grid = CpuGrid::new(vec![50.0]).with_gradient(gradient);
+        // Gradient is private, just test it doesn't panic
+        assert_eq!(grid.core_count(), 1);
+    }
+
+    #[test]
+    fn test_cpu_grid_paint() {
+        use crate::{CellBuffer, DirectTerminalCanvas};
+
+        let mut grid = CpuGrid::new(vec![10.0, 50.0, 90.0]);
+        let mut buffer = CellBuffer::new(40, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+
+        grid.layout(Rect::new(0.0, 0.0, 40.0, 10.0));
+        grid.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_cpu_grid_paint_empty() {
+        use crate::{CellBuffer, DirectTerminalCanvas};
+
+        let grid = CpuGrid::new(vec![]);
+        let mut buffer = CellBuffer::new(40, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+
+        grid.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_cpu_grid_paint_compact() {
+        use crate::{CellBuffer, DirectTerminalCanvas};
+
+        let mut grid = CpuGrid::new(vec![10.0, 50.0, 90.0]).compact();
+        let mut buffer = CellBuffer::new(40, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+
+        grid.layout(Rect::new(0.0, 0.0, 40.0, 10.0));
+        grid.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_cpu_grid_paint_without_labels() {
+        use crate::{CellBuffer, DirectTerminalCanvas};
+
+        let mut grid = CpuGrid::new(vec![10.0, 50.0, 90.0]).without_labels();
+        let mut buffer = CellBuffer::new(40, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+
+        grid.layout(Rect::new(0.0, 0.0, 40.0, 10.0));
+        grid.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_cpu_grid_paint_compact_without_labels() {
+        use crate::{CellBuffer, DirectTerminalCanvas};
+
+        let mut grid = CpuGrid::new(vec![10.0, 50.0, 90.0])
+            .compact()
+            .without_labels();
+        let mut buffer = CellBuffer::new(40, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+
+        grid.layout(Rect::new(0.0, 0.0, 40.0, 10.0));
+        grid.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_cpu_grid_optimal_grid_empty() {
+        let grid = CpuGrid::new(vec![]);
+        let (cols, rows) = grid.optimal_grid(80);
+        assert_eq!(cols, 0);
+        assert_eq!(rows, 0);
+    }
+
+    #[test]
+    fn test_cpu_grid_measure_compact() {
+        let grid = CpuGrid::new(vec![10.0; 8]).compact();
+        let size = grid.measure(Constraints::new(0.0, 80.0, 0.0, 20.0));
+        assert!(size.width > 0.0);
+    }
+
+    #[test]
+    fn test_cpu_grid_measure_without_labels() {
+        let grid = CpuGrid::new(vec![10.0; 8]).without_labels();
+        let size = grid.measure(Constraints::new(0.0, 80.0, 0.0, 20.0));
+        assert!(size.width > 0.0);
+    }
+
+    #[test]
+    fn test_cpu_grid_measure_compact_without_labels() {
+        let grid = CpuGrid::new(vec![10.0; 8]).compact().without_labels();
+        let size = grid.measure(Constraints::new(0.0, 80.0, 0.0, 20.0));
+        assert!(size.width > 0.0);
+    }
+
+    #[test]
+    fn test_cpu_grid_meter_char_edge_cases() {
+        assert_eq!(CpuGrid::meter_char(-10.0), ' ');
+        assert_eq!(CpuGrid::meter_char(150.0), '█');
+        assert_eq!(CpuGrid::meter_char(12.5), '▁');
+        assert_eq!(CpuGrid::meter_char(25.0), '▂');
+        assert_eq!(CpuGrid::meter_char(37.5), '▃');
+        assert_eq!(CpuGrid::meter_char(62.5), '▅');
+        assert_eq!(CpuGrid::meter_char(75.0), '▆');
+        assert_eq!(CpuGrid::meter_char(87.5), '▇');
+    }
 }

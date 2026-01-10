@@ -10,7 +10,7 @@ use presentar_core::{Canvas, Color, Constraints, Point, Rect, Size, TextStyle, W
 use presentar_terminal::widgets::{
     Border, BorderStyle, BrailleGraph, CollapsiblePanel, CpuGrid, Gauge, GaugeMode, GraphMode,
     Heatmap, HeatmapCell, MemoryBar, MemorySegment, NetworkInterface, NetworkPanel, ProcessEntry,
-    ProcessSort, ProcessTable, Scrollbar, Sparkline, Tree, TreeNode,
+    ProcessSort, ProcessState, ProcessTable, Scrollbar, Sparkline, Tree, TreeNode,
 };
 
 /// Mock canvas for testing layout
@@ -209,6 +209,7 @@ fn f046_processtable_has_header() {
         mem_percent: 10.0,
         command: "test_cmd".to_string(),
         cmdline: None,
+        state: ProcessState::Running,
     });
 
     let mut canvas = TestCanvas::new(80, 10);
@@ -236,6 +237,7 @@ fn f047_processtable_has_separator() {
         mem_percent: 10.0,
         command: "cmd".to_string(),
         cmdline: None,
+        state: ProcessState::Running,
     });
 
     let mut canvas = TestCanvas::new(80, 10);
@@ -265,6 +267,7 @@ fn f048_processtable_selection_works() {
         mem_percent: 5.0,
         command: "cmd1".to_string(),
         cmdline: None,
+        state: ProcessState::Running,
     });
     table.add_process(ProcessEntry {
         pid: 2,
@@ -273,6 +276,7 @@ fn f048_processtable_selection_works() {
         mem_percent: 10.0,
         command: "cmd2".to_string(),
         cmdline: None,
+        state: ProcessState::Running,
     });
 
     // Select the first row
@@ -298,6 +302,7 @@ fn f049_processtable_sorting() {
         mem_percent: 5.0,
         command: "cmd1".to_string(),
         cmdline: None,
+        state: ProcessState::Running,
     });
     table.add_process(ProcessEntry {
         pid: 2,
@@ -306,6 +311,7 @@ fn f049_processtable_sorting() {
         mem_percent: 20.0,
         command: "cmd2".to_string(),
         cmdline: None,
+        state: ProcessState::Running,
     });
 
     // Sort by CPU
@@ -332,6 +338,7 @@ fn f050_processtable_scrolling() {
             mem_percent: i as f32 / 2.0,
             command: format!("cmd{}", i),
             cmdline: None,
+            state: ProcessState::Running,
         });
     }
 

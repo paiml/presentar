@@ -1,0 +1,704 @@
+//! Multi-series line chart widget with axis support.
+//!
+//! Implements P200 from SPEC-024 Section 15.2.
+
+use crate::widgets::symbols::BRAILLE_UP;
+use presentar_core::{
+    Brick, BrickAssertion, BrickBudget, BrickVerification, Canvas, Color, Constraints, Event,
+    LayoutResult, Point, Rect, Size, TextStyle, TypeId, Widget,
+};
+use std::any::Any;
+use std::time::Duration;
+
+/// Line simplification algorithm.
+#[derive(Debug, Clone, Copy, Default)]
+pub enum Simplification {
+    /// No simplification - render all points.
+    #[default]
+    None,
+    /// Douglas-Peucker algorithm with epsilon threshold.
+    DouglasPeucker { epsilon: f64 },
+    /// Visvalingam-Whyatt algorithm with area threshold.
+    VisvalingamWhyatt { threshold: f64 },
+}
+
+/// A single data series for the line chart.
+#[derive(Debug, Clone)]
+pub struct Series {
+    /// Series name (for legend).
+    pub name: String,
+    /// Data points as (x, y) coordinates.
+    pub data: Vec<(f64, f64)>,
+    /// Series color.
+    pub color: Color,
+    /// Line style.
+    pub style: LineStyle,
+}
+
+/// Line rendering style.
+#[derive(Debug, Clone, Copy, Default)]
+pub enum LineStyle {
+    /// Solid line (default).
+    #[default]
+    Solid,
+    /// Dashed line.
+    Dashed,
+    /// Dotted line.
+    Dotted,
+    /// Show only markers.
+    Markers,
+}
+
+/// Axis configuration.
+#[derive(Debug, Clone)]
+pub struct Axis {
+    /// Axis label.
+    pub label: Option<String>,
+    /// Minimum value (None = auto).
+    pub min: Option<f64>,
+    /// Maximum value (None = auto).
+    pub max: Option<f64>,
+    /// Number of tick marks.
+    pub ticks: usize,
+    /// Show grid lines.
+    pub grid: bool,
+}
+
+impl Default for Axis {
+    fn default() -> Self {
+        Self {
+            label: None,
+            min: None,
+            max: None,
+            ticks: 5,
+            grid: false,
+        }
+    }
+}
+
+/// Legend position.
+#[derive(Debug, Clone, Copy, Default)]
+pub enum LegendPosition {
+    /// Top-right corner.
+    #[default]
+    TopRight,
+    /// Top-left corner.
+    TopLeft,
+    /// Bottom-right corner.
+    BottomRight,
+    /// Bottom-left corner.
+    BottomLeft,
+    /// No legend.
+    None,
+}
+
+/// Multi-series line chart widget.
+#[derive(Debug, Clone)]
+pub struct LineChart {
+    series: Vec<Series>,
+    x_axis: Axis,
+    y_axis: Axis,
+    legend: LegendPosition,
+    simplification: Simplification,
+    bounds: Rect,
+    /// Margin for axis labels.
+    margin_left: f32,
+    margin_bottom: f32,
+}
+
+impl LineChart {
+    /// Create a new empty line chart.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            series: Vec::new(),
+            x_axis: Axis::default(),
+            y_axis: Axis::default(),
+            legend: LegendPosition::default(),
+            simplification: Simplification::default(),
+            bounds: Rect::default(),
+            margin_left: 6.0,
+            margin_bottom: 2.0,
+        }
+    }
+
+    /// Add a data series.
+    #[must_use]
+    pub fn add_series(mut self, name: &str, data: Vec<(f64, f64)>, color: Color) -> Self {
+        self.series.push(Series {
+            name: name.to_string(),
+            data,
+            color,
+            style: LineStyle::default(),
+        });
+        self
+    }
+
+    /// Add a series with custom style.
+    #[must_use]
+    pub fn add_series_styled(
+        mut self,
+        name: &str,
+        data: Vec<(f64, f64)>,
+        color: Color,
+        style: LineStyle,
+    ) -> Self {
+        self.series.push(Series {
+            name: name.to_string(),
+            data,
+            color,
+            style,
+        });
+        self
+    }
+
+    /// Set line simplification algorithm.
+    #[must_use]
+    pub fn with_simplification(mut self, algorithm: Simplification) -> Self {
+        self.simplification = algorithm;
+        self
+    }
+
+    /// Set X axis configuration.
+    #[must_use]
+    pub fn with_x_axis(mut self, axis: Axis) -> Self {
+        self.x_axis = axis;
+        self
+    }
+
+    /// Set Y axis configuration.
+    #[must_use]
+    pub fn with_y_axis(mut self, axis: Axis) -> Self {
+        self.y_axis = axis;
+        self
+    }
+
+    /// Set legend position.
+    #[must_use]
+    pub fn with_legend(mut self, position: LegendPosition) -> Self {
+        self.legend = position;
+        self
+    }
+
+    /// Compute X range from all series.
+    fn x_range(&self) -> (f64, f64) {
+        if let Some(min) = self.x_axis.min {
+            if let Some(max) = self.x_axis.max {
+                return (min, max);
+            }
+        }
+
+        let mut x_min = f64::INFINITY;
+        let mut x_max = f64::NEG_INFINITY;
+
+        for series in &self.series {
+            for &(x, _) in &series.data {
+                if x.is_finite() {
+                    x_min = x_min.min(x);
+                    x_max = x_max.max(x);
+                }
+            }
+        }
+
+        if x_min == f64::INFINITY {
+            (0.0, 1.0)
+        } else {
+            (
+                self.x_axis.min.unwrap_or(x_min),
+                self.x_axis.max.unwrap_or(x_max),
+            )
+        }
+    }
+
+    /// Compute Y range from all series.
+    fn y_range(&self) -> (f64, f64) {
+        if let Some(min) = self.y_axis.min {
+            if let Some(max) = self.y_axis.max {
+                return (min, max);
+            }
+        }
+
+        let mut y_min = f64::INFINITY;
+        let mut y_max = f64::NEG_INFINITY;
+
+        for series in &self.series {
+            for &(_, y) in &series.data {
+                if y.is_finite() {
+                    y_min = y_min.min(y);
+                    y_max = y_max.max(y);
+                }
+            }
+        }
+
+        if y_min == f64::INFINITY {
+            (0.0, 1.0)
+        } else {
+            // Add 10% padding
+            let padding = (y_max - y_min) * 0.1;
+            (
+                self.y_axis.min.unwrap_or(y_min - padding),
+                self.y_axis.max.unwrap_or(y_max + padding),
+            )
+        }
+    }
+
+    /// Apply simplification to a series.
+    fn simplify(&self, data: &[(f64, f64)]) -> Vec<(f64, f64)> {
+        match self.simplification {
+            Simplification::None => data.to_vec(),
+            Simplification::DouglasPeucker { epsilon } => douglas_peucker(data, epsilon),
+            Simplification::VisvalingamWhyatt { threshold } => visvalingam_whyatt(data, threshold),
+        }
+    }
+}
+
+impl Default for LineChart {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Widget for LineChart {
+    fn type_id(&self) -> TypeId {
+        TypeId::of::<Self>()
+    }
+
+    fn measure(&self, constraints: Constraints) -> Size {
+        Size::new(
+            constraints.max_width.min(80.0),
+            constraints.max_height.min(20.0),
+        )
+    }
+
+    fn layout(&mut self, bounds: Rect) -> LayoutResult {
+        self.bounds = bounds;
+        LayoutResult {
+            size: Size::new(bounds.width, bounds.height),
+        }
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn paint(&self, canvas: &mut dyn Canvas) {
+        if self.bounds.width < 10.0 || self.bounds.height < 5.0 {
+            return;
+        }
+
+        let (x_min, x_max) = self.x_range();
+        let (y_min, y_max) = self.y_range();
+
+        // Calculate plot area (inside margins)
+        let plot_x = self.bounds.x + self.margin_left;
+        let plot_y = self.bounds.y;
+        let plot_width = self.bounds.width - self.margin_left;
+        let plot_height = self.bounds.height - self.margin_bottom;
+
+        if plot_width <= 0.0 || plot_height <= 0.0 {
+            return;
+        }
+
+        // Draw Y axis labels
+        let y_label_style = TextStyle {
+            color: Color::new(0.6, 0.6, 0.6, 1.0),
+            ..Default::default()
+        };
+
+        for i in 0..=self.y_axis.ticks {
+            let t = i as f64 / self.y_axis.ticks as f64;
+            let y_val = y_min + (y_max - y_min) * (1.0 - t);
+            let y_pos = plot_y + plot_height * t as f32;
+
+            if y_pos >= plot_y && y_pos < plot_y + plot_height {
+                let label = format!("{y_val:>5.0}");
+                canvas.draw_text(&label, Point::new(self.bounds.x, y_pos), &y_label_style);
+            }
+        }
+
+        // Draw X axis labels
+        for i in 0..=self.x_axis.ticks.min(plot_width as usize / 8) {
+            let t = i as f64 / self.x_axis.ticks as f64;
+            let x_val = x_min + (x_max - x_min) * t;
+            let x_pos = plot_x + plot_width * t as f32;
+
+            if x_pos >= plot_x && x_pos < plot_x + plot_width - 4.0 {
+                let label = format!("{x_val:.0}");
+                canvas.draw_text(
+                    &label,
+                    Point::new(x_pos, plot_y + plot_height),
+                    &y_label_style,
+                );
+            }
+        }
+
+        // Draw each series
+        for series in &self.series {
+            let simplified = self.simplify(&series.data);
+            let style = TextStyle {
+                color: series.color,
+                ..Default::default()
+            };
+
+            // Create a grid to track which cells have been drawn
+            let cols = plot_width as usize;
+            let rows = (plot_height * 4.0) as usize; // 4 braille dots per row
+
+            if cols == 0 || rows == 0 {
+                continue;
+            }
+
+            let mut grid = vec![vec![false; rows]; cols];
+
+            // Plot points onto grid
+            for &(x, y) in &simplified {
+                if !x.is_finite() || !y.is_finite() {
+                    continue;
+                }
+
+                // Normalize to 0..1
+                let x_norm = if x_max > x_min {
+                    (x - x_min) / (x_max - x_min)
+                } else {
+                    0.5
+                };
+                let y_norm = if y_max > y_min {
+                    (y - y_min) / (y_max - y_min)
+                } else {
+                    0.5
+                };
+
+                // Convert to grid coordinates
+                let gx =
+                    ((x_norm * (cols - 1) as f64).round() as usize).min(cols.saturating_sub(1));
+                let gy = (((1.0 - y_norm) * (rows - 1) as f64).round() as usize)
+                    .min(rows.saturating_sub(1));
+
+                grid[gx][gy] = true;
+            }
+
+            // Connect adjacent points with lines (Bresenham-like)
+            let points: Vec<(usize, usize)> = simplified
+                .iter()
+                .filter_map(|&(x, y)| {
+                    if !x.is_finite() || !y.is_finite() {
+                        return None;
+                    }
+                    let x_norm = if x_max > x_min {
+                        (x - x_min) / (x_max - x_min)
+                    } else {
+                        0.5
+                    };
+                    let y_norm = if y_max > y_min {
+                        (y - y_min) / (y_max - y_min)
+                    } else {
+                        0.5
+                    };
+                    let gx =
+                        ((x_norm * (cols - 1) as f64).round() as usize).min(cols.saturating_sub(1));
+                    let gy = (((1.0 - y_norm) * (rows - 1) as f64).round() as usize)
+                        .min(rows.saturating_sub(1));
+                    Some((gx, gy))
+                })
+                .collect();
+
+            for window in points.windows(2) {
+                if let [p1, p2] = window {
+                    draw_line(&mut grid, p1.0, p1.1, p2.0, p2.1);
+                }
+            }
+
+            // Render grid as braille
+            let char_rows = plot_height as usize;
+            for cy in 0..char_rows {
+                #[allow(clippy::needless_range_loop)]
+                for cx in 0..cols {
+                    // Each braille char encodes 2x4 dots
+                    // But we're using 1x4 (single column) for simplicity
+                    let mut dots = 0u8;
+                    for dy in 0..4 {
+                        let gy = cy * 4 + dy;
+                        if gy < rows && grid[cx][gy] {
+                            dots |= 1 << dy;
+                        }
+                    }
+
+                    if dots > 0 {
+                        // Use braille patterns
+                        let braille_idx = dots as usize;
+                        let ch = if braille_idx < BRAILLE_UP.len() {
+                            BRAILLE_UP[braille_idx]
+                        } else {
+                            '⣿'
+                        };
+                        canvas.draw_text(
+                            &ch.to_string(),
+                            Point::new(plot_x + cx as f32, plot_y + cy as f32),
+                            &style,
+                        );
+                    }
+                }
+            }
+        }
+
+        // Draw legend
+        if !matches!(self.legend, LegendPosition::None) && !self.series.is_empty() {
+            let legend_width = self
+                .series
+                .iter()
+                .map(|s| s.name.len() + 3)
+                .max()
+                .unwrap_or(10) as f32;
+
+            let (lx, ly) = match self.legend {
+                LegendPosition::TopRight => (plot_x + plot_width - legend_width, plot_y),
+                LegendPosition::TopLeft => (plot_x, plot_y),
+                LegendPosition::BottomRight => (
+                    plot_x + plot_width - legend_width,
+                    plot_y + plot_height - self.series.len() as f32,
+                ),
+                LegendPosition::BottomLeft => {
+                    (plot_x, plot_y + plot_height - self.series.len() as f32)
+                }
+                LegendPosition::None => return,
+            };
+
+            for (i, series) in self.series.iter().enumerate() {
+                let style = TextStyle {
+                    color: series.color,
+                    ..Default::default()
+                };
+                let text = format!("─ {}", series.name);
+                canvas.draw_text(&text, Point::new(lx, ly + i as f32), &style);
+            }
+        }
+    }
+
+    fn event(&mut self, _event: &Event) -> Option<Box<dyn Any + Send>> {
+        None
+    }
+
+    fn children(&self) -> &[Box<dyn Widget>] {
+        &[]
+    }
+
+    fn children_mut(&mut self) -> &mut [Box<dyn Widget>] {
+        &mut []
+    }
+}
+
+impl Brick for LineChart {
+    fn brick_name(&self) -> &'static str {
+        "LineChart"
+    }
+
+    fn assertions(&self) -> &[BrickAssertion] {
+        static ASSERTIONS: &[BrickAssertion] = &[BrickAssertion::max_latency_ms(16)];
+        ASSERTIONS
+    }
+
+    fn budget(&self) -> BrickBudget {
+        BrickBudget::uniform(16)
+    }
+
+    fn verify(&self) -> BrickVerification {
+        let mut passed = Vec::new();
+        let mut failed = Vec::new();
+
+        if self.bounds.width >= 10.0 {
+            passed.push(BrickAssertion::max_latency_ms(16));
+        } else {
+            failed.push((
+                BrickAssertion::max_latency_ms(16),
+                "Width too small".to_string(),
+            ));
+        }
+
+        BrickVerification {
+            passed,
+            failed,
+            verification_time: Duration::from_micros(5),
+        }
+    }
+
+    fn to_html(&self) -> String {
+        String::new()
+    }
+
+    fn to_css(&self) -> String {
+        String::new()
+    }
+}
+
+/// Draw a line between two points using Bresenham's algorithm.
+#[allow(clippy::cast_possible_wrap)]
+fn draw_line(grid: &mut [Vec<bool>], x0: usize, y0: usize, x1: usize, y1: usize) {
+    let dx = (x1 as isize - x0 as isize).abs();
+    let dy = -(y1 as isize - y0 as isize).abs();
+    let sx: isize = if x0 < x1 { 1 } else { -1 };
+    let sy: isize = if y0 < y1 { 1 } else { -1 };
+    let mut err = dx + dy;
+
+    let mut x = x0 as isize;
+    let mut y = y0 as isize;
+
+    let cols = grid.len() as isize;
+    let rows = if cols > 0 { grid[0].len() as isize } else { 0 };
+
+    loop {
+        if x >= 0 && x < cols && y >= 0 && y < rows {
+            grid[x as usize][y as usize] = true;
+        }
+
+        if x == x1 as isize && y == y1 as isize {
+            break;
+        }
+
+        let e2 = 2 * err;
+        if e2 >= dy {
+            err += dy;
+            x += sx;
+        }
+        if e2 <= dx {
+            err += dx;
+            y += sy;
+        }
+    }
+}
+
+/// Douglas-Peucker line simplification algorithm.
+fn douglas_peucker(points: &[(f64, f64)], epsilon: f64) -> Vec<(f64, f64)> {
+    if points.len() < 3 {
+        return points.to_vec();
+    }
+
+    // Find the point with the maximum distance from the line
+    let start = points[0];
+    let end = points[points.len() - 1];
+
+    let mut max_dist = 0.0;
+    let mut max_idx = 0;
+
+    for (i, &point) in points.iter().enumerate().skip(1).take(points.len() - 2) {
+        let dist = perpendicular_distance(point, start, end);
+        if dist > max_dist {
+            max_dist = dist;
+            max_idx = i;
+        }
+    }
+
+    // If max distance is greater than epsilon, recursively simplify
+    if max_dist > epsilon {
+        let mut left = douglas_peucker(&points[..=max_idx], epsilon);
+        let right = douglas_peucker(&points[max_idx..], epsilon);
+
+        // Remove duplicate point
+        left.pop();
+        left.extend(right);
+        left
+    } else {
+        // Return just the endpoints
+        vec![start, end]
+    }
+}
+
+/// Calculate perpendicular distance from point to line.
+fn perpendicular_distance(point: (f64, f64), start: (f64, f64), end: (f64, f64)) -> f64 {
+    let dx = end.0 - start.0;
+    let dy = end.1 - start.1;
+
+    let mag = dx.hypot(dy);
+    if mag < 1e-10 {
+        return (point.0 - start.0).hypot(point.1 - start.1);
+    }
+
+    ((dy * point.0 - dx * point.1 + end.0 * start.1 - end.1 * start.0) / mag).abs()
+}
+
+/// Visvalingam-Whyatt line simplification algorithm.
+fn visvalingam_whyatt(points: &[(f64, f64)], threshold: f64) -> Vec<(f64, f64)> {
+    if points.len() < 3 {
+        return points.to_vec();
+    }
+
+    let mut result: Vec<(f64, f64)> = points.to_vec();
+
+    while result.len() > 2 {
+        // Find triangle with minimum area
+        let mut min_area = f64::INFINITY;
+        let mut min_idx = 1;
+
+        for i in 1..result.len() - 1 {
+            let area = triangle_area(result[i - 1], result[i], result[i + 1]);
+            if area < min_area {
+                min_area = area;
+                min_idx = i;
+            }
+        }
+
+        if min_area >= threshold {
+            break;
+        }
+
+        result.remove(min_idx);
+    }
+
+    result
+}
+
+/// Calculate triangle area using cross product.
+fn triangle_area(p1: (f64, f64), p2: (f64, f64), p3: (f64, f64)) -> f64 {
+    ((p2.0 - p1.0) * (p3.1 - p1.1) - (p3.0 - p1.0) * (p2.1 - p1.1)).abs() / 2.0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_line_chart_creation() {
+        let chart = LineChart::new().add_series("test", vec![(0.0, 0.0), (1.0, 1.0)], Color::RED);
+        assert_eq!(chart.series.len(), 1);
+        assert_eq!(chart.series[0].name, "test");
+    }
+
+    #[test]
+    fn test_douglas_peucker() {
+        let points = vec![(0.0, 0.0), (1.0, 0.1), (2.0, 0.0), (3.0, 0.0)];
+        let simplified = douglas_peucker(&points, 0.5);
+        assert!(simplified.len() <= points.len());
+    }
+
+    #[test]
+    fn test_empty_chart() {
+        let chart = LineChart::new();
+        let (x_min, x_max) = chart.x_range();
+        assert_eq!(x_min, 0.0);
+        assert_eq!(x_max, 1.0);
+    }
+
+    #[test]
+    fn test_multi_series() {
+        let chart = LineChart::new()
+            .add_series("a", vec![(0.0, 0.0)], Color::RED)
+            .add_series("b", vec![(1.0, 1.0)], Color::BLUE)
+            .add_series("c", vec![(2.0, 2.0)], Color::GREEN);
+        assert_eq!(chart.series.len(), 3);
+    }
+
+    #[test]
+    fn test_line_chart_assertions() {
+        let chart = LineChart::default();
+        assert!(!chart.assertions().is_empty());
+    }
+
+    #[test]
+    fn test_line_chart_verify() {
+        let mut chart = LineChart::default();
+        chart.bounds = Rect::new(0.0, 0.0, 80.0, 20.0);
+        assert!(chart.verify().is_valid());
+    }
+
+    #[test]
+    fn test_line_chart_children() {
+        let chart = LineChart::default();
+        assert!(chart.children().is_empty());
+    }
+}

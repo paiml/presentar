@@ -423,4 +423,157 @@ mod tests {
             .collect();
         assert!(colors.len() >= 3); // At least 3 different colors (red, green, blue, maybe background)
     }
+
+    #[test]
+    fn test_segmented_meter_layout() {
+        let mut meter = SegmentedMeter::new(vec![Segment::new(50.0, Color::RED)], 100.0);
+        let result = meter.layout(Rect::new(0.0, 0.0, 80.0, 2.0));
+        assert_eq!(result.size.width, 80.0);
+        assert_eq!(result.size.height, 2.0);
+    }
+
+    #[test]
+    fn test_segmented_meter_event() {
+        let mut meter = SegmentedMeter::new(vec![], 100.0);
+        let event = Event::Resize {
+            width: 80.0,
+            height: 24.0,
+        };
+        assert!(meter.event(&event).is_none());
+    }
+
+    #[test]
+    fn test_segmented_meter_children() {
+        let meter = SegmentedMeter::new(vec![], 100.0);
+        assert!(meter.children().is_empty());
+    }
+
+    #[test]
+    fn test_segmented_meter_children_mut() {
+        let mut meter = SegmentedMeter::new(vec![], 100.0);
+        assert!(meter.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_segmented_meter_type_id() {
+        let meter = SegmentedMeter::new(vec![], 100.0);
+        let tid = Widget::type_id(&meter);
+        assert_eq!(tid, TypeId::of::<SegmentedMeter>());
+    }
+
+    #[test]
+    fn test_segmented_meter_budget() {
+        let meter = SegmentedMeter::new(vec![], 100.0);
+        let budget = meter.budget();
+        assert!(budget.layout_ms > 0);
+    }
+
+    #[test]
+    fn test_segmented_meter_to_html() {
+        let meter = SegmentedMeter::new(vec![], 100.0);
+        assert!(meter.to_html().is_empty());
+    }
+
+    #[test]
+    fn test_segmented_meter_to_css() {
+        let meter = SegmentedMeter::new(vec![], 100.0);
+        assert!(meter.to_css().is_empty());
+    }
+
+    #[test]
+    fn test_segment_clone() {
+        let seg = Segment::new(50.0, Color::RED).with_label("Test");
+        let cloned = seg.clone();
+        assert_eq!(cloned.value, seg.value);
+        assert_eq!(cloned.label, seg.label);
+    }
+
+    #[test]
+    fn test_segmented_meter_clone() {
+        let meter = SegmentedMeter::new(vec![Segment::new(50.0, Color::RED)], 100.0);
+        let cloned = meter.clone();
+        assert_eq!(cloned.max, meter.max);
+        assert_eq!(cloned.segments.len(), meter.segments.len());
+    }
+
+    #[test]
+    fn test_segment_debug() {
+        let seg = Segment::new(50.0, Color::RED);
+        let debug = format!("{seg:?}");
+        assert!(debug.contains("50"));
+    }
+
+    #[test]
+    fn test_segmented_meter_debug() {
+        let meter = SegmentedMeter::new(vec![], 100.0);
+        let debug = format!("{meter:?}");
+        assert!(debug.contains("100"));
+    }
+
+    #[test]
+    fn test_segmented_meter_paint_zero_max() {
+        let mut meter = SegmentedMeter::new(vec![Segment::new(50.0, Color::RED)], 0.0);
+        meter.bounds = Rect::new(0.0, 0.0, 20.0, 1.0);
+        let mut canvas = MockCanvas::new();
+        meter.paint(&mut canvas);
+        // With max=0, uses total of segments as denominator
+    }
+
+    #[test]
+    fn test_segmented_meter_paint_multi_row() {
+        let mut meter = SegmentedMeter::new(
+            vec![
+                Segment::new(50.0, Color::RED),
+                Segment::new(30.0, Color::BLUE),
+            ],
+            100.0,
+        );
+        meter.bounds = Rect::new(0.0, 0.0, 20.0, 3.0);
+        let mut canvas = MockCanvas::new();
+        meter.paint(&mut canvas);
+        // Should have drawn on multiple rows
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_segmented_meter_paint_zero_segment() {
+        let mut meter = SegmentedMeter::new(
+            vec![
+                Segment::new(50.0, Color::RED),
+                Segment::new(0.0, Color::BLUE), // Zero-value segment
+                Segment::new(30.0, Color::GREEN),
+            ],
+            100.0,
+        );
+        meter.bounds = Rect::new(0.0, 0.0, 20.0, 1.0);
+        let mut canvas = MockCanvas::new();
+        meter.paint(&mut canvas);
+        // Zero segments should be skipped
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_segmented_meter_paint_overflow() {
+        let mut meter = SegmentedMeter::new(
+            vec![
+                Segment::new(100.0, Color::RED),
+                Segment::new(100.0, Color::BLUE),
+            ],
+            100.0, // Total > max, will overflow width
+        );
+        meter.bounds = Rect::new(0.0, 0.0, 20.0, 1.0);
+        let mut canvas = MockCanvas::new();
+        meter.paint(&mut canvas);
+        // Should still handle gracefully
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_segmented_meter_memory_overflow() {
+        // Test when used + cached > total
+        let meter = SegmentedMeter::memory(80.0, 30.0, 100.0);
+        assert_eq!(meter.segments.len(), 3);
+        // Free should be clamped to 0
+        assert_eq!(meter.segments[2].value, 0.0);
+    }
 }

@@ -4,7 +4,8 @@
 
 use presentar_core::{Color, Rect, TextStyle};
 use presentar_terminal::{
-    CellBuffer, DirectTerminalCanvas, NetworkInterface, NetworkPanel, ProcessEntry, ProcessTable,
+    CellBuffer, DirectTerminalCanvas, NetworkInterface, NetworkPanel, ProcessEntry, ProcessState,
+    ProcessTable,
 };
 
 /// Test that ProcessTable renders with proper colors.
@@ -19,6 +20,7 @@ fn test_process_table_renders_visible_text() {
         mem_percent: 10.0,
         command: "test_cmd".to_string(),
         cmdline: None,
+        state: ProcessState::Running,
     });
 
     // Create a canvas to render to

@@ -3,8 +3,8 @@
 **Status**: **FAILING** - 40% parity, 60% missing
 **Author**: Claude Code
 **Date**: 2026-01-10
-**Version**: 4.2.0
-**Revision**: Tightened performance tolerances (1.5x -> 1.0x parity) and input latency (<16ms).
+**Version**: 4.3.0
+**Revision**: Added PMAT work tickets (Section 12) with 12 trackable tasks, verification commands, and Anti-Coconut-Radio rules.
 **Breaking Change**: Honest gap assessment. Previous claims of "85% complete" were FALSE.
 
 ---
@@ -785,7 +785,7 @@ impl AnalyzerRegistry {
 
 ---
 
-## 10. Acceptance Gate
+## 11. Acceptance Gate
 
 ```bash
 #!/bin/bash
@@ -828,7 +828,506 @@ fi
 
 ---
 
-## 11. Document History
+## 12. PMAT Work Tickets
+
+### 12.1 Purpose
+
+To prevent "Coconut Radio" claims (false completion declarations), each implementation task has a formal work ticket with:
+- **Verification commands** that MUST pass
+- **Proof-of-completion** requirements
+- **Blocking dependencies** that must complete first
+
+### 12.2 Ticket Format
+
+```yaml
+TICKET-XXX:
+  title: "Short description"
+  status: NOT_STARTED | IN_PROGRESS | BLOCKED | DONE
+  assignee: Claude Code
+  dependencies: [TICKET-XXX, ...]
+  falsification_codes: [F500, F501, ...]
+  verification:
+    - command: "exact shell command"
+      expected: "expected output or exit code"
+  proof_of_completion:
+    - "Specific artifact or test result"
+  acceptance_criteria:
+    - "Human-readable criterion"
+```
+
+### 12.3 Work Tickets
+
+---
+
+#### TICKET-001: TUI Comparison Tool - Core Engine
+
+| Field | Value |
+|-------|-------|
+| **Status** | NOT_STARTED |
+| **Dependencies** | None |
+| **Falsification Codes** | F700-F720 |
+| **Estimated Effort** | Medium |
+
+**Description**: Implement the TUI comparison engine that captures ttop and ptop output in deterministic mode and computes CLD, ΔE00, and SSIM metrics.
+
+**Verification Commands**:
+```bash
+# Tool exists and compiles
+cargo build --bin tui-compare -p presentar-terminal --features tui-compare
+
+# Help works
+./target/debug/tui-compare --help | grep -q "CIEDE2000"
+
+# Can run against test fixtures
+./target/debug/tui-compare \
+    --reference fixtures/ttop_120x40.ans \
+    --target fixtures/ptop_120x40.ans \
+    --output /tmp/report.txt
+```
+
+**Proof-of-Completion**:
+- [ ] `tui-compare` binary exists in `target/`
+- [ ] Produces comparison report with CLD, ΔE00, SSIM values
+- [ ] Unit tests pass: `cargo test -p presentar-terminal tui_compare`
+
+**Acceptance Criteria**:
+- CLD calculation matches reference implementation within ±0.001
+- ΔE00 uses full CIEDE2000 formula (not simplified ΔE76)
+- SSIM computed per 8x8 window with luminance weighting
+
+---
+
+#### TICKET-002: CIEDE2000 Color Difference Implementation
+
+| Field | Value |
+|-------|-------|
+| **Status** | NOT_STARTED |
+| **Dependencies** | None |
+| **Falsification Codes** | F701, F704, F706, F716 |
+| **Estimated Effort** | Small |
+
+**Description**: Implement the full CIEDE2000 (ΔE00) formula per CIE Technical Report 142-2001.
+
+**Verification Commands**:
+```bash
+# Unit tests for known color pairs
+cargo test -p presentar-terminal ciede2000
+
+# Test cases (from CIE reference):
+# Lab1=(50.0, 2.6772, -79.7751), Lab2=(50.0, 0.0, -82.7485) → ΔE00 ≈ 2.0425
+```
+
+**Proof-of-Completion**:
+- [ ] `ciede2000()` function exists in `src/tools/color_diff.rs`
+- [ ] Passes all 34 CIE reference test vectors
+- [ ] Handles edge cases: identical colors, black, white, grays
+
+**Acceptance Criteria**:
+- Implements full formula including hue rotation term
+- Accuracy within ±0.0001 of CIE reference values
+
+---
+
+#### TICKET-003: Deterministic Mode for ptop
+
+| Field | Value |
+|-------|-------|
+| **Status** | PARTIAL |
+| **Dependencies** | None |
+| **Falsification Codes** | F700-F720 (all comparison tests) |
+| **Estimated Effort** | Small |
+
+**Description**: Ensure `ptop --deterministic` produces byte-identical output on every run.
+
+**Verification Commands**:
+```bash
+# Run twice and compare
+./target/release/ptop --deterministic > /tmp/run1.txt &
+sleep 1; kill $!
+./target/release/ptop --deterministic > /tmp/run2.txt &
+sleep 1; kill $!
+
+# Must be identical
+diff /tmp/run1.txt /tmp/run2.txt && echo "PASS" || echo "FAIL"
+```
+
+**Proof-of-Completion**:
+- [ ] `--deterministic` flag implemented
+- [ ] Fixed timestamp: `2026-01-01 00:00:00`
+- [ ] Fixed CPU values: `[45.0, 32.0, 67.0, 12.0, 89.0, 23.0, 56.0, 78.0]`
+- [ ] Fixed memory: `18.2GB / 32.0GB`
+- [ ] Fixed processes: 20-item static list
+
+**Acceptance Criteria**:
+- 100 consecutive runs produce identical output
+
+---
+
+#### TICKET-004: ConnectionsAnalyzer
+
+| Field | Value |
+|-------|-------|
+| **Status** | NOT_STARTED |
+| **Dependencies** | None |
+| **Falsification Codes** | F500, F501, F502, F503, F629, F630, F811 |
+| **Estimated Effort** | Large |
+
+**Description**: Parse `/proc/net/tcp` and `/proc/net/tcp6` to show active network connections with process mapping.
+
+**Verification Commands**:
+```bash
+# Module exists
+test -f crates/presentar-terminal/src/ptop/analyzers/connections.rs
+
+# Compiles
+cargo check -p presentar-terminal --features ptop
+
+# Matches system state
+./target/release/ptop --dump-connections | wc -l
+ss -tan | wc -l
+# Counts should match within ±5
+```
+
+**Proof-of-Completion**:
+- [ ] `ConnectionsAnalyzer` struct implemented
+- [ ] Parses IPv4 connections from `/proc/net/tcp`
+- [ ] Parses IPv6 connections from `/proc/net/tcp6`
+- [ ] Maps socket to PID via `/proc/[pid]/fd/`
+- [ ] Shows connection state (ESTABLISHED, TIME_WAIT, etc.)
+
+**Acceptance Criteria**:
+- Connection count matches `ss -tan` within ±5
+- Process names correctly resolved for 95%+ connections
+
+---
+
+#### TICKET-005: ProcessExtraAnalyzer
+
+| Field | Value |
+|-------|-------|
+| **Status** | NOT_STARTED |
+| **Dependencies** | None |
+| **Falsification Codes** | F508, F509, F611, F612, F613, F614 |
+| **Estimated Effort** | Medium |
+
+**Description**: Extend process information with cgroup, OOM score, I/O priority, and CPU affinity.
+
+**Verification Commands**:
+```bash
+# Module exists
+test -f crates/presentar-terminal/src/ptop/analyzers/process_extra.rs
+
+# OOM score readable
+./target/release/ptop --dump-processes | grep "oom_score" | head -5
+```
+
+**Proof-of-Completion**:
+- [ ] Reads `/proc/[pid]/cgroup`
+- [ ] Reads `/proc/[pid]/oom_score` and `oom_score_adj`
+- [ ] Reads `/proc/[pid]/io` for ionice class
+- [ ] Reads CPU affinity from `/proc/[pid]/status`
+
+**Acceptance Criteria**:
+- OOM scores match `cat /proc/[pid]/oom_score` exactly
+- cgroup paths correctly parsed
+
+---
+
+#### TICKET-006: SensorHealthAnalyzer
+
+| Field | Value |
+|-------|-------|
+| **Status** | NOT_STARTED |
+| **Dependencies** | None |
+| **Falsification Codes** | F510, F511, F621, F622, F623, F810 |
+| **Estimated Effort** | Medium |
+
+**Description**: Read hardware sensors from `/sys/class/hwmon/` including temperature, fan RPM, and voltages.
+
+**Verification Commands**:
+```bash
+# Module exists
+test -f crates/presentar-terminal/src/ptop/analyzers/sensor_health.rs
+
+# Temperature matches
+./target/release/ptop --dump-sensors | grep "temp" | head -3
+sensors | grep "temp" | head -3
+# Should show similar values (±2°C)
+```
+
+**Proof-of-Completion**:
+- [ ] Enumerates `/sys/class/hwmon/hwmon*/`
+- [ ] Reads `temp*_input`, `fan*_input`, `in*_input`
+- [ ] Parses labels from `*_label` files
+- [ ] Reads critical/warning thresholds
+
+**Acceptance Criteria**:
+- Temperature within ±2°C of `sensors` output
+- Fan RPM within ±50 of `sensors` output
+
+---
+
+#### TICKET-007: ContainersAnalyzer
+
+| Field | Value |
+|-------|-------|
+| **Status** | NOT_STARTED |
+| **Dependencies** | None |
+| **Falsification Codes** | F504, F505, F618, F619, F620, F812 |
+| **Estimated Effort** | Large |
+
+**Description**: Query Docker and Podman for container stats.
+
+**Verification Commands**:
+```bash
+# Module exists
+test -f crates/presentar-terminal/src/ptop/analyzers/containers.rs
+
+# Docker socket access
+./target/release/ptop --dump-containers | wc -l
+docker ps -q | wc -l
+# Counts should match
+```
+
+**Proof-of-Completion**:
+- [ ] Connects to `/var/run/docker.sock`
+- [ ] Connects to `/run/podman/podman.sock` if Docker unavailable
+- [ ] Lists running containers with name, image, status
+- [ ] Shows per-container CPU/memory from cgroup stats
+
+**Acceptance Criteria**:
+- Container count matches `docker ps -q | wc -l`
+- CPU/memory within ±5% of `docker stats --no-stream`
+
+---
+
+#### TICKET-008: GpuProcsAnalyzer
+
+| Field | Value |
+|-------|-------|
+| **Status** | NOT_STARTED |
+| **Dependencies** | None |
+| **Falsification Codes** | F512, F513, F615, F616, F617 |
+| **Estimated Effort** | Medium |
+
+**Description**: Query GPU process VRAM usage from nvidia-smi or AMDGPU.
+
+**Verification Commands**:
+```bash
+# Module exists
+test -f crates/presentar-terminal/src/ptop/analyzers/gpu_procs.rs
+
+# NVIDIA check (if GPU present)
+if command -v nvidia-smi &>/dev/null; then
+    ./target/release/ptop --dump-gpu-procs | head -5
+    nvidia-smi --query-compute-apps=pid,used_memory --format=csv | head -5
+fi
+```
+
+**Proof-of-Completion**:
+- [ ] Detects NVIDIA GPU via `nvidia-smi`
+- [ ] Parses per-process VRAM usage
+- [ ] Shows GPU temperature and power draw
+- [ ] Falls back gracefully if no GPU
+
+**Acceptance Criteria**:
+- VRAM usage within ±10MB of nvidia-smi
+- Temperature within ±2°C
+
+---
+
+#### TICKET-009: TreemapAnalyzer (Real File Scanning)
+
+| Field | Value |
+|-------|-------|
+| **Status** | NOT_STARTED |
+| **Dependencies** | None |
+| **Falsification Codes** | F514, F515, F624, F625 |
+| **Estimated Effort** | Large |
+
+**Description**: Scan filesystem to build real treemap data instead of hardcoded stub.
+
+**Verification Commands**:
+```bash
+# Module exists
+test -f crates/presentar-terminal/src/ptop/analyzers/treemap.rs
+
+# Scan /home and verify
+./target/release/ptop --scan-treemap /home --depth 2 | head -20
+du -sh /home/*/ 2>/dev/null | head -20
+# Sizes should be comparable
+```
+
+**Proof-of-Completion**:
+- [ ] Uses `walkdir` crate for recursive scanning
+- [ ] Computes file sizes accurately
+- [ ] Groups by directory for treemap layout
+- [ ] Caches results to avoid re-scanning every frame
+
+**Acceptance Criteria**:
+- Directory sizes within ±1% of `du -sb`
+- Scan completes in <5s for /home
+
+---
+
+#### TICKET-010: PsiAnalyzer
+
+| Field | Value |
+|-------|-------|
+| **Status** | NOT_STARTED |
+| **Dependencies** | None |
+| **Falsification Codes** | F516, F517, F604 |
+| **Estimated Effort** | Small |
+
+**Description**: Read Pressure Stall Information from `/proc/pressure/*`.
+
+**Verification Commands**:
+```bash
+# Module exists
+test -f crates/presentar-terminal/src/ptop/analyzers/psi.rs
+
+# PSI data readable
+./target/release/ptop --dump-psi
+cat /proc/pressure/cpu
+cat /proc/pressure/memory
+cat /proc/pressure/io
+# Values should match
+```
+
+**Proof-of-Completion**:
+- [ ] Parses `/proc/pressure/cpu`
+- [ ] Parses `/proc/pressure/memory`
+- [ ] Parses `/proc/pressure/io`
+- [ ] Extracts `some` and `full` stall percentages
+
+**Acceptance Criteria**:
+- PSI values exactly match `/proc/pressure/*` output
+
+---
+
+#### TICKET-011: Panel UI - Show Analyzer Data
+
+| Field | Value |
+|-------|-------|
+| **Status** | NOT_STARTED |
+| **Dependencies** | TICKET-004 through TICKET-010 |
+| **Falsification Codes** | F600-F631 |
+| **Estimated Effort** | Large |
+
+**Description**: Update all panel rendering to display data from analyzers.
+
+**Verification Commands**:
+```bash
+# Visual inspection
+./target/release/ptop
+
+# Check that panels show real data:
+# - Connections panel shows actual TCP connections
+# - Process panel shows OOM scores
+# - Sensors panel shows temperature/fan/voltage
+# - GPU panel shows VRAM per process
+# - Treemap shows real file sizes
+```
+
+**Proof-of-Completion**:
+- [ ] CPU panel shows per-core governor
+- [ ] Memory panel shows PSI pressure indicator
+- [ ] Process panel shows cgroup, OOM score columns
+- [ ] Connections panel shows all TCP states
+- [ ] Sensors panel shows fan RPM, voltages
+- [ ] GPU panel shows per-process VRAM
+- [ ] Treemap shows real scanned data
+
+**Acceptance Criteria**:
+- All F600-F631 tests pass
+
+---
+
+#### TICKET-012: Final Pixel Comparison Pass
+
+| Field | Value |
+|-------|-------|
+| **Status** | NOT_STARTED |
+| **Dependencies** | TICKET-001, TICKET-003, TICKET-011 |
+| **Falsification Codes** | F700-F720 |
+| **Estimated Effort** | Medium |
+
+**Description**: Run full pixel comparison between ttop and ptop, fix all remaining differences.
+
+**Verification Commands**:
+```bash
+# Full comparison
+./target/release/tui-compare \
+    --reference "ttop --deterministic" \
+    --target "ptop --deterministic" \
+    --size 120x40 \
+    --output /tmp/final_report.txt
+
+# Check thresholds
+grep "CLD:" /tmp/final_report.txt  # Must be < 0.01
+grep "ΔE00:" /tmp/final_report.txt # Must be < 2.0
+grep "SSIM:" /tmp/final_report.txt # Must be > 0.95
+
+# All panels pass
+grep "FAIL" /tmp/final_report.txt && echo "FAILING" || echo "ALL PASS"
+```
+
+**Proof-of-Completion**:
+- [ ] CLD < 0.01 (less than 1% character difference)
+- [ ] ΔE00 < 2.0 (barely perceptible color difference)
+- [ ] SSIM > 0.95 (95% structural similarity)
+- [ ] All panel breakdowns pass
+- [ ] Final report saved to `__pixel_baselines__/final_comparison.txt`
+
+**Acceptance Criteria**:
+- Zero FAIL entries in comparison report
+- Screenshot saved as proof
+
+---
+
+### 12.4 Ticket Status Dashboard
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      PMAT TICKET STATUS DASHBOARD                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  TICKET-001  TUI Compare Tool         [ ] NOT_STARTED                       │
+│  TICKET-002  CIEDE2000 Implementation [ ] NOT_STARTED                       │
+│  TICKET-003  Deterministic Mode       [~] PARTIAL                           │
+│  TICKET-004  ConnectionsAnalyzer      [ ] NOT_STARTED                       │
+│  TICKET-005  ProcessExtraAnalyzer     [ ] NOT_STARTED                       │
+│  TICKET-006  SensorHealthAnalyzer     [ ] NOT_STARTED                       │
+│  TICKET-007  ContainersAnalyzer       [ ] NOT_STARTED                       │
+│  TICKET-008  GpuProcsAnalyzer         [ ] NOT_STARTED                       │
+│  TICKET-009  TreemapAnalyzer          [ ] NOT_STARTED                       │
+│  TICKET-010  PsiAnalyzer              [ ] NOT_STARTED                       │
+│  TICKET-011  Panel UI Integration     [ ] BLOCKED (deps: 004-010)           │
+│  TICKET-012  Final Pixel Pass         [ ] BLOCKED (deps: 001,003,011)       │
+│                                                                              │
+│  ─────────────────────────────────────────────────────────────────────────  │
+│                                                                              │
+│  Progress: 0/12 complete (0%)                                               │
+│  Blocking chain: 004-010 → 011 → 012                                        │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 12.5 Anti-Coconut-Radio Rules
+
+To prevent false completion claims, these rules are MANDATORY:
+
+1. **No ticket is DONE until ALL verification commands pass**
+2. **No ticket is DONE until ALL proof-of-completion checkboxes are checked**
+3. **Blocked tickets cannot be marked IN_PROGRESS until dependencies are DONE**
+4. **The Final Pixel Pass (TICKET-012) is the ONLY proof of pixel-perfect parity**
+5. **Claiming "complete" without TICKET-012 DONE is a Coconut Radio violation**
+6. **All verification commands must be run by the implementer, not assumed**
+7. **If any verification command fails, the ticket is NOT DONE**
+
+---
+
+## 13. Document History
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
@@ -836,13 +1335,16 @@ fi
 | **4.0.0** | 2026-01-10 | Claude Code | **BREAKING**: Honest gap assessment. Previous "85% complete" claim was FALSE. Actual: 13% code parity, 40% visual parity. Added: (1) Full ttop analyzer inventory (17 modules, 12,847 lines missing); (2) TUI pixel comparison tooling spec with CIEDE2000, SSIM, CLD metrics; (3) Film studio grade color comparison pipeline; (4) 120 new falsification tests (F500-F820); (5) Analyzer implementation specifications; (6) Acceptance gate script. Total falsification tests now: 301. |
 | **4.1.0** | 2026-01-10 | Claude Code | Re-integrated "Anti-Regression" checks (F900-F905) to ban simulated data and mandate CIELAB precision. Updated acceptance gate. |
 | **4.2.0** | 2026-01-10 | Claude Code | Tightened performance criteria (F260-F262) to <= 1.0x ttop parity and input latency (F264) to <16ms. |
+| **4.3.0** | 2026-01-10 | Claude Code | Added Section 12: PMAT Work Tickets with 12 trackable tickets (TICKET-001 through TICKET-012), verification commands, proof-of-completion requirements, status dashboard, and Anti-Coconut-Radio rules to prevent false completion claims. Renumbered sections 11→14. |
 
 ---
 
-## 12. Conclusion
+## 14. Conclusion
 
 This specification now honestly documents the gap between ttop and ptop. The claim "pixel-perfect" requires passing ALL 301 falsification tests. Until then, ptop is a **partial implementation**, not a complete clone.
 
 **Current Status**: FAILING (40% visual parity, 13% code parity)
 
 **Required for PASS**: Implement 17 analyzers, achieve CLD < 1%, ΔE00 < 2.0, SSIM > 95%
+
+**Ticket Progress**: 0/12 complete - see Section 12 for work breakdown

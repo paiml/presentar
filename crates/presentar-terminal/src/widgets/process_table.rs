@@ -12,6 +12,52 @@ use std::any::Any;
 use std::fmt::Write as _;
 use std::time::Duration;
 
+/// Process state (from /proc/[pid]/stat)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ProcessState {
+    /// Running (R)
+    Running,
+    /// Sleeping (S)
+    #[default]
+    Sleeping,
+    /// Disk sleep/waiting (D)
+    DiskWait,
+    /// Zombie (Z)
+    Zombie,
+    /// Stopped (T)
+    Stopped,
+    /// Idle (I)
+    Idle,
+}
+
+impl ProcessState {
+    /// Get the single-character representation
+    #[must_use]
+    pub fn char(&self) -> char {
+        match self {
+            Self::Running => 'R',
+            Self::Sleeping => 'S',
+            Self::DiskWait => 'D',
+            Self::Zombie => 'Z',
+            Self::Stopped => 'T',
+            Self::Idle => 'I',
+        }
+    }
+
+    /// Get the color for this state
+    #[must_use]
+    pub fn color(&self) -> Color {
+        match self {
+            Self::Running => Color::new(0.3, 0.9, 0.3, 1.0), // Green
+            Self::Sleeping => Color::new(0.5, 0.5, 0.5, 1.0), // Gray
+            Self::DiskWait => Color::new(1.0, 0.7, 0.2, 1.0), // Orange
+            Self::Zombie => Color::new(1.0, 0.3, 0.3, 1.0),  // Red
+            Self::Stopped => Color::new(0.9, 0.9, 0.3, 1.0), // Yellow
+            Self::Idle => Color::new(0.4, 0.4, 0.4, 1.0),    // Dark gray
+        }
+    }
+}
+
 /// A running process entry.
 #[derive(Debug, Clone)]
 pub struct ProcessEntry {
@@ -27,6 +73,8 @@ pub struct ProcessEntry {
     pub command: String,
     /// Full command line (optional).
     pub cmdline: Option<String>,
+    /// Process state.
+    pub state: ProcessState,
 }
 
 impl ProcessEntry {
@@ -46,6 +94,7 @@ impl ProcessEntry {
             mem_percent: mem,
             command: command.into(),
             cmdline: None,
+            state: ProcessState::default(),
         }
     }
 
@@ -53,6 +102,13 @@ impl ProcessEntry {
     #[must_use]
     pub fn with_cmdline(mut self, cmdline: impl Into<String>) -> Self {
         self.cmdline = Some(cmdline.into());
+        self
+    }
+
+    /// Set process state.
+    #[must_use]
+    pub fn with_state(mut self, state: ProcessState) -> Self {
+        self.state = state;
         self
     }
 }
@@ -392,13 +448,15 @@ impl Widget for ProcessTable {
             return;
         }
 
-        // Column layout
+        // Column layout - compact mode: PID S C% M% COMMAND
         let pid_w = 6;
+        let state_w = if self.compact { 2 } else { 0 }; // State column in compact mode
         let user_w = if self.compact { 0 } else { 8 };
         let cpu_w = 6;
         let mem_w = 6;
         let sep_w = if self.compact { 1 } else { 3 };
-        let fixed_w = pid_w + user_w + cpu_w + mem_w + sep_w * (if self.compact { 2 } else { 4 });
+        let fixed_w =
+            pid_w + state_w + user_w + cpu_w + mem_w + sep_w * (if self.compact { 3 } else { 4 });
         let cmd_w = width.saturating_sub(fixed_w);
 
         // Header style
@@ -408,17 +466,28 @@ impl Widget for ProcessTable {
             ..Default::default()
         };
 
-        // Draw header
+        // Draw header - ttop compact format: PID S C% M% COMMAND
         let mut header = String::new();
         let _ = write!(header, "{:>pid_w$}", "PID");
-        if !self.compact {
+        if self.compact {
+            header.push(' ');
+            let _ = write!(header, "{:>1}", "S");
+        } else {
             header.push_str(" │ ");
             let _ = write!(header, "{:user_w$}", "USER");
         }
         header.push_str(if self.compact { " " } else { " │ " });
-        let _ = write!(header, "{:>cpu_w$}", "CPU%");
+        let _ = write!(
+            header,
+            "{:>cpu_w$}",
+            if self.compact { "C%" } else { "CPU%" }
+        );
         header.push_str(if self.compact { " " } else { " │ " });
-        let _ = write!(header, "{:>mem_w$}", "MEM%");
+        let _ = write!(
+            header,
+            "{:>mem_w$}",
+            if self.compact { "M%" } else { "MEM%" }
+        );
         header.push_str(if self.compact { " " } else { " │ " });
         let _ = write!(header, "{:cmd_w$}", "COMMAND");
 
@@ -471,8 +540,20 @@ impl Widget for ProcessTable {
             canvas.draw_text(&pid_str, Point::new(x, y), &default_style);
             x += pid_w as f32;
 
-            // User (if not compact)
-            if !self.compact {
+            // State (compact mode) or User (full mode)
+            if self.compact {
+                x += 1.0; // separator
+                let state_char = proc.state.char().to_string();
+                canvas.draw_text(
+                    &state_char,
+                    Point::new(x, y),
+                    &TextStyle {
+                        color: proc.state.color(),
+                        ..Default::default()
+                    },
+                );
+                x += 1.0;
+            } else {
                 x += 3.0; // separator
                 let user_str = Self::truncate(&proc.user, user_w);
                 canvas.draw_text(&user_str, Point::new(x, y), &default_style);

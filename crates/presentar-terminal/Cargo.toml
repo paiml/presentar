@@ -27,5 +27,23 @@ thiserror = "2.0"
 [dev-dependencies]
 proptest = { workspace = true }
 
+[features]
+default = []
+ptop = ["sysinfo", "clap"]
+
+[dependencies.sysinfo]
+version = "0.33"
+optional = true
+
+[dependencies.clap]
+version = "4"
+features = ["derive"]
+optional = true
+
+[[bin]]
+name = "ptop"
+path = "src/bin/ptop.rs"
+required-features = ["ptop"]
+
 [lints]
 workspace = true

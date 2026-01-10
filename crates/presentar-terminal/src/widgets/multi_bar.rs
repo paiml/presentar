@@ -441,11 +441,188 @@ mod tests {
     #[test]
     fn test_multi_bar_many_values() {
         // Simulate 48 CPU cores
-        let values: Vec<f64> = (0..48).map(|i| (i as f64 / 48.0)).collect();
+        let values: Vec<f64> = (0..48).map(|i| i as f64 / 48.0).collect();
         let mut graph = MultiBarGraph::new(values);
         graph.bounds = Rect::new(0.0, 0.0, 96.0, 6.0);
         let mut canvas = MockCanvas::new();
         graph.paint(&mut canvas);
         assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_multi_bar_layout() {
+        let mut graph = MultiBarGraph::new(vec![0.5, 0.75]);
+        let result = graph.layout(Rect::new(0.0, 0.0, 40.0, 10.0));
+        assert_eq!(result.size.width, 40.0);
+        assert_eq!(result.size.height, 10.0);
+    }
+
+    #[test]
+    fn test_multi_bar_event() {
+        let mut graph = MultiBarGraph::new(vec![0.5]);
+        let event = Event::Resize {
+            width: 80.0,
+            height: 24.0,
+        };
+        assert!(graph.event(&event).is_none());
+    }
+
+    #[test]
+    fn test_multi_bar_children() {
+        let graph = MultiBarGraph::new(vec![0.5]);
+        assert!(graph.children().is_empty());
+    }
+
+    #[test]
+    fn test_multi_bar_children_mut() {
+        let mut graph = MultiBarGraph::new(vec![0.5]);
+        assert!(graph.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_multi_bar_type_id() {
+        let graph = MultiBarGraph::new(vec![0.5]);
+        let tid = Widget::type_id(&graph);
+        assert_eq!(tid, TypeId::of::<MultiBarGraph>());
+    }
+
+    #[test]
+    fn test_multi_bar_budget() {
+        let graph = MultiBarGraph::new(vec![0.5]);
+        let budget = graph.budget();
+        assert!(budget.layout_ms > 0);
+    }
+
+    #[test]
+    fn test_multi_bar_to_html() {
+        let graph = MultiBarGraph::new(vec![0.5]);
+        assert!(graph.to_html().is_empty());
+    }
+
+    #[test]
+    fn test_multi_bar_to_css() {
+        let graph = MultiBarGraph::new(vec![0.5]);
+        assert!(graph.to_css().is_empty());
+    }
+
+    #[test]
+    fn test_multi_bar_clone() {
+        let graph = MultiBarGraph::new(vec![0.5, 0.75]).with_gap(2);
+        let cloned = graph.clone();
+        assert_eq!(cloned.values.len(), graph.values.len());
+        assert_eq!(cloned.gap, graph.gap);
+    }
+
+    #[test]
+    fn test_multi_bar_debug() {
+        let graph = MultiBarGraph::new(vec![0.5]);
+        let debug = format!("{graph:?}");
+        assert!(debug.contains("MultiBarGraph"));
+    }
+
+    #[test]
+    fn test_multi_bar_mode_debug() {
+        let mode = MultiBarMode::Vertical;
+        let debug = format!("{mode:?}");
+        assert!(debug.contains("Vertical"));
+    }
+
+    #[test]
+    fn test_multi_bar_mode_clone() {
+        let mode = MultiBarMode::Horizontal;
+        let cloned = mode;
+        assert_eq!(cloned, MultiBarMode::Horizontal);
+    }
+
+    #[test]
+    fn test_multi_bar_with_labels() {
+        let graph =
+            MultiBarGraph::new(vec![0.5]).with_labels(vec!["CPU0".to_string(), "CPU1".to_string()]);
+        assert!(graph.labels.is_some());
+        assert_eq!(graph.labels.unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_multi_bar_color_for_value_no_gradient() {
+        let graph = MultiBarGraph::new(vec![0.5]).with_color(Color::BLUE);
+        let color = graph.color_for_value(0.75);
+        assert_eq!(color, Color::BLUE);
+    }
+
+    #[test]
+    fn test_multi_bar_color_for_value_with_gradient() {
+        let gradient = Gradient::from_hex(&["#00FF00", "#FF0000"]);
+        let graph = MultiBarGraph::new(vec![0.5]).with_gradient(gradient);
+        let color = graph.color_for_value(0.5);
+        // Should be somewhere between green and red
+        assert!(color.r > 0.0 || color.g > 0.0);
+    }
+
+    #[test]
+    fn test_multi_bar_vertical_overflow() {
+        // More bars than width
+        let mut graph = MultiBarGraph::new(vec![0.5; 20]);
+        graph.bounds = Rect::new(0.0, 0.0, 10.0, 5.0);
+        let mut canvas = MockCanvas::new();
+        graph.paint(&mut canvas);
+        // Should handle gracefully
+    }
+
+    #[test]
+    fn test_multi_bar_horizontal_overflow() {
+        // More bars than height
+        let mut graph = MultiBarGraph::new(vec![0.5; 20]).with_mode(MultiBarMode::Horizontal);
+        graph.bounds = Rect::new(0.0, 0.0, 10.0, 5.0);
+        let mut canvas = MockCanvas::new();
+        graph.paint(&mut canvas);
+        // Should handle gracefully
+    }
+
+    #[test]
+    fn test_multi_bar_vertical_with_gap() {
+        let mut graph = MultiBarGraph::new(vec![0.5, 0.75, 1.0]).with_gap(1);
+        graph.bounds = Rect::new(0.0, 0.0, 12.0, 5.0);
+        let mut canvas = MockCanvas::new();
+        graph.paint(&mut canvas);
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_multi_bar_horizontal_with_gap() {
+        let mut graph = MultiBarGraph::new(vec![0.5, 0.75, 1.0])
+            .with_mode(MultiBarMode::Horizontal)
+            .with_gap(1);
+        graph.bounds = Rect::new(0.0, 0.0, 10.0, 12.0);
+        let mut canvas = MockCanvas::new();
+        graph.paint(&mut canvas);
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_multi_bar_horizontal_empty() {
+        let mut graph = MultiBarGraph::new(vec![]).with_mode(MultiBarMode::Horizontal);
+        graph.bounds = Rect::new(0.0, 0.0, 10.0, 5.0);
+        let mut canvas = MockCanvas::new();
+        graph.paint(&mut canvas);
+        assert!(canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_multi_bar_horizontal_zero_bounds() {
+        let mut graph = MultiBarGraph::new(vec![0.5]).with_mode(MultiBarMode::Horizontal);
+        graph.bounds = Rect::new(0.0, 0.0, 0.0, 0.0);
+        let mut canvas = MockCanvas::new();
+        graph.paint(&mut canvas);
+        assert!(canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_multi_bar_clamped_values() {
+        // Values outside 0-1 range should be clamped
+        let mut graph = MultiBarGraph::new(vec![-0.5, 1.5, 2.0]);
+        graph.bounds = Rect::new(0.0, 0.0, 9.0, 5.0);
+        let mut canvas = MockCanvas::new();
+        graph.paint(&mut canvas);
+        // Should handle gracefully with clamped values
     }
 }

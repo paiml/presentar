@@ -14,13 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - cbtop_visibility.rs: Tests validating widget text uses visible colors
 - scripts/pixel_diff.sh: Pixel diff testing workflow for visual regression
-- SPEC-024: Pixel-by-pixel cbtop/ttop recreation specification with 100-pt falsification checklist
-- Popperian falsification test suites (125 tests total):
+- SPEC-024: Pixel-by-pixel cbtop/ttop recreation specification with 125-pt falsification checklist
+- Popperian falsification test suites (196 tests total across 8 files):
   - f001_f020_symbol_rendering.rs: 25 tests for braille/block symbol arrays
   - f021_f040_color_system.rs: 25 tests for CIELAB gradients, themes, ColorMode
   - f041_f060_widget_layout.rs: 23 tests for widget layout constraints
   - f061_f075_text_rendering.rs: 27 tests for text visibility, truncation, unicode
+  - f076_f085_performance.rs: 13 tests for frame budget, memory, large data, paint cost
   - f086_f100_integration.rs: 25 tests for system integration, resize, events
+  - f101_f115_edge_cases.rs: 37 tests for NaN/Inf handling, zero dimensions, UTF-8, emoji, RTL, large data, threading
+  - f116_f120_accessibility.rs: 21 tests for WCAG contrast, color-independent info, keyboard nav, screen reader labels
 
 ## [0.1.3] - 2025-12-15
 

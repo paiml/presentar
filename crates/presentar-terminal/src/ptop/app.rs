@@ -3,14 +3,14 @@
 //! Mirrors ttop's app.rs - maintains system state and history.
 
 use crossterm::event::{KeyCode, KeyModifiers};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use sysinfo::{
     CpuRefreshKind, Disks, MemoryRefreshKind, Networks, ProcessRefreshKind, ProcessesToUpdate,
     System,
 };
 
-/// Ring buffer for history (matches ttop's ring_buffer.rs)
+/// Ring buffer for history (matches ttop's `ring_buffer.rs`)
 pub struct RingBuffer<T> {
     data: Vec<T>,
     capacity: usize,
@@ -62,29 +62,66 @@ impl ProcessSortColumn {
     }
 }
 
-/// Panel visibility (matches ttop's app.rs)
+/// Panel visibility (matches ttop's app.rs - all 14 panels)
 #[derive(Debug, Clone, Copy)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct PanelVisibility {
+    // Core panels (P0)
     pub cpu: bool,
     pub memory: bool,
     pub disk: bool,
     pub network: bool,
     pub process: bool,
+    // Hardware panels (P1)
+    pub gpu: bool,
+    pub sensors: bool,
+    pub psi: bool,
+    pub connections: bool,
+    // Optional panels (P2)
+    pub battery: bool,
+    pub sensors_compact: bool,
+    pub system: bool,
+    // Advanced panels (P3)
+    pub treemap: bool,
+    pub files: bool,
 }
 
 impl Default for PanelVisibility {
     fn default() -> Self {
         Self {
+            // Core panels - always visible by default
             cpu: true,
             memory: true,
             disk: true,
             network: true,
             process: true,
+            // Hardware panels - visible if hardware available
+            gpu: false,     // TODO: detect GPU
+            sensors: false, // TODO: detect sensors
+            psi: false,     // TODO: detect PSI support
+            connections: false,
+            // Optional panels - hidden by default
+            battery: false, // TODO: detect battery
+            sensors_compact: false,
+            system: false,
+            // Advanced panels - hidden by default
+            treemap: false,
+            files: false,
         }
     }
 }
 
+/// Disk I/O rates (bytes per second)
+#[derive(Debug, Default, Clone, Copy)]
+pub struct DiskIoRates {
+    /// Read bytes per second
+    pub read_bytes_per_sec: f64,
+    /// Write bytes per second
+    pub write_bytes_per_sec: f64,
+}
+
 /// Main application state (mirrors ttop's App struct)
+#[allow(clippy::struct_excessive_bools)]
 pub struct App {
     // System collectors
     pub system: System,
@@ -107,6 +144,11 @@ pub struct App {
     pub mem_cached: u64,
     pub swap_total: u64,
     pub swap_used: u64,
+
+    // Disk I/O rates
+    pub disk_io_rates: DiskIoRates,
+    prev_disk_read_bytes: u64,
+    prev_disk_write_bytes: u64,
 
     // UI state
     pub panels: PanelVisibility,
@@ -131,8 +173,9 @@ impl App {
         let mut system = System::new();
 
         // Initial refresh (need 2 samples for CPU delta)
+        // Use 50ms instead of 100ms for faster startup while still getting valid CPU readings
         system.refresh_cpu_specifics(CpuRefreshKind::everything());
-        std::thread::sleep(Duration::from_millis(100));
+        std::thread::sleep(Duration::from_millis(50));
         system.refresh_cpu_specifics(CpuRefreshKind::everything());
         system.refresh_memory_specifics(MemoryRefreshKind::everything());
         system.refresh_processes_specifics(
@@ -164,6 +207,9 @@ impl App {
             mem_cached: 0,
             swap_total: 0,
             swap_used: 0,
+            disk_io_rates: DiskIoRates::default(),
+            prev_disk_read_bytes: 0,
+            prev_disk_write_bytes: 0,
             panels: PanelVisibility::default(),
             process_selected: 0,
             process_scroll_offset: 0,
@@ -191,7 +237,7 @@ impl App {
             .system
             .cpus()
             .iter()
-            .map(|c| c.cpu_usage())
+            .map(sysinfo::Cpu::cpu_usage)
             .sum::<f32>()
             / self.system.cpus().len().max(1) as f32;
         self.cpu_history.push(cpu_total as f64 / 100.0);
@@ -235,6 +281,9 @@ impl App {
         // Disk
         self.disks.refresh(true);
 
+        // Disk I/O rates from /proc/diskstats (Linux only)
+        self.collect_disk_io();
+
         // Network
         self.networks.refresh(true);
 
@@ -256,7 +305,7 @@ impl App {
         if frame_times.is_empty() {
             return;
         }
-        let total: u128 = frame_times.iter().map(|d| d.as_micros()).sum();
+        let total: u128 = frame_times.iter().map(std::time::Duration::as_micros).sum();
         self.avg_frame_time_us = (total / frame_times.len() as u128) as u64;
     }
 
@@ -284,6 +333,7 @@ impl App {
         }
 
         // Normal mode
+        #[allow(clippy::match_same_arms)]
         match code {
             // Quit
             KeyCode::Char('q') | KeyCode::Esc => return true,
@@ -292,12 +342,16 @@ impl App {
             // Help
             KeyCode::Char('?') | KeyCode::F(1) => self.show_help = !self.show_help,
 
-            // Panel toggles
+            // Panel toggles (matches ttop keys)
             KeyCode::Char('1') => self.panels.cpu = !self.panels.cpu,
             KeyCode::Char('2') => self.panels.memory = !self.panels.memory,
             KeyCode::Char('3') => self.panels.disk = !self.panels.disk,
             KeyCode::Char('4') => self.panels.network = !self.panels.network,
             KeyCode::Char('5') => self.panels.process = !self.panels.process,
+            KeyCode::Char('6') => self.panels.gpu = !self.panels.gpu,
+            KeyCode::Char('7') => self.panels.sensors = !self.panels.sensors,
+            KeyCode::Char('8') => self.panels.connections = !self.panels.connections,
+            KeyCode::Char('9') => self.panels.psi = !self.panels.psi,
 
             // Process navigation
             KeyCode::Down | KeyCode::Char('j') => self.navigate_process(1),
@@ -331,7 +385,7 @@ impl App {
             KeyCode::Char('r') => self.sort_descending = !self.sort_descending,
 
             // Filter
-            KeyCode::Char('/') | KeyCode::Char('f') => {
+            KeyCode::Char('/' | 'f') => {
                 self.show_filter_input = true;
             }
             KeyCode::Delete => self.filter.clear(),
@@ -348,6 +402,7 @@ impl App {
         false
     }
 
+    #[allow(clippy::cast_possible_wrap)]
     fn navigate_process(&mut self, delta: isize) {
         let count = self.process_count();
         if count == 0 {
@@ -423,5 +478,87 @@ impl App {
     /// Get system uptime in seconds
     pub fn uptime(&self) -> u64 {
         System::uptime()
+    }
+
+    /// Collect disk I/O statistics from /proc/diskstats (Linux only)
+    fn collect_disk_io(&mut self) {
+        #[cfg(target_os = "linux")]
+        {
+            use std::fs;
+
+            // Read /proc/diskstats
+            // Format: major minor name reads_completed reads_merged sectors_read time_reading
+            //         writes_completed writes_merged sectors_written time_writing ...
+            // Sector size is typically 512 bytes
+            const SECTOR_SIZE: u64 = 512;
+
+            let Ok(content) = fs::read_to_string("/proc/diskstats") else {
+                return;
+            };
+
+            let mut total_read_sectors: u64 = 0;
+            let mut total_write_sectors: u64 = 0;
+
+            for line in content.lines() {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() < 14 {
+                    continue;
+                }
+
+                let name = parts[2];
+                // Skip partitions (e.g., sda1, nvme0n1p1) - only count whole disks
+                // This avoids double-counting
+                if name.chars().last().map_or(false, |c| c.is_ascii_digit()) {
+                    // Check if it's a partition (e.g., sda1, nvme0n1p1)
+                    // Partitions usually end with a number after device name
+                    // Skip nvme partitions (contain 'p' followed by digits)
+                    if name.contains('p')
+                        && name
+                            .chars()
+                            .rev()
+                            .take_while(|c| c.is_ascii_digit())
+                            .count()
+                            > 0
+                    {
+                        continue;
+                    }
+                    // Skip traditional partitions (sda1, sdb2, etc.)
+                    if name.starts_with("sd") || name.starts_with("hd") {
+                        continue;
+                    }
+                }
+
+                // Skip loop devices and ram devices
+                if name.starts_with("loop") || name.starts_with("ram") || name.starts_with("dm-") {
+                    continue;
+                }
+
+                // sectors_read is field 5 (0-indexed: 5), sectors_written is field 9
+                let read_sectors: u64 = parts[5].parse().unwrap_or(0);
+                let write_sectors: u64 = parts[9].parse().unwrap_or(0);
+
+                total_read_sectors += read_sectors;
+                total_write_sectors += write_sectors;
+            }
+
+            let total_read_bytes = total_read_sectors * SECTOR_SIZE;
+            let total_write_bytes = total_write_sectors * SECTOR_SIZE;
+
+            // Calculate rates (assume 1 second interval between refreshes)
+            if self.prev_disk_read_bytes > 0 {
+                self.disk_io_rates.read_bytes_per_sec =
+                    total_read_bytes.saturating_sub(self.prev_disk_read_bytes) as f64;
+                self.disk_io_rates.write_bytes_per_sec =
+                    total_write_bytes.saturating_sub(self.prev_disk_write_bytes) as f64;
+            }
+
+            self.prev_disk_read_bytes = total_read_bytes;
+            self.prev_disk_write_bytes = total_write_bytes;
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            // No disk I/O stats on non-Linux platforms
+        }
     }
 }

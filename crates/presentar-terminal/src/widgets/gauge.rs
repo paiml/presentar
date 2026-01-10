@@ -13,9 +13,15 @@ use std::time::Duration;
 /// Gauge display mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GaugeMode {
-    /// Half-circle arc (╭───╮).
+    /// Full arc (360° - ╭───╮).
     #[default]
     Arc,
+    /// Quarter arc (90° - bottom-right corner).
+    Quarter,
+    /// Half arc (180° - bottom semicircle ╰───╯).
+    Half,
+    /// Three-quarter arc (270° - U-shape open at top-left).
+    ThreeQuarter,
     /// Vertical bar with ticks.
     Vertical,
     /// Compact single-line.
@@ -313,6 +319,224 @@ impl Gauge {
 
         canvas.draw_text(&text, Point::new(self.bounds.x, self.bounds.y), &style);
     }
+
+    /// Render quarter arc (90° - bottom-right corner style).
+    fn render_quarter(&self, canvas: &mut dyn Canvas) {
+        let width = self.bounds.width as usize;
+        let height = self.bounds.height as usize;
+
+        if width < 3 || height < 2 {
+            self.render_compact(canvas);
+            return;
+        }
+
+        let color = self.current_color();
+        let style = TextStyle {
+            color,
+            ..Default::default()
+        };
+        let dim_style = TextStyle {
+            color: Color::new(0.3, 0.3, 0.3, 1.0),
+            ..Default::default()
+        };
+
+        let pct = self.percent() / 100.0;
+        let arc_width = width.saturating_sub(1);
+        let filled = ((pct * arc_width as f64).round() as usize).min(arc_width);
+
+        // Quarter arc: ───╮
+        //                 │
+        let mut top = String::with_capacity(width);
+        for i in 0..arc_width {
+            if i < filled {
+                top.push('━');
+            } else {
+                top.push('─');
+            }
+        }
+        top.push('╮');
+        canvas.draw_text(&top, Point::new(self.bounds.x, self.bounds.y), &style);
+
+        // Vertical part
+        if height > 1 {
+            let x_pos = self.bounds.x + arc_width as f32;
+            canvas.draw_text("│", Point::new(x_pos, self.bounds.y + 1.0), &dim_style);
+        }
+
+        // Value display
+        if self.show_value && height > 1 {
+            let unit = self.unit.as_deref().unwrap_or("");
+            let value_text = format!("{:.0}{}", self.value, unit);
+            canvas.draw_text(
+                &value_text,
+                Point::new(self.bounds.x, self.bounds.y + 1.0),
+                &style,
+            );
+        }
+
+        // Label
+        if let Some(ref label) = self.label {
+            if height > 2 {
+                let label_style = TextStyle {
+                    color: Color::new(0.6, 0.6, 0.6, 1.0),
+                    ..Default::default()
+                };
+                canvas.draw_text(
+                    label,
+                    Point::new(self.bounds.x, self.bounds.y + 2.0),
+                    &label_style,
+                );
+            }
+        }
+    }
+
+    /// Render half arc (180° - bottom semicircle).
+    fn render_half(&self, canvas: &mut dyn Canvas) {
+        let width = self.bounds.width as usize;
+        let height = self.bounds.height as usize;
+
+        if width < 4 || height < 2 {
+            self.render_compact(canvas);
+            return;
+        }
+
+        let color = self.current_color();
+        let style = TextStyle {
+            color,
+            ..Default::default()
+        };
+
+        let pct = self.percent() / 100.0;
+        let arc_width = width.saturating_sub(2);
+        let filled = ((pct * arc_width as f64).round() as usize).min(arc_width);
+
+        // Half arc (bottom semicircle): ╰───╯
+        let mut arc = String::with_capacity(width);
+        arc.push('╰');
+        for i in 0..arc_width {
+            if i < filled {
+                arc.push('━');
+            } else {
+                arc.push('─');
+            }
+        }
+        arc.push('╯');
+        canvas.draw_text(&arc, Point::new(self.bounds.x, self.bounds.y), &style);
+
+        // Value above arc
+        if self.show_value && height > 1 {
+            let unit = self.unit.as_deref().unwrap_or("");
+            let value_text = format!("{:.0}{}", self.value, unit);
+            let padding = (arc_width.saturating_sub(value_text.len())) / 2;
+            canvas.draw_text(
+                &value_text,
+                Point::new(self.bounds.x + 1.0 + padding as f32, self.bounds.y + 1.0),
+                &style,
+            );
+        }
+
+        // Label
+        if let Some(ref label) = self.label {
+            if height > 2 {
+                let label_style = TextStyle {
+                    color: Color::new(0.6, 0.6, 0.6, 1.0),
+                    ..Default::default()
+                };
+                canvas.draw_text(
+                    label,
+                    Point::new(self.bounds.x, self.bounds.y + 2.0),
+                    &label_style,
+                );
+            }
+        }
+    }
+
+    /// Render three-quarter arc (270° - U-shape open at top-left).
+    fn render_three_quarter(&self, canvas: &mut dyn Canvas) {
+        let width = self.bounds.width as usize;
+        let height = self.bounds.height as usize;
+
+        if width < 4 || height < 3 {
+            self.render_compact(canvas);
+            return;
+        }
+
+        let color = self.current_color();
+        let style = TextStyle {
+            color,
+            ..Default::default()
+        };
+        let dim_style = TextStyle {
+            color: Color::new(0.3, 0.3, 0.3, 1.0),
+            ..Default::default()
+        };
+
+        let pct = self.percent() / 100.0;
+        let arc_width = width.saturating_sub(1);
+
+        // Three-quarter arc: open at top-left
+        // ────╮
+        //     │
+        // ────╯
+
+        // Top section (horizontal part with right corner)
+        let top_filled = ((pct * arc_width as f64).round() as usize).min(arc_width);
+        let mut top = String::with_capacity(width);
+        for i in 0..arc_width {
+            if i < top_filled {
+                top.push('━');
+            } else {
+                top.push('─');
+            }
+        }
+        top.push('╮');
+        canvas.draw_text(&top, Point::new(self.bounds.x, self.bounds.y), &style);
+
+        // Middle section (vertical bar on right)
+        if height > 2 {
+            let x_pos = self.bounds.x + arc_width as f32;
+            canvas.draw_text("│", Point::new(x_pos, self.bounds.y + 1.0), &dim_style);
+
+            // Value in middle
+            if self.show_value {
+                let unit = self.unit.as_deref().unwrap_or("");
+                let value_text = format!("{:.0}{}", self.value, unit);
+                canvas.draw_text(
+                    &value_text,
+                    Point::new(self.bounds.x, self.bounds.y + 1.0),
+                    &style,
+                );
+            }
+        }
+
+        // Bottom section (horizontal with right corner)
+        let bottom_y = if height > 2 {
+            self.bounds.y + 2.0
+        } else {
+            self.bounds.y + 1.0
+        };
+        let mut bottom = String::with_capacity(width);
+        for _ in 0..arc_width {
+            bottom.push('─');
+        }
+        bottom.push('╯');
+        canvas.draw_text(&bottom, Point::new(self.bounds.x, bottom_y), &dim_style);
+
+        // Label
+        if let Some(ref label) = self.label {
+            if height > 3 {
+                let label_style = TextStyle {
+                    color: Color::new(0.6, 0.6, 0.6, 1.0),
+                    ..Default::default()
+                };
+                canvas.draw_text(
+                    label,
+                    Point::new(self.bounds.x, self.bounds.y + 3.0),
+                    &label_style,
+                );
+            }
+        }
+    }
 }
 
 impl Brick for Gauge {
@@ -365,9 +589,19 @@ impl Widget for Gauge {
 
     fn measure(&self, constraints: Constraints) -> Size {
         match self.mode {
-            GaugeMode::Arc => {
+            GaugeMode::Arc | GaugeMode::ThreeQuarter => {
                 let width = 10.0_f32.min(constraints.max_width);
                 let height = 4.0_f32.min(constraints.max_height);
+                constraints.constrain(Size::new(width, height))
+            }
+            GaugeMode::Quarter => {
+                let width = 8.0_f32.min(constraints.max_width);
+                let height = 3.0_f32.min(constraints.max_height);
+                constraints.constrain(Size::new(width, height))
+            }
+            GaugeMode::Half => {
+                let width = 10.0_f32.min(constraints.max_width);
+                let height = 3.0_f32.min(constraints.max_height);
                 constraints.constrain(Size::new(width, height))
             }
             GaugeMode::Vertical => {
@@ -388,6 +622,9 @@ impl Widget for Gauge {
     fn paint(&self, canvas: &mut dyn Canvas) {
         match self.mode {
             GaugeMode::Arc => self.render_arc(canvas),
+            GaugeMode::Quarter => self.render_quarter(canvas),
+            GaugeMode::Half => self.render_half(canvas),
+            GaugeMode::ThreeQuarter => self.render_three_quarter(canvas),
             GaugeMode::Vertical => self.render_vertical(canvas),
             GaugeMode::Compact => self.render_compact(canvas),
         }
@@ -798,5 +1035,144 @@ mod tests {
         gauge.paint(&mut canvas);
         // Should show value without label prefix
         assert!(canvas.texts.iter().any(|(t, _)| t.contains("75")));
+    }
+
+    #[test]
+    fn test_gauge_quarter_mode() {
+        let gauge = Gauge::default().with_mode(GaugeMode::Quarter);
+        assert_eq!(gauge.mode, GaugeMode::Quarter);
+    }
+
+    #[test]
+    fn test_gauge_half_mode() {
+        let gauge = Gauge::default().with_mode(GaugeMode::Half);
+        assert_eq!(gauge.mode, GaugeMode::Half);
+    }
+
+    #[test]
+    fn test_gauge_three_quarter_mode() {
+        let gauge = Gauge::default().with_mode(GaugeMode::ThreeQuarter);
+        assert_eq!(gauge.mode, GaugeMode::ThreeQuarter);
+    }
+
+    #[test]
+    fn test_gauge_quarter_paint() {
+        let mut gauge = Gauge::percentage(50.0).with_mode(GaugeMode::Quarter);
+        gauge.bounds = Rect::new(0.0, 0.0, 8.0, 3.0);
+        let mut canvas = MockCanvas::new();
+        gauge.paint(&mut canvas);
+        assert!(!canvas.texts.is_empty());
+        // Quarter arc should have ╮ character
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains('╮')));
+    }
+
+    #[test]
+    fn test_gauge_half_paint() {
+        let mut gauge = Gauge::percentage(50.0).with_mode(GaugeMode::Half);
+        gauge.bounds = Rect::new(0.0, 0.0, 10.0, 3.0);
+        let mut canvas = MockCanvas::new();
+        gauge.paint(&mut canvas);
+        assert!(!canvas.texts.is_empty());
+        // Half arc should have ╰ and ╯ characters
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains('╰')));
+    }
+
+    #[test]
+    fn test_gauge_three_quarter_paint() {
+        let mut gauge = Gauge::percentage(50.0).with_mode(GaugeMode::ThreeQuarter);
+        gauge.bounds = Rect::new(0.0, 0.0, 10.0, 4.0);
+        let mut canvas = MockCanvas::new();
+        gauge.paint(&mut canvas);
+        assert!(!canvas.texts.is_empty());
+        // Three-quarter arc should have ╮ and ╯ characters
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains('╮')));
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains('╯')));
+    }
+
+    #[test]
+    fn test_gauge_quarter_fallback() {
+        // Quarter mode with too small bounds falls back to compact
+        let mut gauge = Gauge::percentage(50.0).with_mode(GaugeMode::Quarter);
+        gauge.bounds = Rect::new(0.0, 0.0, 2.0, 1.0);
+        let mut canvas = MockCanvas::new();
+        gauge.paint(&mut canvas);
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_gauge_half_fallback() {
+        // Half mode with too small bounds falls back to compact
+        let mut gauge = Gauge::percentage(50.0).with_mode(GaugeMode::Half);
+        gauge.bounds = Rect::new(0.0, 0.0, 2.0, 1.0);
+        let mut canvas = MockCanvas::new();
+        gauge.paint(&mut canvas);
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_gauge_three_quarter_fallback() {
+        // Three-quarter mode with too small bounds falls back to compact
+        let mut gauge = Gauge::percentage(50.0).with_mode(GaugeMode::ThreeQuarter);
+        gauge.bounds = Rect::new(0.0, 0.0, 2.0, 2.0);
+        let mut canvas = MockCanvas::new();
+        gauge.paint(&mut canvas);
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_gauge_measure_quarter() {
+        let gauge = Gauge::default().with_mode(GaugeMode::Quarter);
+        let size = gauge.measure(Constraints::loose(Size::new(100.0, 100.0)));
+        assert_eq!(size.width, 8.0);
+        assert_eq!(size.height, 3.0);
+    }
+
+    #[test]
+    fn test_gauge_measure_half() {
+        let gauge = Gauge::default().with_mode(GaugeMode::Half);
+        let size = gauge.measure(Constraints::loose(Size::new(100.0, 100.0)));
+        assert_eq!(size.width, 10.0);
+        assert_eq!(size.height, 3.0);
+    }
+
+    #[test]
+    fn test_gauge_measure_three_quarter() {
+        let gauge = Gauge::default().with_mode(GaugeMode::ThreeQuarter);
+        let size = gauge.measure(Constraints::loose(Size::new(100.0, 100.0)));
+        assert_eq!(size.width, 10.0);
+        assert_eq!(size.height, 4.0);
+    }
+
+    #[test]
+    fn test_gauge_quarter_with_label() {
+        let mut gauge = Gauge::percentage(50.0)
+            .with_mode(GaugeMode::Quarter)
+            .with_label("Temp");
+        gauge.bounds = Rect::new(0.0, 0.0, 8.0, 4.0);
+        let mut canvas = MockCanvas::new();
+        gauge.paint(&mut canvas);
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains("Temp")));
+    }
+
+    #[test]
+    fn test_gauge_half_with_label() {
+        let mut gauge = Gauge::percentage(50.0)
+            .with_mode(GaugeMode::Half)
+            .with_label("Load");
+        gauge.bounds = Rect::new(0.0, 0.0, 10.0, 4.0);
+        let mut canvas = MockCanvas::new();
+        gauge.paint(&mut canvas);
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains("Load")));
+    }
+
+    #[test]
+    fn test_gauge_three_quarter_with_label() {
+        let mut gauge = Gauge::percentage(50.0)
+            .with_mode(GaugeMode::ThreeQuarter)
+            .with_label("CPU");
+        gauge.bounds = Rect::new(0.0, 0.0, 10.0, 5.0);
+        let mut canvas = MockCanvas::new();
+        gauge.paint(&mut canvas);
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains("CPU")));
     }
 }
