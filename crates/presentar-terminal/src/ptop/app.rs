@@ -11,6 +11,7 @@ use sysinfo::{
 };
 
 use super::config::{DetailLevel, PanelType, PtopConfig};
+use super::ui::{read_gpu_info, GpuInfo};
 
 /// Read cached memory from /proc/meminfo (Linux only).
 /// Returns bytes, or 0 if unavailable.
@@ -143,16 +144,6 @@ impl Default for PanelVisibility {
     }
 }
 
-/// Disk I/O rates (bytes per second)
-#[derive(Debug, Default, Clone, Copy)]
-pub struct DiskIoRates {
-    /// Read bytes per second
-    pub read_bytes_per_sec: f64,
-    /// Write bytes per second
-    pub write_bytes_per_sec: f64,
-}
-
-/// Main application state (mirrors ttop's App struct)
 #[allow(clippy::struct_excessive_bools)]
 pub struct App {
     // System collectors
@@ -168,6 +159,12 @@ pub struct App {
     pub mem_history: RingBuffer<f64>,
     pub net_rx_history: RingBuffer<f64>,
     pub net_tx_history: RingBuffer<f64>,
+    /// GPU utilization history (0-100%)
+    pub gpu_history: RingBuffer<f64>,
+    /// VRAM usage history (0-100%)
+    pub vram_history: RingBuffer<f64>,
+    /// Cached GPU info (updated during `update()`)
+    pub gpu_info: Option<GpuInfo>,
 
     // Per-core CPU percentages
     pub per_core_percent: Vec<f64>,
@@ -179,11 +176,6 @@ pub struct App {
     pub mem_cached: u64,
     pub swap_total: u64,
     pub swap_used: u64,
-
-    // Disk I/O rates
-    pub disk_io_rates: DiskIoRates,
-    prev_disk_read_bytes: u64,
-    prev_disk_write_bytes: u64,
 
     // UI state
     pub panels: PanelVisibility,
@@ -221,7 +213,13 @@ impl App {
     ///
     /// # Arguments
     /// * `deterministic` - If true, uses fixed mock data for pixel-perfect testing
+    /// Create a new App with default configuration
     pub fn new(deterministic: bool) -> Self {
+        Self::with_config(deterministic, PtopConfig::load())
+    }
+
+    /// Create a new App with a custom configuration
+    pub fn with_config(deterministic: bool, config: PtopConfig) -> Self {
         let mut system = System::new();
 
         // Initial refresh (need 2 samples for CPU delta)
@@ -290,9 +288,6 @@ impl App {
             };
         }
 
-        // Load configuration (SPEC-024 v5.0 Feature A)
-        let config = PtopConfig::load();
-
         let mut app = Self {
             system,
             disks,
@@ -302,6 +297,9 @@ impl App {
             mem_history: RingBuffer::new(60),
             net_rx_history: RingBuffer::new(60),
             net_tx_history: RingBuffer::new(60),
+            gpu_history: RingBuffer::new(60),
+            vram_history: RingBuffer::new(60),
+            gpu_info: None,
             per_core_percent: vec![0.0; core_count],
             mem_total: 0,
             mem_used: 0,
@@ -309,9 +307,6 @@ impl App {
             mem_cached: 0,
             swap_total: 0,
             swap_used: 0,
-            disk_io_rates: DiskIoRates::default(),
-            prev_disk_read_bytes: 0,
-            prev_disk_write_bytes: 0,
             panels,
             process_selected: 0,
             process_scroll_offset: 0,
@@ -355,12 +350,6 @@ impl App {
         self.swap_total = 0;
         self.swap_used = 0;
 
-        // ttop deterministic: no disk I/O
-        self.disk_io_rates = DiskIoRates {
-            read_bytes_per_sec: 0.0,
-            write_bytes_per_sec: 0.0,
-        };
-
         // ttop deterministic: fixed uptime (5 days, 3 hours, 47 minutes)
         self.fixed_uptime = 5 * 86400 + 3 * 3600 + 47 * 60;
 
@@ -381,6 +370,15 @@ impl App {
     /// Collect metrics from all sources
     pub fn collect_metrics(&mut self) {
         self.frame_id += 1;
+
+        // Check for config hot reload (SPEC-024 v5.2.0 Feature A)
+        // Only check every 10 frames to reduce filesystem overhead
+        if self.frame_id % 10 == 0 {
+            if let Some(new_config) = self.config.check_reload() {
+                eprintln!("[ptop] config reloaded");
+                self.config = new_config;
+            }
+        }
 
         // In deterministic mode, skip real data collection
         if self.deterministic {
@@ -438,9 +436,6 @@ impl App {
         // Disk
         self.disks.refresh(true);
 
-        // Disk I/O rates from /proc/diskstats (Linux only)
-        self.collect_disk_io();
-
         // Network
         self.networks.refresh(true);
 
@@ -455,6 +450,22 @@ impl App {
             .push((rx as f64 / 1_000_000_000.0).min(1.0));
         self.net_tx_history
             .push((tx as f64 / 1_000_000_000.0).min(1.0));
+
+        // GPU (SPEC-024 D012: track real GPU history)
+        // Skip in deterministic mode (nvidia-smi is non-deterministic)
+        if !self.deterministic {
+            self.gpu_info = read_gpu_info();
+            if let Some(ref gpu) = self.gpu_info {
+                // Push utilization (0-100%)
+                self.gpu_history.push(gpu.utilization.unwrap_or(0) as f64);
+                // Push VRAM percentage (0-100%)
+                let vram_pct = match (gpu.vram_used, gpu.vram_total) {
+                    (Some(used), Some(total)) if total > 0 => (used as f64 / total as f64) * 100.0,
+                    _ => 0.0,
+                };
+                self.vram_history.push(vram_pct);
+            }
+        }
 
         // Collect analyzer data (PSI, etc.)
         self.analyzers.collect_all();
@@ -783,89 +794,17 @@ impl App {
         procs
     }
 
+    /// Get Disk I/O data if available
+    pub fn disk_io_data(&self) -> Option<&super::analyzers::DiskIoData> {
+        self.analyzers.disk_io_data()
+    }
+
     /// Get system uptime in seconds
     pub fn uptime(&self) -> u64 {
         if self.deterministic {
             self.fixed_uptime
         } else {
             System::uptime()
-        }
-    }
-
-    /// Collect disk I/O statistics from /proc/diskstats (Linux only)
-    fn collect_disk_io(&mut self) {
-        #[cfg(target_os = "linux")]
-        {
-            use std::fs;
-
-            // Read /proc/diskstats
-            // Format: major minor name reads_completed reads_merged sectors_read time_reading
-            //         writes_completed writes_merged sectors_written time_writing ...
-            // Sector size is typically 512 bytes
-            const SECTOR_SIZE: u64 = 512;
-
-            let Ok(content) = fs::read_to_string("/proc/diskstats") else {
-                return;
-            };
-
-            let mut total_read_sectors: u64 = 0;
-            let mut total_write_sectors: u64 = 0;
-
-            for line in content.lines() {
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() < 14 {
-                    continue;
-                }
-
-                let name = parts[2];
-                // Skip partitions (e.g., sda1, nvme0n1p1) - only count whole disks
-                // This avoids double-counting
-                if name.chars().last().is_some_and(|c| c.is_ascii_digit()) {
-                    // Check if it's a partition (e.g., sda1, nvme0n1p1)
-                    // Partitions usually end with a number after device name
-                    // Skip nvme partitions (contain 'p' followed by digits)
-                    if name.contains('p')
-                        && name.chars().rev().take_while(char::is_ascii_digit).count() > 0
-                    {
-                        continue;
-                    }
-                    // Skip traditional partitions (sda1, sdb2, etc.)
-                    if name.starts_with("sd") || name.starts_with("hd") {
-                        continue;
-                    }
-                }
-
-                // Skip loop devices and ram devices
-                if name.starts_with("loop") || name.starts_with("ram") || name.starts_with("dm-") {
-                    continue;
-                }
-
-                // sectors_read is field 5 (0-indexed: 5), sectors_written is field 9
-                let read_sectors: u64 = parts[5].parse().unwrap_or(0);
-                let write_sectors: u64 = parts[9].parse().unwrap_or(0);
-
-                total_read_sectors += read_sectors;
-                total_write_sectors += write_sectors;
-            }
-
-            let total_read_bytes = total_read_sectors * SECTOR_SIZE;
-            let total_write_bytes = total_write_sectors * SECTOR_SIZE;
-
-            // Calculate rates (assume 1 second interval between refreshes)
-            if self.prev_disk_read_bytes > 0 {
-                self.disk_io_rates.read_bytes_per_sec =
-                    total_read_bytes.saturating_sub(self.prev_disk_read_bytes) as f64;
-                self.disk_io_rates.write_bytes_per_sec =
-                    total_write_bytes.saturating_sub(self.prev_disk_write_bytes) as f64;
-            }
-
-            self.prev_disk_read_bytes = total_read_bytes;
-            self.prev_disk_write_bytes = total_write_bytes;
-        }
-
-        #[cfg(not(target_os = "linux"))]
-        {
-            // No disk I/O stats on non-Linux platforms
         }
     }
 }

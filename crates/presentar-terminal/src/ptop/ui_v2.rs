@@ -251,10 +251,16 @@ impl PtopView {
 
         let inner = Layout::rows(meters);
 
+        let (r_rate, w_rate) = if let Some(io) = app.disk_io_data() {
+            (io.total_read_bytes_per_sec, io.total_write_bytes_per_sec)
+        } else {
+            (0.0, 0.0)
+        };
+
         Border::rounded(format!(
             "Disk │ R: {}B/s │ W: {}B/s",
-            format_bytes(app.disk_io_rates.read_bytes_per_sec as u64),
-            format_bytes(app.disk_io_rates.write_bytes_per_sec as u64)
+            format_bytes(r_rate as u64),
+            format_bytes(w_rate as u64)
         ))
         .child(inner)
     }

@@ -2,6 +2,12 @@
 //!
 //! Pixel-perfect ttop clone using presentar-terminal widgets.
 
+// Allow style-only clippy warnings that don't affect correctness
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::match_same_arms)]
+#![allow(clippy::items_after_statements)]
+#![allow(clippy::option_map_or_none)]
+
 use crate::direct::{CellBuffer, DirectTerminalCanvas};
 use crate::{
     Border, BorderStyle, BrailleGraph, GraphMode, NetworkInterface, NetworkPanel, ProcessEntry,
@@ -11,7 +17,7 @@ use presentar_core::{Canvas, Color, Point, Rect, TextStyle, Widget};
 
 use super::analyzers::TcpState;
 use super::app::App;
-use super::config::PanelType;
+use super::config::{calculate_grid_layout, snap_to_grid, DetailLevel, PanelType};
 
 // ttop panel border colors (exact RGB values from theme.rs)
 const CPU_COLOR: Color = Color {
@@ -327,11 +333,16 @@ pub fn draw(app: &App, buffer: &mut CellBuffer) {
 
     let mut canvas = DirectTerminalCanvas::new(buffer);
 
+    // Reserve 1 row for status bar at bottom (SPEC-024 v5.5 Section 11.6)
+    let status_bar_height = 1.0_f32;
+    let content_h = h - status_bar_height;
+
     // EXPLODED MODE: render single panel fullscreen (SPEC-024 v5.0 Feature D)
     // Reference: ttop/src/ui.rs line 20-50
     if let Some(panel) = app.exploded_panel {
-        draw_exploded_panel(app, &mut canvas, Rect::new(0.0, 0.0, w, h), panel);
-        draw_explode_hint(&mut canvas, w, h);
+        draw_exploded_panel(app, &mut canvas, Rect::new(0.0, 0.0, w, content_h), panel);
+        draw_explode_hint(&mut canvas, w, content_h);
+        draw_status_bar(app, &mut canvas, w, h);
         return;
     }
 
@@ -341,14 +352,14 @@ pub fn draw(app: &App, buffer: &mut CellBuffer) {
 
     // Layout: 45% top panels, 55% bottom row (like ttop)
     let top_height = if top_panel_count > 0 && has_process {
-        (h * 0.45).max(8.0)
+        (content_h * 0.45).max(8.0)
     } else if top_panel_count > 0 {
-        h
+        content_h
     } else {
         0.0
     };
     let bottom_y = top_height;
-    let bottom_height = h - bottom_y;
+    let bottom_height = content_h - bottom_y;
 
     // Draw top panels in grid layout
     if top_panel_count > 0 {
@@ -405,6 +416,9 @@ pub fn draw(app: &App, buffer: &mut CellBuffer) {
     if app.show_fps {
         draw_fps_overlay(app, &mut canvas, w);
     }
+
+    // Status bar at bottom (SPEC-024 v5.5 Section 11.6)
+    draw_status_bar(app, &mut canvas, w, h);
 }
 
 fn count_top_panels(app: &App) -> u32 {
@@ -447,6 +461,88 @@ fn draw_fps_overlay(app: &App, canvas: &mut DirectTerminalCanvas<'_>, w: f32) {
         Point::new(w - fps_str.len() as f32 - 1.0, 0.0),
         &style,
     );
+}
+
+/// Status bar with navigation hints (SPEC-024 v5.5 Section 11.6)
+/// Shows: [Tab] Navigate [Enter] Explode [?] Help [q] Quit | Focused: CPU
+fn draw_status_bar(app: &App, canvas: &mut DirectTerminalCanvas<'_>, w: f32, h: f32) {
+    let y = h - 1.0;
+    let bar_width = w as usize;
+
+    // Key hint colors
+    let key_style = TextStyle {
+        color: Color::new(0.3, 0.3, 0.3, 1.0), // Dim for background
+        ..Default::default()
+    };
+    let bracket_style = TextStyle {
+        color: Color::new(0.6, 0.6, 0.6, 1.0), // Brackets
+        ..Default::default()
+    };
+    let action_style = TextStyle {
+        color: Color::new(0.8, 0.8, 0.8, 1.0), // Action text
+        ..Default::default()
+    };
+    let focus_style = TextStyle {
+        color: Color::new(0.4, 0.8, 1.0, 1.0), // Cyan for focused panel
+        ..Default::default()
+    };
+
+    // Draw background bar
+    let bg = "─".repeat(bar_width);
+    canvas.draw_text(&bg, Point::new(0.0, y), &key_style);
+
+    // Navigation hints on left
+    let hints = if app.exploded_panel.is_some() {
+        " [Esc] Collapse  [?] Help  [q] Quit "
+    } else {
+        " [Tab] Navigate  [Enter] Explode  [/] Filter  [?] Help  [q] Quit "
+    };
+
+    // Draw hints with bracket highlighting
+    let mut x = 0.0;
+    let mut in_bracket = false;
+    for ch in hints.chars() {
+        let style = if ch == '[' {
+            in_bracket = true;
+            &bracket_style
+        } else if ch == ']' {
+            in_bracket = false;
+            &bracket_style
+        } else if in_bracket {
+            &focus_style // Key inside brackets
+        } else {
+            &action_style
+        };
+        canvas.draw_text(&ch.to_string(), Point::new(x, y), style);
+        x += 1.0;
+    }
+
+    // Focused panel indicator on right
+    if let Some(panel) = app.focused_panel {
+        let panel_name = match panel {
+            super::config::PanelType::Cpu => "CPU",
+            super::config::PanelType::Memory => "Memory",
+            super::config::PanelType::Disk => "Disk",
+            super::config::PanelType::Network => "Network",
+            super::config::PanelType::Process => "Process",
+            super::config::PanelType::Gpu => "GPU",
+            super::config::PanelType::Battery => "Battery",
+            super::config::PanelType::Sensors => "Sensors",
+            super::config::PanelType::Files => "Files",
+            super::config::PanelType::Connections => "Connections",
+            super::config::PanelType::Psi => "PSI",
+            super::config::PanelType::Containers => "Containers",
+        };
+        // Draw full right-aligned string "│ CPU " all at once
+        // Use chars().count() since "│" is multi-byte UTF-8
+        let focus_text = format!("│ {panel_name} ");
+        let focus_x = w - focus_text.chars().count() as f32;
+        if focus_x > x {
+            canvas.draw_text(&focus_text, Point::new(focus_x, y), &focus_style);
+            // Draw the separator with different color
+            canvas.draw_text("│", Point::new(focus_x, y), &bracket_style);
+        }
+    }
 }
 
 #[allow(clippy::type_complexity)]
@@ -510,7 +606,8 @@ fn draw_top_panels(app: &App, canvas: &mut DirectTerminalCanvas<'_>, area: Rect)
             Rect::new(col3_x, row1_y + sensors_h, cell_w, containers_h),
         );
     } else {
-        // Generic grid layout for non-ttop configurations
+        // Generic grid layout for non-ttop configurations (SPEC-024 v5.0 Feature B)
+        // Uses calculate_grid_layout and snap_to_grid for automatic space packing
         let mut panels: Vec<fn(&App, &mut DirectTerminalCanvas<'_>, Rect)> = Vec::new();
 
         if app.panels.cpu {
@@ -548,18 +645,29 @@ fn draw_top_panels(app: &App, canvas: &mut DirectTerminalCanvas<'_>, area: Rect)
             return;
         }
 
-        let max_cols = if area.width >= 100.0 { 3 } else { 2 };
-        let cols = panels.len().min(max_cols);
-        let rows = panels.len().div_ceil(cols);
-        let cell_w = area.width / cols as f32;
-        let cell_h = area.height / rows as f32;
+        // Use config's grid layout algorithm (SPEC-024 v5.0 Feature B)
+        let layout_config = &app.config.layout;
+
+        let grid_rects = calculate_grid_layout(
+            panels.len() as u32,
+            area.width as u16,
+            area.height as u16,
+            layout_config,
+        );
 
         for (i, draw_fn) in panels.iter().enumerate() {
-            let col = i % cols;
-            let row = i / cols;
-            let x = area.x + col as f32 * cell_w;
-            let y = area.y + row as f32 * cell_h;
-            draw_fn(app, canvas, Rect::new(x, y, cell_w, cell_h));
+            if let Some(rect) = grid_rects.get(i) {
+                // Apply snap_to_grid for pixel-perfect alignment
+                let snapped_x = snap_to_grid(rect.x, layout_config.grid_size);
+                let snapped_y = snap_to_grid(rect.y, layout_config.grid_size);
+                let bounds = Rect::new(
+                    area.x + snapped_x as f32,
+                    area.y + snapped_y as f32,
+                    rect.width as f32,
+                    rect.height as f32,
+                );
+                draw_fn(app, canvas, bounds);
+            }
         }
     }
 }
@@ -567,6 +675,9 @@ fn draw_top_panels(app: &App, canvas: &mut DirectTerminalCanvas<'_>, area: Rect)
 #[allow(clippy::too_many_lines)]
 fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
     use sysinfo::{Cpu, LoadAvg, System};
+
+    // Determine detail level based on available height (SPEC-024 v5.0 Feature E)
+    let _detail_level = DetailLevel::for_height(bounds.height as u16);
 
     let cpu_pct = app.cpu_history.last().copied().unwrap_or(0.0) * 100.0;
     let core_count = app.per_core_percent.len();
@@ -917,6 +1028,9 @@ fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
 
 #[allow(clippy::too_many_lines)]
 fn draw_memory_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
+    // Determine detail level based on available height (SPEC-024 v5.0 Feature E)
+    let _detail_level = DetailLevel::for_height(bounds.height as u16);
+
     let gb = |b: u64| b as f64 / 1024.0 / 1024.0 / 1024.0;
     let mem_pct = if app.mem_total > 0 {
         (app.mem_used as f64 / app.mem_total as f64) * 100.0
@@ -946,11 +1060,9 @@ fn draw_memory_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: R
         zram_info
     );
 
-    let mut border = Border::new()
-        .with_title(&title)
-        .with_style(BorderStyle::Rounded)
-        .with_color(MEMORY_COLOR)
-        .with_title_left_aligned();
+    // Check if this panel is focused (SPEC-024 v5.0 Feature D)
+    let is_focused = app.is_panel_focused(PanelType::Memory);
+    let mut border = create_panel_border(&title, MEMORY_COLOR, is_focused);
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
@@ -1333,6 +1445,9 @@ fn draw_memory_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: R
 }
 
 fn draw_disk_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
+    // Get disk I/O data
+    let disk_io = app.disk_io_data();
+
     // In deterministic mode, use zeroed values like ttop
     let (total_used, total_space, read_rate, write_rate) = if app.deterministic {
         (0u64, 0u64, 0.0, 0.0)
@@ -1343,12 +1458,11 @@ fn draw_disk_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rec
             .iter()
             .map(|d| (d.total_space() - d.available_space(), d.total_space()))
             .fold((0, 0), |(au, at), (u, t)| (au + u, at + t));
-        (
-            used,
-            space,
-            app.disk_io_rates.read_bytes_per_sec,
-            app.disk_io_rates.write_bytes_per_sec,
-        )
+
+        let r_rate = disk_io.map_or(0.0, |d| d.total_read_bytes_per_sec);
+        let w_rate = disk_io.map_or(0.0, |d| d.total_write_bytes_per_sec);
+
+        (used, space, r_rate, w_rate)
     };
     let total_pct = if total_space > 0 {
         (total_used as f64 / total_space as f64) * 100.0
@@ -1363,7 +1477,7 @@ fn draw_disk_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rec
         "Disk │ R: 0B/s │ W: 0B/s │ -0 IOPS │".to_string()
     } else if read_rate > 0.0 || write_rate > 0.0 {
         format!(
-            "Disk │ R: {}/s │ W: {}/s │ {:.0}G / {:.0}G",
+            "Disk │ R: {} │ W: {} │ {:.0}G / {:.0}G",
             format_bytes_rate(read_rate),
             format_bytes_rate(write_rate),
             total_used as f64 / 1024.0 / 1024.0 / 1024.0,
@@ -1379,11 +1493,9 @@ fn draw_disk_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rec
         )
     };
 
-    let mut border = Border::new()
-        .with_title(&title)
-        .with_style(BorderStyle::Rounded)
-        .with_color(DISK_COLOR)
-        .with_title_left_aligned();
+    // Check if this panel is focused (SPEC-024 v5.0 Feature D)
+    let is_focused = app.is_panel_focused(PanelType::Disk);
+    let mut border = create_panel_border(&title, DISK_COLOR, is_focused);
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
@@ -1455,18 +1567,62 @@ fn draw_disk_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rec
         };
         let total_gb = total as f64 / 1024.0 / 1024.0 / 1024.0;
 
-        let bar_width = 12.min((inner.width as usize).saturating_sub(24));
+        // Try to find I/O rates for this disk
+        let disk_name = disk.name().to_string_lossy();
+        let device_name = disk_name.trim_start_matches("/dev/");
+
+        let (d_read, d_write) = if let Some(data) = disk_io {
+            if let Some(rate) = data.rates.get(device_name) {
+                (rate.read_bytes_per_sec, rate.write_bytes_per_sec)
+            } else {
+                (0.0, 0.0)
+            }
+        } else {
+            (0.0, 0.0)
+        };
+
+        let io_str = if d_read > 0.0 || d_write > 0.0 {
+            format!(
+                " R:{} W:{}",
+                format_bytes_rate(d_read),
+                format_bytes_rate(d_write)
+            )
+        } else {
+            String::new()
+        };
+
+        // Layout: mount(8) | size(5)G | bar(...) | pct(5)% | IO(...)
+        // Fixed parts: 8 + 1 + 6 + 1 + 1 + 6 + 1 = 24 chars
+        // IO string is variable width
+        let fixed_width = 24;
+        let io_width = io_str.len();
+        let available_width = (inner.width as usize).saturating_sub(fixed_width + io_width);
+        let bar_width = available_width.max(2);
+
         let filled = ((pct / 100.0) * bar_width as f64) as usize;
         let bar: String =
             "█".repeat(filled.min(bar_width)) + &"░".repeat(bar_width - filled.min(bar_width));
 
-        // ttop format: mount | size | bar | percent
-        let text = format!("{mount_short:<8} {total_gb:>5.0}G {bar} {pct:>5.1}%");
+        // Format: "mnt      100G  ████░░  50.0%  R:10M W:5M"
+        let text = format!("{mount_short:<8} {total_gb:>5.0}G {bar} {pct:>5.1}%{io_str}");
+
+        // Highlight active disks
+        let color = if d_read > 1024.0 || d_write > 1024.0 {
+            Color {
+                r: 1.0,
+                g: 1.0,
+                b: 1.0,
+                a: 1.0,
+            } // White for active
+        } else {
+            percent_color(pct) // Gradient for idle
+        };
+
         canvas.draw_text(
             &text,
             Point::new(inner.x, y),
             &TextStyle {
-                color: percent_color(pct),
+                color,
                 ..Default::default()
             },
         );
@@ -1504,11 +1660,9 @@ fn draw_network_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
         format_bytes(tx_total)
     );
 
-    let mut border = Border::new()
-        .with_title(&title)
-        .with_style(BorderStyle::Rounded)
-        .with_color(NETWORK_COLOR)
-        .with_title_left_aligned();
+    // Check if this panel is focused (SPEC-024 v5.0 Feature D)
+    let is_focused = app.is_panel_focused(PanelType::Network);
+    let mut border = create_panel_border(&title, NETWORK_COLOR, is_focused);
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
@@ -1765,12 +1919,31 @@ fn draw_network_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
         return;
     }
 
+    // Get network stats from analyzer for errors/drops
+    let network_stats_data = app.analyzers.network_stats_data();
+
     // Build interface list with historical data for sparklines
     let mut interfaces: Vec<NetworkInterface> = Vec::new();
     for (name, data) in &app.networks {
         let mut iface = NetworkInterface::new(name);
         iface.update(data.received() as f64, data.transmitted() as f64);
         iface.set_totals(data.total_received(), data.total_transmitted());
+
+        // Add error/drop stats from analyzer if available
+        if let Some(stats_data) = network_stats_data {
+            if let Some(stats) = stats_data.stats.get(name.as_str()) {
+                iface.set_stats(
+                    stats.rx_errors,
+                    stats.tx_errors,
+                    stats.rx_dropped,
+                    stats.tx_dropped,
+                );
+            }
+            if let Some(rates) = stats_data.rates.get(name.as_str()) {
+                iface.set_rates(rates.errors_per_sec, rates.drops_per_sec);
+            }
+        }
+
         interfaces.push(iface);
     }
 
@@ -1844,11 +2017,9 @@ fn draw_process_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
         filter_str
     );
 
-    let mut border = Border::new()
-        .with_title(&title)
-        .with_style(BorderStyle::Rounded)
-        .with_color(PROCESS_COLOR)
-        .with_title_left_aligned();
+    // Check if this panel is focused (SPEC-024 v5.0 Feature D)
+    let is_focused = app.is_panel_focused(PanelType::Process);
+    let mut border = create_panel_border(&title, PROCESS_COLOR, is_focused);
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
@@ -1877,11 +2048,20 @@ fn draw_process_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
     let procs = app.sorted_processes();
     let total_mem = app.mem_total as f64;
 
-    // Convert to ProcessEntry with state
+    // Get extended process info from analyzer
+    let process_extra_data = app.analyzers.process_extra_data();
+
+    // Detect exploded mode: when panel is large (fullscreen), show more detail
+    // User request: show full command path when exploded so "rustc...which project?" is answered
+    let is_exploded = inner.height > 30.0 || inner.width > 100.0;
+    let max_cmd_len = if is_exploded { 200 } else { 40 };
+
+    // Convert to ProcessEntry with state and extended info
     let entries: Vec<ProcessEntry> = procs
         .iter()
-        .take(100)
+        .take(if is_exploded { 500 } else { 100 })
         .map(|p| {
+            let pid = p.pid().as_u32();
             let mem_pct = if total_mem > 0.0 {
                 (p.memory() as f64 / total_mem) * 100.0
             } else {
@@ -1891,7 +2071,31 @@ fn draw_process_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
                 .user_id()
                 .map_or_else(|| "-".to_string(), |u| u.to_string());
             let user_short: String = user.chars().take(8).collect();
-            let cmd: String = p.name().to_string_lossy().chars().take(40).collect();
+
+            // In exploded mode, show full command line with path
+            let cmd: String = if is_exploded {
+                // Try to get full command line
+                let cmdline: Vec<String> = p
+                    .cmd()
+                    .iter()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .collect();
+                if cmdline.is_empty() {
+                    p.name()
+                        .to_string_lossy()
+                        .chars()
+                        .take(max_cmd_len)
+                        .collect()
+                } else {
+                    cmdline.join(" ").chars().take(max_cmd_len).collect()
+                }
+            } else {
+                p.name()
+                    .to_string_lossy()
+                    .chars()
+                    .take(max_cmd_len)
+                    .collect()
+            };
 
             // Convert sysinfo status to ProcessState
             let state = match p.status() {
@@ -1904,18 +2108,30 @@ fn draw_process_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
                 _ => ProcessState::Sleeping,
             };
 
-            ProcessEntry::new(
-                p.pid().as_u32(),
-                &user_short,
-                p.cpu_usage(),
-                mem_pct as f32,
-                &cmd,
-            )
-            .with_state(state)
+            let mut entry =
+                ProcessEntry::new(pid, &user_short, p.cpu_usage(), mem_pct as f32, &cmd)
+                    .with_state(state);
+
+            // Add extended process info if available
+            if let Some(extra_data) = process_extra_data {
+                if let Some(extra) = extra_data.get(pid) {
+                    entry = entry
+                        .with_oom_score(extra.oom_score)
+                        .with_cgroup(extra.cgroup_short())
+                        .with_nice(extra.nice);
+                }
+            }
+
+            entry
         })
         .collect();
 
-    let mut table = ProcessTable::new().compact();
+    // In exploded mode, use full table with cmdline; otherwise compact
+    let mut table = if is_exploded {
+        ProcessTable::new().with_cmdline()
+    } else {
+        ProcessTable::new().compact()
+    };
     table.set_processes(entries);
     table.select(app.process_selected);
     table.layout(inner);
@@ -1924,7 +2140,7 @@ fn draw_process_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
 
 fn draw_help_overlay(canvas: &mut DirectTerminalCanvas<'_>, w: f32, h: f32) {
     let popup_w = 55.0;
-    let popup_h = 18.0;
+    let popup_h = 24.0; // Expanded for new keybindings
     let px = (w - popup_w) / 2.0;
     let py = (h - popup_h) / 2.0;
 
@@ -1956,28 +2172,43 @@ fn draw_help_overlay(canvas: &mut DirectTerminalCanvas<'_>, w: f32, h: f32) {
         color: Color::new(0.3, 0.8, 0.9, 1.0),
         ..Default::default()
     };
+    let section_style = TextStyle {
+        color: Color::new(0.8, 0.8, 0.2, 1.0),
+        ..Default::default()
+    };
 
-    let help_lines = [
-        ("q, Esc, Ctrl+C", "Quit"),
-        ("h, ?", "Toggle help"),
-        ("j/k, ↑/↓", "Navigate processes"),
-        ("PgUp/PgDn", "Page up/down"),
-        ("g/G", "Go to top/bottom"),
-        ("c", "Sort by CPU"),
-        ("m", "Sort by Memory"),
-        ("p", "Sort by PID"),
-        ("s, Tab", "Cycle sort column"),
-        ("r", "Reverse sort"),
-        ("/, f", "Filter processes"),
-        ("Delete", "Clear filter"),
-        ("1-5", "Toggle panels"),
-        ("0", "Reset panels"),
+    // Help content with section headers (SPEC-024 v5.0 Feature D keybindings)
+    let help_lines: &[(&str, &str, bool)] = &[
+        ("", "-- General --", true),
+        ("q, Esc, Ctrl+C", "Quit", false),
+        ("h, ?", "Toggle help", false),
+        ("", "-- Panel Navigation --", true),
+        ("Tab", "Focus next panel", false),
+        ("Shift+Tab", "Focus previous panel", false),
+        ("hjkl", "Vim-style focus navigation", false),
+        ("Enter, z", "Explode/zoom focused panel", false),
+        ("", "-- Process List --", true),
+        ("j/k, ↑/↓", "Navigate processes", false),
+        ("PgUp/PgDn", "Page up/down", false),
+        ("g/G", "Go to top/bottom", false),
+        ("c/m/p", "Sort by CPU/Memory/PID", false),
+        ("s", "Cycle sort column", false),
+        ("r", "Reverse sort", false),
+        ("/, f", "Filter processes", false),
+        ("Delete", "Clear filter", false),
+        ("", "-- Panels --", true),
+        ("1-5", "Toggle panels", false),
+        ("0", "Reset panels", false),
     ];
 
-    for (i, (key, desc)) in help_lines.iter().enumerate() {
+    for (i, (key, desc, is_section)) in help_lines.iter().enumerate() {
         let y = py + 1.0 + i as f32;
-        canvas.draw_text(&format!("{key:>14}"), Point::new(px + 2.0, y), &key_style);
-        canvas.draw_text(desc, Point::new(px + 18.0, y), &text_style);
+        if *is_section {
+            canvas.draw_text(desc, Point::new(px + 2.0, y), &section_style);
+        } else {
+            canvas.draw_text(&format!("{key:>14}"), Point::new(px + 2.0, y), &key_style);
+            canvas.draw_text(desc, Point::new(px + 18.0, y), &text_style);
+        }
     }
 }
 
@@ -2010,24 +2241,25 @@ fn draw_filter_overlay(app: &App, canvas: &mut DirectTerminalCanvas<'_>, w: f32,
 // ============================================================================
 
 /// GPU information from sysfs or nvidia-smi
-#[derive(Debug, Default)]
-struct GpuInfo {
+/// GPU information structure used by both app.rs and ui.rs
+#[derive(Debug, Default, Clone)]
+pub struct GpuInfo {
     /// GPU name/model
-    name: String,
+    pub name: String,
     /// GPU utilization (0-100)
-    utilization: Option<u8>,
+    pub utilization: Option<u8>,
     /// Temperature in Celsius
-    temperature: Option<u32>,
+    pub temperature: Option<u32>,
     /// Power consumption in Watts
-    power_watts: Option<f32>,
+    pub power_watts: Option<f32>,
     /// VRAM used in bytes
-    vram_used: Option<u64>,
+    pub vram_used: Option<u64>,
     /// VRAM total in bytes
-    vram_total: Option<u64>,
+    pub vram_total: Option<u64>,
 }
 
 /// Read GPU info from nvidia-smi (NVIDIA) or sysfs (AMD/Intel)
-fn read_gpu_info() -> Option<GpuInfo> {
+pub fn read_gpu_info() -> Option<GpuInfo> {
     // Try NVIDIA first (nvidia-smi)
     #[cfg(target_os = "linux")]
     {
@@ -2132,35 +2364,37 @@ fn read_gpu_info() -> Option<GpuInfo> {
 
 /// F006: GPU Panel - shows GPU utilization, VRAM, temperature
 fn draw_gpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
-    // Read GPU info (skip in deterministic mode)
-    let gpu = if app.deterministic {
-        None
-    } else {
-        read_gpu_info()
-    };
+    // Determine detail level based on available height (SPEC-024 v5.0 Feature E)
+    let detail_level = DetailLevel::for_height(bounds.height as u16);
+
+    // Use cached GPU info from app (updated in App::update())
+    let gpu = app.gpu_info.clone();
 
     // ttop-style title (Border adds outer spaces)
     // Deterministic: just "GPU" with no info
+    // At Minimal detail level, only show name
     let title = gpu
         .as_ref()
         .map(|g| {
-            let temp_str = g
-                .temperature
-                .map(|t| format!(" │ {t}°C"))
-                .unwrap_or_default();
-            let power_str = g
-                .power_watts
-                .map(|p| format!(" │ {p:.0}W"))
-                .unwrap_or_default();
-            format!("{}{}{}", g.name, temp_str, power_str)
+            if detail_level == DetailLevel::Minimal {
+                g.name.clone()
+            } else {
+                let temp_str = g
+                    .temperature
+                    .map(|t| format!(" │ {t}°C"))
+                    .unwrap_or_default();
+                let power_str = g
+                    .power_watts
+                    .map(|p| format!(" │ {p:.0}W"))
+                    .unwrap_or_default();
+                format!("{}{}{}", g.name, temp_str, power_str)
+            }
         })
         .unwrap_or_else(|| "GPU".to_string());
 
-    let mut border = Border::new()
-        .with_title(&title)
-        .with_style(BorderStyle::Rounded)
-        .with_color(GPU_COLOR)
-        .with_title_left_aligned();
+    // Check if this panel is focused (SPEC-024 v5.0 Feature D)
+    let is_focused = app.is_panel_focused(PanelType::Gpu);
+    let mut border = create_panel_border(&title, GPU_COLOR, is_focused);
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
@@ -2273,10 +2507,40 @@ fn draw_gpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
             }
         }
 
+        // GPU Utilization History Graph (SPEC-024 v5.2.0 Exploded mode, D012 fix)
+        // Only render in exploded mode (height >= 40)
+        if detail_level == DetailLevel::Exploded && y < inner.y + inner.height - 10.0 {
+            // Draw GPU utilization history graph using real data from app.gpu_history
+            let gpu_history: Vec<f64> = app.gpu_history.as_slice().to_vec();
+            if !gpu_history.is_empty() {
+                let graph_height = 6.0_f32;
+                let mut graph = BrailleGraph::new(gpu_history)
+                    .with_color(GPU_COLOR)
+                    .with_label("GPU History")
+                    .with_range(0.0, 100.0);
+                graph.layout(Rect::new(inner.x, y, inner.width, graph_height));
+                graph.paint(canvas);
+                y += graph_height + 1.0;
+            }
+
+            // Draw VRAM history graph using real data from app.vram_history
+            let vram_history: Vec<f64> = app.vram_history.as_slice().to_vec();
+            if !vram_history.is_empty() {
+                let graph_height = 6.0_f32;
+                let mut graph = BrailleGraph::new(vram_history)
+                    .with_color(Color::new(0.6, 0.4, 1.0, 1.0))
+                    .with_label("VRAM History")
+                    .with_range(0.0, 100.0);
+                graph.layout(Rect::new(inner.x, y, inner.width, graph_height));
+                graph.paint(canvas);
+                y += graph_height + 1.0;
+            }
+        }
+
         // GPU Processes with G/C badges (SPEC-024 v5.0 Feature E)
-        // Only show when height >= 15 (DetailLevel::Normal or higher)
+        // Only show at DetailLevel::Expanded or higher
         // Reference: ttop/src/panels.rs lines 1497-1989, ttop/src/analyzers/gpu_procs.rs
-        if y < inner.y + inner.height - 3.0 {
+        if detail_level >= DetailLevel::Expanded && y < inner.y + inner.height - 3.0 {
             if let Some(gpu_data) = app.analyzers.gpu_procs_data() {
                 if !gpu_data.processes.is_empty() {
                     // Header
@@ -2482,7 +2746,7 @@ fn read_battery_info() -> Option<BatteryInfo> {
 }
 
 /// F007: Battery Panel - shows charge level and state
-fn draw_battery_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
+fn draw_battery_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
     let battery = read_battery_info();
 
     // ttop-style title (Border adds outer spaces)
@@ -2503,11 +2767,9 @@ fn draw_battery_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds:
         })
         .unwrap_or_else(|| "Battery │ No battery".to_string());
 
-    let mut border = Border::new()
-        .with_title(&title)
-        .with_style(BorderStyle::Rounded)
-        .with_color(BATTERY_COLOR)
-        .with_title_left_aligned();
+    // Check if this panel is focused (SPEC-024 v5.0 Feature D)
+    let is_focused = app.is_panel_focused(PanelType::Battery);
+    let mut border = create_panel_border(&title, BATTERY_COLOR, is_focused);
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
@@ -2597,6 +2859,7 @@ fn draw_battery_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds:
 
 /// F008: Sensors Panel - shows temperature sensors with health indicators
 fn draw_sensors_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
+    use super::analyzers::{SensorStatus, SensorType};
     use sysinfo::{Component, Components};
 
     // In deterministic mode, show 0°C like ttop
@@ -2611,14 +2874,36 @@ fn draw_sensors_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
         (Some(comps), temp)
     };
 
-    // ttop-style title (Border adds outer spaces)
-    let title = format!("Sensors │ {max_temp:.0}°C");
+    // Get additional sensor data from analyzer (fan RPM, voltage, etc.)
+    let sensor_health_data = app.analyzers.sensor_health_data();
 
-    let mut border = Border::new()
-        .with_title(&title)
-        .with_style(BorderStyle::Rounded)
-        .with_color(SENSORS_COLOR)
-        .with_title_left_aligned();
+    // Build title with max temp and fan/voltage count
+    let extra_info = if let Some(health_data) = sensor_health_data {
+        let fan_count = health_data
+            .type_counts
+            .get(&SensorType::Fan)
+            .copied()
+            .unwrap_or(0);
+        let volt_count = health_data
+            .type_counts
+            .get(&SensorType::Voltage)
+            .copied()
+            .unwrap_or(0);
+        if fan_count > 0 || volt_count > 0 {
+            format!(" │ {fan_count}F {volt_count}V")
+        } else {
+            String::new()
+        }
+    } else {
+        String::new()
+    };
+
+    // ttop-style title (Border adds outer spaces)
+    let title = format!("Sensors │ {max_temp:.0}°C{extra_info}");
+
+    // Check if this panel is focused (SPEC-024 v5.0 Feature D)
+    let is_focused = app.is_panel_focused(PanelType::Sensors);
+    let mut border = create_panel_border(&title, SENSORS_COLOR, is_focused);
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
@@ -2633,7 +2918,15 @@ fn draw_sensors_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
     };
 
     let mut y = inner.y;
-    for component in comps.iter().take(inner.height as usize) {
+    let max_rows = inner.height as usize;
+    let mut rows_used = 0;
+
+    // First show temperature sensors from sysinfo
+    for component in comps {
+        if rows_used >= max_rows {
+            break;
+        }
+
         let label = component.label();
         let label_short: String = label.chars().take(12).collect();
 
@@ -2685,11 +2978,121 @@ fn draw_sensors_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
             },
         );
         y += 1.0;
+        rows_used += 1;
+    }
+
+    // Then show fan and voltage sensors from sensor_health analyzer
+    if let Some(health_data) = sensor_health_data {
+        // Fan sensors
+        for fan in health_data.fans() {
+            if rows_used >= max_rows {
+                break;
+            }
+
+            let (indicator, color) = match fan.status {
+                SensorStatus::Critical | SensorStatus::Fault => (
+                    "✗",
+                    Color {
+                        r: 1.0,
+                        g: 0.3,
+                        b: 0.3,
+                        a: 1.0,
+                    },
+                ),
+                SensorStatus::Warning | SensorStatus::Low => (
+                    "⚠",
+                    Color {
+                        r: 1.0,
+                        g: 0.8,
+                        b: 0.2,
+                        a: 1.0,
+                    },
+                ),
+                SensorStatus::Normal => (
+                    "✓",
+                    Color {
+                        r: 0.3,
+                        g: 0.8,
+                        b: 0.9,
+                        a: 1.0,
+                    },
+                ),
+            };
+
+            let text = format!(
+                "{indicator} {:<12} {:>5.0} RPM",
+                fan.short_label(),
+                fan.value
+            );
+            canvas.draw_text(
+                &text,
+                Point::new(inner.x, y),
+                &TextStyle {
+                    color,
+                    ..Default::default()
+                },
+            );
+            y += 1.0;
+            rows_used += 1;
+        }
+
+        // Voltage sensors
+        for volt in health_data.by_type(SensorType::Voltage) {
+            if rows_used >= max_rows {
+                break;
+            }
+
+            let (indicator, color) = match volt.status {
+                SensorStatus::Critical | SensorStatus::Fault => (
+                    "✗",
+                    Color {
+                        r: 1.0,
+                        g: 0.3,
+                        b: 0.3,
+                        a: 1.0,
+                    },
+                ),
+                SensorStatus::Warning | SensorStatus::Low => (
+                    "⚠",
+                    Color {
+                        r: 1.0,
+                        g: 0.8,
+                        b: 0.2,
+                        a: 1.0,
+                    },
+                ),
+                SensorStatus::Normal => (
+                    "✓",
+                    Color {
+                        r: 0.9,
+                        g: 0.7,
+                        b: 0.3,
+                        a: 1.0,
+                    },
+                ),
+            };
+
+            let text = format!(
+                "{indicator} {:<12} {:>6.2}V",
+                volt.short_label(),
+                volt.value
+            );
+            canvas.draw_text(
+                &text,
+                Point::new(inner.x, y),
+                &TextStyle {
+                    color,
+                    ..Default::default()
+                },
+            );
+            y += 1.0;
+            rows_used += 1;
+        }
     }
 
     // Note: In deterministic mode, we already returned early above
     // This check is for non-deterministic mode when no sensors are detected
-    if comps.is_empty() {
+    if comps.is_empty() && sensor_health_data.is_none() {
         canvas.draw_text(
             "No sensors detected",
             Point::new(inner.x, inner.y),
@@ -2711,11 +3114,9 @@ fn draw_containers_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bound
     // ttop-style title
     let title = "Containers";
 
-    let mut border = Border::new()
-        .with_title(title)
-        .with_style(BorderStyle::Rounded)
-        .with_color(CONTAINERS_COLOR)
-        .with_title_left_aligned();
+    // Check if this panel is focused (SPEC-024 v5.0 Feature D)
+    let is_focused = app.is_panel_focused(PanelType::Containers);
+    let mut border = create_panel_border(title, CONTAINERS_COLOR, is_focused);
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
@@ -2809,11 +3210,9 @@ fn draw_psi_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
     // ttop-style title (Border adds outer spaces)
     let title = "Pressure │ —";
 
-    let mut border = Border::new()
-        .with_title(title)
-        .with_style(BorderStyle::Rounded)
-        .with_color(PSI_COLOR)
-        .with_title_left_aligned();
+    // Check if this panel is focused (SPEC-024 v5.0 Feature D)
+    let is_focused = app.is_panel_focused(PanelType::Psi);
+    let mut border = create_panel_border(title, PSI_COLOR, is_focused);
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
@@ -2999,11 +3398,9 @@ fn draw_connections_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, boun
     // ttop-style title (Border adds outer spaces)
     let title = format!("Connections │ {active_count} active │ {listen_count} listen");
 
-    let mut border = Border::new()
-        .with_title(&title)
-        .with_style(BorderStyle::Rounded)
-        .with_color(CONNECTIONS_COLOR)
-        .with_title_left_aligned();
+    // Check if this panel is focused (SPEC-024 v5.0 Feature D)
+    let is_focused = app.is_panel_focused(PanelType::Connections);
+    let mut border = create_panel_border(&title, CONNECTIONS_COLOR, is_focused);
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
@@ -3067,8 +3464,8 @@ fn draw_connections_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, boun
     };
 
     // Show connections (skip loopback, prioritize ESTABLISHED and LISTEN)
-    use std::net::IpAddr;
-    let loopback_v4: IpAddr = "127.0.0.1".parse().unwrap();
+    use std::net::{IpAddr, Ipv4Addr};
+    let loopback_v4: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST);
 
     let mut display_conns: Vec<_> = conns
         .iter()
@@ -3509,11 +3906,9 @@ fn draw_files_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Re
     // ttop-style title (Border adds outer spaces)
     let title = format!("Files │ {} total", format_bytes(total_size));
 
-    let mut border = Border::new()
-        .with_title(&title)
-        .with_style(BorderStyle::Rounded)
-        .with_color(FILES_COLOR)
-        .with_title_left_aligned();
+    // Check if this panel is focused (SPEC-024 v5.0 Feature D)
+    let is_focused = app.is_panel_focused(PanelType::Files);
+    let mut border = create_panel_border(&title, FILES_COLOR, is_focused);
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
