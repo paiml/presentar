@@ -170,11 +170,19 @@ pub struct App {
     pub frame_id: u64,
     pub avg_frame_time_us: u64,
     pub show_fps: bool,
+
+    // Deterministic mode for pixel-perfect testing
+    pub deterministic: bool,
+    /// Fixed uptime in seconds (used in deterministic mode)
+    pub fixed_uptime: u64,
 }
 
 impl App {
     /// Create new App with collectors initialized
-    pub fn new(show_fps: bool) -> Self {
+    ///
+    /// # Arguments
+    /// * `deterministic` - If true, uses fixed mock data for pixel-perfect testing
+    pub fn new(deterministic: bool) -> Self {
         let mut system = System::new();
 
         // Initial refresh (need 2 samples for CPU delta)
@@ -195,7 +203,11 @@ impl App {
         let disks = Disks::new_with_refreshed_list();
         let networks = Networks::new_with_refreshed_list();
 
-        let core_count = system.cpus().len();
+        let core_count = if deterministic {
+            8
+        } else {
+            system.cpus().len()
+        };
 
         // Initialize analyzers and detect available features
         let analyzers = AnalyzerRegistry::new();
@@ -206,7 +218,7 @@ impl App {
             panels.psi = true;
         }
 
-        Self {
+        let mut app = Self {
             system,
             disks,
             networks,
@@ -236,7 +248,51 @@ impl App {
             running: true,
             frame_id: 0,
             avg_frame_time_us: 0,
-            show_fps,
+            show_fps: false,
+            deterministic,
+            // Fixed uptime: 5 days, 3 hours, 47 minutes = 453420 seconds
+            fixed_uptime: 5 * 86400 + 3 * 3600 + 47 * 60,
+        };
+
+        // In deterministic mode, populate with fixed data
+        if deterministic {
+            app.init_deterministic_data();
+        }
+
+        app
+    }
+
+    /// Initialize fixed data for deterministic mode
+    fn init_deterministic_data(&mut self) {
+        // Fixed 8-core CPU percentages (varied pattern)
+        self.per_core_percent = vec![45.0, 32.0, 78.0, 15.0, 52.0, 88.0, 23.0, 61.0];
+
+        // Fixed memory values (16GB total, 8GB used)
+        self.mem_total = 16 * 1024 * 1024 * 1024; // 16 GiB
+        self.mem_used = 8 * 1024 * 1024 * 1024; // 8 GiB
+        self.mem_available = 6 * 1024 * 1024 * 1024; // 6 GiB
+        self.mem_cached = 2 * 1024 * 1024 * 1024; // 2 GiB
+        self.swap_total = 4 * 1024 * 1024 * 1024; // 4 GiB
+        self.swap_used = 512 * 1024 * 1024; // 512 MiB
+
+        // Fixed disk I/O rates
+        self.disk_io_rates = DiskIoRates {
+            read_bytes_per_sec: 125.0 * 1024.0 * 1024.0, // 125 MB/s
+            write_bytes_per_sec: 45.0 * 1024.0 * 1024.0, // 45 MB/s
+        };
+
+        // Pre-populate history with a sine-wave-like pattern for visual consistency
+        for i in 0..60 {
+            let t = i as f64 / 60.0 * std::f64::consts::PI * 4.0;
+            // CPU: oscillates between 0.3 and 0.7
+            self.cpu_history.push(0.5 + 0.2 * t.sin());
+            // Memory: slowly rising from 0.45 to 0.55
+            self.mem_history.push(0.45 + 0.10 * (i as f64 / 60.0));
+            // Network: bursty pattern
+            self.net_rx_history
+                .push(0.1 + 0.05 * ((t * 2.0).sin().abs()));
+            self.net_tx_history
+                .push(0.05 + 0.03 * ((t * 1.5).cos().abs()));
         }
     }
 
@@ -248,6 +304,11 @@ impl App {
     /// Collect metrics from all sources
     pub fn collect_metrics(&mut self) {
         self.frame_id += 1;
+
+        // In deterministic mode, skip real data collection
+        if self.deterministic {
+            return;
+        }
 
         // CPU
         self.system
@@ -500,7 +561,11 @@ impl App {
 
     /// Get system uptime in seconds
     pub fn uptime(&self) -> u64 {
-        System::uptime()
+        if self.deterministic {
+            self.fixed_uptime
+        } else {
+            System::uptime()
+        }
     }
 
     /// Collect disk I/O statistics from /proc/diskstats (Linux only)
@@ -583,5 +648,81 @@ impl App {
         {
             // No disk I/O stats on non-Linux platforms
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_app_normal_mode() {
+        let app = App::new(false);
+        assert!(!app.deterministic);
+        assert!(!app.show_fps);
+    }
+
+    #[test]
+    fn test_app_deterministic_mode() {
+        let app = App::new(true);
+        assert!(app.deterministic);
+
+        // Check fixed values
+        assert_eq!(app.per_core_percent.len(), 8);
+        assert_eq!(app.mem_total, 16 * 1024 * 1024 * 1024);
+        assert_eq!(app.mem_used, 8 * 1024 * 1024 * 1024);
+        assert_eq!(app.swap_total, 4 * 1024 * 1024 * 1024);
+
+        // Check fixed uptime (5 days, 3 hours, 47 minutes)
+        assert_eq!(app.uptime(), 5 * 86400 + 3 * 3600 + 47 * 60);
+
+        // Check history is pre-populated
+        assert_eq!(app.cpu_history.as_slice().len(), 60);
+        assert_eq!(app.mem_history.as_slice().len(), 60);
+    }
+
+    #[test]
+    fn test_deterministic_mode_collect_metrics_noop() {
+        let mut app = App::new(true);
+        let initial_frame_id = app.frame_id;
+        let initial_cpu_history_len = app.cpu_history.as_slice().len();
+
+        // Collect should only increment frame_id, not change data
+        app.collect_metrics();
+
+        assert_eq!(app.frame_id, initial_frame_id + 1);
+        // History should NOT grow (deterministic mode skips collection)
+        assert_eq!(app.cpu_history.as_slice().len(), initial_cpu_history_len);
+    }
+
+    #[test]
+    fn test_ring_buffer() {
+        let mut buf: RingBuffer<i32> = RingBuffer::new(3);
+        buf.push(1);
+        buf.push(2);
+        buf.push(3);
+        assert_eq!(buf.as_slice(), &[1, 2, 3]);
+
+        buf.push(4);
+        assert_eq!(buf.as_slice(), &[2, 3, 4]);
+
+        assert_eq!(buf.last(), Some(&4));
+    }
+
+    #[test]
+    fn test_process_sort_column_next() {
+        assert_eq!(ProcessSortColumn::Pid.next(), ProcessSortColumn::User);
+        assert_eq!(ProcessSortColumn::User.next(), ProcessSortColumn::Cpu);
+        assert_eq!(ProcessSortColumn::Command.next(), ProcessSortColumn::Pid);
+    }
+
+    #[test]
+    fn test_panel_visibility_default() {
+        let panels = PanelVisibility::default();
+        assert!(panels.cpu);
+        assert!(panels.memory);
+        assert!(panels.process);
+        assert!(!panels.gpu);
+        assert!(!panels.treemap);
     }
 }
