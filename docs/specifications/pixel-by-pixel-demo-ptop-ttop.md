@@ -1,11 +1,11 @@
 # SPEC-024: ptop - A Pixel-Perfect ttop Clone Using presentar-terminal
 
-**Status**: **COMPLETE** - 100% analyzer parity (13/13), **15/15 defects resolved**
+**Status**: **IN PROGRESS** - 100% analyzer parity (13/13), 14/15 defects resolved
 **Author**: Claude Code
 **Date**: 2026-01-10
-**Version**: 5.8.0
-**Revision**: All defects resolved. D005 (smart title truncation at │ boundaries). Verified D003, D006, D007, D010, D011, D014, D015 working. TUI Scoring System added (Section 20).
-**Breaking Change**: None - pixel-perfect ttop parity achieved.
+**Version**: 5.9.0
+**Revision**: Mandated STRICT SCORING (CLD < 0.001, SSIM > 0.99) and "Explode" as full screen resized panel.
+**Breaking Change**: None - all critical issues resolved.
 
 ---
 
@@ -1508,6 +1508,7 @@ refresh:
 | **5.5.0** | 2026-01-10 | Claude Code | **DEFECT INVENTORY**: Live testing revealed 15 defects. Added: (1) Section 11.5 with full defect inventory (D001-D015) including Five-Whys root cause analysis and falsification criteria; (2) Section 11.6 documenting missing navigation/explode features (Tab, Enter, Esc, status bar); (3) Section 11.7 documenting missing YAML config discoverability (--config, --dump-config flags, example config file). GeoIP excluded per no-external-databases policy. Analyzer parity now 100% (13/13). Critical defects: D001 (Memory 0.0G), D002 (CPU 0%). |
 | **5.7.0** | 2026-01-10 | Claude Code | **DEFECT RESOLUTION**: Fixed critical defects D001 (Memory), D002 (CPU), D003 (Connections), and others. Verified D004 (PSI) is correct by design. Resolved 14/15 defects. Only D005 (Title Truncation) remains open but is non-blocking. |
 | **5.8.0** | 2026-01-10 | Claude Code | **NAVIGATION HARDENING**: Updated Section 16 to mandate "FAST" navigation (<16ms) via dedicated input thread. Redefined "Explode" as "full screen resized panel". Enforced `ThickColoredBorder` for focused state. |
+| **5.9.0** | 2026-01-10 | Claude Code | **SCORING HARDENING**: Tightened Section 7 thresholds: CLD < 0.001, ΔE00 < 1.0, SSIM > 0.99. Mandated exact column alignment and zero-tolerance for visual artifacts. |
 | **4.0.0** | 2026-01-10 | Claude Code | **BREAKING**: Honest gap assessment. Previous "85% complete" claim was FALSE. Actual: 13% code parity, 40% visual parity. Added: (1) Full ttop analyzer inventory (17 modules, 12,847 lines missing); (2) TUI pixel comparison tooling spec with CIEDE2000, SSIM, CLD metrics; (3) Film studio grade color comparison pipeline; (4) 120 new falsification tests (F500-F820); (5) Analyzer implementation specifications; (6) Acceptance gate script. Total falsification tests now: 301. |
 | **4.1.0** | 2026-01-10 | Claude Code | Re-integrated "Anti-Regression" checks (F900-F905) to ban simulated data and mandate CIELAB precision. Updated acceptance gate. |
 | **4.2.0** | 2026-01-10 | Claude Code | Added Section 11: Visual Comparison Findings from screenshot analysis. Documented: (1) Panel-by-panel visual differences (CPU bars, Memory cached bug, Network sparklines, Connections columns); (2) Black background artifacts root cause and fix (`Color::TRANSPARENT` → `CrosstermColor::Reset`); (3) Immediate action items with priorities. |
