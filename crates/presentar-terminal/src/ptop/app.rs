@@ -10,6 +10,8 @@ use sysinfo::{
     System,
 };
 
+use super::analyzers::{AnalyzerRegistry, PsiData};
+
 /// Ring buffer for history (matches ttop's `ring_buffer.rs`)
 pub struct RingBuffer<T> {
     data: Vec<T>,
@@ -128,6 +130,9 @@ pub struct App {
     pub disks: Disks,
     pub networks: Networks,
 
+    // Analyzers (detailed metrics from /proc, /sys)
+    pub analyzers: AnalyzerRegistry,
+
     // History buffers (normalized 0-1)
     pub cpu_history: RingBuffer<f64>,
     pub mem_history: RingBuffer<f64>,
@@ -192,10 +197,20 @@ impl App {
 
         let core_count = system.cpus().len();
 
+        // Initialize analyzers and detect available features
+        let analyzers = AnalyzerRegistry::new();
+
+        // Auto-detect panel visibility based on available analyzers
+        let mut panels = PanelVisibility::default();
+        if analyzers.psi.is_some() {
+            panels.psi = true;
+        }
+
         Self {
             system,
             disks,
             networks,
+            analyzers,
             cpu_history: RingBuffer::new(60),
             mem_history: RingBuffer::new(60),
             net_rx_history: RingBuffer::new(60),
@@ -210,7 +225,7 @@ impl App {
             disk_io_rates: DiskIoRates::default(),
             prev_disk_read_bytes: 0,
             prev_disk_write_bytes: 0,
-            panels: PanelVisibility::default(),
+            panels,
             process_selected: 0,
             process_scroll_offset: 0,
             sort_column: ProcessSortColumn::Cpu,
@@ -223,6 +238,11 @@ impl App {
             avg_frame_time_us: 0,
             show_fps,
         }
+    }
+
+    /// Get PSI data if available
+    pub fn psi_data(&self) -> Option<&PsiData> {
+        self.analyzers.psi_data()
     }
 
     /// Collect metrics from all sources
@@ -298,6 +318,9 @@ impl App {
             .push((rx as f64 / 1_000_000_000.0).min(1.0));
         self.net_tx_history
             .push((tx as f64 / 1_000_000_000.0).min(1.0));
+
+        // Collect analyzer data (PSI, etc.)
+        self.analyzers.collect_all();
     }
 
     /// Update frame timing stats

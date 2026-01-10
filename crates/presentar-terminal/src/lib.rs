@@ -34,6 +34,7 @@ pub mod direct;
 mod error;
 mod input;
 pub mod theme;
+pub mod tools;
 pub mod widgets;
 
 #[cfg(feature = "ptop")]

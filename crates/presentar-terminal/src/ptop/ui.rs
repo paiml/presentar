@@ -1646,6 +1646,7 @@ struct BatteryInfo {
     /// Time remaining in minutes (if available)
     time_remaining_mins: Option<u32>,
     /// Whether battery is present
+    #[allow(dead_code)]
     present: bool,
 }
 
@@ -2129,6 +2130,7 @@ fn read_tcp_connections() -> Vec<TcpConnection> {
 
 #[derive(Debug)]
 struct TcpConnection {
+    #[allow(dead_code)]
     local_addr: String,
     local_port: u16,
     remote_addr: String,
