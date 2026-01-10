@@ -9,6 +9,7 @@ use crate::{
 };
 use presentar_core::{Canvas, Color, Point, Rect, TextStyle, Widget};
 
+use super::analyzers::TcpState;
 use super::app::App;
 
 // ttop panel border colors (exact RGB values from theme.rs)
@@ -1930,7 +1931,7 @@ fn draw_sensors_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
 }
 
 /// F010: PSI Panel - shows CPU/Memory/IO pressure (Linux only)
-fn draw_psi_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
+fn draw_psi_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
     let title = " Pressure │ — ";
 
     let mut border = Border::new()
@@ -1945,49 +1946,66 @@ fn draw_psi_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rec
         return;
     }
 
-    // Try to read PSI from /proc/pressure (Linux only)
-    let psi_data = read_psi_data();
+    // Use PSI data from analyzer
+    if let Some(psi) = app.psi_data() {
+        if psi.available {
+            let mut y = inner.y;
 
-    if let Some((cpu, mem, io)) = psi_data {
-        let mut y = inner.y;
-
-        // CPU pressure
-        let cpu_symbol = pressure_symbol(cpu);
-        let cpu_color = pressure_color(cpu);
-        canvas.draw_text(
-            &format!("CPU  {cpu_symbol} {cpu:>5.1}%"),
-            Point::new(inner.x, y),
-            &TextStyle {
-                color: cpu_color,
-                ..Default::default()
-            },
-        );
-        y += 1.0;
-
-        // Memory pressure
-        if y < inner.y + inner.height {
-            let mem_symbol = pressure_symbol(mem);
-            let mem_color = pressure_color(mem);
+            // CPU pressure
+            let cpu = psi.cpu.some.avg10;
+            let cpu_symbol = pressure_symbol(cpu);
+            let cpu_color = pressure_color(cpu);
             canvas.draw_text(
-                &format!("MEM  {mem_symbol} {mem:>5.1}%"),
+                &format!("CPU  {cpu_symbol} {cpu:>5.1}%"),
                 Point::new(inner.x, y),
                 &TextStyle {
-                    color: mem_color,
+                    color: cpu_color,
                     ..Default::default()
                 },
             );
             y += 1.0;
-        }
 
-        // I/O pressure
-        if y < inner.y + inner.height {
-            let io_symbol = pressure_symbol(io);
-            let io_color = pressure_color(io);
+            // Memory pressure
+            if y < inner.y + inner.height {
+                let mem = psi.memory.some.avg10;
+                let mem_symbol = pressure_symbol(mem);
+                let mem_color = pressure_color(mem);
+                canvas.draw_text(
+                    &format!("MEM  {mem_symbol} {mem:>5.1}%"),
+                    Point::new(inner.x, y),
+                    &TextStyle {
+                        color: mem_color,
+                        ..Default::default()
+                    },
+                );
+                y += 1.0;
+            }
+
+            // I/O pressure
+            if y < inner.y + inner.height {
+                let io = psi.io.some.avg10;
+                let io_symbol = pressure_symbol(io);
+                let io_color = pressure_color(io);
+                canvas.draw_text(
+                    &format!("I/O  {io_symbol} {io:>5.1}%"),
+                    Point::new(inner.x, y),
+                    &TextStyle {
+                        color: io_color,
+                        ..Default::default()
+                    },
+                );
+            }
+        } else {
             canvas.draw_text(
-                &format!("I/O  {io_symbol} {io:>5.1}%"),
-                Point::new(inner.x, y),
+                "PSI not available",
+                Point::new(inner.x, inner.y),
                 &TextStyle {
-                    color: io_color,
+                    color: Color {
+                        r: 0.5,
+                        g: 0.5,
+                        b: 0.5,
+                        a: 1.0,
+                    },
                     ..Default::default()
                 },
             );
@@ -2006,39 +2024,6 @@ fn draw_psi_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rec
                 ..Default::default()
             },
         );
-    }
-}
-
-/// Read PSI data from /proc/pressure (Linux only)
-fn read_psi_data() -> Option<(f64, f64, f64)> {
-    #[cfg(target_os = "linux")]
-    {
-        use std::fs;
-
-        let parse_psi = |path: &str| -> Option<f64> {
-            let content = fs::read_to_string(path).ok()?;
-            // Parse "some avg10=X.XX avg60=..." format
-            for line in content.lines() {
-                if line.starts_with("some") {
-                    for part in line.split_whitespace() {
-                        if let Some(value) = part.strip_prefix("avg10=") {
-                            return value.parse().ok();
-                        }
-                    }
-                }
-            }
-            None
-        };
-
-        let cpu = parse_psi("/proc/pressure/cpu")?;
-        let mem = parse_psi("/proc/pressure/memory")?;
-        let io = parse_psi("/proc/pressure/io")?;
-        Some((cpu, mem, io))
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    {
-        None
     }
 }
 
@@ -2095,120 +2080,6 @@ fn pressure_color(pct: f64) -> Color {
     }
 }
 
-/// Parse /proc/net/tcp to get active connections
-#[cfg(target_os = "linux")]
-fn read_tcp_connections() -> Vec<TcpConnection> {
-    use std::fs;
-
-    let mut connections = Vec::new();
-
-    // Read TCP connections
-    if let Ok(content) = fs::read_to_string("/proc/net/tcp") {
-        for line in content.lines().skip(1) {
-            if let Some(conn) = parse_tcp_line(line, "tcp") {
-                connections.push(conn);
-            }
-        }
-    }
-
-    // Read TCP6 connections
-    if let Ok(content) = fs::read_to_string("/proc/net/tcp6") {
-        for line in content.lines().skip(1) {
-            if let Some(conn) = parse_tcp_line(line, "tcp6") {
-                connections.push(conn);
-            }
-        }
-    }
-
-    connections
-}
-
-#[cfg(not(target_os = "linux"))]
-fn read_tcp_connections() -> Vec<TcpConnection> {
-    Vec::new()
-}
-
-#[derive(Debug)]
-struct TcpConnection {
-    #[allow(dead_code)]
-    local_addr: String,
-    local_port: u16,
-    remote_addr: String,
-    remote_port: u16,
-    state: &'static str,
-    #[allow(dead_code)]
-    proto: &'static str,
-}
-
-/// Parse a line from /proc/net/tcp
-fn parse_tcp_line(line: &str, proto: &'static str) -> Option<TcpConnection> {
-    let parts: Vec<&str> = line.split_whitespace().collect();
-    if parts.len() < 4 {
-        return None;
-    }
-
-    // Format: sl local_address rem_address st ...
-    let local = parts[1];
-    let remote = parts[2];
-    let state_hex = parts[3];
-
-    let (local_addr, local_port) = parse_hex_addr(local)?;
-    let (remote_addr, remote_port) = parse_hex_addr(remote)?;
-
-    let state = match u8::from_str_radix(state_hex, 16).ok()? {
-        0x01 => "E", // ESTABLISHED
-        0x02 => "S", // SYN_SENT
-        0x03 => "R", // SYN_RECV
-        0x04 => "F", // FIN_WAIT1
-        0x05 => "F", // FIN_WAIT2
-        0x06 => "W", // TIME_WAIT
-        0x07 => "C", // CLOSE
-        0x08 => "C", // CLOSE_WAIT
-        0x09 => "L", // LAST_ACK
-        0x0A => "L", // LISTEN
-        0x0B => "C", // CLOSING
-        _ => "?",
-    };
-
-    Some(TcpConnection {
-        local_addr,
-        local_port,
-        remote_addr,
-        remote_port,
-        state,
-        proto,
-    })
-}
-
-/// Parse hex IP:port from /proc/net/tcp format
-fn parse_hex_addr(hex: &str) -> Option<(String, u16)> {
-    let parts: Vec<&str> = hex.split(':').collect();
-    if parts.len() != 2 {
-        return None;
-    }
-
-    let addr_hex = parts[0];
-    let port = u16::from_str_radix(parts[1], 16).ok()?;
-
-    // Handle IPv4 (8 chars) vs IPv6 (32 chars)
-    let addr = if addr_hex.len() == 8 {
-        // IPv4: parse as little-endian
-        let ip = u32::from_str_radix(addr_hex, 16).ok()?;
-        format!(
-            "{}.{}.{}.{}",
-            ip & 0xFF,
-            (ip >> 8) & 0xFF,
-            (ip >> 16) & 0xFF,
-            (ip >> 24) & 0xFF
-        )
-    } else {
-        // IPv6: simplified display
-        "::".to_string()
-    };
-
-    Some((addr, port))
-}
-
 /// Get service name from port
 fn port_to_service(port: u16) -> &'static str {
     match port {
@@ -2230,11 +2101,24 @@ fn port_to_service(port: u16) -> &'static str {
 }
 
 /// F012: Connections Panel - shows active network connections
-fn draw_connections_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
-    let connections = read_tcp_connections();
-
-    let listen_count = connections.iter().filter(|c| c.state == "L").count();
-    let active_count = connections.iter().filter(|c| c.state == "E").count();
+fn draw_connections_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
+    // Get connection data from analyzer
+    let (listen_count, active_count, connections) =
+        if let Some(conn_data) = app.analyzers.connections_data() {
+            let listen = conn_data
+                .connections
+                .iter()
+                .filter(|c| c.state == TcpState::Listen)
+                .count();
+            let active = conn_data
+                .connections
+                .iter()
+                .filter(|c| c.state == TcpState::Established)
+                .count();
+            (listen, active, Some(&conn_data.connections))
+        } else {
+            (0, 0, None)
+        };
 
     let title = format!(
         " Connections │ {} active │ {} listen ",
@@ -2264,17 +2148,37 @@ fn draw_connections_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bou
         },
     );
 
+    let Some(conns) = connections else {
+        canvas.draw_text(
+            "No data",
+            Point::new(inner.x, inner.y + 1.0),
+            &TextStyle {
+                color: Color {
+                    r: 0.5,
+                    g: 0.5,
+                    b: 0.5,
+                    a: 1.0,
+                },
+                ..Default::default()
+            },
+        );
+        return;
+    };
+
     // Show connections (skip loopback, prioritize ESTABLISHED and LISTEN)
-    let mut display_conns: Vec<_> = connections
+    use std::net::IpAddr;
+    let loopback_v4: IpAddr = "127.0.0.1".parse().unwrap();
+
+    let mut display_conns: Vec<_> = conns
         .iter()
-        .filter(|c| c.remote_addr != "127.0.0.1" || c.state == "L")
+        .filter(|c| c.remote_addr != loopback_v4 || c.state == TcpState::Listen)
         .collect();
 
     // Sort: LISTEN first, then ESTABLISHED, then others
     display_conns.sort_by(|a, b| {
-        let order = |s: &str| match s {
-            "L" => 0,
-            "E" => 1,
+        let order = |s: TcpState| match s {
+            TcpState::Listen => 0,
+            TcpState::Established => 1,
             _ => 2,
         };
         order(a.state).cmp(&order(b.state))
@@ -2308,20 +2212,21 @@ fn draw_connections_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bou
 
         let svc = port_to_service(conn.local_port);
         let local = format!(":{}", conn.local_port);
-        let remote = if conn.state == "L" {
+        let remote = if conn.state == TcpState::Listen {
             "*.*".to_string()
         } else {
             format!("{}:{}", conn.remote_addr, conn.remote_port)
         };
 
+        let state_short = conn.state.short();
         let state_color = match conn.state {
-            "E" => active_color,
-            "L" => listen_color,
+            TcpState::Established => active_color,
+            TcpState::Listen => listen_color,
             _ => dim_color,
         };
 
         // Format: SVC    LOCAL        REMOTE              ST
-        let line = format!("{:<6} {:<12} {:<19} {}", svc, local, remote, conn.state);
+        let line = format!("{:<6} {:<12} {:<19} {}", svc, local, remote, state_short);
         canvas.draw_text(
             &line,
             Point::new(inner.x, y),
