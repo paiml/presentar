@@ -21,6 +21,9 @@ fn test_process_table_renders_visible_text() {
         command: "test_cmd".to_string(),
         cmdline: None,
         state: ProcessState::Running,
+        oom_score: None,
+        cgroup: None,
+        nice: None,
     });
 
     // Create a canvas to render to

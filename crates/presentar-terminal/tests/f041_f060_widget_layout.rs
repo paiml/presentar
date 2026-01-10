@@ -210,6 +210,9 @@ fn f046_processtable_has_header() {
         command: "test_cmd".to_string(),
         cmdline: None,
         state: ProcessState::Running,
+        oom_score: None,
+        cgroup: None,
+        nice: None,
     });
 
     let mut canvas = TestCanvas::new(80, 10);
@@ -238,6 +241,9 @@ fn f047_processtable_has_separator() {
         command: "cmd".to_string(),
         cmdline: None,
         state: ProcessState::Running,
+        oom_score: None,
+        cgroup: None,
+        nice: None,
     });
 
     let mut canvas = TestCanvas::new(80, 10);
@@ -268,6 +274,9 @@ fn f048_processtable_selection_works() {
         command: "cmd1".to_string(),
         cmdline: None,
         state: ProcessState::Running,
+        oom_score: None,
+        cgroup: None,
+        nice: None,
     });
     table.add_process(ProcessEntry {
         pid: 2,
@@ -277,6 +286,9 @@ fn f048_processtable_selection_works() {
         command: "cmd2".to_string(),
         cmdline: None,
         state: ProcessState::Running,
+        oom_score: None,
+        cgroup: None,
+        nice: None,
     });
 
     // Select the first row
@@ -303,6 +315,9 @@ fn f049_processtable_sorting() {
         command: "cmd1".to_string(),
         cmdline: None,
         state: ProcessState::Running,
+        oom_score: None,
+        cgroup: None,
+        nice: None,
     });
     table.add_process(ProcessEntry {
         pid: 2,
@@ -312,6 +327,9 @@ fn f049_processtable_sorting() {
         command: "cmd2".to_string(),
         cmdline: None,
         state: ProcessState::Running,
+        oom_score: None,
+        cgroup: None,
+        nice: None,
     });
 
     // Sort by CPU
@@ -339,6 +357,9 @@ fn f050_processtable_scrolling() {
             command: format!("cmd{}", i),
             cmdline: None,
             state: ProcessState::Running,
+            oom_score: None,
+            cgroup: None,
+            nice: None,
         });
     }
 

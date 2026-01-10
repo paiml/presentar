@@ -58,6 +58,10 @@ pub struct Border {
     background: Color,
     /// Cached bounds.
     bounds: Rect,
+    /// Left-align title (ttop style) instead of centering.
+    title_left_aligned: bool,
+    /// Child widget (for composition).
+    child: Option<Box<dyn Widget>>,
 }
 
 impl Default for Border {
@@ -78,7 +82,32 @@ impl Border {
             fill: false,
             background: Color::new(0.1, 0.1, 0.1, 1.0),
             bounds: Rect::default(),
+            title_left_aligned: false,
+            child: None,
         }
+    }
+
+    /// Create a border with rounded corners and a title.
+    #[must_use]
+    pub fn rounded(title: impl Into<String>) -> Self {
+        Self::new()
+            .with_style(BorderStyle::Rounded)
+            .with_title(title)
+            .with_title_left_aligned()
+    }
+
+    /// Set a child widget to render inside the border.
+    #[must_use]
+    pub fn child(mut self, widget: impl Widget + 'static) -> Self {
+        self.child = Some(Box::new(widget));
+        self
+    }
+
+    /// Enable left-aligned title (ttop style) instead of centered.
+    #[must_use]
+    pub fn with_title_left_aligned(mut self) -> Self {
+        self.title_left_aligned = true;
+        self
     }
 
     /// Set the title.
@@ -184,6 +213,13 @@ impl Widget for Border {
 
     fn layout(&mut self, bounds: Rect) -> LayoutResult {
         self.bounds = bounds;
+
+        // Layout child in inner rect (calculate inner rect first to avoid borrow conflict)
+        let inner = self.inner_rect();
+        if let Some(ref mut child) = self.child {
+            child.layout(inner);
+        }
+
         LayoutResult {
             size: Size::new(bounds.width, bounds.height),
         }
@@ -220,41 +256,83 @@ impl Widget for Border {
             let title_len = title.chars().count();
             let available = width.saturating_sub(4); // 2 for corners, 2 for spacing
 
-            if title_len <= available {
-                // Center title
-                let padding = (available - title_len) / 2;
-                for _ in 0..padding {
-                    top_line.push(top);
-                }
+            // ttop-style: no trailing space, just leading space
+            // Available calculation: width - 3 (corner + leading space + corner)
+            let ttop_available = width.saturating_sub(3);
 
-                // Draw title with different color
-                canvas.draw_text(&top_line, Point::new(self.bounds.x, self.bounds.y), &style);
+            // Truncate title if too long (don't hide it entirely)
+            let display_title: std::borrow::Cow<'_, str> = if title_len > ttop_available {
+                // Truncate with ellipsis, leaving room for "…"
+                let truncate_to = ttop_available.saturating_sub(1);
+                let truncated: String = title.chars().take(truncate_to).collect();
+                std::borrow::Cow::Owned(format!("{truncated}…"))
+            } else {
+                std::borrow::Cow::Borrowed(title)
+            };
+            let display_len = display_title.chars().count();
 
+            if display_len > 0 && ttop_available > 0 {
                 let title_style = TextStyle {
                     color: self.title_color,
                     ..Default::default()
                 };
-                canvas.draw_text(
-                    &format!(" {title} "),
-                    Point::new(self.bounds.x + 1.0 + padding as f32, self.bounds.y),
-                    &title_style,
-                );
 
-                // Rest of top line
-                let after_title = padding + title_len + 2;
-                let remaining = width.saturating_sub(after_title + 1);
-                let mut rest = String::new();
-                for _ in 0..remaining {
-                    rest.push(top);
+                if self.title_left_aligned {
+                    // ttop-style: left-aligned title, right-padded with dashes
+                    // Format: ╭ title────────╮ (no trailing space before dashes)
+                    canvas.draw_text(&top_line, Point::new(self.bounds.x, self.bounds.y), &style);
+
+                    canvas.draw_text(
+                        &format!(" {display_title}"),
+                        Point::new(self.bounds.x + 1.0, self.bounds.y),
+                        &title_style,
+                    );
+
+                    // Right padding with dashes
+                    let after_title = 1 + display_len + 1; // corner + space + title
+                    let remaining = width.saturating_sub(after_title + 1);
+                    let mut rest = String::new();
+                    for _ in 0..remaining {
+                        rest.push(top);
+                    }
+                    rest.push(tr);
+                    canvas.draw_text(
+                        &rest,
+                        Point::new(self.bounds.x + after_title as f32, self.bounds.y),
+                        &style,
+                    );
+                } else {
+                    // Centered title with padding on both sides
+                    let padding = (available.saturating_sub(display_len)) / 2;
+                    for _ in 0..padding {
+                        top_line.push(top);
+                    }
+
+                    // Draw title with different color
+                    canvas.draw_text(&top_line, Point::new(self.bounds.x, self.bounds.y), &style);
+
+                    canvas.draw_text(
+                        &format!(" {display_title} "),
+                        Point::new(self.bounds.x + 1.0 + padding as f32, self.bounds.y),
+                        &title_style,
+                    );
+
+                    // Rest of top line
+                    let after_title = padding + display_len + 2;
+                    let remaining = width.saturating_sub(after_title + 1);
+                    let mut rest = String::new();
+                    for _ in 0..remaining {
+                        rest.push(top);
+                    }
+                    rest.push(tr);
+                    canvas.draw_text(
+                        &rest,
+                        Point::new(self.bounds.x + after_title as f32, self.bounds.y),
+                        &style,
+                    );
                 }
-                rest.push(tr);
-                canvas.draw_text(
-                    &rest,
-                    Point::new(self.bounds.x + after_title as f32, self.bounds.y),
-                    &style,
-                );
             } else {
-                // Title too long, just draw plain border
+                // Width too small for any title, just draw plain border
                 for _ in 0..(width - 2) {
                     top_line.push(top);
                 }
@@ -296,9 +374,23 @@ impl Widget for Border {
             Point::new(self.bounds.x, self.bounds.y + (height - 1) as f32),
             &style,
         );
+
+        // Paint child widget inside border
+        if let Some(ref child) = self.child {
+            let inner = self.inner_rect();
+            canvas.push_clip(inner);
+            child.paint(canvas);
+            canvas.pop_clip();
+        }
     }
 
-    fn event(&mut self, _event: &Event) -> Option<Box<dyn Any + Send>> {
+    fn event(&mut self, event: &Event) -> Option<Box<dyn Any + Send>> {
+        // Propagate events to child
+        if let Some(ref mut child) = self.child {
+            if let Some(result) = child.event(event) {
+                return Some(result);
+            }
+        }
         None
     }
 

@@ -112,6 +112,17 @@ impl MemoryBar {
         self.segments.push(segment);
     }
 
+    /// Add a segment (builder pattern for chaining).
+    #[must_use]
+    pub fn segment(mut self, name: impl Into<String>, bytes: u64, color: Color) -> Self {
+        self.segments.push(MemorySegment::new(name, bytes, color));
+        // Auto-calculate total if not explicitly set
+        if self.total_bytes == 0 {
+            self.total_bytes = self.segments.iter().map(|s| s.bytes).sum();
+        }
+        self
+    }
+
     /// Set bar width.
     #[must_use]
     pub fn with_bar_width(mut self, width: usize) -> Self {

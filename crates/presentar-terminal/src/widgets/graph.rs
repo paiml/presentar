@@ -20,6 +20,88 @@ pub enum GraphMode {
     Tty,
 }
 
+/// UX-117: Time axis display mode.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum TimeAxisMode {
+    /// Show numeric indices (0, 1, 2, ...).
+    #[default]
+    Indices,
+    /// Show relative time (1m, 2m, 5m ago).
+    Relative {
+        /// Seconds per data point.
+        interval_secs: u64,
+    },
+    /// Show absolute time (HH:MM:SS).
+    Absolute,
+    /// Hide X-axis labels.
+    Hidden,
+}
+
+impl TimeAxisMode {
+    /// Format a time offset as a label.
+    pub fn format_label(&self, index: usize, total: usize) -> Option<String> {
+        match self {
+            Self::Indices => Some(format!("{index}")),
+            Self::Relative { interval_secs } => {
+                let secs_ago = (total - index) as u64 * interval_secs;
+                if secs_ago < 60 {
+                    Some(format!("{secs_ago}s"))
+                } else if secs_ago < 3600 {
+                    Some(format!("{}m", secs_ago / 60))
+                } else {
+                    Some(format!("{}h", secs_ago / 3600))
+                }
+            }
+            Self::Absolute => None, // Would need actual timestamp
+            Self::Hidden => None,
+        }
+    }
+}
+
+/// UX-102: Axis margin configuration.
+#[derive(Debug, Clone, Copy)]
+pub struct AxisMargins {
+    /// Width for Y-axis labels (in characters).
+    pub y_axis_width: u16,
+    /// Height for X-axis labels (in lines).
+    pub x_axis_height: u16,
+}
+
+impl Default for AxisMargins {
+    fn default() -> Self {
+        Self {
+            y_axis_width: 6,
+            x_axis_height: 1,
+        }
+    }
+}
+
+impl AxisMargins {
+    /// No margins (labels overlap content).
+    pub const NONE: Self = Self {
+        y_axis_width: 0,
+        x_axis_height: 0,
+    };
+
+    /// Compact margins.
+    pub const COMPACT: Self = Self {
+        y_axis_width: 4,
+        x_axis_height: 1,
+    };
+
+    /// Standard margins.
+    pub const STANDARD: Self = Self {
+        y_axis_width: 6,
+        x_axis_height: 1,
+    };
+
+    /// Wide margins for large numbers.
+    pub const WIDE: Self = Self {
+        y_axis_width: 10,
+        x_axis_height: 2,
+    };
+}
+
 /// Time-series graph widget.
 #[derive(Debug, Clone)]
 pub struct BrailleGraph {
@@ -31,6 +113,12 @@ pub struct BrailleGraph {
     max: f64,
     mode: GraphMode,
     label: Option<String>,
+    /// UX-102: Axis margin configuration.
+    margins: AxisMargins,
+    /// UX-117: Time axis display mode.
+    time_axis: TimeAxisMode,
+    /// UX-104: Show legend for braille characters.
+    show_legend: bool,
     bounds: Rect,
 }
 
@@ -47,6 +135,9 @@ impl BrailleGraph {
             max,
             mode: GraphMode::default(),
             label: None,
+            margins: AxisMargins::default(),
+            time_axis: TimeAxisMode::default(),
+            show_legend: false,
             bounds: Rect::new(0.0, 0.0, 0.0, 0.0),
         }
     }
@@ -86,6 +177,114 @@ impl BrailleGraph {
     pub fn with_label(mut self, label: impl Into<String>) -> Self {
         self.label = Some(label.into());
         self
+    }
+
+    /// UX-102: Set axis margins.
+    #[must_use]
+    pub fn with_margins(mut self, margins: AxisMargins) -> Self {
+        self.margins = margins;
+        self
+    }
+
+    /// UX-117: Set time axis display mode.
+    #[must_use]
+    pub fn with_time_axis(mut self, mode: TimeAxisMode) -> Self {
+        self.time_axis = mode;
+        self
+    }
+
+    /// UX-104: Enable/disable legend display.
+    #[must_use]
+    pub fn with_legend(mut self, show: bool) -> Self {
+        self.show_legend = show;
+        self
+    }
+
+    /// Get the effective graph area after accounting for margins.
+    fn graph_area(&self) -> Rect {
+        let y_offset = self.margins.y_axis_width as f32;
+        let x_height = self.margins.x_axis_height as f32;
+        Rect::new(
+            self.bounds.x + y_offset,
+            self.bounds.y,
+            (self.bounds.width - y_offset).max(0.0),
+            (self.bounds.height - x_height).max(0.0),
+        )
+    }
+
+    /// Render Y-axis labels in the margin.
+    fn render_y_axis(&self, canvas: &mut dyn Canvas) {
+        if self.margins.y_axis_width == 0 {
+            return;
+        }
+
+        let style = TextStyle {
+            color: Color::WHITE,
+            ..Default::default()
+        };
+
+        // Max value at top
+        let max_str = format!("{:.0}", self.max);
+        canvas.draw_text(&max_str, Point::new(self.bounds.x, self.bounds.y), &style);
+
+        // Min value at bottom of graph area
+        let graph_height = (self.bounds.height - self.margins.x_axis_height as f32).max(1.0);
+        let min_str = format!("{:.0}", self.min);
+        canvas.draw_text(
+            &min_str,
+            Point::new(self.bounds.x, self.bounds.y + graph_height - 1.0),
+            &style,
+        );
+    }
+
+    /// Render X-axis time labels.
+    fn render_x_axis(&self, canvas: &mut dyn Canvas) {
+        if self.margins.x_axis_height == 0 {
+            return;
+        }
+        if matches!(self.time_axis, TimeAxisMode::Hidden) {
+            return;
+        }
+
+        let graph = self.graph_area();
+        let y_pos = self.bounds.y + self.bounds.height - 1.0;
+        let total = self.data.len();
+
+        let style = TextStyle {
+            color: Color::WHITE,
+            ..Default::default()
+        };
+
+        // Show labels at start, middle, and end
+        let positions = [0, total / 2, total.saturating_sub(1)];
+        for &idx in &positions {
+            if let Some(label) = self.time_axis.format_label(idx, total) {
+                let x_frac = if total > 1 {
+                    idx as f32 / (total - 1) as f32
+                } else {
+                    0.5
+                };
+                let x_pos = graph.x + x_frac * (graph.width - 1.0).max(0.0);
+                canvas.draw_text(&label, Point::new(x_pos, y_pos), &style);
+            }
+        }
+    }
+
+    /// Render legend explaining braille patterns.
+    fn render_legend(&self, canvas: &mut dyn Canvas) {
+        if !self.show_legend {
+            return;
+        }
+
+        let style = TextStyle {
+            color: Color::WHITE,
+            ..Default::default()
+        };
+
+        // Simple legend showing value mapping
+        let legend = format!("⣿={:.0} ⣀={:.0}", self.max, self.min);
+        let x = self.bounds.x + self.bounds.width - legend.len() as f32;
+        canvas.draw_text(&legend, Point::new(x.max(0.0), self.bounds.y), &style);
     }
 
     /// Update the data.
@@ -372,6 +571,21 @@ impl Widget for BrailleGraph {
     }
 
     fn paint(&self, canvas: &mut dyn Canvas) {
+        // Early return if bounds are too small or data is empty
+        if self.bounds.width < 1.0 || self.bounds.height < 1.0 || self.data.is_empty() {
+            return;
+        }
+
+        // UX-102: Render Y-axis labels in margin
+        self.render_y_axis(canvas);
+
+        // UX-117: Render X-axis time labels
+        self.render_x_axis(canvas);
+
+        // UX-104: Render legend
+        self.render_legend(canvas);
+
+        // Render the graph data
         match self.mode {
             GraphMode::Braille => self.render_braille(canvas),
             GraphMode::Block => self.render_block(canvas),

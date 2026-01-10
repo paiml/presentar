@@ -50,6 +50,7 @@ pub use theme::{Gradient, Theme};
 
 // Re-export widget types
 pub use widgets::{
+    truncate,
     // Data science widgets (sklearn/ggplot style)
     Axis,
     BarStyle,
@@ -65,6 +66,8 @@ pub use widgets::{
     CurveData,
     CurveMode,
     EmaConfig,
+    // UX utilities
+    EmptyState,
     ForceGraph,
     ForceParams,
     Gauge,
@@ -72,11 +75,14 @@ pub use widgets::{
     GraphEdge,
     GraphMode,
     GraphNode,
+    HealthStatus,
     Heatmap,
     HeatmapCell,
     HeatmapPalette,
     Histogram,
     HistogramOrientation,
+    HorizonGraph,
+    HorizonScheme,
     LegendPosition,
     LineChart,
     LineStyle,

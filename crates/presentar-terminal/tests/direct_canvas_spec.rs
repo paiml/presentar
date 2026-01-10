@@ -370,7 +370,7 @@ fn c20_resize_clears_buffer() {
     );
     assert_eq!(
         cell.bg,
-        Color::BLACK,
+        Color::TRANSPARENT,
         "C20 FALSIFIED: Background not reset after resize"
     );
     assert!(
@@ -463,7 +463,8 @@ fn integration_transform_stacking() {
 
     // Should be at (7, 7) after combined transform
     assert_eq!(buffer.get(7, 7).unwrap().bg, Color::GREEN);
-    assert_eq!(buffer.get(0, 0).unwrap().bg, Color::BLACK);
+    // Untouched cells have transparent background
+    assert_eq!(buffer.get(0, 0).unwrap().bg, Color::TRANSPARENT);
 }
 
 /// Test style caching in renderer

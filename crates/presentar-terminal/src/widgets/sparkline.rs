@@ -60,6 +60,10 @@ pub struct Sparkline {
     color: Color,
     /// Whether to show trend indicator.
     show_trend: bool,
+    /// UX-121: Whether to show Y-axis min/max labels.
+    show_y_axis: bool,
+    /// UX-121: Y-axis label format (e.g., "{:.0}%").
+    y_format: Option<String>,
     /// Cached bounds.
     bounds: Rect,
 }
@@ -81,6 +85,8 @@ impl Sparkline {
             max,
             color: Color::new(0.3, 0.7, 1.0, 1.0),
             show_trend: false,
+            show_y_axis: false,
+            y_format: None,
             bounds: Rect::default(),
         }
     }
@@ -105,6 +111,36 @@ impl Sparkline {
     pub fn with_trend(mut self, show: bool) -> Self {
         self.show_trend = show;
         self
+    }
+
+    /// UX-121: Show Y-axis min/max labels.
+    #[must_use]
+    pub fn with_y_axis(mut self, show: bool) -> Self {
+        self.show_y_axis = show;
+        self
+    }
+
+    /// UX-121: Set Y-axis label format (e.g., "{:.0}%", "{:.1}ms").
+    #[must_use]
+    pub fn with_y_format(mut self, format: impl Into<String>) -> Self {
+        self.y_format = Some(format.into());
+        self.show_y_axis = true;
+        self
+    }
+
+    /// Get the Y-axis label width needed for layout.
+    #[must_use]
+    pub fn y_axis_width(&self) -> u16 {
+        if !self.show_y_axis {
+            return 0;
+        }
+        // Estimate width based on format or default
+        let max_label = if let Some(ref fmt) = self.y_format {
+            fmt.replace("{:.0}", "999").replace("{:.1}", "99.9")
+        } else {
+            format!("{:.0}", self.max.abs().max(self.min.abs()))
+        };
+        (max_label.len() + 1) as u16
     }
 
     /// Update data.

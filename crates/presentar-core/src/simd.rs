@@ -623,6 +623,398 @@ mod simd_impl {
 #[cfg(feature = "simd")]
 pub use simd_impl::*;
 
+// =============================================================================
+// ComputeBlocks: Auto-Accelerated Aggregation Primitives
+// =============================================================================
+//
+// ComputeBlocks are data processing primitives with automatic acceleration.
+// They select the optimal execution path at compile time:
+//
+// 1. **Auto-vectorization**: Tight 4-way loops enable compiler SIMD codegen
+// 2. **ILP (Instruction-Level Parallelism)**: Multiple accumulators hide latency
+// 3. **Cache-friendly**: Sequential access patterns for prefetcher efficiency
+//
+// These primitives form the foundation for widget data processing:
+// - Charts: range calculation, normalization, statistics
+// - Heatmaps: binning, histogram generation
+// - Tables: aggregation, sorting support
+//
+// Reference: PROBAR-SPEC-009 (ComputeBlock Architecture)
+// Reference: docs/specifications/computeblocks-refactor.md Section 2
+
+/// SIMD-friendly sum of f64 values.
+///
+/// Uses 4-way accumulator for instruction-level parallelism and auto-vectorization.
+/// For small slices (<4), falls back to direct sum.
+///
+/// # Example
+/// ```
+/// use presentar_core::simd::batch_sum_f64;
+/// let values = vec![1.0, 2.0, 3.0, 4.0];
+/// assert_eq!(batch_sum_f64(&values), 10.0);
+/// ```
+#[inline]
+#[must_use]
+pub fn batch_sum_f64(values: &[f64]) -> f64 {
+    if values.len() < 4 {
+        return values.iter().sum();
+    }
+
+    // 4-way accumulator for ILP and auto-vectorization
+    let chunks = values.chunks_exact(4);
+    let remainder = chunks.remainder();
+
+    let mut acc = [0.0f64; 4];
+    for chunk in chunks {
+        acc[0] += chunk[0];
+        acc[1] += chunk[1];
+        acc[2] += chunk[2];
+        acc[3] += chunk[3];
+    }
+
+    let mut sum = acc[0] + acc[1] + acc[2] + acc[3];
+    for &v in remainder {
+        sum += v;
+    }
+    sum
+}
+
+/// SIMD-friendly mean of f64 values.
+///
+/// Returns 0.0 for empty slices.
+///
+/// # Example
+/// ```
+/// use presentar_core::simd::batch_mean_f64;
+/// let values = vec![2.0, 4.0, 6.0, 8.0];
+/// assert_eq!(batch_mean_f64(&values), 5.0);
+/// ```
+#[inline]
+#[must_use]
+pub fn batch_mean_f64(values: &[f64]) -> f64 {
+    if values.is_empty() {
+        return 0.0;
+    }
+    batch_sum_f64(values) / values.len() as f64
+}
+
+/// SIMD-friendly min/max of f64 values.
+///
+/// Returns `None` for empty slices.
+/// Uses 4-way comparison for auto-vectorization.
+///
+/// # Example
+/// ```
+/// use presentar_core::simd::batch_min_max_f64;
+/// let values = vec![3.0, 1.0, 4.0, 1.0, 5.0, 9.0];
+/// let (min, max) = batch_min_max_f64(&values).unwrap();
+/// assert_eq!(min, 1.0);
+/// assert_eq!(max, 9.0);
+/// ```
+#[inline]
+#[must_use]
+pub fn batch_min_max_f64(values: &[f64]) -> Option<(f64, f64)> {
+    if values.is_empty() {
+        return None;
+    }
+
+    if values.len() < 4 {
+        let mut min = values[0];
+        let mut max = values[0];
+        for &v in &values[1..] {
+            min = min.min(v);
+            max = max.max(v);
+        }
+        return Some((min, max));
+    }
+
+    // 4-way min/max for auto-vectorization
+    let chunks = values.chunks_exact(4);
+    let remainder = chunks.remainder();
+
+    let mut min_acc = [f64::INFINITY; 4];
+    let mut max_acc = [f64::NEG_INFINITY; 4];
+
+    for chunk in chunks {
+        min_acc[0] = min_acc[0].min(chunk[0]);
+        min_acc[1] = min_acc[1].min(chunk[1]);
+        min_acc[2] = min_acc[2].min(chunk[2]);
+        min_acc[3] = min_acc[3].min(chunk[3]);
+
+        max_acc[0] = max_acc[0].max(chunk[0]);
+        max_acc[1] = max_acc[1].max(chunk[1]);
+        max_acc[2] = max_acc[2].max(chunk[2]);
+        max_acc[3] = max_acc[3].max(chunk[3]);
+    }
+
+    let mut min = min_acc[0].min(min_acc[1]).min(min_acc[2]).min(min_acc[3]);
+    let mut max = max_acc[0].max(max_acc[1]).max(max_acc[2]).max(max_acc[3]);
+
+    for &v in remainder {
+        min = min.min(v);
+        max = max.max(v);
+    }
+
+    Some((min, max))
+}
+
+/// SIMD-friendly normalization to [0, 1] range.
+///
+/// Normalizes values using `(v - min) / (max - min)`.
+/// Returns empty vec for empty input, all zeros if min == max.
+///
+/// # Example
+/// ```
+/// use presentar_core::simd::normalize_f64;
+/// let values = vec![0.0, 50.0, 100.0];
+/// let normalized = normalize_f64(&values);
+/// assert_eq!(normalized, vec![0.0, 0.5, 1.0]);
+/// ```
+#[inline]
+#[must_use]
+pub fn normalize_f64(values: &[f64]) -> Vec<f64> {
+    if values.is_empty() {
+        return Vec::new();
+    }
+
+    let Some((min, max)) = batch_min_max_f64(values) else {
+        return Vec::new();
+    };
+
+    let range = max - min;
+    if range == 0.0 {
+        return vec![0.0; values.len()];
+    }
+
+    let inv_range = 1.0 / range;
+    values.iter().map(|&v| (v - min) * inv_range).collect()
+}
+
+/// SIMD-friendly normalization with provided range.
+///
+/// Normalizes values using `(v - min) / (max - min)` with caller-provided bounds.
+/// More efficient when min/max are already known.
+///
+/// # Example
+/// ```
+/// use presentar_core::simd::normalize_with_range_f64;
+/// let values = vec![25.0, 50.0, 75.0];
+/// let normalized = normalize_with_range_f64(&values, 0.0, 100.0);
+/// assert_eq!(normalized, vec![0.25, 0.5, 0.75]);
+/// ```
+#[inline]
+#[must_use]
+pub fn normalize_with_range_f64(values: &[f64], min: f64, max: f64) -> Vec<f64> {
+    let range = max - min;
+    if range == 0.0 {
+        return vec![0.0; values.len()];
+    }
+
+    let inv_range = 1.0 / range;
+    values.iter().map(|&v| (v - min) * inv_range).collect()
+}
+
+/// SIMD-friendly scale operation.
+///
+/// Multiplies all values by a scalar.
+///
+/// # Example
+/// ```
+/// use presentar_core::simd::batch_scale_f64;
+/// let values = vec![1.0, 2.0, 3.0];
+/// let scaled = batch_scale_f64(&values, 2.0);
+/// assert_eq!(scaled, vec![2.0, 4.0, 6.0]);
+/// ```
+#[inline]
+#[must_use]
+pub fn batch_scale_f64(values: &[f64], scale: f64) -> Vec<f64> {
+    values.iter().map(|&v| v * scale).collect()
+}
+
+/// SIMD-friendly scale and offset operation.
+///
+/// Applies `v * scale + offset` to all values.
+/// Common operation for data transformation.
+///
+/// # Example
+/// ```
+/// use presentar_core::simd::batch_scale_offset_f64;
+/// let values = vec![0.0, 0.5, 1.0];
+/// // Map [0, 1] to [100, 200]
+/// let transformed = batch_scale_offset_f64(&values, 100.0, 100.0);
+/// assert_eq!(transformed, vec![100.0, 150.0, 200.0]);
+/// ```
+#[inline]
+#[must_use]
+pub fn batch_scale_offset_f64(values: &[f64], scale: f64, offset: f64) -> Vec<f64> {
+    values.iter().map(|&v| v.mul_add(scale, offset)).collect()
+}
+
+/// SIMD-friendly variance calculation (population variance).
+///
+/// Uses two-pass algorithm: first calculates mean, then variance.
+/// Returns 0.0 for empty or single-element slices.
+///
+/// # Example
+/// ```
+/// use presentar_core::simd::batch_variance_f64;
+/// let values = vec![2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0];
+/// let variance = batch_variance_f64(&values);
+/// assert!((variance - 4.0).abs() < 0.001);
+/// ```
+#[inline]
+#[must_use]
+pub fn batch_variance_f64(values: &[f64]) -> f64 {
+    if values.len() < 2 {
+        return 0.0;
+    }
+
+    let mean = batch_mean_f64(values);
+    let sum_sq: f64 = values.iter().map(|&v| (v - mean) * (v - mean)).sum();
+    sum_sq / values.len() as f64
+}
+
+/// SIMD-friendly standard deviation.
+///
+/// Returns square root of population variance.
+///
+/// # Example
+/// ```
+/// use presentar_core::simd::batch_stddev_f64;
+/// let values = vec![2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0];
+/// let stddev = batch_stddev_f64(&values);
+/// assert!((stddev - 2.0).abs() < 0.001);
+/// ```
+#[inline]
+#[must_use]
+pub fn batch_stddev_f64(values: &[f64]) -> f64 {
+    batch_variance_f64(values).sqrt()
+}
+
+/// SIMD-friendly weighted sum.
+///
+/// Computes sum(values[i] * weights[i]).
+/// Panics in debug mode if lengths differ.
+///
+/// # Example
+/// ```
+/// use presentar_core::simd::weighted_sum_f64;
+/// let values = vec![1.0, 2.0, 3.0];
+/// let weights = vec![0.5, 0.3, 0.2];
+/// let result = weighted_sum_f64(&values, &weights);
+/// assert!((result - 1.7).abs() < 0.001);
+/// ```
+#[inline]
+#[must_use]
+pub fn weighted_sum_f64(values: &[f64], weights: &[f64]) -> f64 {
+    debug_assert_eq!(values.len(), weights.len());
+
+    if values.len() < 4 {
+        return values
+            .iter()
+            .zip(weights.iter())
+            .map(|(&v, &w)| v * w)
+            .sum();
+    }
+
+    // 4-way accumulator
+    let v_chunks = values.chunks_exact(4);
+    let w_chunks = weights.chunks_exact(4);
+    let v_rem = v_chunks.remainder();
+    let w_rem = w_chunks.remainder();
+
+    let mut acc = [0.0f64; 4];
+    for (vc, wc) in v_chunks.zip(w_chunks) {
+        acc[0] = vc[0].mul_add(wc[0], acc[0]);
+        acc[1] = vc[1].mul_add(wc[1], acc[1]);
+        acc[2] = vc[2].mul_add(wc[2], acc[2]);
+        acc[3] = vc[3].mul_add(wc[3], acc[3]);
+    }
+
+    let mut sum = acc[0] + acc[1] + acc[2] + acc[3];
+    for (&v, &w) in v_rem.iter().zip(w_rem.iter()) {
+        sum = v.mul_add(w, sum);
+    }
+    sum
+}
+
+/// SIMD-friendly percentile calculation.
+///
+/// Finds the value at the given percentile (0.0-1.0).
+/// Uses linear interpolation for non-integer indices.
+/// Values must be sorted in ascending order.
+///
+/// # Example
+/// ```
+/// use presentar_core::simd::percentile_sorted_f64;
+/// let sorted = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+/// assert_eq!(percentile_sorted_f64(&sorted, 0.5), 3.0); // median
+/// ```
+#[inline]
+#[must_use]
+pub fn percentile_sorted_f64(sorted_values: &[f64], p: f64) -> f64 {
+    if sorted_values.is_empty() {
+        return 0.0;
+    }
+    if sorted_values.len() == 1 {
+        return sorted_values[0];
+    }
+
+    let p = p.clamp(0.0, 1.0);
+    let n = sorted_values.len() as f64;
+    let idx = p * (n - 1.0);
+    let lower = idx.floor() as usize;
+    let upper = idx.ceil() as usize;
+
+    if lower == upper {
+        sorted_values[lower]
+    } else {
+        let frac = idx - lower as f64;
+        sorted_values[lower].mul_add(1.0 - frac, sorted_values[upper] * frac)
+    }
+}
+
+/// Compute histogram bin counts for f64 data.
+///
+/// Assigns values to bins and returns counts per bin.
+/// Efficient for visualization (heatmaps, histograms).
+///
+/// # Example
+/// ```
+/// use presentar_core::simd::histogram_f64;
+/// let values = vec![0.1, 0.5, 0.9, 1.5, 2.5, 3.5, 4.5];
+/// let counts = histogram_f64(&values, 0.0, 5.0, 5);
+/// assert_eq!(counts, vec![3, 1, 1, 1, 1]); // bins: [0-1), [1-2), [2-3), [3-4), [4-5]
+/// ```
+#[inline]
+#[must_use]
+pub fn histogram_f64(values: &[f64], min: f64, max: f64, num_bins: usize) -> Vec<usize> {
+    if num_bins == 0 || values.is_empty() {
+        return vec![0; num_bins];
+    }
+
+    let range = max - min;
+    if range <= 0.0 {
+        // All values in first bin
+        return {
+            let mut counts = vec![0; num_bins];
+            counts[0] = values.len();
+            counts
+        };
+    }
+
+    let bin_width = range / num_bins as f64;
+    let mut counts = vec![0usize; num_bins];
+
+    for &v in values {
+        let bin = ((v - min) / bin_width) as usize;
+        let bin = bin.min(num_bins - 1); // Clamp to last bin
+        counts[bin] += 1;
+    }
+
+    counts
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1090,6 +1482,195 @@ mod tests {
             let b = vec![Vec4::new(1.0, 0.0, 0.0, 0.0), Vec4::new(0.0, 1.0, 0.0, 0.0)];
             let dots = batch_dot_product(&a, &b);
             assert_eq!(dots, vec![1.0, 1.0]);
+        }
+    }
+
+    // =========================================================================
+    // ComputeBlock Tests (f64 Aggregation)
+    // =========================================================================
+
+    mod compute_block_tests {
+        use super::*;
+
+        #[test]
+        fn test_batch_sum_f64_empty() {
+            assert_eq!(batch_sum_f64(&[]), 0.0);
+        }
+
+        #[test]
+        fn test_batch_sum_f64_small() {
+            assert_eq!(batch_sum_f64(&[1.0, 2.0, 3.0]), 6.0);
+        }
+
+        #[test]
+        fn test_batch_sum_f64_large() {
+            let values: Vec<f64> = (1..=100).map(|i| i as f64).collect();
+            assert_eq!(batch_sum_f64(&values), 5050.0);
+        }
+
+        #[test]
+        fn test_batch_sum_f64_exact_chunks() {
+            // 8 elements = 2 exact chunks of 4
+            let values = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+            assert_eq!(batch_sum_f64(&values), 36.0);
+        }
+
+        #[test]
+        fn test_batch_mean_f64_empty() {
+            assert_eq!(batch_mean_f64(&[]), 0.0);
+        }
+
+        #[test]
+        fn test_batch_mean_f64() {
+            assert_eq!(batch_mean_f64(&[2.0, 4.0, 6.0, 8.0]), 5.0);
+        }
+
+        #[test]
+        fn test_batch_min_max_f64_empty() {
+            assert!(batch_min_max_f64(&[]).is_none());
+        }
+
+        #[test]
+        fn test_batch_min_max_f64_single() {
+            assert_eq!(batch_min_max_f64(&[42.0]), Some((42.0, 42.0)));
+        }
+
+        #[test]
+        fn test_batch_min_max_f64_small() {
+            assert_eq!(batch_min_max_f64(&[3.0, 1.0, 2.0]), Some((1.0, 3.0)));
+        }
+
+        #[test]
+        fn test_batch_min_max_f64_large() {
+            let values: Vec<f64> = (1..=256).map(|i| i as f64).collect();
+            assert_eq!(batch_min_max_f64(&values), Some((1.0, 256.0)));
+        }
+
+        #[test]
+        fn test_normalize_f64_empty() {
+            assert!(normalize_f64(&[]).is_empty());
+        }
+
+        #[test]
+        fn test_normalize_f64_constant() {
+            let result = normalize_f64(&[5.0, 5.0, 5.0]);
+            assert_eq!(result, vec![0.0, 0.0, 0.0]);
+        }
+
+        #[test]
+        fn test_normalize_f64() {
+            let result = normalize_f64(&[0.0, 50.0, 100.0]);
+            assert_eq!(result, vec![0.0, 0.5, 1.0]);
+        }
+
+        #[test]
+        fn test_normalize_with_range_f64() {
+            let result = normalize_with_range_f64(&[25.0, 50.0, 75.0], 0.0, 100.0);
+            assert_eq!(result, vec![0.25, 0.5, 0.75]);
+        }
+
+        #[test]
+        fn test_batch_scale_f64() {
+            let result = batch_scale_f64(&[1.0, 2.0, 3.0], 2.0);
+            assert_eq!(result, vec![2.0, 4.0, 6.0]);
+        }
+
+        #[test]
+        fn test_batch_scale_offset_f64() {
+            let result = batch_scale_offset_f64(&[0.0, 0.5, 1.0], 100.0, 100.0);
+            assert_eq!(result, vec![100.0, 150.0, 200.0]);
+        }
+
+        #[test]
+        fn test_batch_variance_f64_empty() {
+            assert_eq!(batch_variance_f64(&[]), 0.0);
+        }
+
+        #[test]
+        fn test_batch_variance_f64_single() {
+            assert_eq!(batch_variance_f64(&[42.0]), 0.0);
+        }
+
+        #[test]
+        fn test_batch_variance_f64() {
+            let values = vec![2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0];
+            let variance = batch_variance_f64(&values);
+            assert!((variance - 4.0).abs() < 0.001);
+        }
+
+        #[test]
+        fn test_batch_stddev_f64() {
+            let values = vec![2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0];
+            let stddev = batch_stddev_f64(&values);
+            assert!((stddev - 2.0).abs() < 0.001);
+        }
+
+        #[test]
+        fn test_weighted_sum_f64_small() {
+            let values = vec![1.0, 2.0];
+            let weights = vec![0.5, 0.5];
+            assert_eq!(weighted_sum_f64(&values, &weights), 1.5);
+        }
+
+        #[test]
+        fn test_weighted_sum_f64_large() {
+            let values = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+            let weights = vec![1.0; 8];
+            assert_eq!(weighted_sum_f64(&values, &weights), 36.0);
+        }
+
+        #[test]
+        fn test_percentile_sorted_f64_empty() {
+            assert_eq!(percentile_sorted_f64(&[], 0.5), 0.0);
+        }
+
+        #[test]
+        fn test_percentile_sorted_f64_single() {
+            assert_eq!(percentile_sorted_f64(&[42.0], 0.5), 42.0);
+        }
+
+        #[test]
+        fn test_percentile_sorted_f64_median() {
+            let sorted = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+            assert_eq!(percentile_sorted_f64(&sorted, 0.5), 3.0);
+        }
+
+        #[test]
+        fn test_percentile_sorted_f64_quartiles() {
+            let sorted = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+            assert_eq!(percentile_sorted_f64(&sorted, 0.0), 1.0);
+            assert_eq!(percentile_sorted_f64(&sorted, 1.0), 5.0);
+            assert_eq!(percentile_sorted_f64(&sorted, 0.25), 2.0);
+            assert_eq!(percentile_sorted_f64(&sorted, 0.75), 4.0);
+        }
+
+        #[test]
+        fn test_histogram_f64_empty() {
+            assert_eq!(histogram_f64(&[], 0.0, 10.0, 5), vec![0; 5]);
+        }
+
+        #[test]
+        fn test_histogram_f64() {
+            let values = vec![0.1, 0.5, 0.9, 1.5, 2.5, 3.5, 4.5];
+            let counts = histogram_f64(&values, 0.0, 5.0, 5);
+            assert_eq!(counts, vec![3, 1, 1, 1, 1]);
+        }
+
+        #[test]
+        fn test_histogram_f64_edge_values() {
+            // Values exactly at bin boundaries
+            let values = vec![0.0, 1.0, 2.0, 3.0, 4.0, 4.999];
+            let counts = histogram_f64(&values, 0.0, 5.0, 5);
+            assert_eq!(counts, vec![1, 1, 1, 1, 2]); // 4.0 and 4.999 in last bin
+        }
+
+        #[test]
+        fn test_histogram_f64_uniform() {
+            // Uniform distribution across bins
+            let values: Vec<f64> = (0..100).map(|i| i as f64).collect();
+            let counts = histogram_f64(&values, 0.0, 100.0, 10);
+            // Each bin should have 10 values
+            assert!(counts.iter().all(|&c| c == 10));
         }
     }
 }

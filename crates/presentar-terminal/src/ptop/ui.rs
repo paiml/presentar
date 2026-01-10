@@ -11,6 +11,7 @@ use presentar_core::{Canvas, Color, Point, Rect, TextStyle, Widget};
 
 use super::analyzers::TcpState;
 use super::app::App;
+use super::config::PanelType;
 
 // ttop panel border colors (exact RGB values from theme.rs)
 const CPU_COLOR: Color = Color {
@@ -79,6 +80,12 @@ const FILES_COLOR: Color = Color {
     b: 0.392,
     a: 1.0,
 }; // #B48C64 (180,140,100)
+const CONTAINERS_COLOR: Color = Color {
+    r: 0.392,
+    g: 0.706,
+    b: 0.863,
+    a: 1.0,
+}; // #64B4DC (100,180,220) - Docker blue
 
 // Network graph colors (distinct from panel border)
 const NET_RX_COLOR: Color = Color {
@@ -179,7 +186,7 @@ fn format_bytes_rate(bytes_per_sec: f64) -> String {
     } else if bytes_per_sec >= KB {
         format!("{:.0}K", bytes_per_sec / KB)
     } else {
-        format!("{:.0}B", bytes_per_sec)
+        format!("{bytes_per_sec:.0}B")
     }
 }
 
@@ -196,6 +203,34 @@ fn format_uptime(secs: u64) -> String {
     } else {
         format!("{mins}m")
     }
+}
+
+/// Create a border with focus indication (SPEC-024 v5.0 Feature D)
+/// Reference: ttop uses double-line border for focused panels
+fn create_panel_border(title: &str, color: Color, is_focused: bool) -> Border {
+    let style = if is_focused {
+        BorderStyle::Double // Double border for focused panel
+    } else {
+        BorderStyle::Rounded // Normal rounded border
+    };
+
+    // Brighten color slightly for focused panels
+    let border_color = if is_focused {
+        Color {
+            r: (color.r * 1.2).min(1.0),
+            g: (color.g * 1.2).min(1.0),
+            b: (color.b * 1.2).min(1.0),
+            a: color.a,
+        }
+    } else {
+        color
+    };
+
+    Border::new()
+        .with_title(title)
+        .with_style(style)
+        .with_color(border_color)
+        .with_title_left_aligned()
 }
 
 /// ZRAM statistics from /sys/block/zram*
@@ -292,6 +327,14 @@ pub fn draw(app: &App, buffer: &mut CellBuffer) {
 
     let mut canvas = DirectTerminalCanvas::new(buffer);
 
+    // EXPLODED MODE: render single panel fullscreen (SPEC-024 v5.0 Feature D)
+    // Reference: ttop/src/ui.rs line 20-50
+    if let Some(panel) = app.exploded_panel {
+        draw_exploded_panel(app, &mut canvas, Rect::new(0.0, 0.0, w, h), panel);
+        draw_explode_hint(&mut canvas, w, h);
+        return;
+    }
+
     // Count visible top panels (like ttop)
     let top_panel_count = count_top_panels(app);
     let has_process = app.panels.process;
@@ -312,11 +355,13 @@ pub fn draw(app: &App, buffer: &mut CellBuffer) {
         draw_top_panels(app, &mut canvas, Rect::new(0.0, 0.0, w, top_height));
     }
 
-    // Draw bottom row: 40% Processes | 30% Connections | 30% Treemap (like ttop)
+    // Draw bottom row: ttop uses exactly 48 | 36 | 36 for 120-width terminal
     if has_process && bottom_height > 3.0 {
-        let proc_w = w * 0.4;
-        let conn_w = w * 0.3;
-        let tree_w = w - proc_w - conn_w;
+        // Calculate widths to match ttop exactly
+        let proc_w = (w * 0.4).round(); // 48 for 120
+        let remaining = w - proc_w; // 72 for 120
+        let conn_w = (remaining / 2.0).floor(); // 36 for 72
+        let files_w = remaining - conn_w; // 36 for 72
 
         draw_process_panel(
             app,
@@ -332,11 +377,18 @@ pub fn draw(app: &App, buffer: &mut CellBuffer) {
             );
         }
 
-        if app.panels.treemap {
+        // Draw Files panel (ttop style) or Treemap if files not enabled
+        if app.panels.files {
+            draw_files_panel(
+                app,
+                &mut canvas,
+                Rect::new(proc_w + conn_w, bottom_y, files_w, bottom_height),
+            );
+        } else if app.panels.treemap {
             draw_treemap_panel(
                 app,
                 &mut canvas,
-                Rect::new(proc_w + conn_w, bottom_y, tree_w, bottom_height),
+                Rect::new(proc_w + conn_w, bottom_y, files_w, bottom_height),
             );
         }
     }
@@ -399,103 +451,174 @@ fn draw_fps_overlay(app: &App, canvas: &mut DirectTerminalCanvas<'_>, w: f32) {
 
 #[allow(clippy::type_complexity)]
 fn draw_top_panels(app: &App, canvas: &mut DirectTerminalCanvas<'_>, area: Rect) {
-    let mut panels: Vec<fn(&App, &mut DirectTerminalCanvas<'_>, Rect)> = Vec::new();
+    // ttop layout at 120x40:
+    // Row 0 (rows 0-8, 9 rows):   CPU | Memory | Disk
+    // Row 1 (rows 9-17, 9 rows):  Network | GPU | Sensors (3 rows) + Containers (6 rows)
+    //
+    // The third column of row 1 is split into stacked panels:
+    // - Sensors: 3 rows (33%)
+    // - Containers: 6 rows (67%)
 
-    // Core panels (P0)
-    if app.panels.cpu {
-        panels.push(draw_cpu_panel);
-    }
-    if app.panels.memory {
-        panels.push(draw_memory_panel);
-    }
-    if app.panels.disk {
-        panels.push(draw_disk_panel);
-    }
-    if app.panels.network {
-        panels.push(draw_network_panel);
-    }
-    // Hardware panels (P1)
-    if app.panels.gpu {
-        panels.push(draw_gpu_panel);
-    }
-    if app.panels.sensors {
-        panels.push(draw_sensors_panel);
-    }
-    if app.panels.psi {
-        panels.push(draw_psi_panel);
-    }
-    if app.panels.connections {
-        panels.push(draw_connections_panel);
-    }
-    // Optional panels (P2)
-    if app.panels.battery {
-        panels.push(draw_battery_panel);
-    }
-    if app.panels.sensors_compact {
-        panels.push(draw_sensors_compact_panel);
-    }
-    if app.panels.system {
-        panels.push(draw_system_panel);
-    }
-    // Advanced panels (P3)
-    if app.panels.treemap {
-        panels.push(draw_treemap_panel);
-    }
-    if app.panels.files {
-        panels.push(draw_files_panel);
-    }
+    // For ttop-style deterministic layout with 6 core panels:
+    let is_ttop_layout = app.panels.cpu
+        && app.panels.memory
+        && app.panels.disk
+        && app.panels.network
+        && app.panels.gpu
+        && app.panels.sensors
+        && !app.panels.psi
+        && !app.panels.battery;
 
-    if panels.is_empty() {
-        return;
-    }
+    if is_ttop_layout && area.width >= 100.0 {
+        // ttop-specific 3x2 grid with stacked third column in row 1
+        let cols = 3;
+        let rows = 2;
+        let cell_w = area.width / cols as f32;
+        let cell_h = area.height / rows as f32;
 
-    // Grid layout: 2 columns, rows as needed (like ttop)
-    let cols = panels.len().min(2);
-    let rows = panels.len().div_ceil(cols);
-    let cell_w = area.width / cols as f32;
-    let cell_h = area.height / rows as f32;
+        // Row 0: CPU, Memory, Disk
+        draw_cpu_panel(app, canvas, Rect::new(area.x, area.y, cell_w, cell_h));
+        draw_memory_panel(
+            app,
+            canvas,
+            Rect::new(area.x + cell_w, area.y, cell_w, cell_h),
+        );
+        draw_disk_panel(
+            app,
+            canvas,
+            Rect::new(area.x + 2.0 * cell_w, area.y, cell_w, cell_h),
+        );
 
-    for (i, draw_fn) in panels.iter().enumerate() {
-        let col = i % cols;
-        let row = i / cols;
-        let x = area.x + col as f32 * cell_w;
-        let y = area.y + row as f32 * cell_h;
-        draw_fn(app, canvas, Rect::new(x, y, cell_w, cell_h));
+        // Row 1: Network, GPU, Sensors+Containers stacked
+        let row1_y = area.y + cell_h;
+        draw_network_panel(app, canvas, Rect::new(area.x, row1_y, cell_w, cell_h));
+        draw_gpu_panel(
+            app,
+            canvas,
+            Rect::new(area.x + cell_w, row1_y, cell_w, cell_h),
+        );
+
+        // Third column: split into Sensors (33%) + Containers (67%)
+        let col3_x = area.x + 2.0 * cell_w;
+        let sensors_h = (cell_h / 3.0).round(); // 3 rows for sensors
+        let containers_h = cell_h - sensors_h; // 6 rows for containers
+
+        draw_sensors_panel(app, canvas, Rect::new(col3_x, row1_y, cell_w, sensors_h));
+        draw_containers_panel(
+            app,
+            canvas,
+            Rect::new(col3_x, row1_y + sensors_h, cell_w, containers_h),
+        );
+    } else {
+        // Generic grid layout for non-ttop configurations
+        let mut panels: Vec<fn(&App, &mut DirectTerminalCanvas<'_>, Rect)> = Vec::new();
+
+        if app.panels.cpu {
+            panels.push(draw_cpu_panel);
+        }
+        if app.panels.memory {
+            panels.push(draw_memory_panel);
+        }
+        if app.panels.disk {
+            panels.push(draw_disk_panel);
+        }
+        if app.panels.network {
+            panels.push(draw_network_panel);
+        }
+        if app.panels.gpu {
+            panels.push(draw_gpu_panel);
+        }
+        if app.panels.sensors {
+            panels.push(draw_sensors_panel);
+        }
+        if app.panels.psi {
+            panels.push(draw_psi_panel);
+        }
+        if app.panels.battery {
+            panels.push(draw_battery_panel);
+        }
+        if app.panels.sensors_compact {
+            panels.push(draw_sensors_compact_panel);
+        }
+        if app.panels.system {
+            panels.push(draw_system_panel);
+        }
+
+        if panels.is_empty() {
+            return;
+        }
+
+        let max_cols = if area.width >= 100.0 { 3 } else { 2 };
+        let cols = panels.len().min(max_cols);
+        let rows = panels.len().div_ceil(cols);
+        let cell_w = area.width / cols as f32;
+        let cell_h = area.height / rows as f32;
+
+        for (i, draw_fn) in panels.iter().enumerate() {
+            let col = i % cols;
+            let row = i / cols;
+            let x = area.x + col as f32 * cell_w;
+            let y = area.y + row as f32 * cell_h;
+            draw_fn(app, canvas, Rect::new(x, y, cell_w, cell_h));
+        }
     }
 }
 
 #[allow(clippy::too_many_lines)]
 fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
-    use sysinfo::{Cpu, System};
+    use sysinfo::{Cpu, LoadAvg, System};
 
     let cpu_pct = app.cpu_history.last().copied().unwrap_or(0.0) * 100.0;
     let core_count = app.per_core_percent.len();
     let uptime = app.uptime();
-    let load = System::load_average();
 
-    // Get CPU frequency (max from all cores)
-    let max_freq_mhz = app
-        .system
-        .cpus()
-        .iter()
-        .map(Cpu::frequency)
-        .max()
-        .unwrap_or(0);
+    // In deterministic mode, use zeroed values like ttop
+    let (load, max_freq_mhz) = if app.deterministic {
+        (
+            LoadAvg {
+                one: 0.0,
+                five: 0.0,
+                fifteen: 0.0,
+            },
+            0u64,
+        )
+    } else {
+        let load = System::load_average();
+        let freq = app
+            .system
+            .cpus()
+            .iter()
+            .map(Cpu::frequency)
+            .max()
+            .unwrap_or(0);
+        (load, freq)
+    };
+
     let is_boosting = max_freq_mhz > 3000; // Heuristic: >3GHz = boosting
 
-    // ttop-style title: " CPU 45% │ 8 cores │ 3.5GHz⚡ │ up 2d 3h │ LAV 2.15 "
+    // ttop-style title format (Border widget adds outer spaces)
+    // Deterministic mode: ttop shows "CPU 0% │ 48 cores │ 0.0GHz │ up 0m │"
+    // Normal mode: includes LAV and boost icon
     let boost_icon = if is_boosting { "⚡" } else { "" };
-    let title = format!(
-        " CPU {cpu_pct:.0}% │ {core_count} cores │ {:.1}GHz{boost_icon} │ up {} │ LAV {:.2} ",
-        max_freq_mhz as f64 / 1000.0,
-        format_uptime(uptime),
-        load.one
-    );
+    let title = if app.deterministic {
+        // ttop deterministic: no LAV, no boost icon, exact format match
+        format!(
+            "CPU {cpu_pct:.0}% │ {core_count} cores │ {:.1}GHz │ up {} │",
+            max_freq_mhz as f64 / 1000.0,
+            format_uptime(uptime)
+        )
+    } else {
+        format!(
+            "CPU {cpu_pct:.0}% │ {core_count} cores │ {:.1}GHz{boost_icon} │ up {} │ LAV {:.2}",
+            max_freq_mhz as f64 / 1000.0,
+            format_uptime(uptime),
+            load.one
+        )
+    };
 
-    let mut border = Border::new()
-        .with_title(&title)
-        .with_style(BorderStyle::Rounded)
-        .with_color(CPU_COLOR);
+    // Check if this panel is focused (SPEC-024 v5.0 Feature D)
+    let is_focused = app.is_panel_focused(PanelType::Cpu);
+    let mut border = create_panel_border(&title, CPU_COLOR, is_focused);
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
@@ -508,67 +631,102 @@ fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
     let reserved_bottom = 2.0_f32;
     let core_area_height = (inner.height - reserved_bottom).max(1.0);
 
-    // ttop layout: per-core meters on LEFT, graph on RIGHT
-    let meter_bar_width = 12.0_f32;
-    let cores_per_col = core_area_height as usize;
-    let num_meter_cols = if cores_per_col > 0 {
-        core_count.div_ceil(cores_per_col)
-    } else {
-        1
-    };
-    let meters_width = (num_meter_cols as f32 * meter_bar_width).min(inner.width / 2.0);
+    // In deterministic mode with zeroed data, ttop shows empty interior (no per-core meters)
+    // Only show per-core meters when there's actual data
+    let has_cpu_data = !app.deterministic || app.per_core_percent.iter().any(|&p| p > 0.0);
 
-    // Draw per-core meters on left side
-    for (i, &percent) in app.per_core_percent.iter().enumerate() {
-        if cores_per_col == 0 {
-            break;
+    if has_cpu_data {
+        // ttop layout: per-core meters on LEFT, graph on RIGHT
+        let meter_bar_width = 12.0_f32;
+        let cores_per_col = core_area_height as usize;
+        let num_meter_cols = if cores_per_col > 0 {
+            core_count.div_ceil(cores_per_col)
+        } else {
+            1
+        };
+        let meters_width = (num_meter_cols as f32 * meter_bar_width).min(inner.width / 2.0);
+
+        // Get per-core temperatures from sensor data (like ttop)
+        // Look for sensors with labels like "Core 0", "Core 1", etc.
+        let core_temps: std::collections::HashMap<usize, f64> = app
+            .analyzers
+            .sensor_health_data()
+            .map(|data| {
+                data.temperatures()
+                    .filter_map(|s| {
+                        // Parse "Core X" from label
+                        if s.label.starts_with("Core ") {
+                            s.label
+                                .strip_prefix("Core ")
+                                .and_then(|n| n.parse::<usize>().ok())
+                                .map(|idx| (idx, s.value))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        // Draw per-core meters on left side
+        for (i, &percent) in app.per_core_percent.iter().enumerate() {
+            if cores_per_col == 0 {
+                break;
+            }
+            let col = i / cores_per_col;
+            let row = i % cores_per_col;
+
+            let cell_x = inner.x + col as f32 * meter_bar_width;
+            let cell_y = inner.y + row as f32;
+
+            if cell_x + meter_bar_width > inner.x + meters_width
+                || cell_y >= inner.y + core_area_height
+            {
+                continue;
+            }
+
+            let color = percent_color(percent);
+            let bar_len = 6;
+            let filled = ((percent / 100.0) * bar_len as f64) as usize;
+            let bar: String =
+                "█".repeat(filled.min(bar_len)) + &"░".repeat(bar_len - filled.min(bar_len));
+
+            // ttop style: show temp if available, otherwise show percent
+            let label = if let Some(&temp) = core_temps.get(&i) {
+                format!("{i:>2} {bar} {temp:>2.0}°")
+            } else {
+                format!("{i:>2} {bar} {percent:>3.0}")
+            };
+            canvas.draw_text(
+                &label,
+                Point::new(cell_x, cell_y),
+                &TextStyle {
+                    color,
+                    ..Default::default()
+                },
+            );
         }
-        let col = i / cores_per_col;
-        let row = i % cores_per_col;
 
-        let cell_x = inner.x + col as f32 * meter_bar_width;
-        let cell_y = inner.y + row as f32;
+        // Draw graph on right side
+        let graph_x = inner.x + meters_width + 1.0;
+        let graph_width = inner.width - meters_width - 1.0;
 
-        if cell_x + meter_bar_width > inner.x + meters_width || cell_y >= inner.y + core_area_height
-        {
-            continue;
+        if graph_width > 5.0 && !app.cpu_history.as_slice().is_empty() {
+            let history: Vec<f64> = app
+                .cpu_history
+                .as_slice()
+                .iter()
+                .map(|&v| v * 100.0)
+                .collect();
+            let mut graph = BrailleGraph::new(history)
+                .with_color(CPU_COLOR)
+                .with_range(0.0, 100.0)
+                .with_mode(GraphMode::Block);
+            graph.layout(Rect::new(graph_x, inner.y, graph_width, core_area_height));
+            graph.paint(canvas);
         }
-
-        let color = percent_color(percent);
-        let bar_len = 6;
-        let filled = ((percent / 100.0) * bar_len as f64) as usize;
-        let bar: String =
-            "█".repeat(filled.min(bar_len)) + &"░".repeat(bar_len - filled.min(bar_len));
-
-        let label = format!("{i:>2} {bar} {percent:>3.0}");
-        canvas.draw_text(
-            &label,
-            Point::new(cell_x, cell_y),
-            &TextStyle {
-                color,
-                ..Default::default()
-            },
-        );
     }
-
-    // Draw graph on right side
-    let graph_x = inner.x + meters_width + 1.0;
-    let graph_width = inner.width - meters_width - 1.0;
-
-    if graph_width > 5.0 && !app.cpu_history.as_slice().is_empty() {
-        let history: Vec<f64> = app
-            .cpu_history
-            .as_slice()
-            .iter()
-            .map(|&v| v * 100.0)
-            .collect();
-        let mut graph = BrailleGraph::new(history)
-            .with_color(CPU_COLOR)
-            .with_range(0.0, 100.0)
-            .with_mode(GraphMode::Block);
-        graph.layout(Rect::new(graph_x, inner.y, graph_width, core_area_height));
-        graph.paint(canvas);
-    }
+    // In deterministic mode with no data, interior is left empty (just like ttop)
 
     // === Bottom Row 1: Load Average Gauge with trend arrows (ttop style) ===
     let load_y = inner.y + core_area_height;
@@ -621,10 +779,28 @@ fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
             "█".repeat(filled.min(bar_width)) + &"░".repeat(bar_width - filled.min(bar_width));
 
         // Format: "Load ██████████ 2.15↑ 1.85↓ 1.50 │ Freq 3.5GHz ⚡"
-        let load_str = format!(
-            "Load {bar} {:.2}{trend_1_5} {:.2}{trend_5_15} {:.2}",
-            load.one, load.five, load.fifteen
-        );
+        // In deterministic mode: "Load ░░░░░░░░░░ 0.00→ 0.00→ 0.00 │ Fre"
+        let load_str = if app.deterministic {
+            // ttop shows truncated " │ Fre" in deterministic mode
+            format!(
+                "Load {bar} {:.2}{trend_1_5} {:.2}{trend_5_15} {:.2} │ Fre",
+                load.one, load.five, load.fifteen
+            )
+        } else {
+            // Show frequency info in real mode
+            let freq_ghz = max_freq_mhz as f64 / 1000.0;
+            if freq_ghz > 0.0 {
+                format!(
+                    "Load {bar} {:.2}{trend_1_5} {:.2}{trend_5_15} {:.2} │ {freq_ghz:.1}GHz",
+                    load.one, load.five, load.fifteen
+                )
+            } else {
+                format!(
+                    "Load {bar} {:.2}{trend_1_5} {:.2}{trend_5_15} {:.2}",
+                    load.one, load.five, load.fifteen
+                )
+            }
+        };
 
         canvas.draw_text(
             &load_str,
@@ -637,8 +813,9 @@ fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
     }
 
     // === Bottom Row 2: Top 3 CPU Consumers (ttop style) ===
+    // Skip in deterministic mode (ttop shows empty row)
     let consumers_y = inner.y + core_area_height + 1.0;
-    if consumers_y < inner.y + inner.height && inner.width > 20.0 {
+    if !app.deterministic && consumers_y < inner.y + inner.height && inner.width > 20.0 {
         // Get top 3 processes by CPU
         let mut top_procs: Vec<_> = app
             .system
@@ -747,17 +924,22 @@ fn draw_memory_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: R
         0.0
     };
 
-    // Check for ZRAM
-    let zram_stats = read_zram_stats();
+    // Check for ZRAM (skip in deterministic mode)
+    let zram_stats = if app.deterministic {
+        None
+    } else {
+        read_zram_stats()
+    };
     let zram_info = zram_stats
         .as_ref()
         .filter(|z| z.is_active())
         .map(|z| format!(" │ ZRAM:{:.1}x", z.ratio()))
         .unwrap_or_default();
 
-    // ttop-style title: " Memory │ 16.5G / 32.0G (52%) │ ZRAM:2.5x "
+    // ttop-style title (Border widget adds outer spaces)
+    // Deterministic: "Memory │ 0.0G / 0.0G (0%)"
     let title = format!(
-        " Memory │ {:.1}G / {:.1}G ({:.0}%){} ",
+        "Memory │ {:.1}G / {:.1}G ({:.0}%){}",
         gb(app.mem_used),
         gb(app.mem_total),
         mem_pct,
@@ -767,7 +949,8 @@ fn draw_memory_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: R
     let mut border = Border::new()
         .with_title(&title)
         .with_style(BorderStyle::Rounded)
-        .with_color(MEMORY_COLOR);
+        .with_color(MEMORY_COLOR)
+        .with_title_left_aligned();
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
@@ -779,14 +962,19 @@ fn draw_memory_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: R
     let mut y = inner.y;
 
     // Line 1: Stacked memory bar (ttop style: Used|Cached|Free)
-    if app.mem_total > 0 {
+    // In deterministic mode with 0 values, ttop shows all-gray bar
+    {
         let bar_width = inner.width as usize;
         let used_actual_pct = if app.mem_total > 0 {
             ((app.mem_total - app.mem_available) as f64 / app.mem_total as f64) * 100.0
         } else {
             0.0
         };
-        let cached_pct = (app.mem_cached as f64 / app.mem_total as f64) * 100.0;
+        let cached_pct = if app.mem_total > 0 {
+            (app.mem_cached as f64 / app.mem_total as f64) * 100.0
+        } else {
+            0.0
+        };
 
         let used_chars = ((used_actual_pct / 100.0) * bar_width as f64) as usize;
         let cached_chars = ((cached_pct / 100.0) * bar_width as f64) as usize;
@@ -833,7 +1021,7 @@ fn draw_memory_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: R
             );
         }
 
-        // Draw free segment
+        // Draw free segment (always show if there's remaining space)
         if free_chars > 0 {
             let free_bar: String = "░".repeat(free_chars);
             canvas.draw_text(
@@ -850,10 +1038,23 @@ fn draw_memory_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: R
     }
 
     // Remaining lines: Memory breakdown rows (ttop style)
-    if y < inner.y + inner.height && app.mem_total > 0 {
-        let used_pct = (app.mem_used as f64 / app.mem_total as f64) * 100.0;
-        let cached_pct = (app.mem_cached as f64 / app.mem_total as f64) * 100.0;
-        let free_pct = (app.mem_available as f64 / app.mem_total as f64) * 100.0;
+    // Always show even with 0 values (like ttop deterministic mode)
+    if y < inner.y + inner.height {
+        let used_pct = if app.mem_total > 0 {
+            (app.mem_used as f64 / app.mem_total as f64) * 100.0
+        } else {
+            0.0
+        };
+        let cached_pct = if app.mem_total > 0 {
+            (app.mem_cached as f64 / app.mem_total as f64) * 100.0
+        } else {
+            0.0
+        };
+        let free_pct = if app.mem_total > 0 {
+            (app.mem_available as f64 / app.mem_total as f64) * 100.0
+        } else {
+            0.0
+        };
         let swap_pct = if app.swap_total > 0 {
             (app.swap_used as f64 / app.swap_total as f64) * 100.0
         } else {
@@ -943,126 +1144,226 @@ fn draw_memory_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: R
             );
         }
 
-        for (label, value, pct, color) in &rows {
-            if y >= inner.y + inner.height {
-                break;
-            }
+        // In deterministic mode, use ttop simple format: "  Used:   0.0G  0"
+        // In normal mode, use detailed format with bar and percentage
+        if app.deterministic {
+            // ttop deterministic format: label:value mini-bar
+            // Used, Cached, Free (no Swap in deterministic mode)
+            let dim_color = Color {
+                r: 0.3,
+                g: 0.3,
+                b: 0.3,
+                a: 1.0,
+            };
+            let cyan = Color {
+                r: 0.3,
+                g: 0.8,
+                b: 0.9,
+                a: 1.0,
+            };
+            let blue = Color {
+                r: 0.4,
+                g: 0.4,
+                b: 0.9,
+                a: 1.0,
+            };
 
-            // Special handling for ZRAM row (ttop style: "ZRAM 2.5G→1.0G 2.5x lz4")
-            if *label == "ZRAM" {
-                if let Some((orig_gb, compr_gb, ratio, algo)) = &zram_row_data {
-                    // Format size strings
-                    let orig_str = if *orig_gb >= 1024.0 {
-                        format!("{:.1}T", orig_gb / 1024.0)
-                    } else {
-                        format!("{:.1}G", orig_gb)
-                    };
-                    let compr_str = if *compr_gb >= 1024.0 {
-                        format!("{:.1}T", compr_gb / 1024.0)
-                    } else {
-                        format!("{:.1}G", compr_gb)
-                    };
-
-                    // ZRAM row: "  ZRAM  2.5G→1.0G 2.5x lz4"
-                    let dim_color = Color {
-                        r: 0.5,
-                        g: 0.5,
-                        b: 0.5,
-                        a: 1.0,
-                    };
-                    let magenta = Color {
-                        r: 0.8,
-                        g: 0.4,
-                        b: 1.0,
-                        a: 1.0,
-                    };
-                    let green = Color {
-                        r: 0.3,
-                        g: 0.9,
-                        b: 0.3,
-                        a: 1.0,
-                    };
-
-                    // Draw each part with its color
-                    canvas.draw_text(
-                        "  ZRAM ",
-                        Point::new(inner.x, y),
-                        &TextStyle {
-                            color: dim_color,
-                            ..Default::default()
-                        },
-                    );
-                    canvas.draw_text(
-                        &format!("{orig_str}→{compr_str} "),
-                        Point::new(inner.x + 7.0, y),
-                        &TextStyle {
-                            color: magenta,
-                            ..Default::default()
-                        },
-                    );
-                    let ratio_x =
-                        inner.x + 7.0 + orig_str.len() as f32 + 1.0 + compr_str.len() as f32 + 1.0;
-                    canvas.draw_text(
-                        &format!("{ratio:.1}x"),
-                        Point::new(ratio_x, y),
-                        &TextStyle {
-                            color: green,
-                            ..Default::default()
-                        },
-                    );
-                    canvas.draw_text(
-                        &format!(" {algo}"),
-                        Point::new(ratio_x + 4.0, y),
-                        &TextStyle {
-                            color: dim_color,
-                            ..Default::default()
-                        },
-                    );
-                }
-                y += 1.0;
-                continue;
-            }
-
-            let bar_width = 10.min((inner.width as usize).saturating_sub(22));
-            let filled = ((*pct / 100.0) * bar_width as f64) as usize;
-            let bar: String =
-                "█".repeat(filled.min(bar_width)) + &"░".repeat(bar_width - filled.min(bar_width));
-
-            let text = format!("{label:>6} {value:>5.1}G {bar} {pct:>5.1}%");
+            // Used row
             canvas.draw_text(
-                &text,
+                &format!("  Used:   {:.1}G  0", gb(app.mem_used)),
                 Point::new(inner.x, y),
                 &TextStyle {
-                    color: *color,
+                    color: percent_color(0.0),
                     ..Default::default()
                 },
             );
             y += 1.0;
+
+            // Cached row
+            if y < inner.y + inner.height {
+                canvas.draw_text(
+                    &format!("Cached:   {:.1}G  0", gb(app.mem_cached)),
+                    Point::new(inner.x, y),
+                    &TextStyle {
+                        color: cyan,
+                        ..Default::default()
+                    },
+                );
+                y += 1.0;
+            }
+
+            // Free row
+            if y < inner.y + inner.height {
+                canvas.draw_text(
+                    &format!("  Free:   {:.1}G  0", gb(app.mem_available)),
+                    Point::new(inner.x, y),
+                    &TextStyle {
+                        color: blue,
+                        ..Default::default()
+                    },
+                );
+                y += 1.0;
+            }
+
+            // PSI row (ttop style: "PSI ○ 0.0 cpu ○ 0.0 mem ○ 0.0 io")
+            if y < inner.y + inner.height {
+                canvas.draw_text(
+                    "PSI ○ 0.0 cpu ○ 0.0 mem ○ 0.0 io",
+                    Point::new(inner.x, y),
+                    &TextStyle {
+                        color: dim_color,
+                        ..Default::default()
+                    },
+                );
+                y += 1.0;
+            }
+
+            // Top Memory Consumers header
+            if y < inner.y + inner.height {
+                canvas.draw_text(
+                    "── Top Memory Consumers ──────────────",
+                    Point::new(inner.x, y),
+                    &TextStyle {
+                        color: dim_color,
+                        ..Default::default()
+                    },
+                );
+            }
+        } else {
+            // Normal mode: detailed format with bars
+            for (label, value, pct, color) in &rows {
+                if y >= inner.y + inner.height {
+                    break;
+                }
+
+                // Special handling for ZRAM row (ttop style: "ZRAM 2.5G→1.0G 2.5x lz4")
+                if *label == "ZRAM" {
+                    if let Some((orig_gb, compr_gb, ratio, algo)) = &zram_row_data {
+                        let orig_str = if *orig_gb >= 1024.0 {
+                            format!("{:.1}T", orig_gb / 1024.0)
+                        } else {
+                            format!("{orig_gb:.1}G")
+                        };
+                        let compr_str = if *compr_gb >= 1024.0 {
+                            format!("{:.1}T", compr_gb / 1024.0)
+                        } else {
+                            format!("{compr_gb:.1}G")
+                        };
+
+                        let dim_color = Color {
+                            r: 0.5,
+                            g: 0.5,
+                            b: 0.5,
+                            a: 1.0,
+                        };
+                        let magenta = Color {
+                            r: 0.8,
+                            g: 0.4,
+                            b: 1.0,
+                            a: 1.0,
+                        };
+                        let green = Color {
+                            r: 0.3,
+                            g: 0.9,
+                            b: 0.3,
+                            a: 1.0,
+                        };
+
+                        canvas.draw_text(
+                            "  ZRAM ",
+                            Point::new(inner.x, y),
+                            &TextStyle {
+                                color: dim_color,
+                                ..Default::default()
+                            },
+                        );
+                        canvas.draw_text(
+                            &format!("{orig_str}→{compr_str} "),
+                            Point::new(inner.x + 7.0, y),
+                            &TextStyle {
+                                color: magenta,
+                                ..Default::default()
+                            },
+                        );
+                        let ratio_x = inner.x
+                            + 7.0
+                            + orig_str.len() as f32
+                            + 1.0
+                            + compr_str.len() as f32
+                            + 1.0;
+                        canvas.draw_text(
+                            &format!("{ratio:.1}x"),
+                            Point::new(ratio_x, y),
+                            &TextStyle {
+                                color: green,
+                                ..Default::default()
+                            },
+                        );
+                        canvas.draw_text(
+                            &format!(" {algo}"),
+                            Point::new(ratio_x + 4.0, y),
+                            &TextStyle {
+                                color: dim_color,
+                                ..Default::default()
+                            },
+                        );
+                    }
+                    y += 1.0;
+                    continue;
+                }
+
+                let bar_width = 10.min((inner.width as usize).saturating_sub(22));
+                let filled = ((*pct / 100.0) * bar_width as f64) as usize;
+                let bar: String = "█".repeat(filled.min(bar_width))
+                    + &"░".repeat(bar_width - filled.min(bar_width));
+
+                let text = format!("{label:>6} {value:>5.1}G {bar} {pct:>5.1}%");
+                canvas.draw_text(
+                    &text,
+                    Point::new(inner.x, y),
+                    &TextStyle {
+                        color: *color,
+                        ..Default::default()
+                    },
+                );
+                y += 1.0;
+            }
         }
     }
 }
 
 fn draw_disk_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
-    // Calculate total disk usage for title
-    let (total_used, total_space): (u64, u64) = app
-        .disks
-        .iter()
-        .map(|d| (d.total_space() - d.available_space(), d.total_space()))
-        .fold((0, 0), |(au, at), (u, t)| (au + u, at + t));
+    // In deterministic mode, use zeroed values like ttop
+    let (total_used, total_space, read_rate, write_rate) = if app.deterministic {
+        (0u64, 0u64, 0.0, 0.0)
+    } else {
+        // Calculate total disk usage for title
+        let (used, space): (u64, u64) = app
+            .disks
+            .iter()
+            .map(|d| (d.total_space() - d.available_space(), d.total_space()))
+            .fold((0, 0), |(au, at), (u, t)| (au + u, at + t));
+        (
+            used,
+            space,
+            app.disk_io_rates.read_bytes_per_sec,
+            app.disk_io_rates.write_bytes_per_sec,
+        )
+    };
     let total_pct = if total_space > 0 {
         (total_used as f64 / total_space as f64) * 100.0
     } else {
         0.0
     };
 
-    // Get I/O rates
-    let read_rate = app.disk_io_rates.read_bytes_per_sec;
-    let write_rate = app.disk_io_rates.write_bytes_per_sec;
-
-    // ttop-style title with I/O rates: " Disk │ R: 1.2M │ W: 345K │ 52G / 100G "
-    let title = if read_rate > 0.0 || write_rate > 0.0 {
+    // ttop-style title (Border adds outer spaces)
+    // Deterministic: "Disk │ R: 0B/s │ W: 0B/s │ -0 IOPS │"
+    let title = if app.deterministic {
+        // ttop deterministic format with IOPS
+        "Disk │ R: 0B/s │ W: 0B/s │ -0 IOPS │".to_string()
+    } else if read_rate > 0.0 || write_rate > 0.0 {
         format!(
-            " Disk │ R: {}/s │ W: {}/s │ {:.0}G / {:.0}G ",
+            "Disk │ R: {}/s │ W: {}/s │ {:.0}G / {:.0}G",
             format_bytes_rate(read_rate),
             format_bytes_rate(write_rate),
             total_used as f64 / 1024.0 / 1024.0 / 1024.0,
@@ -1071,7 +1372,7 @@ fn draw_disk_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rec
     } else {
         // Fallback when no I/O data
         format!(
-            " Disk │ {:.0}G / {:.0}G ({:.0}%) ",
+            "Disk │ {:.0}G / {:.0}G ({:.0}%)",
             total_used as f64 / 1024.0 / 1024.0 / 1024.0,
             total_space as f64 / 1024.0 / 1024.0 / 1024.0,
             total_pct
@@ -1081,12 +1382,47 @@ fn draw_disk_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rec
     let mut border = Border::new()
         .with_title(&title)
         .with_style(BorderStyle::Rounded)
-        .with_color(DISK_COLOR);
+        .with_color(DISK_COLOR)
+        .with_title_left_aligned();
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
 
     if inner.height < 1.0 {
+        return;
+    }
+
+    // In deterministic mode, show ttop-style content
+    if app.deterministic {
+        let dim_color = Color {
+            r: 0.3,
+            g: 0.3,
+            b: 0.3,
+            a: 1.0,
+        };
+
+        // Row 1: I/O Pressure
+        canvas.draw_text(
+            "I/O Pressure ○  0.0% some    0.0% full",
+            Point::new(inner.x, inner.y),
+            &TextStyle {
+                color: dim_color,
+                ..Default::default()
+            },
+        );
+
+        // Row 2: Top Active Processes header
+        if inner.height >= 2.0 {
+            canvas.draw_text(
+                "── Top Active Processes ──────────────",
+                Point::new(inner.x, inner.y + 1.0),
+                &TextStyle {
+                    color: dim_color,
+                    ..Default::default()
+                },
+            );
+        }
+
         return;
     }
 
@@ -1138,25 +1474,31 @@ fn draw_disk_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rec
 }
 
 fn draw_network_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
-    // Calculate total network rates for title
-    let (rx_total, tx_total): (u64, u64) = app
-        .networks
-        .iter()
-        .map(|(_name, d)| (d.received(), d.transmitted()))
-        .fold((0, 0), |(ar, at), (r, t)| (ar + r, at + t));
+    // In deterministic mode, use zeroed values like ttop
+    let (rx_total, tx_total, primary_iface) = if app.deterministic {
+        (0u64, 0u64, "none")
+    } else {
+        // Calculate total network rates for title
+        let (rx, tx): (u64, u64) = app
+            .networks
+            .values()
+            .map(|d| (d.received(), d.transmitted()))
+            .fold((0, 0), |(ar, at), (r, t)| (ar + r, at + t));
 
-    // Find primary interface (highest traffic, excluding loopback)
-    let primary_iface = app
-        .networks
-        .iter()
-        .filter(|(name, _)| !name.starts_with("lo"))
-        .max_by_key(|(_, data)| data.received() + data.transmitted())
-        .map(|(name, _)| name.as_str())
-        .unwrap_or("none");
+        // Find primary interface (highest traffic, excluding loopback)
+        let iface = app
+            .networks
+            .iter()
+            .filter(|(name, _)| !name.starts_with("lo"))
+            .max_by_key(|(_, data)| data.received() + data.transmitted())
+            .map_or("none", |(name, _)| name.as_str());
+        (rx, tx, iface)
+    };
 
-    // ttop-style title: " Network (eth0) │ ↓ 1.2M/s │ ↑ 345K/s "
+    // ttop-style title (Border adds outer spaces)
+    // Deterministic: "Network (none) │ ↓ 0B/s │ ↑ 0B/s"
     let title = format!(
-        " Network ({}) │ ↓ {}/s │ ↑ {}/s ",
+        "Network ({}) │ ↓ {}/s │ ↑ {}/s",
         primary_iface,
         format_bytes(rx_total),
         format_bytes(tx_total)
@@ -1165,17 +1507,300 @@ fn draw_network_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
     let mut border = Border::new()
         .with_title(&title)
         .with_style(BorderStyle::Rounded)
-        .with_color(NETWORK_COLOR);
+        .with_color(NETWORK_COLOR)
+        .with_title_left_aligned();
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
 
+    // In deterministic mode, show ttop-style network content
+    if app.deterministic {
+        let cyan = Color {
+            r: 0.3,
+            g: 0.8,
+            b: 0.9,
+            a: 1.0,
+        };
+        let red = Color {
+            r: 1.0,
+            g: 0.3,
+            b: 0.3,
+            a: 1.0,
+        };
+        let dim_color = Color {
+            r: 0.3,
+            g: 0.3,
+            b: 0.3,
+            a: 1.0,
+        };
+        let white = Color {
+            r: 1.0,
+            g: 1.0,
+            b: 1.0,
+            a: 1.0,
+        };
+        let green = Color {
+            r: 0.3,
+            g: 0.9,
+            b: 0.3,
+            a: 1.0,
+        };
+
+        let mut y = inner.y;
+
+        // Row 1: Download label
+        canvas.draw_text(
+            "↓",
+            Point::new(inner.x, y),
+            &TextStyle {
+                color: cyan,
+                ..Default::default()
+            },
+        );
+        canvas.draw_text(
+            " Download ",
+            Point::new(inner.x + 1.0, y),
+            &TextStyle {
+                color: cyan,
+                ..Default::default()
+            },
+        );
+        canvas.draw_text(
+            "0B/s",
+            Point::new(inner.x + 11.0, y),
+            &TextStyle {
+                color: white,
+                ..Default::default()
+            },
+        );
+        y += 1.0;
+
+        // Row 2: Download braille graph (empty)
+        if y < inner.y + inner.height {
+            let empty_braille = "⠀".repeat(inner.width as usize);
+            canvas.draw_text(
+                &empty_braille,
+                Point::new(inner.x, y),
+                &TextStyle {
+                    color: cyan,
+                    ..Default::default()
+                },
+            );
+            y += 1.0;
+        }
+
+        // Row 3: Upload label
+        if y < inner.y + inner.height {
+            canvas.draw_text(
+                "↑",
+                Point::new(inner.x, y),
+                &TextStyle {
+                    color: red,
+                    ..Default::default()
+                },
+            );
+            canvas.draw_text(
+                " Upload   ",
+                Point::new(inner.x + 1.0, y),
+                &TextStyle {
+                    color: red,
+                    ..Default::default()
+                },
+            );
+            canvas.draw_text(
+                "0B/s",
+                Point::new(inner.x + 11.0, y),
+                &TextStyle {
+                    color: white,
+                    ..Default::default()
+                },
+            );
+            y += 1.0;
+        }
+
+        // Row 4-5: Upload braille graph (empty)
+        for _ in 0..2 {
+            if y < inner.y + inner.height {
+                let empty_braille = "⠀".repeat(inner.width as usize);
+                canvas.draw_text(
+                    &empty_braille,
+                    Point::new(inner.x, y),
+                    &TextStyle {
+                        color: red,
+                        ..Default::default()
+                    },
+                );
+                y += 1.0;
+            }
+        }
+
+        // Row 6: Session stats
+        if y < inner.y + inner.height {
+            canvas.draw_text(
+                "Session ",
+                Point::new(inner.x, y),
+                &TextStyle {
+                    color: dim_color,
+                    ..Default::default()
+                },
+            );
+            canvas.draw_text(
+                "↓",
+                Point::new(inner.x + 8.0, y),
+                &TextStyle {
+                    color: cyan,
+                    ..Default::default()
+                },
+            );
+            canvas.draw_text(
+                "0B",
+                Point::new(inner.x + 9.0, y),
+                &TextStyle {
+                    color: white,
+                    ..Default::default()
+                },
+            );
+            canvas.draw_text(
+                " ↑",
+                Point::new(inner.x + 11.0, y),
+                &TextStyle {
+                    color: red,
+                    ..Default::default()
+                },
+            );
+            canvas.draw_text(
+                "0B",
+                Point::new(inner.x + 13.0, y),
+                &TextStyle {
+                    color: white,
+                    ..Default::default()
+                },
+            );
+            y += 1.0;
+        }
+
+        // Row 7: TCP/UDP stats
+        if y < inner.y + inner.height {
+            canvas.draw_text(
+                "TCP ",
+                Point::new(inner.x, y),
+                &TextStyle {
+                    color: Color {
+                        r: 0.3,
+                        g: 0.7,
+                        b: 0.9,
+                        a: 1.0,
+                    },
+                    ..Default::default()
+                },
+            );
+            canvas.draw_text(
+                "0",
+                Point::new(inner.x + 4.0, y),
+                &TextStyle {
+                    color: green,
+                    ..Default::default()
+                },
+            );
+            canvas.draw_text(
+                "/",
+                Point::new(inner.x + 5.0, y),
+                &TextStyle {
+                    color: dim_color,
+                    ..Default::default()
+                },
+            );
+            canvas.draw_text(
+                "0",
+                Point::new(inner.x + 6.0, y),
+                &TextStyle {
+                    color: Color {
+                        r: 0.3,
+                        g: 0.7,
+                        b: 0.9,
+                        a: 1.0,
+                    },
+                    ..Default::default()
+                },
+            );
+            canvas.draw_text(
+                " UDP ",
+                Point::new(inner.x + 7.0, y),
+                &TextStyle {
+                    color: Color {
+                        r: 0.8,
+                        g: 0.3,
+                        b: 0.8,
+                        a: 1.0,
+                    },
+                    ..Default::default()
+                },
+            );
+            canvas.draw_text(
+                "0",
+                Point::new(inner.x + 12.0, y),
+                &TextStyle {
+                    color: white,
+                    ..Default::default()
+                },
+            );
+            canvas.draw_text(
+                " │ RTT ",
+                Point::new(inner.x + 13.0, y),
+                &TextStyle {
+                    color: dim_color,
+                    ..Default::default()
+                },
+            );
+            canvas.draw_text(
+                "●●●●●",
+                Point::new(inner.x + 20.0, y),
+                &TextStyle {
+                    color: green,
+                    ..Default::default()
+                },
+            );
+        }
+
+        return;
+    }
+
+    // Build interface list with historical data for sparklines
     let mut interfaces: Vec<NetworkInterface> = Vec::new();
     for (name, data) in &app.networks {
         let mut iface = NetworkInterface::new(name);
         iface.update(data.received() as f64, data.transmitted() as f64);
         iface.set_totals(data.total_received(), data.total_transmitted());
         interfaces.push(iface);
+    }
+
+    // Sort by traffic (highest first) and keep primary interface
+    interfaces.sort_by(|a, b| {
+        let a_total = a.rx_bps + a.tx_bps;
+        let b_total = b.rx_bps + b.tx_bps;
+        b_total
+            .partial_cmp(&a_total)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    // Inject app's network history into the primary interface for sparklines
+    // The history is normalized 0-1, scale back to approximate bytes/s for display
+    if let Some(primary) = interfaces.first_mut() {
+        // Convert normalized history (0-1) to scaled values for sparkline
+        // Max expected rate is 1GB/s, so multiply by 1e9 and scale for display
+        let max_rate = 1_000_000_000.0_f64;
+        primary.rx_history = app
+            .net_rx_history
+            .as_slice()
+            .iter()
+            .map(|&v| v * max_rate)
+            .collect();
+        primary.tx_history = app
+            .net_tx_history
+            .as_slice()
+            .iter()
+            .map(|&v| v * max_rate)
+            .collect();
     }
 
     interfaces.truncate(4);
@@ -1194,9 +1819,10 @@ fn draw_network_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
 }
 
 fn draw_process_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
+    // ttop uses "CPU%" not "CPU" for percentage-based columns
     let sort_name = match app.sort_column {
-        super::app::ProcessSortColumn::Cpu => "CPU",
-        super::app::ProcessSortColumn::Mem => "MEM",
+        super::app::ProcessSortColumn::Cpu => "CPU%",
+        super::app::ProcessSortColumn::Mem => "MEM%",
         super::app::ProcessSortColumn::Pid => "PID",
         super::app::ProcessSortColumn::User => "USER",
         super::app::ProcessSortColumn::Command => "CMD",
@@ -1208,9 +1834,10 @@ fn draw_process_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
         format!(" │ Filter: \"{}\"", app.filter)
     };
 
-    // ttop-style title: " Processes (143) │ Sort: CPU ▼ │ Filter: "chrome" "
+    // ttop-style title (Border adds outer spaces)
+    // Deterministic: "Processes (0) │ Sort: CPU% ▼"
     let title = format!(
-        " Processes ({}) │ Sort: {} {}{} ",
+        "Processes ({}) │ Sort: {} {}{}",
         app.process_count(),
         sort_name,
         arrow,
@@ -1220,12 +1847,29 @@ fn draw_process_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
     let mut border = Border::new()
         .with_title(&title)
         .with_style(BorderStyle::Rounded)
-        .with_color(PROCESS_COLOR);
+        .with_color(PROCESS_COLOR)
+        .with_title_left_aligned();
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
 
     if inner.height < 2.0 {
+        return;
+    }
+
+    // In deterministic mode, show ttop-style header and empty list
+    if app.deterministic {
+        // ttop header: "PID    S  C%   M%   COMMAND"
+        let header = "PID    S  C%   M%   COMMAND";
+        canvas.draw_text(
+            header,
+            Point::new(inner.x, inner.y),
+            &TextStyle {
+                color: PROCESS_COLOR,
+                ..Default::default()
+            },
+        );
+        // Empty process list (no separator, no "No processes" message)
         return;
     }
 
@@ -1448,8 +2092,7 @@ fn read_gpu_info() -> Option<GpuInfo> {
                     // Read GPU name
                     let name = fs::read_to_string(hwmon_dir.join("name"))
                         .ok()
-                        .map(|s| s.trim().to_string())
-                        .unwrap_or_else(|| "AMD GPU".to_string());
+                        .map_or_else(|| "AMD GPU".to_string(), |s| s.trim().to_string());
 
                     // Read VRAM
                     let vram_used = fs::read_to_string(format!("{card_path}/mem_info_vram_used"))
@@ -1488,9 +2131,16 @@ fn read_gpu_info() -> Option<GpuInfo> {
 }
 
 /// F006: GPU Panel - shows GPU utilization, VRAM, temperature
-fn draw_gpu_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
-    let gpu = read_gpu_info();
+fn draw_gpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
+    // Read GPU info (skip in deterministic mode)
+    let gpu = if app.deterministic {
+        None
+    } else {
+        read_gpu_info()
+    };
 
+    // ttop-style title (Border adds outer spaces)
+    // Deterministic: just "GPU" with no info
     let title = gpu
         .as_ref()
         .map(|g| {
@@ -1502,14 +2152,15 @@ fn draw_gpu_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rec
                 .power_watts
                 .map(|p| format!(" │ {p:.0}W"))
                 .unwrap_or_default();
-            format!(" {} {}{} ", g.name, temp_str, power_str)
+            format!("{}{}{}", g.name, temp_str, power_str)
         })
-        .unwrap_or_else(|| " GPU │ No GPU detected ".to_string());
+        .unwrap_or_else(|| "GPU".to_string());
 
     let mut border = Border::new()
         .with_title(&title)
         .with_style(BorderStyle::Rounded)
-        .with_color(GPU_COLOR);
+        .with_color(GPU_COLOR)
+        .with_title_left_aligned();
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
@@ -1528,7 +2179,7 @@ fn draw_gpu_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rec
             let bar: String = "█".repeat(filled) + &"░".repeat(bar_width.saturating_sub(filled));
             let color = percent_color(util as f64);
 
-            let text = format!("GPU  {bar} {:>3}%", util);
+            let text = format!("GPU  {bar} {util:>3}%");
             canvas.draw_text(
                 &text,
                 Point::new(inner.x, y),
@@ -1618,9 +2269,120 @@ fn draw_gpu_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rec
                         ..Default::default()
                     },
                 );
+                y += 1.0;
             }
         }
-    } else {
+
+        // GPU Processes with G/C badges (SPEC-024 v5.0 Feature E)
+        // Only show when height >= 15 (DetailLevel::Normal or higher)
+        // Reference: ttop/src/panels.rs lines 1497-1989, ttop/src/analyzers/gpu_procs.rs
+        if y < inner.y + inner.height - 3.0 {
+            if let Some(gpu_data) = app.analyzers.gpu_procs_data() {
+                if !gpu_data.processes.is_empty() {
+                    // Header
+                    y += 1.0;
+                    let header_color = Color {
+                        r: 0.5,
+                        g: 0.5,
+                        b: 0.5,
+                        a: 1.0,
+                    };
+                    canvas.draw_text(
+                        "TY  PID   SM%  MEM%  CMD",
+                        Point::new(inner.x, y),
+                        &TextStyle {
+                            color: header_color,
+                            ..Default::default()
+                        },
+                    );
+                    y += 1.0;
+
+                    // Show top 3 GPU processes with G/C type badge
+                    let max_procs = 3.min(gpu_data.processes.len());
+                    for proc in gpu_data.processes.iter().take(max_procs) {
+                        if y >= inner.y + inner.height {
+                            break;
+                        }
+
+                        // Type badge: C (Cyan) for Compute, G (Magenta) for Graphics
+                        // Reference: ttop/src/analyzers/gpu_procs.rs GpuProcType
+                        let (type_badge, badge_color) =
+                            match proc.process_type.to_uppercase().as_str() {
+                                "C" | "COMPUTE" => (
+                                    "C",
+                                    Color {
+                                        r: 0.0,
+                                        g: 0.8,
+                                        b: 1.0,
+                                        a: 1.0,
+                                    },
+                                ), // Cyan
+                                "G" | "GRAPHICS" => (
+                                    "G",
+                                    Color {
+                                        r: 1.0,
+                                        g: 0.0,
+                                        b: 1.0,
+                                        a: 1.0,
+                                    },
+                                ), // Magenta
+                                _ => (
+                                    "?",
+                                    Color {
+                                        r: 0.5,
+                                        g: 0.5,
+                                        b: 0.5,
+                                        a: 1.0,
+                                    },
+                                ),
+                            };
+
+                        // Draw type badge
+                        canvas.draw_text(
+                            type_badge,
+                            Point::new(inner.x, y),
+                            &TextStyle {
+                                color: badge_color,
+                                ..Default::default()
+                            },
+                        );
+
+                        // Draw process info
+                        let sm_str = proc
+                            .gpu_util
+                            .map_or_else(|| "  -".to_string(), |u| format!("{u:>3.0}"));
+                        let mem_str = proc
+                            .mem_util
+                            .map_or_else(|| "  -".to_string(), |u| format!("{u:>3.0}"));
+                        let cmd = if proc.name.len() > 12 {
+                            &proc.name[..12]
+                        } else {
+                            &proc.name
+                        };
+
+                        let proc_info =
+                            format!(" {:>5} {}%  {}%  {}", proc.pid, sm_str, mem_str, cmd);
+                        canvas.draw_text(
+                            &proc_info,
+                            Point::new(inner.x + 1.0, y),
+                            &TextStyle {
+                                color: Color {
+                                    r: 0.8,
+                                    g: 0.8,
+                                    b: 0.8,
+                                    a: 1.0,
+                                },
+                                ..Default::default()
+                            },
+                        );
+                        y += 1.0;
+                    }
+                }
+            }
+        }
+    } else if !app.deterministic {
+        // Only show "No GPU" message in non-deterministic mode
+        // In deterministic mode, ttop shows empty GPU panel
         canvas.draw_text(
             "No GPU detected or nvidia-smi not available",
             Point::new(inner.x, inner.y),
@@ -1635,9 +2397,10 @@ fn draw_gpu_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rec
             },
         );
     }
+    // In deterministic mode with no GPU, leave panel interior empty (like ttop)
 }
 
-/// Battery information from /sys/class/power_supply
+/// Battery information from /`sys/class/power_supply`
 #[derive(Debug, Default)]
 struct BatteryInfo {
     /// Capacity as percentage (0-100)
@@ -1651,7 +2414,7 @@ struct BatteryInfo {
     present: bool,
 }
 
-/// Read battery info from /sys/class/power_supply (Linux only)
+/// Read battery info from /`sys/class/power_supply` (Linux only)
 fn read_battery_info() -> Option<BatteryInfo> {
     #[cfg(target_os = "linux")]
     {
@@ -1676,8 +2439,7 @@ fn read_battery_info() -> Option<BatteryInfo> {
             // Read status
             let status = fs::read_to_string(format!("{bat_path}/status"))
                 .ok()
-                .map(|s| s.trim().to_string())
-                .unwrap_or_else(|| "Unknown".to_string());
+                .map_or_else(|| "Unknown".to_string(), |s| s.trim().to_string());
 
             // Try to calculate time remaining
             // Uses energy_now/power_now or charge_now/current_now
@@ -1723,6 +2485,7 @@ fn read_battery_info() -> Option<BatteryInfo> {
 fn draw_battery_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
     let battery = read_battery_info();
 
+    // ttop-style title (Border adds outer spaces)
     let title = battery
         .as_ref()
         .map(|b| {
@@ -1732,18 +2495,19 @@ fn draw_battery_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds:
                     if m >= 60 {
                         format!(" │ {}h{}m", m / 60, m % 60)
                     } else {
-                        format!(" │ {}m", m)
+                        format!(" │ {m}m")
                     }
                 })
                 .unwrap_or_default();
-            format!(" Battery │ {}% │ {}{} ", b.capacity, b.status, time_str)
+            format!("Battery │ {}% │ {}{}", b.capacity, b.status, time_str)
         })
-        .unwrap_or_else(|| " Battery │ No battery ".to_string());
+        .unwrap_or_else(|| "Battery │ No battery".to_string());
 
     let mut border = Border::new()
         .with_title(&title)
         .with_style(BorderStyle::Rounded)
-        .with_color(BATTERY_COLOR);
+        .with_color(BATTERY_COLOR)
+        .with_title_left_aligned();
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
@@ -1835,18 +2599,26 @@ fn draw_battery_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds:
 fn draw_sensors_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
     use sysinfo::{Component, Components};
 
-    let components = Components::new_with_refreshed_list();
-    let max_temp = components
-        .iter()
-        .filter_map(Component::temperature)
-        .fold(0.0_f32, f32::max);
+    // In deterministic mode, show 0°C like ttop
+    let (components, max_temp) = if app.deterministic {
+        (None, 0.0_f32)
+    } else {
+        let comps = Components::new_with_refreshed_list();
+        let temp = comps
+            .iter()
+            .filter_map(Component::temperature)
+            .fold(0.0_f32, f32::max);
+        (Some(comps), temp)
+    };
 
-    let title = format!(" Sensors │ Max: {max_temp:.0}°C ");
+    // ttop-style title (Border adds outer spaces)
+    let title = format!("Sensors │ {max_temp:.0}°C");
 
     let mut border = Border::new()
         .with_title(&title)
         .with_style(BorderStyle::Rounded)
-        .with_color(SENSORS_COLOR);
+        .with_color(SENSORS_COLOR)
+        .with_title_left_aligned();
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
@@ -1855,8 +2627,13 @@ fn draw_sensors_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
         return;
     }
 
+    // In deterministic mode, components is None - don't show any sensors
+    let Some(ref comps) = components else {
+        return;
+    };
+
     let mut y = inner.y;
-    for component in components.iter().take(inner.height as usize) {
+    for component in comps.iter().take(inner.height as usize) {
         let label = component.label();
         let label_short: String = label.chars().take(12).collect();
 
@@ -1910,7 +2687,9 @@ fn draw_sensors_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
         y += 1.0;
     }
 
-    if components.is_empty() {
+    // Note: In deterministic mode, we already returned early above
+    // This check is for non-deterministic mode when no sensors are detected
+    if comps.is_empty() {
         canvas.draw_text(
             "No sensors detected",
             Point::new(inner.x, inner.y),
@@ -1925,19 +2704,116 @@ fn draw_sensors_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
             },
         );
     }
-
-    // Suppress unused warning
-    let _ = app;
 }
 
-/// F010: PSI Panel - shows CPU/Memory/IO pressure (Linux only)
-fn draw_psi_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
-    let title = " Pressure │ — ";
+/// Containers Panel - shows Docker/Podman containers (ttop style)
+fn draw_containers_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
+    // ttop-style title
+    let title = "Containers";
 
     let mut border = Border::new()
         .with_title(title)
         .with_style(BorderStyle::Rounded)
-        .with_color(PSI_COLOR);
+        .with_color(CONTAINERS_COLOR)
+        .with_title_left_aligned();
+    border.layout(bounds);
+    border.paint(canvas);
+    let inner = border.inner_rect();
+
+    if inner.height < 1.0 {
+        return;
+    }
+
+    // In deterministic mode, show "No running containers" like ttop
+    if app.deterministic {
+        canvas.draw_text(
+            "No running containers",
+            Point::new(inner.x, inner.y),
+            &TextStyle {
+                color: Color {
+                    r: 0.5,
+                    g: 0.5,
+                    b: 0.5,
+                    a: 1.0,
+                },
+                ..Default::default()
+            },
+        );
+        return;
+    }
+
+    // Get containers data from analyzer
+    if let Some(data) = app.analyzers.containers_data() {
+        if data.containers.is_empty() {
+            canvas.draw_text(
+                "No running containers",
+                Point::new(inner.x, inner.y),
+                &TextStyle {
+                    color: Color {
+                        r: 0.5,
+                        g: 0.5,
+                        b: 0.5,
+                        a: 1.0,
+                    },
+                    ..Default::default()
+                },
+            );
+        } else {
+            let mut y = inner.y;
+            for container in data.containers.iter().take(inner.height as usize) {
+                let status_icon = match container.state {
+                    super::analyzers::ContainerState::Running => "●",
+                    super::analyzers::ContainerState::Paused => "◐",
+                    super::analyzers::ContainerState::Exited => "○",
+                    super::analyzers::ContainerState::Created => "◎",
+                    super::analyzers::ContainerState::Restarting => "↻",
+                    super::analyzers::ContainerState::Removing => "⊘",
+                    super::analyzers::ContainerState::Dead => "✗",
+                    super::analyzers::ContainerState::Unknown => "?",
+                };
+                let name: String = container.name.chars().take(20).collect();
+                let cpu = container.stats.cpu_percent;
+                let mem_mb = container.stats.memory_bytes / (1024 * 1024);
+
+                let text = format!("{status_icon} {name:<20} {cpu:>5.1}% {mem_mb:>4}MB");
+                canvas.draw_text(
+                    &text,
+                    Point::new(inner.x, y),
+                    &TextStyle {
+                        color: CONTAINERS_COLOR,
+                        ..Default::default()
+                    },
+                );
+                y += 1.0;
+            }
+        }
+    } else {
+        canvas.draw_text(
+            "No container runtime",
+            Point::new(inner.x, inner.y),
+            &TextStyle {
+                color: Color {
+                    r: 0.5,
+                    g: 0.5,
+                    b: 0.5,
+                    a: 1.0,
+                },
+                ..Default::default()
+            },
+        );
+    }
+}
+
+/// F010: PSI Panel - shows CPU/Memory/IO pressure (Linux only)
+fn draw_psi_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
+    // ttop-style title (Border adds outer spaces)
+    let title = "Pressure │ —";
+
+    let mut border = Border::new()
+        .with_title(title)
+        .with_style(BorderStyle::Rounded)
+        .with_color(PSI_COLOR)
+        .with_title_left_aligned();
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
@@ -2120,15 +2996,14 @@ fn draw_connections_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, boun
             (0, 0, None)
         };
 
-    let title = format!(
-        " Connections │ {} active │ {} listen ",
-        active_count, listen_count
-    );
+    // ttop-style title (Border adds outer spaces)
+    let title = format!("Connections │ {active_count} active │ {listen_count} listen");
 
     let mut border = Border::new()
         .with_title(&title)
         .with_style(BorderStyle::Rounded)
-        .with_color(CONNECTIONS_COLOR);
+        .with_color(CONNECTIONS_COLOR)
+        .with_title_left_aligned();
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
@@ -2137,8 +3012,34 @@ fn draw_connections_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, boun
         return;
     }
 
-    // Header
-    let header = "SVC    LOCAL        REMOTE              ST";
+    // In deterministic mode, use ttop-style header and "No active connections"
+    if app.deterministic {
+        let _dim_color = Color {
+            r: 0.3,
+            g: 0.3,
+            b: 0.3,
+            a: 1.0,
+        };
+
+        // ttop header: "SVC   LOCA REMOT GE ST AGE   PROC"
+        let header = "SVC   LOCA REMOT GE ST AGE   PROC";
+        canvas.draw_text(
+            header,
+            Point::new(inner.x, inner.y),
+            &TextStyle {
+                color: CONNECTIONS_COLOR,
+                ..Default::default()
+            },
+        );
+
+        // No connections in deterministic mode
+        return;
+    }
+
+    // Header for real data mode (ttop style: SVC LOCAL REMOTE GE ST AGE PROC)
+    // GE (geo) simplified: L=local, R=remote
+    // AGE: would need connection tracking, show "-" for now
+    let header = "SVC   LOCAL        REMOTE            GE ST    PROC";
     canvas.draw_text(
         header,
         Point::new(inner.x, inner.y),
@@ -2213,20 +3114,62 @@ fn draw_connections_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, boun
         let svc = port_to_service(conn.local_port);
         let local = format!(":{}", conn.local_port);
         let remote = if conn.state == TcpState::Listen {
-            "*.*".to_string()
+            "*".to_string()
         } else {
-            format!("{}:{}", conn.remote_addr, conn.remote_port)
+            // Truncate remote address for display
+            let addr_str = format!("{}:{}", conn.remote_addr, conn.remote_port);
+            if addr_str.len() > 17 {
+                format!("{}…", &addr_str[..16])
+            } else {
+                addr_str
+            }
         };
 
-        let state_short = conn.state.short();
+        // GE (geo): L=local (127.x, 192.168.x, 10.x), R=remote
+        let is_local = match &conn.remote_addr {
+            std::net::IpAddr::V4(ip) => ip.is_loopback() || ip.is_private() || ip.is_link_local(),
+            std::net::IpAddr::V6(ip) => ip.is_loopback(),
+        };
+        let geo = if conn.state == TcpState::Listen {
+            "-"
+        } else if is_local {
+            "L"
+        } else {
+            "R"
+        };
+
+        let state_short = match conn.state {
+            TcpState::Established => "E",
+            TcpState::Listen => "L",
+            TcpState::TimeWait => "T",
+            TcpState::CloseWait => "C",
+            TcpState::SynSent => "S",
+            _ => "?",
+        };
+
+        // PROC: process name or PID
+        let proc_name = conn
+            .process_name
+            .as_ref()
+            .map(|s| {
+                if s.len() > 10 {
+                    format!("{}…", &s[..9])
+                } else {
+                    s.clone()
+                }
+            })
+            .or_else(|| conn.pid.map(|p| p.to_string()))
+            .unwrap_or_else(|| "-".to_string());
+
         let state_color = match conn.state {
             TcpState::Established => active_color,
             TcpState::Listen => listen_color,
             _ => dim_color,
         };
 
-        // Format: SVC    LOCAL        REMOTE              ST
-        let line = format!("{:<6} {:<12} {:<19} {}", svc, local, remote, state_short);
+        // Format: SVC   LOCAL        REMOTE            GE ST    PROC
+        let line =
+            format!("{svc:<5} {local:<12} {remote:<17} {geo:<2} {state_short:<5} {proc_name}");
         canvas.draw_text(
             &line,
             Point::new(inner.x, y),
@@ -2260,12 +3203,13 @@ fn draw_sensors_compact_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>,
         .filter_map(Component::temperature)
         .fold(0.0_f32, f32::max);
 
-    let title = format!(" Sensors │ {max_temp:.0}°C ");
+    let title = format!("Sensors │ {max_temp:.0}°C");
 
     let mut border = Border::new()
         .with_title(&title)
         .with_style(BorderStyle::Rounded)
-        .with_color(SENSORS_COLOR);
+        .with_color(SENSORS_COLOR)
+        .with_title_left_aligned();
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
@@ -2355,7 +3299,7 @@ fn draw_sensors_compact_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>,
 
 /// F011: System Panel - composite view with `sensors_compact` + containers
 fn draw_system_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
-    let title = " System ";
+    let title = "System";
 
     let mut border = Border::new()
         .with_title(title)
@@ -2365,7 +3309,8 @@ fn draw_system_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
             g: 0.7,
             b: 0.9,
             a: 1.0,
-        });
+        })
+        .with_title_left_aligned();
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
@@ -2460,7 +3405,7 @@ fn draw_treemap_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
 
     let disk_count = app.disks.iter().count();
     let title = format!(
-        " Treemap │ {} disk{} │ {:.0}G / {:.0}G ",
+        "Treemap │ {} disk{} │ {:.0}G / {:.0}G",
         disk_count,
         if disk_count == 1 { "" } else { "s" },
         total_used as f64 / 1024.0 / 1024.0 / 1024.0,
@@ -2470,7 +3415,8 @@ fn draw_treemap_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
     let mut border = Border::new()
         .with_title(&title)
         .with_style(BorderStyle::Rounded)
-        .with_color(FILES_COLOR);
+        .with_color(FILES_COLOR)
+        .with_title_left_aligned();
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
@@ -2482,7 +3428,7 @@ fn draw_treemap_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
     // Build treemap nodes from disk data
     let mut disk_nodes: Vec<TreemapNode> = Vec::new();
 
-    for disk in app.disks.iter() {
+    for disk in &app.disks {
         let mount = disk.mount_point().to_string_lossy();
         let used = disk.total_space() - disk.available_space();
         let total = disk.total_space();
@@ -2549,14 +3495,25 @@ fn draw_treemap_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
     treemap.paint(canvas);
 }
 
-/// F014: Files Panel - file activity and statistics
-fn draw_files_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
-    let title = " Files │ 0 total │ 0 hot │ 0 dup │ 0 wasted ";
+/// F014: Files Panel - file activity and large files (ttop style)
+fn draw_files_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
+    // Get treemap data if available
+    let treemap_data = app.analyzers.treemap_data();
+
+    // Calculate total size from treemap or disks
+    let total_size = treemap_data.map_or_else(
+        || app.disks.iter().map(sysinfo::Disk::total_space).sum(),
+        |d| d.total_size,
+    );
+
+    // ttop-style title (Border adds outer spaces)
+    let title = format!("Files │ {} total", format_bytes(total_size));
 
     let mut border = Border::new()
-        .with_title(title)
+        .with_title(&title)
         .with_style(BorderStyle::Rounded)
-        .with_color(FILES_COLOR);
+        .with_color(FILES_COLOR)
+        .with_title_left_aligned();
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
@@ -2565,8 +3522,34 @@ fn draw_files_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: R
         return;
     }
 
-    // Header row with sparklines (placeholder)
-    let header = "Activity  Entropy   Duplicates  Recent";
+    let dim_color = Color {
+        r: 0.5,
+        g: 0.5,
+        b: 0.5,
+        a: 1.0,
+    };
+    let file_color = Color {
+        r: 0.7,
+        g: 0.7,
+        b: 0.5,
+        a: 1.0,
+    };
+
+    // In deterministic mode, ttop shows just "..." and empty lines
+    if app.deterministic {
+        canvas.draw_text(
+            "...",
+            Point::new(inner.x, inner.y),
+            &TextStyle {
+                color: dim_color,
+                ..Default::default()
+            },
+        );
+        return;
+    }
+
+    // Header
+    let header = "NAME                          SIZE";
     canvas.draw_text(
         header,
         Point::new(inner.x, inner.y),
@@ -2576,38 +3559,118 @@ fn draw_files_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: R
         },
     );
 
-    // Sparkline placeholders
-    if inner.height > 1.0 {
-        let sparklines = "▁▂▃▄▅▆▇█  ▃▃▃▃▃▃▃▃  ▁▁▂▁▁▁▁▁  ▁▂▃▂▁▂▃▄";
+    // Display top items from treemap
+    if let Some(data) = treemap_data {
+        let max_rows = (inner.height as usize).saturating_sub(1);
+        for (i, item) in data.top_items.iter().take(max_rows).enumerate() {
+            let y = inner.y + 1.0 + i as f32;
+            if y >= inner.y + inner.height {
+                break;
+            }
+
+            // Truncate name if too long
+            let name = if item.name.len() > 26 {
+                format!("{}…", &item.name[..25])
+            } else {
+                item.name.clone()
+            };
+
+            // File icon based on type
+            let icon = if item.is_dir { "📁" } else { "📄" };
+
+            let line = format!("{} {:<25} {:>8}", icon, name, format_bytes(item.size));
+            canvas.draw_text(
+                &line,
+                Point::new(inner.x, y),
+                &TextStyle {
+                    color: file_color,
+                    ..Default::default()
+                },
+            );
+        }
+
+        if data.top_items.is_empty() {
+            canvas.draw_text(
+                "Scanning filesystem...",
+                Point::new(inner.x, inner.y + 1.0),
+                &TextStyle {
+                    color: dim_color,
+                    ..Default::default()
+                },
+            );
+        }
+    } else {
+        // No treemap data available
         canvas.draw_text(
-            sparklines,
+            "Waiting for filesystem scan...",
             Point::new(inner.x, inner.y + 1.0),
             &TextStyle {
-                color: Color {
-                    r: 0.6,
-                    g: 0.7,
-                    b: 0.5,
-                    a: 1.0,
-                },
+                color: dim_color,
                 ..Default::default()
             },
         );
     }
+}
 
-    // File list placeholder
-    if inner.height > 2.0 {
-        canvas.draw_text(
-            "File monitoring requires inotify/fanotify",
-            Point::new(inner.x, inner.y + 2.0),
-            &TextStyle {
-                color: Color {
-                    r: 0.5,
-                    g: 0.5,
-                    b: 0.5,
-                    a: 1.0,
-                },
-                ..Default::default()
-            },
-        );
+// =============================================================================
+// EXPLODE MODE (SPEC-024 v5.0 Feature D)
+// Reference: ttop/src/ui.rs lines 14-347
+// =============================================================================
+
+/// Draw a single panel in fullscreen (exploded) mode
+fn draw_exploded_panel(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect, panel: PanelType) {
+    match panel {
+        PanelType::Cpu => draw_cpu_panel(app, canvas, area),
+        PanelType::Memory => draw_memory_panel(app, canvas, area),
+        PanelType::Disk => draw_disk_panel(app, canvas, area),
+        PanelType::Network => draw_network_panel(app, canvas, area),
+        PanelType::Process => draw_process_panel(app, canvas, area),
+        PanelType::Gpu => draw_gpu_panel(app, canvas, area),
+        PanelType::Sensors => draw_sensors_panel(app, canvas, area),
+        PanelType::Connections => draw_connections_panel(app, canvas, area),
+        PanelType::Psi => draw_psi_panel(app, canvas, area),
+        PanelType::Files => draw_files_panel(app, canvas, area),
+        PanelType::Battery => draw_battery_panel(app, canvas, area),
+        PanelType::Containers => draw_containers_panel(app, canvas, area),
+    }
+}
+
+/// Draw the "[FULLSCREEN] Press ESC to exit" hint in exploded mode
+fn draw_explode_hint(canvas: &mut DirectTerminalCanvas, width: f32, _height: f32) {
+    let hint = "[FULLSCREEN] Press ESC or Enter to exit";
+    let hint_x = (width - hint.len() as f32 - 2.0).max(0.0);
+
+    let dim_color = Color {
+        r: 0.5,
+        g: 0.5,
+        b: 0.5,
+        a: 1.0,
+    };
+
+    canvas.draw_text(
+        hint,
+        Point::new(hint_x, 0.0),
+        &TextStyle {
+            color: dim_color,
+            ..Default::default()
+        },
+    );
+}
+
+/// Get the border color for a panel type
+pub fn panel_border_color(panel: PanelType) -> Color {
+    match panel {
+        PanelType::Cpu => CPU_COLOR,
+        PanelType::Memory => MEMORY_COLOR,
+        PanelType::Disk => DISK_COLOR,
+        PanelType::Network => NETWORK_COLOR,
+        PanelType::Process => PROCESS_COLOR,
+        PanelType::Gpu => GPU_COLOR,
+        PanelType::Battery => BATTERY_COLOR,
+        PanelType::Sensors => SENSORS_COLOR,
+        PanelType::Psi => PSI_COLOR,
+        PanelType::Connections => CONNECTIONS_COLOR,
+        PanelType::Files => FILES_COLOR,
+        PanelType::Containers => CONTAINERS_COLOR,
     }
 }

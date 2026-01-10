@@ -9,6 +9,8 @@
 //! The 25-character sets encode two values (0-4 each) in a single character,
 //! allowing 5×5 resolution per cell pair.
 
+#![allow(dead_code)] // Symbol sets may be used in future widgets
+
 /// Braille characters for upward-filling graphs (5×5 grid = 25 chars).
 /// Index: `left_value` * 5 + `right_value` where values are 0-4.
 pub const BRAILLE_UP: [char; 25] = [
@@ -73,6 +75,48 @@ pub const SUPERSCRIPT: [char; 10] = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶
 
 /// Subscript digit characters.
 pub const SUBSCRIPT: [char; 10] = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'];
+
+// ============================================================================
+// UX-112: Distinct Category Symbols
+// ============================================================================
+
+/// Category marker symbols - filled circles with varying fill levels.
+/// Use these to distinguish different data categories in legends.
+pub(super) const CATEGORY_FILLED: [char; 6] = ['●', '◐', '◑', '◒', '◓', '○'];
+
+/// Category marker symbols - geometric shapes.
+/// Use for color-blind friendly category distinction.
+pub(super) const CATEGORY_SHAPES: [char; 6] = ['●', '■', '▲', '◆', '★', '◯'];
+
+/// Category marker symbols - checkmarks and status.
+/// Use for pass/fail/warning status indicators.
+pub(super) const CATEGORY_STATUS: [char; 4] = ['✓', '⚠', '✗', '?'];
+
+/// Get a distinct category symbol by index.
+/// Cycles through filled circle variants.
+#[inline]
+pub(super) const fn category_symbol(index: usize) -> char {
+    CATEGORY_FILLED[index % CATEGORY_FILLED.len()]
+}
+
+/// Get a distinct shape symbol by index.
+/// Cycles through geometric shapes for color-blind accessibility.
+#[inline]
+pub(super) const fn shape_symbol(index: usize) -> char {
+    CATEGORY_SHAPES[index % CATEGORY_SHAPES.len()]
+}
+
+/// Arrow symbols for flow diagrams.
+pub(super) const ARROWS_FLOW: [&str; 4] = ["━▶", "──▶", "···▶", "→"];
+
+/// Get consistent arrow style for Sankey diagrams.
+/// UX-113: Standardized arrow styles based on flow strength.
+#[inline]
+pub(super) const fn flow_arrow(strength: usize) -> &'static str {
+    // Use if-else instead of .min() for const fn compatibility
+    let idx = if strength > 3 { 3 } else { strength };
+    ARROWS_FLOW[idx]
+}
 
 /// Symbol set variants for graph rendering.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

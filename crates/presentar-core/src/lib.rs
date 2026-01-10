@@ -81,6 +81,13 @@ pub mod lifecycle;
 mod runtime;
 pub mod shortcut;
 pub mod simd;
+
+// Re-export ComputeBlock primitives for convenient access
+pub use simd::{
+    batch_mean_f64, batch_min_max_f64, batch_scale_f64, batch_scale_offset_f64, batch_stddev_f64,
+    batch_sum_f64, batch_variance_f64, histogram_f64, normalize_f64, normalize_with_range_f64,
+    percentile_sorted_f64, weighted_sum_f64,
+};
 mod state;
 pub mod streaming;
 pub mod theme;

@@ -27,9 +27,15 @@ thiserror = "2.0"
 [dev-dependencies]
 proptest = { workspace = true }
 
+# ttop and trueno-viz for parity testing against the reference implementation
+# See SPEC-024 Section 11 - Visual Comparison Findings
+ttop = "0.3"
+trueno-viz = { version = "0.1", features = ["monitor"] }
+
 [features]
 default = []
 ptop = ["sysinfo", "clap"]
+tui-compare = ["clap"]
 
 [dependencies.sysinfo]
 version = "0.33"
@@ -44,6 +50,11 @@ optional = true
 name = "ptop"
 path = "src/bin/ptop.rs"
 required-features = ["ptop"]
+
+[[bin]]
+name = "tui-compare"
+path = "src/bin/tui-compare.rs"
+required-features = ["tui-compare"]
 
 [lints]
 workspace = true

@@ -893,7 +893,7 @@ mod tests {
         }
 
         // Outside clip should be unchanged
-        assert_eq!(buffer.get(0, 0).unwrap().bg, Color::BLACK);
+        assert_eq!(buffer.get(0, 0).unwrap().bg, Color::TRANSPARENT);
         // Inside clip should be filled
         assert_eq!(buffer.get(7, 7).unwrap().bg, Color::RED);
     }
@@ -908,7 +908,7 @@ mod tests {
             canvas.pop_clip();
         }
         // Nothing should be filled
-        assert_eq!(buffer.get(0, 0).unwrap().bg, Color::BLACK);
+        assert_eq!(buffer.get(0, 0).unwrap().bg, Color::TRANSPARENT);
     }
 
     #[test]
@@ -932,7 +932,7 @@ mod tests {
         }
 
         assert_eq!(buffer.get(5, 5).unwrap().bg, Color::BLUE);
-        assert_eq!(buffer.get(0, 0).unwrap().bg, Color::BLACK);
+        assert_eq!(buffer.get(0, 0).unwrap().bg, Color::TRANSPARENT);
     }
 
     #[test]

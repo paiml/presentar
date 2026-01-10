@@ -61,6 +61,9 @@ pub struct FlexItem {
     pub basis: Option<f32>,
     /// Self alignment override
     pub align_self: Option<FlexAlign>,
+    /// UX-107: Collapse to zero size when content is empty.
+    /// When true, items with no content will have 0 size in layout.
+    pub collapse_if_empty: bool,
 }
 
 impl FlexItem {
@@ -97,9 +100,17 @@ impl FlexItem {
         self.align_self = Some(align);
         self
     }
+
+    /// UX-107: Enable auto-collapse when content is empty.
+    #[must_use]
+    pub const fn collapse_if_empty(mut self) -> Self {
+        self.collapse_if_empty = true;
+        self
+    }
 }
 
 /// Distribute available space among flex items.
+/// UX-107: Items with `collapse_if_empty=true` and size=0 are excluded from distribution.
 #[must_use]
 #[allow(dead_code)]
 pub(crate) fn distribute_flex(items: &[FlexItem], sizes: &[f32], available: f32) -> Vec<f32> {
@@ -107,7 +118,21 @@ pub(crate) fn distribute_flex(items: &[FlexItem], sizes: &[f32], available: f32)
         return Vec::new();
     }
 
-    let total_size: f32 = sizes.iter().sum();
+    // UX-107: Collapsed items keep size 0 and don't participate in flex distribution
+    let collapsed: Vec<bool> = items
+        .iter()
+        .zip(sizes.iter())
+        .map(|(item, &size)| item.collapse_if_empty && size == 0.0)
+        .collect();
+
+    // Calculate total size excluding collapsed items
+    let total_size: f32 = sizes
+        .iter()
+        .zip(collapsed.iter())
+        .filter(|(_, &is_collapsed)| !is_collapsed)
+        .map(|(&s, _)| s)
+        .sum();
+
     let remaining = available - total_size;
 
     if remaining.abs() < 0.001 {
@@ -115,28 +140,59 @@ pub(crate) fn distribute_flex(items: &[FlexItem], sizes: &[f32], available: f32)
     }
 
     if remaining > 0.0 {
-        // Grow items
-        let total_grow: f32 = items.iter().map(|i| i.grow).sum();
+        // Grow items (only non-collapsed items participate)
+        let total_grow: f32 = items
+            .iter()
+            .zip(collapsed.iter())
+            .filter(|(_, &is_collapsed)| !is_collapsed)
+            .map(|(i, _)| i.grow)
+            .sum();
+
         if total_grow > 0.0 {
             return sizes
                 .iter()
                 .zip(items.iter())
-                .map(|(&size, item)| size + (remaining * item.grow / total_grow))
+                .zip(collapsed.iter())
+                .map(|((&size, item), &is_collapsed)| {
+                    if is_collapsed {
+                        0.0
+                    } else {
+                        size + (remaining * item.grow / total_grow)
+                    }
+                })
                 .collect();
         }
     } else {
-        // Shrink items
-        let total_shrink: f32 = items.iter().map(|i| i.shrink).sum();
+        // Shrink items (only non-collapsed items participate)
+        let total_shrink: f32 = items
+            .iter()
+            .zip(collapsed.iter())
+            .filter(|(_, &is_collapsed)| !is_collapsed)
+            .map(|(i, _)| i.shrink)
+            .sum();
+
         if total_shrink > 0.0 {
             return sizes
                 .iter()
                 .zip(items.iter())
-                .map(|(&size, item)| (size + (remaining * item.shrink / total_shrink)).max(0.0))
+                .zip(collapsed.iter())
+                .map(|((&size, item), &is_collapsed)| {
+                    if is_collapsed {
+                        0.0
+                    } else {
+                        (size + (remaining * item.shrink / total_shrink)).max(0.0)
+                    }
+                })
                 .collect();
         }
     }
 
-    sizes.to_vec()
+    // Keep collapsed items at 0
+    sizes
+        .iter()
+        .zip(collapsed.iter())
+        .map(|(&size, &is_collapsed)| if is_collapsed { 0.0 } else { size })
+        .collect()
 }
 
 #[cfg(test)]
@@ -431,5 +487,83 @@ mod tests {
         let result = distribute_flex(&items, &sizes, 100.0);
         // Should be treated as exact fit (within 0.001 tolerance)
         assert_eq!(result, vec![49.9995, 50.0005]);
+    }
+
+    // =========================================================================
+    // UX-107: collapse_if_empty Tests
+    // =========================================================================
+
+    #[test]
+    fn test_flex_item_collapse_if_empty() {
+        let item = FlexItem::new().collapse_if_empty();
+        assert!(item.collapse_if_empty);
+    }
+
+    #[test]
+    fn test_flex_item_collapse_if_empty_default_false() {
+        let item = FlexItem::new();
+        assert!(!item.collapse_if_empty);
+    }
+
+    #[test]
+    fn test_distribute_flex_collapsed_item_stays_zero() {
+        let items = vec![
+            FlexItem::new().grow(1.0).collapse_if_empty(),
+            FlexItem::new().grow(1.0),
+        ];
+        let sizes = vec![0.0, 50.0]; // First item empty (collapsed), second has content
+        let result = distribute_flex(&items, &sizes, 100.0);
+        // Collapsed item stays 0, second item gets all the extra space
+        assert_eq!(result, vec![0.0, 100.0]);
+    }
+
+    #[test]
+    fn test_distribute_flex_collapsed_doesnt_participate_in_grow() {
+        let items = vec![
+            FlexItem::new().grow(1.0).collapse_if_empty(),
+            FlexItem::new().grow(1.0),
+            FlexItem::new().grow(1.0),
+        ];
+        let sizes = vec![0.0, 25.0, 25.0]; // First collapsed, others have content
+        let result = distribute_flex(&items, &sizes, 100.0);
+        // Collapsed stays 0, remaining 50 is split evenly between items 2 and 3
+        assert_eq!(result, vec![0.0, 50.0, 50.0]);
+    }
+
+    #[test]
+    fn test_distribute_flex_collapsed_with_size_not_collapsed() {
+        // collapse_if_empty only collapses if size is 0
+        let items = vec![
+            FlexItem::new().grow(1.0).collapse_if_empty(),
+            FlexItem::new().grow(1.0),
+        ];
+        let sizes = vec![30.0, 30.0]; // Both have content, collapse flag doesn't apply
+        let result = distribute_flex(&items, &sizes, 100.0);
+        // Both participate in grow
+        assert_eq!(result, vec![50.0, 50.0]);
+    }
+
+    #[test]
+    fn test_distribute_flex_all_collapsed() {
+        let items = vec![
+            FlexItem::new().grow(1.0).collapse_if_empty(),
+            FlexItem::new().grow(1.0).collapse_if_empty(),
+        ];
+        let sizes = vec![0.0, 0.0]; // Both empty
+        let result = distribute_flex(&items, &sizes, 100.0);
+        // Both stay at 0
+        assert_eq!(result, vec![0.0, 0.0]);
+    }
+
+    #[test]
+    fn test_distribute_flex_collapsed_in_shrink() {
+        let items = vec![
+            FlexItem::new().shrink(1.0).collapse_if_empty(),
+            FlexItem::new().shrink(1.0),
+        ];
+        let sizes = vec![0.0, 120.0]; // First empty, second needs shrinking
+        let result = distribute_flex(&items, &sizes, 100.0);
+        // Collapsed stays 0, second shrinks to fit
+        assert_eq!(result, vec![0.0, 100.0]);
     }
 }

@@ -173,6 +173,27 @@ impl LineChart {
         self
     }
 
+    /// UX-P01: Compact mode with no axis labels or margins.
+    ///
+    /// Useful for inline/small charts where space is limited.
+    #[must_use]
+    pub fn compact(mut self) -> Self {
+        self.margin_left = 0.0;
+        self.margin_bottom = 0.0;
+        self.y_axis.ticks = 0;
+        self.x_axis.ticks = 0;
+        self.legend = LegendPosition::None;
+        self
+    }
+
+    /// UX-P01: Set custom margins for axis labels.
+    #[must_use]
+    pub fn with_margins(mut self, left: f32, bottom: f32) -> Self {
+        self.margin_left = left;
+        self.margin_bottom = bottom;
+        self
+    }
+
     /// Set legend position.
     #[must_use]
     pub fn with_legend(mut self, position: LegendPosition) -> Self {

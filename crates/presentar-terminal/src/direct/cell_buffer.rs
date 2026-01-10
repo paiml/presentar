@@ -120,7 +120,8 @@ impl Default for Cell {
         Self {
             symbol: CompactString::const_new(" "),
             fg: Color::WHITE,
-            bg: Color::BLACK,
+            // Use transparent background so unpainted areas don't show black
+            bg: Color::TRANSPARENT,
             modifiers: Modifiers::NONE,
             width: 1,
         }
@@ -169,12 +170,12 @@ impl Cell {
         self.width
     }
 
-    /// Reset to default (space).
+    /// Reset to default (space with transparent background).
     pub fn reset(&mut self) {
         self.symbol.clear();
         self.symbol.push(' ');
         self.fg = Color::WHITE;
-        self.bg = Color::BLACK;
+        self.bg = Color::TRANSPARENT;
         self.modifiers = Modifiers::NONE;
         self.width = 1;
     }
@@ -363,6 +364,28 @@ impl CellBuffer {
             }
         }
     }
+
+    /// Set a single character at the given position (keeps existing colors/modifiers).
+    pub fn set_char(&mut self, x: u16, y: u16, ch: char) {
+        if let Some(cell) = self.get_mut(x, y) {
+            let mut buf = [0u8; 4];
+            let s = ch.encode_utf8(&mut buf);
+            cell.symbol = CompactString::from(&*s);
+            self.mark_dirty(x, y);
+        }
+    }
+
+    /// Write a string starting at the given position (keeps existing colors/modifiers).
+    pub fn write_str(&mut self, x: u16, y: u16, s: &str) {
+        let mut cx = x;
+        for ch in s.chars() {
+            self.set_char(cx, y, ch);
+            cx = cx.saturating_add(1);
+            if cx >= self.width {
+                break;
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -427,7 +450,7 @@ mod tests {
         let cell = Cell::default();
         assert_eq!(cell.symbol.as_str(), " ");
         assert_eq!(cell.fg, Color::WHITE);
-        assert_eq!(cell.bg, Color::BLACK);
+        assert_eq!(cell.bg, Color::TRANSPARENT);
         assert_eq!(cell.modifiers, Modifiers::NONE);
         assert_eq!(cell.width(), 1);
     }
@@ -472,7 +495,7 @@ mod tests {
         cell.reset();
         assert_eq!(cell.symbol.as_str(), " ");
         assert_eq!(cell.fg, Color::WHITE);
-        assert_eq!(cell.bg, Color::BLACK);
+        assert_eq!(cell.bg, Color::TRANSPARENT);
         assert!(cell.modifiers.is_empty());
     }
 
@@ -615,8 +638,8 @@ mod tests {
 
         // Inside rect
         assert_eq!(buf.get(3, 3).unwrap().bg, Color::RED);
-        // Outside rect
-        assert_eq!(buf.get(0, 0).unwrap().bg, Color::BLACK);
+        // Outside rect - default is TRANSPARENT
+        assert_eq!(buf.get(0, 0).unwrap().bg, Color::TRANSPARENT);
     }
 
     #[test]

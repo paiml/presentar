@@ -8,22 +8,31 @@
 //! - `ConnectionsAnalyzer`: Network connections (`/proc/net/tcp*`)
 //! - `ProcessExtraAnalyzer`: Extended process info (cgroup, OOM, affinity)
 //! - `SensorHealthAnalyzer`: Hardware sensors (`/sys/class/hwmon/`)
+//! - `ContainersAnalyzer`: Docker/Podman container stats
 
 #![allow(clippy::redundant_closure_for_method_calls)]
 
 use std::time::Duration;
 
 mod connections;
+mod containers;
+mod gpu_procs;
 mod process_extra;
 mod psi;
 mod sensor_health;
+mod treemap;
 
 pub use connections::{ConnectionsAnalyzer, ConnectionsData, TcpConnection, TcpState};
+pub use containers::{
+    Container, ContainerRuntime, ContainerState, ContainerStats, ContainersAnalyzer, ContainersData,
+};
+pub use gpu_procs::{GpuInfo, GpuProcess, GpuProcsAnalyzer, GpuProcsData, GpuVendor};
 pub use process_extra::{IoPriorityClass, ProcessExtra, ProcessExtraAnalyzer, ProcessExtraData};
 pub use psi::{PsiAnalyzer, PsiAverages, PsiData, PsiResource};
 pub use sensor_health::{
     SensorHealthAnalyzer, SensorHealthData, SensorReading, SensorStatus, SensorType,
 };
+pub use treemap::{TreemapAnalyzer, TreemapConfig, TreemapData, TreemapNode};
 
 /// Error type for analyzer operations
 #[derive(Debug)]
@@ -39,9 +48,9 @@ pub enum AnalyzerError {
 impl std::fmt::Display for AnalyzerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::IoError(msg) => write!(f, "I/O error: {}", msg),
-            Self::ParseError(msg) => write!(f, "Parse error: {}", msg),
-            Self::NotAvailable(msg) => write!(f, "Not available: {}", msg),
+            Self::IoError(msg) => write!(f, "I/O error: {msg}"),
+            Self::ParseError(msg) => write!(f, "Parse error: {msg}"),
+            Self::NotAvailable(msg) => write!(f, "Not available: {msg}"),
         }
     }
 }
@@ -79,6 +88,12 @@ pub struct AnalyzerRegistry {
     pub process_extra: Option<ProcessExtraAnalyzer>,
     /// Hardware sensors
     pub sensor_health: Option<SensorHealthAnalyzer>,
+    /// Container stats (Docker/Podman)
+    pub containers: Option<ContainersAnalyzer>,
+    /// GPU process stats
+    pub gpu_procs: Option<GpuProcsAnalyzer>,
+    /// Filesystem treemap
+    pub treemap: Option<TreemapAnalyzer>,
 }
 
 impl Default for AnalyzerRegistry {
@@ -126,11 +141,41 @@ impl AnalyzerRegistry {
             }
         };
 
+        let containers = {
+            let analyzer = ContainersAnalyzer::new();
+            if analyzer.available() {
+                Some(analyzer)
+            } else {
+                None
+            }
+        };
+
+        let gpu_procs = {
+            let analyzer = GpuProcsAnalyzer::new();
+            if analyzer.available() {
+                Some(analyzer)
+            } else {
+                None
+            }
+        };
+
+        let treemap = {
+            let analyzer = TreemapAnalyzer::new();
+            if analyzer.available() {
+                Some(analyzer)
+            } else {
+                None
+            }
+        };
+
         Self {
             psi,
             connections,
             process_extra,
             sensor_health,
+            containers,
+            gpu_procs,
+            treemap,
         }
     }
 
@@ -147,6 +192,15 @@ impl AnalyzerRegistry {
         }
         if let Some(ref mut sensor_health) = self.sensor_health {
             let _ = sensor_health.collect();
+        }
+        if let Some(ref mut containers) = self.containers {
+            let _ = containers.collect();
+        }
+        if let Some(ref mut gpu_procs) = self.gpu_procs {
+            let _ = gpu_procs.collect();
+        }
+        if let Some(ref mut treemap) = self.treemap {
+            let _ = treemap.collect();
         }
     }
 
@@ -168,6 +222,21 @@ impl AnalyzerRegistry {
     /// Get sensor health data if available
     pub fn sensor_health_data(&self) -> Option<&SensorHealthData> {
         self.sensor_health.as_ref().map(|s| s.data())
+    }
+
+    /// Get containers data if available
+    pub fn containers_data(&self) -> Option<&ContainersData> {
+        self.containers.as_ref().map(|c| c.data())
+    }
+
+    /// Get GPU processes data if available
+    pub fn gpu_procs_data(&self) -> Option<&GpuProcsData> {
+        self.gpu_procs.as_ref().map(|g| g.data())
+    }
+
+    /// Get treemap data if available
+    pub fn treemap_data(&self) -> Option<&TreemapData> {
+        self.treemap.as_ref().map(|t| t.data())
     }
 }
 

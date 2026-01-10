@@ -75,6 +75,12 @@ pub struct ProcessEntry {
     pub cmdline: Option<String>,
     /// Process state.
     pub state: ProcessState,
+    /// OOM score (0-1000, higher = more likely to be killed).
+    pub oom_score: Option<i32>,
+    /// cgroup path (short form).
+    pub cgroup: Option<String>,
+    /// Nice value (-20 to +19).
+    pub nice: Option<i32>,
 }
 
 impl ProcessEntry {
@@ -95,6 +101,9 @@ impl ProcessEntry {
             command: command.into(),
             cmdline: None,
             state: ProcessState::default(),
+            oom_score: None,
+            cgroup: None,
+            nice: None,
         }
     }
 
@@ -111,6 +120,27 @@ impl ProcessEntry {
         self.state = state;
         self
     }
+
+    /// Set OOM score (0-1000).
+    #[must_use]
+    pub fn with_oom_score(mut self, score: i32) -> Self {
+        self.oom_score = Some(score);
+        self
+    }
+
+    /// Set cgroup path.
+    #[must_use]
+    pub fn with_cgroup(mut self, cgroup: impl Into<String>) -> Self {
+        self.cgroup = Some(cgroup.into());
+        self
+    }
+
+    /// Set nice value.
+    #[must_use]
+    pub fn with_nice(mut self, nice: i32) -> Self {
+        self.nice = Some(nice);
+        self
+    }
 }
 
 /// Sort column for process table.
@@ -121,6 +151,7 @@ pub enum ProcessSort {
     Cpu,
     Memory,
     Command,
+    Oom,
 }
 
 /// Process table widget with color-coded CPU/Memory bars.
@@ -144,6 +175,10 @@ pub struct ProcessTable {
     show_cmdline: bool,
     /// Compact mode (fewer columns).
     compact: bool,
+    /// Show OOM score column.
+    show_oom: bool,
+    /// Show nice value column.
+    show_nice: bool,
     /// Cached bounds.
     bounds: Rect,
 }
@@ -168,6 +203,8 @@ impl ProcessTable {
             mem_gradient: Gradient::from_hex(&["#9ece6a", "#e0af68", "#f7768e"]),
             show_cmdline: false,
             compact: false,
+            show_oom: false,
+            show_nice: false,
             bounds: Rect::default(),
         }
     }
@@ -222,14 +259,31 @@ impl ProcessTable {
         self
     }
 
+    /// Show OOM score column.
+    #[must_use]
+    pub fn with_oom(mut self) -> Self {
+        self.show_oom = true;
+        self
+    }
+
+    /// Show nice value column.
+    #[must_use]
+    pub fn with_nice_column(mut self) -> Self {
+        self.show_nice = true;
+        self
+    }
+
     /// Set sort column.
     pub fn sort_by(&mut self, column: ProcessSort) {
         if self.sort_by == column {
             self.sort_ascending = !self.sort_ascending;
         } else {
             self.sort_by = column;
-            // Default directions
-            self.sort_ascending = !matches!(column, ProcessSort::Cpu | ProcessSort::Memory);
+            // Default directions (CPU/Memory/OOM default to descending)
+            self.sort_ascending = !matches!(
+                column,
+                ProcessSort::Cpu | ProcessSort::Memory | ProcessSort::Oom
+            );
         }
         self.sort_processes();
     }
@@ -344,6 +398,17 @@ impl ProcessTable {
                     }
                 });
             }
+            ProcessSort::Oom => {
+                self.processes.sort_by(|a, b| {
+                    let a_oom = a.oom_score.unwrap_or(0);
+                    let b_oom = b.oom_score.unwrap_or(0);
+                    if ascending {
+                        a_oom.cmp(&b_oom)
+                    } else {
+                        b_oom.cmp(&a_oom)
+                    }
+                });
+            }
         }
     }
 
@@ -448,15 +513,18 @@ impl Widget for ProcessTable {
             return;
         }
 
-        // Column layout - compact mode: PID S C% M% COMMAND
+        // Column layout - compact mode: PID S [OOM] [NI] C% M% COMMAND
         let pid_w = 6;
         let state_w = if self.compact { 2 } else { 0 }; // State column in compact mode
+        let oom_w = if self.show_oom { 4 } else { 0 }; // OOM column (3 digits + space)
+        let nice_w = if self.show_nice { 4 } else { 0 }; // NI column (3 chars + space)
         let user_w = if self.compact { 0 } else { 8 };
         let cpu_w = 6;
         let mem_w = 6;
         let sep_w = if self.compact { 1 } else { 3 };
-        let fixed_w =
-            pid_w + state_w + user_w + cpu_w + mem_w + sep_w * (if self.compact { 3 } else { 4 });
+        let extra_cols = usize::from(self.show_oom) + usize::from(self.show_nice);
+        let num_seps = if self.compact { 3 } else { 4 } + extra_cols;
+        let fixed_w = pid_w + state_w + oom_w + nice_w + user_w + cpu_w + mem_w + sep_w * num_seps;
         let cmd_w = width.saturating_sub(fixed_w);
 
         // Header style
@@ -466,7 +534,7 @@ impl Widget for ProcessTable {
             ..Default::default()
         };
 
-        // Draw header - ttop compact format: PID S C% M% COMMAND
+        // Draw header - ttop compact format: PID S [OOM] C% M% COMMAND
         let mut header = String::new();
         let _ = write!(header, "{:>pid_w$}", "PID");
         if self.compact {
@@ -475,6 +543,14 @@ impl Widget for ProcessTable {
         } else {
             header.push_str(" │ ");
             let _ = write!(header, "{:user_w$}", "USER");
+        }
+        if self.show_oom {
+            header.push_str(if self.compact { " " } else { " │ " });
+            let _ = write!(header, "{:>3}", "OOM");
+        }
+        if self.show_nice {
+            header.push_str(if self.compact { " " } else { " │ " });
+            let _ = write!(header, "{:>3}", "NI");
         }
         header.push_str(if self.compact { " " } else { " │ " });
         let _ = write!(
@@ -560,6 +636,54 @@ impl Widget for ProcessTable {
                 x += user_w as f32;
             }
 
+            // OOM score (if enabled)
+            if self.show_oom {
+                x += if self.compact { 1.0 } else { 3.0 };
+                let oom = proc.oom_score.unwrap_or(0);
+                // Color based on OOM risk: green < 200, yellow 200-500, red > 500
+                let oom_color = if oom > 500 {
+                    Color::new(1.0, 0.3, 0.3, 1.0) // Red - high risk
+                } else if oom > 200 {
+                    Color::new(1.0, 0.8, 0.2, 1.0) // Yellow - medium risk
+                } else {
+                    Color::new(0.5, 0.8, 0.5, 1.0) // Green - low risk
+                };
+                let oom_str = format!("{oom:>3}");
+                canvas.draw_text(
+                    &oom_str,
+                    Point::new(x, y),
+                    &TextStyle {
+                        color: oom_color,
+                        ..Default::default()
+                    },
+                );
+                x += 3.0;
+            }
+
+            // Nice value (if enabled)
+            if self.show_nice {
+                x += if self.compact { 1.0 } else { 3.0 };
+                let ni = proc.nice.unwrap_or(0);
+                // Color: negative nice (high priority) = cyan, positive (low priority) = gray
+                let ni_color = if ni < 0 {
+                    Color::new(0.3, 0.9, 0.9, 1.0) // Cyan - high priority
+                } else if ni > 0 {
+                    Color::new(0.6, 0.6, 0.6, 1.0) // Gray - low priority
+                } else {
+                    Color::new(0.8, 0.8, 0.8, 1.0) // White - normal
+                };
+                let ni_str = format!("{ni:>3}");
+                canvas.draw_text(
+                    &ni_str,
+                    Point::new(x, y),
+                    &TextStyle {
+                        color: ni_color,
+                        ..Default::default()
+                    },
+                );
+                x += 3.0;
+            }
+
             // CPU
             x += if self.compact { 1.0 } else { 3.0 };
             let cpu_color = self.cpu_gradient.for_percent(proc.cpu_percent as f64);
@@ -630,6 +754,7 @@ impl Widget for ProcessTable {
                     Key::M => self.sort_by(ProcessSort::Memory),
                     Key::P => self.sort_by(ProcessSort::Pid),
                     Key::N => self.sort_by(ProcessSort::Command),
+                    Key::O => self.sort_by(ProcessSort::Oom),
                     _ => {}
                 }
                 None
@@ -884,5 +1009,43 @@ mod tests {
         table.set_processes(sample_processes());
         table.sort_by(ProcessSort::User);
         assert_eq!(table.processes[0].user, "noah");
+    }
+
+    #[test]
+    fn test_process_table_sort_oom() {
+        let mut table = ProcessTable::new();
+        // Create processes with different OOM scores
+        let entries = vec![
+            ProcessEntry::new(1, "user", 10.0, 5.0, "low_oom").with_oom_score(100),
+            ProcessEntry::new(2, "user", 10.0, 5.0, "high_oom").with_oom_score(800),
+            ProcessEntry::new(3, "user", 10.0, 5.0, "med_oom").with_oom_score(400),
+        ];
+        table.set_processes(entries);
+
+        // Sort by OOM (default descending - highest first)
+        table.sort_by(ProcessSort::Oom);
+
+        // Verify order: high (800) -> med (400) -> low (100)
+        assert_eq!(table.processes[0].command, "high_oom");
+        assert_eq!(table.processes[1].command, "med_oom");
+        assert_eq!(table.processes[2].command, "low_oom");
+    }
+
+    #[test]
+    fn test_process_table_sort_oom_toggle_ascending() {
+        let mut table = ProcessTable::new();
+        let entries = vec![
+            ProcessEntry::new(1, "user", 10.0, 5.0, "low_oom").with_oom_score(100),
+            ProcessEntry::new(2, "user", 10.0, 5.0, "high_oom").with_oom_score(800),
+        ];
+        table.set_processes(entries);
+
+        // Sort by OOM twice to toggle to ascending
+        table.sort_by(ProcessSort::Oom);
+        table.sort_by(ProcessSort::Oom);
+
+        // Verify order is now ascending: low (100) -> high (800)
+        assert_eq!(table.processes[0].command, "low_oom");
+        assert_eq!(table.processes[1].command, "high_oom");
     }
 }

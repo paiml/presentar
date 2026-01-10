@@ -18,13 +18,28 @@
 //! Layout engine for Presentar UI framework.
 //!
 //! Implements Flexbox-inspired and CSS Grid layout with SIMD acceleration.
+//!
+//! # ComputeBlock Grid Compositor
+//!
+//! The `compute_block` module provides a compositor for managing TUI panel layouts:
+//!
+//! - **Intrinsic Sizing**: Widgets report min/preferred/max sizes via `SizeHint`
+//! - **Cell Ownership**: Prevents rendering conflicts via `GridCompositor`
+//! - **Clipping**: Enforces bounds at render time to prevent artifacts
+//!
+//! See `ComputeBlock` and `GridCompositor` for details.
 
 mod cache;
+mod compute_block;
 mod engine;
 mod flex;
 mod grid;
 
 pub use cache::LayoutCache;
+pub use compute_block::{
+    compute_intrinsic_layout, ClipMode, CompositorError, ComputeBlock, FlexConstraint,
+    GridCompositor, IntrinsicSize, Rect, Size, SizeHint,
+};
 pub use engine::LayoutEngine;
 pub use flex::{FlexAlign, FlexDirection, FlexItem, FlexJustify};
 pub use grid::{

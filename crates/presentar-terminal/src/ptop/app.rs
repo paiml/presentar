@@ -10,6 +10,36 @@ use sysinfo::{
     System,
 };
 
+use super::config::{DetailLevel, PanelType, PtopConfig};
+
+/// Read cached memory from /proc/meminfo (Linux only).
+/// Returns bytes, or 0 if unavailable.
+#[cfg(target_os = "linux")]
+fn read_cached_memory() -> u64 {
+    use std::fs;
+    if let Ok(contents) = fs::read_to_string("/proc/meminfo") {
+        for line in contents.lines() {
+            // Look for "Cached:" line (not "SwapCached:")
+            if line.starts_with("Cached:") && !line.starts_with("CachedSwap") {
+                // Format: "Cached:          1234567 kB"
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 2 {
+                    if let Ok(kb) = parts[1].parse::<u64>() {
+                        return kb * 1024; // Convert kB to bytes
+                    }
+                }
+            }
+        }
+    }
+    0
+}
+
+#[cfg(not(target_os = "linux"))]
+fn read_cached_memory() -> u64 {
+    // On non-Linux systems, return 0 (cached memory not available via /proc)
+    0
+}
+
 use super::analyzers::{AnalyzerRegistry, PsiData};
 
 /// Ring buffer for history (matches ttop's `ring_buffer.rs`)
@@ -166,6 +196,15 @@ pub struct App {
     pub show_help: bool,
     pub running: bool,
 
+    // Panel navigation and explode (SPEC-024 v5.0 Features D, E)
+    /// Currently focused panel (receives keyboard input)
+    pub focused_panel: Option<PanelType>,
+    /// Exploded (fullscreen) panel, if any
+    pub exploded_panel: Option<PanelType>,
+
+    // Configuration (SPEC-024 v5.0 Feature A)
+    pub config: PtopConfig,
+
     // Frame timing
     pub frame_id: u64,
     pub avg_frame_time_us: u64,
@@ -203,8 +242,9 @@ impl App {
         let disks = Disks::new_with_refreshed_list();
         let networks = Networks::new_with_refreshed_list();
 
+        // ttop deterministic mode uses 48 cores with all zeros
         let core_count = if deterministic {
-            8
+            48
         } else {
             system.cpus().len()
         };
@@ -217,6 +257,41 @@ impl App {
         if analyzers.psi.is_some() {
             panels.psi = true;
         }
+        if analyzers.gpu_procs.is_some() {
+            panels.gpu = true;
+        }
+        if analyzers.sensor_health.is_some() {
+            panels.sensors = true;
+        }
+        if analyzers.connections.is_some() {
+            panels.connections = true;
+        }
+        if analyzers.treemap.is_some() {
+            panels.files = true;
+        }
+
+        // In deterministic mode, match ttop's panel layout exactly
+        if deterministic {
+            panels = PanelVisibility {
+                cpu: true,
+                memory: true,
+                disk: true,
+                network: true,
+                process: true,
+                gpu: true,
+                sensors: true,
+                psi: false, // ttop shows Containers, not PSI
+                connections: true,
+                battery: false,
+                sensors_compact: false,
+                system: false,
+                treemap: false,
+                files: true,
+            };
+        }
+
+        // Load configuration (SPEC-024 v5.0 Feature A)
+        let config = PtopConfig::load();
 
         let mut app = Self {
             system,
@@ -246,12 +321,16 @@ impl App {
             show_filter_input: false,
             show_help: false,
             running: true,
+            // Panel navigation (SPEC-024 v5.0 Feature D)
+            focused_panel: Some(PanelType::Cpu), // Start with CPU focused
+            exploded_panel: None,
+            config,
             frame_id: 0,
             avg_frame_time_us: 0,
             show_fps: false,
             deterministic,
-            // Fixed uptime: 5 days, 3 hours, 47 minutes = 453420 seconds
-            fixed_uptime: 5 * 86400 + 3 * 3600 + 47 * 60,
+            // ttop deterministic mode: 0 uptime
+            fixed_uptime: 0,
         };
 
         // In deterministic mode, populate with fixed data
@@ -263,36 +342,34 @@ impl App {
     }
 
     /// Initialize fixed data for deterministic mode
+    /// Matches ttop's deterministic mode exactly: all zeros
     fn init_deterministic_data(&mut self) {
-        // Fixed 8-core CPU percentages (varied pattern)
-        self.per_core_percent = vec![45.0, 32.0, 78.0, 15.0, 52.0, 88.0, 23.0, 61.0];
+        // ttop deterministic: 48 cores all at 0%
+        self.per_core_percent = vec![0.0; 48];
 
-        // Fixed memory values (16GB total, 8GB used)
-        self.mem_total = 16 * 1024 * 1024 * 1024; // 16 GiB
-        self.mem_used = 8 * 1024 * 1024 * 1024; // 8 GiB
-        self.mem_available = 6 * 1024 * 1024 * 1024; // 6 GiB
-        self.mem_cached = 2 * 1024 * 1024 * 1024; // 2 GiB
-        self.swap_total = 4 * 1024 * 1024 * 1024; // 4 GiB
-        self.swap_used = 512 * 1024 * 1024; // 512 MiB
+        // ttop deterministic: all memory values are 0
+        self.mem_total = 0;
+        self.mem_used = 0;
+        self.mem_available = 0;
+        self.mem_cached = 0;
+        self.swap_total = 0;
+        self.swap_used = 0;
 
-        // Fixed disk I/O rates
+        // ttop deterministic: no disk I/O
         self.disk_io_rates = DiskIoRates {
-            read_bytes_per_sec: 125.0 * 1024.0 * 1024.0, // 125 MB/s
-            write_bytes_per_sec: 45.0 * 1024.0 * 1024.0, // 45 MB/s
+            read_bytes_per_sec: 0.0,
+            write_bytes_per_sec: 0.0,
         };
 
-        // Pre-populate history with a sine-wave-like pattern for visual consistency
-        for i in 0..60 {
-            let t = i as f64 / 60.0 * std::f64::consts::PI * 4.0;
-            // CPU: oscillates between 0.3 and 0.7
-            self.cpu_history.push(0.5 + 0.2 * t.sin());
-            // Memory: slowly rising from 0.45 to 0.55
-            self.mem_history.push(0.45 + 0.10 * (i as f64 / 60.0));
-            // Network: bursty pattern
-            self.net_rx_history
-                .push(0.1 + 0.05 * ((t * 2.0).sin().abs()));
-            self.net_tx_history
-                .push(0.05 + 0.03 * ((t * 1.5).cos().abs()));
+        // ttop deterministic: fixed uptime (5 days, 3 hours, 47 minutes)
+        self.fixed_uptime = 5 * 86400 + 3 * 3600 + 47 * 60;
+
+        // ttop deterministic: empty history (all zeros)
+        for _ in 0..60 {
+            self.cpu_history.push(0.0);
+            self.mem_history.push(0.0);
+            self.net_rx_history.push(0.0);
+            self.net_tx_history.push(0.0);
         }
     }
 
@@ -338,9 +415,8 @@ impl App {
         self.mem_total = self.system.total_memory();
         self.mem_used = self.system.used_memory();
         self.mem_available = self.system.available_memory();
-        self.mem_cached = self
-            .mem_total
-            .saturating_sub(self.mem_used + self.mem_available);
+        // Read cached memory directly from /proc/meminfo (sysinfo doesn't expose this)
+        self.mem_cached = read_cached_memory();
         self.swap_total = self.system.total_swap();
         self.swap_used = self.system.used_swap();
 
@@ -395,6 +471,33 @@ impl App {
 
     /// Handle keyboard input. Returns true if app should quit.
     pub fn handle_key(&mut self, code: KeyCode, modifiers: KeyModifiers) -> bool {
+        // Help overlay mode - block all inputs except close
+        if self.show_help {
+            match code {
+                KeyCode::Esc | KeyCode::Char('?' | 'h') | KeyCode::F(1) => {
+                    self.show_help = false;
+                }
+                KeyCode::Char('q') => return true,
+                KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => return true,
+                _ => {} // Swallow all other inputs
+            }
+            return false;
+        }
+
+        // Exploded mode - Esc or Enter collapses (SPEC-024 v5.0 Feature D)
+        if self.exploded_panel.is_some() {
+            match code {
+                KeyCode::Esc | KeyCode::Enter | KeyCode::Char('z') => {
+                    self.exploded_panel = None;
+                    return false;
+                }
+                KeyCode::Char('q') => return true,
+                KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => return true,
+                _ => {} // In exploded mode, most keys are handled within the panel
+            }
+            return false;
+        }
+
         // Filter input mode
         if self.show_filter_input {
             match code {
@@ -420,11 +523,37 @@ impl App {
         #[allow(clippy::match_same_arms)]
         match code {
             // Quit
-            KeyCode::Char('q') | KeyCode::Esc => return true,
+            KeyCode::Char('q') => return true,
             KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => return true,
+
+            // Explode focused panel (SPEC-024 v5.0 Feature D)
+            KeyCode::Enter | KeyCode::Char('z') => {
+                if let Some(panel) = self.focused_panel {
+                    self.exploded_panel = Some(panel);
+                }
+            }
+
+            // Panel navigation - Tab cycles forward (SPEC-024 v5.0 Feature D)
+            KeyCode::Tab if !modifiers.contains(KeyModifiers::SHIFT) => {
+                self.navigate_panel_forward();
+            }
+
+            // Panel navigation - Shift+Tab cycles backward
+            KeyCode::BackTab => {
+                self.navigate_panel_backward();
+            }
+
+            // Vim-style panel navigation (hjkl)
+            KeyCode::Char('l') if !self.show_filter_input => {
+                self.navigate_panel_forward();
+            }
+            KeyCode::Char('H') => {
+                self.navigate_panel_backward();
+            }
 
             // Help
             KeyCode::Char('?') | KeyCode::F(1) => self.show_help = !self.show_help,
+            KeyCode::Char('h') => self.show_help = !self.show_help,
 
             // Panel toggles (matches ttop keys)
             KeyCode::Char('1') => self.panels.cpu = !self.panels.cpu,
@@ -437,7 +566,7 @@ impl App {
             KeyCode::Char('8') => self.panels.connections = !self.panels.connections,
             KeyCode::Char('9') => self.panels.psi = !self.panels.psi,
 
-            // Process navigation
+            // Process navigation (when Process panel focused)
             KeyCode::Down | KeyCode::Char('j') => self.navigate_process(1),
             KeyCode::Up | KeyCode::Char('k') => self.navigate_process(-1),
             KeyCode::PageDown => self.navigate_process(10),
@@ -463,7 +592,7 @@ impl App {
                 self.sort_column = ProcessSortColumn::Pid;
                 self.sort_descending = false;
             }
-            KeyCode::Tab | KeyCode::Char('s') => {
+            KeyCode::Char('s') => {
                 self.sort_column = self.sort_column.next();
             }
             KeyCode::Char('r') => self.sort_descending = !self.sort_descending,
@@ -474,16 +603,103 @@ impl App {
             }
             KeyCode::Delete => self.filter.clear(),
 
-            // Reset / Help
+            // Reset panels
             KeyCode::Char('0') => {
                 self.panels = PanelVisibility::default();
             }
-            KeyCode::Char('h') => self.show_help = !self.show_help,
+
+            // Escape in normal mode quits
+            KeyCode::Esc => return true,
 
             _ => {}
         }
 
         false
+    }
+
+    /// Navigate to next visible panel (SPEC-024 v5.0 Feature D)
+    fn navigate_panel_forward(&mut self) {
+        let visible = self.visible_panels();
+        if visible.is_empty() {
+            return;
+        }
+
+        let current_idx = self
+            .focused_panel
+            .and_then(|p| visible.iter().position(|&v| v == p))
+            .unwrap_or(0);
+
+        let next_idx = (current_idx + 1) % visible.len();
+        self.focused_panel = Some(visible[next_idx]);
+    }
+
+    /// Navigate to previous visible panel (SPEC-024 v5.0 Feature D)
+    fn navigate_panel_backward(&mut self) {
+        let visible = self.visible_panels();
+        if visible.is_empty() {
+            return;
+        }
+
+        let current_idx = self
+            .focused_panel
+            .and_then(|p| visible.iter().position(|&v| v == p))
+            .unwrap_or(0);
+
+        let prev_idx = if current_idx == 0 {
+            visible.len() - 1
+        } else {
+            current_idx - 1
+        };
+        self.focused_panel = Some(visible[prev_idx]);
+    }
+
+    /// Get list of currently visible panels in order
+    pub fn visible_panels(&self) -> Vec<PanelType> {
+        let mut visible = Vec::new();
+
+        if self.panels.cpu {
+            visible.push(PanelType::Cpu);
+        }
+        if self.panels.memory {
+            visible.push(PanelType::Memory);
+        }
+        if self.panels.disk {
+            visible.push(PanelType::Disk);
+        }
+        if self.panels.network {
+            visible.push(PanelType::Network);
+        }
+        if self.panels.process {
+            visible.push(PanelType::Process);
+        }
+        if self.panels.gpu {
+            visible.push(PanelType::Gpu);
+        }
+        if self.panels.sensors {
+            visible.push(PanelType::Sensors);
+        }
+        if self.panels.connections {
+            visible.push(PanelType::Connections);
+        }
+        if self.panels.psi {
+            visible.push(PanelType::Psi);
+        }
+        if self.panels.files {
+            visible.push(PanelType::Files);
+        }
+
+        visible
+    }
+
+    /// Check if a panel is currently focused
+    pub fn is_panel_focused(&self, panel: PanelType) -> bool {
+        self.focused_panel == Some(panel)
+    }
+
+    /// Get detail level for a panel based on its current height
+    /// Reference: SPEC-024 Section 17.3
+    pub fn detail_level_for_panel(&self, _panel: PanelType, height: u16) -> DetailLevel {
+        DetailLevel::for_height(height)
     }
 
     #[allow(clippy::cast_possible_wrap)]
@@ -500,6 +716,10 @@ impl App {
 
     /// Get filtered process count
     pub fn process_count(&self) -> usize {
+        // ttop deterministic mode: 0 processes
+        if self.deterministic {
+            return 0;
+        }
         self.system
             .processes()
             .values()
@@ -516,6 +736,10 @@ impl App {
 
     /// Get sorted and filtered processes
     pub fn sorted_processes(&self) -> Vec<&sysinfo::Process> {
+        // ttop deterministic mode: empty process list
+        if self.deterministic {
+            return Vec::new();
+        }
         let mut procs: Vec<_> = self
             .system
             .processes()
@@ -596,17 +820,12 @@ impl App {
                 let name = parts[2];
                 // Skip partitions (e.g., sda1, nvme0n1p1) - only count whole disks
                 // This avoids double-counting
-                if name.chars().last().map_or(false, |c| c.is_ascii_digit()) {
+                if name.chars().last().is_some_and(|c| c.is_ascii_digit()) {
                     // Check if it's a partition (e.g., sda1, nvme0n1p1)
                     // Partitions usually end with a number after device name
                     // Skip nvme partitions (contain 'p' followed by digits)
                     if name.contains('p')
-                        && name
-                            .chars()
-                            .rev()
-                            .take_while(|c| c.is_ascii_digit())
-                            .count()
-                            > 0
+                        && name.chars().rev().take_while(char::is_ascii_digit).count() > 0
                     {
                         continue;
                     }
@@ -667,16 +886,17 @@ mod tests {
         let app = App::new(true);
         assert!(app.deterministic);
 
-        // Check fixed values
-        assert_eq!(app.per_core_percent.len(), 8);
-        assert_eq!(app.mem_total, 16 * 1024 * 1024 * 1024);
-        assert_eq!(app.mem_used, 8 * 1024 * 1024 * 1024);
-        assert_eq!(app.swap_total, 4 * 1024 * 1024 * 1024);
+        // Check fixed values - ttop deterministic mode uses 48 cores, all zeros
+        assert_eq!(app.per_core_percent.len(), 48);
+        // ttop deterministic: all memory values are 0
+        assert_eq!(app.mem_total, 0);
+        assert_eq!(app.mem_used, 0);
+        assert_eq!(app.swap_total, 0);
 
         // Check fixed uptime (5 days, 3 hours, 47 minutes)
         assert_eq!(app.uptime(), 5 * 86400 + 3 * 3600 + 47 * 60);
 
-        // Check history is pre-populated
+        // Check history is pre-populated with 60 zeros
         assert_eq!(app.cpu_history.as_slice().len(), 60);
         assert_eq!(app.mem_history.as_slice().len(), 60);
     }

@@ -25,6 +25,8 @@ pub struct CpuGrid {
     columns: Option<usize>,
     /// Show core labels (0, 1, 2...).
     show_labels: bool,
+    /// Show numeric percentages instead of meter chars.
+    show_percentages: bool,
     /// Compact mode (minimal spacing).
     compact: bool,
     /// Cached bounds.
@@ -46,6 +48,7 @@ impl CpuGrid {
             gradient: Gradient::from_hex(&["#7aa2f7", "#e0af68", "#f7768e"]), // Tokyo Night CPU
             columns: None,
             show_labels: true,
+            show_percentages: false,
             compact: false,
             bounds: Rect::default(),
         }
@@ -79,6 +82,14 @@ impl CpuGrid {
         self
     }
 
+    /// Show numeric percentages instead of meter characters.
+    /// Format: "12 45%" or " 5 99%" (like ttop).
+    #[must_use]
+    pub fn with_percentages(mut self) -> Self {
+        self.show_percentages = true;
+        self
+    }
+
     /// Update core usage data.
     pub fn set_usage(&mut self, usage: Vec<f64>) {
         self.core_usage = usage;
@@ -97,18 +108,7 @@ impl CpuGrid {
             return (0, 0);
         }
 
-        // Cell width: label (2-3 chars) + meter (1 char) + spacing
-        let cell_width = if self.show_labels {
-            if self.compact {
-                4
-            } else {
-                5
-            }
-        } else if self.compact {
-            2
-        } else {
-            3
-        };
+        let cell_width = self.cell_width();
 
         let max_cols = (max_width / cell_width).max(1);
         let cols = self.columns.unwrap_or_else(|| {
@@ -119,6 +119,29 @@ impl CpuGrid {
 
         let rows = count.div_ceil(cols);
         (cols, rows)
+    }
+
+    /// Get cell width based on current display mode.
+    fn cell_width(&self) -> usize {
+        if self.show_percentages {
+            // Format: "12 45%" = 6 chars + space = 7
+            if self.compact {
+                7
+            } else {
+                8
+            }
+        } else if self.show_labels {
+            // Format: "12▆" = 3 chars + space
+            if self.compact {
+                4
+            } else {
+                5
+            }
+        } else if self.compact {
+            2
+        } else {
+            3
+        }
     }
 
     /// Get meter character for percentage (0-100).
@@ -168,17 +191,7 @@ impl Widget for CpuGrid {
         let max_width = constraints.max_width as usize;
         let (cols, rows) = self.optimal_grid(max_width);
 
-        let cell_width = if self.show_labels {
-            if self.compact {
-                4.0
-            } else {
-                5.0
-            }
-        } else if self.compact {
-            2.0
-        } else {
-            3.0
-        };
+        let cell_width = self.cell_width() as f32;
 
         let width = (cols as f32 * cell_width).min(constraints.max_width);
         let height = (rows as f32).min(constraints.max_height);
@@ -203,17 +216,7 @@ impl Widget for CpuGrid {
             return;
         }
 
-        let cell_width = if self.show_labels {
-            if self.compact {
-                4.0
-            } else {
-                5.0
-            }
-        } else if self.compact {
-            2.0
-        } else {
-            3.0
-        };
+        let cell_width = self.cell_width() as f32;
 
         for (i, &usage) in self.core_usage.iter().enumerate() {
             let col = i % cols;
@@ -224,15 +227,23 @@ impl Widget for CpuGrid {
 
             let usage_clamped = usage.clamp(0.0, 100.0);
             let color = self.gradient.for_percent(usage_clamped);
-            let meter = Self::meter_char(usage_clamped);
 
             let style = TextStyle {
                 color,
                 ..Default::default()
             };
 
-            if self.show_labels {
+            if self.show_percentages {
+                // Format: "12 45%" or " 5 99%" (ttop style with numeric percentages)
+                let label = if self.compact {
+                    format!("{i:2}{usage_clamped:3.0}%")
+                } else {
+                    format!("{i:2} {usage_clamped:3.0}%")
+                };
+                canvas.draw_text(&label, Point::new(x, y), &style);
+            } else if self.show_labels {
                 // Format: "12▆" or " 5▄"
+                let meter = Self::meter_char(usage_clamped);
                 let label = if self.compact {
                     format!("{i:2}{meter}")
                 } else {
@@ -240,6 +251,7 @@ impl Widget for CpuGrid {
                 };
                 canvas.draw_text(&label, Point::new(x, y), &style);
             } else {
+                let meter = Self::meter_char(usage_clamped);
                 canvas.draw_text(&meter.to_string(), Point::new(x, y), &style);
             }
         }

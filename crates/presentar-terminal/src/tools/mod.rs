@@ -6,5 +6,12 @@
 //! - Structural similarity (SSIM)
 
 mod color_diff;
+#[cfg(feature = "tui-compare")]
+mod tui_compare;
 
 pub use color_diff::{average_delta_e, ciede2000, rgb_to_lab, DeltaECategory, Lab, Rgb};
+#[cfg(feature = "tui-compare")]
+pub use tui_compare::{
+    compare_tui, generate_report, DiffCell, PanelResult, PanelThreshold, TuiComparisonConfig,
+    TuiComparisonResult,
+};

@@ -46,8 +46,18 @@ impl ColorMode {
     }
 
     /// Convert a presentar Color to crossterm Color based on this mode.
+    ///
+    /// Note: Transparent colors (alpha = 0) return `CrosstermColor::Reset` which
+    /// uses the terminal's default background color instead of rendering as black.
     #[must_use]
     pub fn to_crossterm(&self, color: Color) -> CrosstermColor {
+        // CRITICAL: Handle transparent colors specially to avoid black squares!
+        // Color::TRANSPARENT is {r: 0, g: 0, b: 0, a: 0} - without this check,
+        // it would convert to RGB(0,0,0) = BLACK, creating ugly black artifacts.
+        if color.a == 0.0 {
+            return CrosstermColor::Reset;
+        }
+
         let r = (color.r * 255.0).round() as u8;
         let g = (color.g * 255.0).round() as u8;
         let b = (color.b * 255.0).round() as u8;
@@ -270,6 +280,34 @@ mod tests {
         assert_eq!(mode.to_crossterm(Color::RED), CrosstermColor::White);
         assert_eq!(mode.to_crossterm(Color::BLUE), CrosstermColor::White);
         assert_eq!(mode.to_crossterm(Color::GREEN), CrosstermColor::White);
+    }
+
+    #[test]
+    fn test_transparent_returns_reset() {
+        // CRITICAL: Transparent colors must return Reset, NOT black!
+        // This prevents the "black squares behind panels" bug.
+        for mode in [
+            ColorMode::TrueColor,
+            ColorMode::Color256,
+            ColorMode::Color16,
+            ColorMode::Mono,
+        ] {
+            assert_eq!(
+                mode.to_crossterm(Color::TRANSPARENT),
+                CrosstermColor::Reset,
+                "Mode {:?} should return Reset for TRANSPARENT",
+                mode
+            );
+
+            // Also test any color with alpha=0
+            let zero_alpha = Color::new(1.0, 0.5, 0.25, 0.0);
+            assert_eq!(
+                mode.to_crossterm(zero_alpha),
+                CrosstermColor::Reset,
+                "Mode {:?} should return Reset for any color with alpha=0",
+                mode
+            );
+        }
     }
 
     #[test]

@@ -429,7 +429,7 @@ impl Widget for NetworkPanel {
                 );
                 y += 1.0;
 
-                let spark_w = self.spark_width.min((width - 40) / 2);
+                let spark_w = self.spark_width.min(width.saturating_sub(40) / 2);
                 let mut x = self.bounds.x + 2.0;
 
                 // Download
