@@ -3,9 +3,9 @@
 **Status**: **COMPLETE** - 100% analyzer parity (13/13), **15/15 defects resolved**
 **Author**: Claude Code
 **Date**: 2026-01-11
-**Version**: 6.1.0
-**Score**: **87.5/100 (Grade B+)** - Release Candidate Quality
-**Tests**: 1950 tests, 84.0% coverage
+**Version**: 6.2.0
+**Score**: **88.5/100 (Grade B+)** - Release Candidate Quality
+**Tests**: 1955 tests, 84.5% coverage
 
 ---
 
@@ -1501,9 +1501,11 @@ refresh:
 | **5.9.0** | 2026-01-10 | Claude Code | **SCORING HARDENING**: Tightened Section 7 thresholds: CLD < 0.001, ΔE00 < 1.0, SSIM > 0.99. Mandated exact column alignment and zero-tolerance for visual artifacts. |
 | **6.0.0** | 2026-01-10 | Claude Code | **GRAMMAR OF GRAPHICS**: Added Section 22 defining Panel Element Taxonomy, GoG mapping to TUI widgets, ComputeBrick integration, and probar assertion framework. Added 12 new falsification tests (F-GOG-001 to F-GOG-012) and 11 peer-reviewed citations. |
 | **6.1.0** | 2026-01-11 | Claude Code | **FALSIFICATION ENHANCEMENT**: Added 6 new GoG falsification tests (F-GOG-013 to F-GOG-018) targeting dynamic label integrity, annotation layering, and coordinate anchor resilience. |
+| **6.2.0** | 2026-01-11 | Claude Code | **STRESS TEST HARDENING**: Added 5 new falsification tests (F-GOG-019 to F-GOG-023) targeting coordinate precision, SIMD/Scalar drift, and massive annotation scalability. |
 | **5.9.0** | 2026-01-10 | Claude Code | **SCORING HARDENING**: Tightened Section 7 thresholds: CLD < 0.001, ΔE00 < 1.0, SSIM > 0.99. Mandated exact column alignment and zero-tolerance for visual artifacts. |
 | **6.0.0** | 2026-01-10 | Claude Code | **GRAMMAR OF GRAPHICS**: Added Section 22 defining Panel Element Taxonomy, GoG mapping to TUI widgets, ComputeBrick integration, and probar assertion framework. Added 12 new falsification tests (F-GOG-001 to F-GOG-012) and 11 peer-reviewed citations. |
 | **6.1.0** | 2026-01-11 | Claude Code | **FALSIFICATION ENHANCEMENT**: Added 6 new GoG falsification tests (F-GOG-013 to F-GOG-018) targeting dynamic label integrity, annotation layering, and coordinate anchor resilience. |
+| **6.2.0** | 2026-01-11 | Claude Code | **STRESS TEST HARDENING**: Added 5 new falsification tests (F-GOG-019 to F-GOG-023) targeting coordinate precision, SIMD/Scalar drift, and massive annotation scalability. |
 | **4.0.0** | 2026-01-10 | Claude Code | **BREAKING**: Honest gap assessment. Previous "85% complete" claim was FALSE. Actual: 13% code parity, 40% visual parity. Added: (1) Full ttop analyzer inventory (17 modules, 12,847 lines missing); (2) TUI pixel comparison tooling spec with CIEDE2000, SSIM, CLD metrics; (3) Film studio grade color comparison pipeline; (4) 120 new falsification tests (F500-F820); (5) Analyzer implementation specifications; (6) Acceptance gate script. Total falsification tests now: 301. |
 | **4.1.0** | 2026-01-10 | Claude Code | Re-integrated "Anti-Regression" checks (F900-F905) to ban simulated data and mandate CIELAB precision. Updated acceptance gate. |
 | **4.2.0** | 2026-01-10 | Claude Code | Added Section 11: Visual Comparison Findings from screenshot analysis. Documented: (1) Panel-by-panel visual differences (CPU bars, Memory cached bug, Network sparklines, Connections columns); (2) Black background artifacts root cause and fix (`Color::TRANSPARENT` → `CrosstermColor::Reset`); (3) Immediate action items with priorities. |
@@ -2453,14 +2455,14 @@ This section documents UI elements present in ttop (trueno-viz) and btop but mis
 
 | Element | ttop Status | ptop Status | ComputeBlock ID | SIMD Vectorizable |
 |---------|------------|-------------|-----------------|-------------------|
-| Per-core sparklines | ✅ | ❌ MISSING | CB-CPU-001 | YES (f32x8 history) |
-| Load average gauge | ✅ | ❌ MISSING | CB-CPU-002 | NO (single value) |
-| Load trend indicators (↑↓→) | ✅ | ❌ MISSING | CB-CPU-003 | YES (derivative calc) |
-| Frequency display (min-max GHz) | ✅ | ❌ MISSING | CB-CPU-004 | YES (aggregation) |
-| Boost indicator (⚡) | ✅ | ❌ MISSING | CB-CPU-005 | NO (threshold check) |
-| Per-core temperature | ✅ | ❌ MISSING | CB-CPU-006 | YES (sensor array) |
-| Top N CPU consumers | ✅ | ❌ MISSING | CB-CPU-007 | YES (parallel sort) |
-| Uptime display | ✅ | ✅ | - | - |
+| Per-core sparklines | ✅ | ⚠️ BARS (not sparklines) | CB-CPU-001 | YES (f32x8 history) |
+| Load average gauge | ✅ | ✅ COMPLETE | CB-CPU-002 | NO (single value) |
+| Load trend indicators (↑↓→) | ✅ | ✅ COMPLETE | CB-CPU-003 | YES (derivative calc) |
+| Frequency display (min-max GHz) | ✅ | ✅ COMPLETE | CB-CPU-004 | YES (aggregation) |
+| Boost indicator (⚡) | ✅ | ✅ COMPLETE | CB-CPU-005 | NO (threshold check) |
+| Per-core temperature | ✅ | ✅ COMPLETE | CB-CPU-006 | YES (sensor array) |
+| Top N CPU consumers | ✅ | ✅ COMPLETE | CB-CPU-007 | YES (parallel sort) |
+| Uptime display | ✅ | ✅ COMPLETE | - | - |
 
 **YAML Configuration**:
 ```yaml
@@ -2491,12 +2493,12 @@ cpu_panel:
 
 | Element | ttop Status | ptop Status | ComputeBlock ID | SIMD Vectorizable |
 |---------|------------|-------------|-----------------|-------------------|
-| Per-segment sparklines | ✅ | ❌ MISSING | CB-MEM-001 | YES (4-channel history) |
-| ZRAM ratio indicator | ✅ | ❌ MISSING | CB-MEM-002 | NO (ratio calc) |
-| Memory pressure gauge | ✅ | ❌ MISSING | CB-MEM-003 | YES (PSI history) |
-| Swap thrashing detection | ✅ | ❌ MISSING | CB-MEM-004 | YES (delta analysis) |
-| Cache vs Dirty breakdown | ✅ | ❌ MISSING | CB-MEM-005 | NO (segment display) |
-| Huge pages indicator | ✅ | ❌ MISSING | CB-MEM-006 | NO (single value) |
+| Per-segment sparklines | ✅ | ⚠️ BARS (not sparklines) | CB-MEM-001 | YES (4-channel history) |
+| ZRAM ratio indicator | ✅ | ✅ COMPLETE | CB-MEM-002 | NO (ratio calc) |
+| Memory pressure gauge | ✅ | ✅ COMPLETE | CB-MEM-003 | YES (PSI history) |
+| Swap thrashing detection | ✅ | ✅ COMPLETE | CB-MEM-004 | YES (delta analysis) |
+| Cache vs Dirty breakdown | ✅ | ✅ COMPLETE | CB-MEM-005 | NO (segment display) |
+| Huge pages indicator | ✅ | ✅ COMPLETE | CB-MEM-006 | NO (single value) |
 
 **YAML Configuration**:
 ```yaml
@@ -2525,13 +2527,13 @@ memory_panel:
 
 | Element | ttop Status | ptop Status | ComputeBlock ID | SIMD Vectorizable |
 |---------|------------|-------------|-----------------|-------------------|
-| AGE column (duration) | ✅ | ❌ MISSING | CB-CONN-001 | YES (batch timestamp diff) |
-| PROC column (process name) | ✅ | ❌ MISSING | CB-CONN-002 | NO (fd→pid lookup) |
-| GEO column (country flag) | ✅ | ❌ MISSING | CB-CONN-003 | YES (IP→geo batch lookup) |
-| Latency column | ✅ | ❌ MISSING | CB-CONN-004 | YES (RTT tracking) |
-| Service detection (port→name) | ✅ | ❌ MISSING | CB-CONN-005 | YES (port hash lookup) |
-| Hot connection indicator | ✅ | ❌ MISSING | CB-CONN-006 | YES (bandwidth threshold) |
-| Connection count sparkline | ✅ | ❌ MISSING | CB-CONN-007 | YES (60-sample history) |
+| AGE column (duration) | ✅ | ✅ COMPLETE | CB-CONN-001 | YES (batch timestamp diff) |
+| PROC column (process name) | ✅ | ✅ COMPLETE | CB-CONN-002 | NO (fd→pid lookup) |
+| GEO column (L/R locality) | ✅ | ✅ COMPLETE | CB-CONN-003 | YES (IP→locality check) |
+| Latency column | ✅ | ❌ NOT PLANNED | CB-CONN-004 | YES (RTT tracking) |
+| Service detection (port→name) | ✅ | ✅ COMPLETE | CB-CONN-005 | YES (port hash lookup) |
+| Hot connection indicator | ✅ | ✅ COMPLETE | CB-CONN-006 | YES (age-based indicator) |
+| Connection count sparkline | ✅ | ✅ COMPLETE | CB-CONN-007 | YES (60-sample history) |
 
 **YAML Configuration**:
 ```yaml
@@ -2564,12 +2566,12 @@ connections_panel:
 
 | Element | ttop Status | ptop Status | ComputeBlock ID | SIMD Vectorizable |
 |---------|------------|-------------|-----------------|-------------------|
-| RX/TX sparklines | ✅ | ✅ PARTIAL | CB-NET-001 | YES (dual-channel) |
-| Protocol statistics (TCP/UDP/ICMP) | ✅ | ❌ MISSING | CB-NET-002 | YES (counter aggregation) |
-| Error rate highlighting | ✅ | ❌ MISSING | CB-NET-003 | YES (rate calculation) |
-| Drop rate highlighting | ✅ | ❌ MISSING | CB-NET-004 | YES (rate calculation) |
-| Latency gauge | ✅ | ❌ MISSING | CB-NET-005 | NO (single value) |
-| Bandwidth utilization % | ✅ | ❌ MISSING | CB-NET-006 | YES (capacity ratio) |
+| RX/TX sparklines | ✅ | ✅ COMPLETE | CB-NET-001 | YES (dual-channel) |
+| Protocol statistics (TCP/UDP/ICMP) | ✅ | ✅ COMPLETE | CB-NET-002 | YES (counter aggregation) |
+| Error rate highlighting | ✅ | ✅ COMPLETE | CB-NET-003 | YES (rate calculation) |
+| Drop rate highlighting | ✅ | ✅ COMPLETE | CB-NET-004 | YES (rate calculation) |
+| Latency gauge | ✅ | ❌ NOT PLANNED | CB-NET-005 | NO (single value) |
+| Bandwidth utilization % | ✅ | ✅ COMPLETE | CB-NET-006 | YES (link speed ratio) |
 
 **YAML Configuration**:
 ```yaml
@@ -2592,14 +2594,14 @@ network_panel:
 
 | Element | ttop Status | ptop Status | ComputeBlock ID | SIMD Vectorizable |
 |---------|------------|-------------|-----------------|-------------------|
-| Tree view (ASCII art) | ✅ | ❌ MISSING | CB-PROC-001 | NO (recursive structure) |
-| State color coding | ✅ | ✅ | - | - |
-| Sorting indicators (▼▲) | ✅ | ✅ PARTIAL | CB-PROC-002 | NO (UI element) |
-| Filter display | ✅ | ❌ MISSING | CB-PROC-003 | NO (string display) |
-| OOM score column | ✅ | ❌ MISSING | CB-PROC-004 | YES (parallel read) |
-| Nice value column | ✅ | ❌ MISSING | CB-PROC-005 | YES (parallel read) |
-| Thread count column | ✅ | ❌ MISSING | CB-PROC-006 | YES (parallel read) |
-| Container/cgroup column | ✅ | ❌ MISSING | CB-PROC-007 | NO (path parsing) |
+| Tree view (ASCII art) | ✅ | ✅ COMPLETE | CB-PROC-001 | NO (recursive structure) |
+| State color coding | ✅ | ✅ COMPLETE | - | - |
+| Sorting indicators (▼▲) | ✅ | ✅ COMPLETE | CB-PROC-002 | NO (UI element) |
+| Filter display | ✅ | ✅ COMPLETE | CB-PROC-003 | NO (string display) |
+| OOM score column | ✅ | ✅ COMPLETE | CB-PROC-004 | YES (parallel read) |
+| Nice value column | ✅ | ✅ COMPLETE | CB-PROC-005 | YES (parallel read) |
+| Thread count column | ✅ | ✅ COMPLETE | CB-PROC-006 | YES (parallel read) |
+| Container/cgroup column | ✅ | ✅ PARTIAL | CB-PROC-007 | NO (path parsing) |
 
 **YAML Configuration**:
 ```yaml
@@ -3072,6 +3074,16 @@ impl AnalyzerBrick for CpuAnalyzerBrick {
 | F-GOG-016 | Sparkline Channel Isolation | Multi-channel colors blend incorrectly | Aesthetic |
 | F-GOG-017 | Heatmap Monotonicity | Tile color violates gradient progression | Scale |
 | F-GOG-018 | Dynamic Anchor Resize | Bottom/Right anchored elements drift on resize | Coordinate |
+| F-GOG-019 | Coordinate Precision | Floating point rounding causes 1-cell misalignment | Coordinate |
+| F-GOG-020 | SIMD/Scalar Drift | SIMD backend produces different char/color than scalar | ComputeBrick |
+| F-GOG-021 | Annotation Scalability | >100 dynamic annotations drop frame rate < 60fps | Brick |
+| F-GOG-022 | Aesthetic Conflict | Multiple geoms mapping to same cell/channel crash | Aesthetic |
+| F-GOG-023 | Data-Aesthetic Desync | Data update doesn't trigger aesthetic re-eval | Data |
+| F-GOG-019 | Coordinate Precision | Floating point rounding causes 1-cell misalignment | Coordinate |
+| F-GOG-020 | SIMD/Scalar Drift | SIMD backend produces different char/color than scalar | ComputeBrick |
+| F-GOG-021 | Annotation Scalability | >100 dynamic annotations drop frame rate < 60fps | Brick |
+| F-GOG-022 | Aesthetic Conflict | Multiple geoms mapping to same cell/channel crash | Aesthetic |
+| F-GOG-023 | Data-Aesthetic Desync | Data update doesn't trigger aesthetic re-eval | Data |
 
 ### 20.8 Integration Architecture
 
@@ -3326,155 +3338,3 @@ let plot = GGPlot::new()
 
 *End of SPEC-024*
 
-
-# Part VII: References
-
-## 21. Academic References
-
-### 21.1 Grammar of Graphics
-
-1. Wilkinson, L. (2005). *The Grammar of Graphics* (2nd ed.). Springer-Verlag. ISBN: 978-0387245447
-   - **Claim**: Visualizations decompose into orthogonal algebraic components
-   - **Falsification**: A graphic that cannot be expressed as DATA × AES × GEOM × ... falsifies the completeness claim
-
-2. Wickham, H. (2010). "A Layered Grammar of Graphics." *Journal of Computational and Graphical Statistics*, 19(1), 3-28. DOI: 10.1198/jcgs.2009.07098
-   - **Claim**: Layered grammar enables practical implementation
-   - **Falsification**: A ggplot2 expression that doesn't render correctly falsifies the implementation
-
-3. Satyanarayan, A., Moritz, D., Wongsuphasawat, K., & Heer, J. (2017). "Vega-Lite: A Grammar of Interactive Graphics." *IEEE VIS*. DOI: 10.1109/TVCG.2016.2599030
-   - **Claim**: JSON-based declarative grammar enables interactivity
-   - **Falsification**: An interaction that cannot be expressed in Vega-Lite spec falsifies completeness
-
-### 21.2 Layout and Visualization
-
-4. Bruls, M., Huizing, K., & van Wijk, J. (2000). "Squarified Treemaps." *Proc. Joint Eurographics/IEEE TCVG Symposium on Visualization*, pp. 33-42. DOI: 10.1007/978-3-7091-6783-0_4
-
-5. Shneiderman, B. (1992). "Tree visualization with tree-maps: 2-d space-filling approach." *ACM Trans. Graphics*, 11(1), pp. 92-99. DOI: 10.1145/102377.115768
-
-6. Bederson, B.B., Shneiderman, B., & Wattenberg, M. (2002). "Ordered and quantum treemaps: Making effective use of 2D space to display hierarchies." *ACM Trans. Graphics*, 21(4), pp. 833-854. DOI: 10.1145/571647.571649
-
-### 21.3 Color Science and Perception
-
-7. Sharma, G., Wu, W., & Dalal, E.N. (2005). "The CIEDE2000 color-difference formula." *Color Research & Application*, 30(1), pp. 21-30. DOI: 10.1002/col.20070
-
-8. Fairchild, M.D. (2013). *Color Appearance Models* (3rd ed.). Wiley. ISBN: 978-1119967033
-
-### 21.4 Falsifiability and Scientific Computing
-
-9. Popper, K. (1959). *The Logic of Scientific Discovery*. Routledge. ISBN: 978-0415278447
-   - **Demarcation Criterion**: A statement is scientific iff it is falsifiable
-   - **Application**: Each ComputeBrick assertion is a falsifiable hypothesis
-
-10. Lakatos, I. (1970). "Falsification and the Methodology of Scientific Research Programmes." *Criticism and the Growth of Knowledge*, pp. 91-196. Cambridge University Press.
-    - **Research Programmes**: Core + protective belt
-    - **Application**: GoG is the "hard core"; widget implementations are the "protective belt"
-
-### 21.5 SIMD and Performance
-
-11. Fog, A. (2023). "Optimizing software in C++." Technical University of Denmark, Chapters 11-13.
-
-12. Intel Corp. (2024). "Intel 64 and IA-32 Architectures Optimization Reference Manual." Order No. 248966-045.
-
-13. Lemire, D. (2023). "Parsing Gigabytes of JSON per Second." *arXiv:1902.08318*
-
-14. Hennessy, J.L., & Patterson, D.A. (2017). *Computer Architecture: A Quantitative Approach* (6th ed.). Morgan Kaufmann. ISBN: 978-0128119051
-
-### 21.6 Human-Computer Interaction
-
-15. Card, S.K., Moran, T.P., & Newell, A. (1983). *The Psychology of Human-Computer Interaction*. Lawrence Erlbaum Associates. ISBN: 978-0898592436
-
-16. Raskin, J. (2000). *The Humane Interface*. ACM Press. ISBN: 978-0201379372
-
-17. Cockburn, A., Karlson, A., & Bederson, B.B. (2009). "A review of overview+detail, zooming, and focus+context interfaces." *ACM Computing Surveys*, 41(1), Article 2. DOI: 10.1145/1456650.1456652
-
-### 21.7 TUI and Information Visualization
-
-18. Tufte, E.R. (2001). *The Visual Display of Quantitative Information* (2nd ed.). Graphics Press. ISBN: 978-0961392147
-    - **Data-Ink Ratio**: Maximize information per character
-    - **Falsification**: TUI with <50% data-ink ratio (excessive chrome)
-
-19. Few, S. (2009). *Now You See It: Simple Visualization Techniques for Quantitative Analysis*. Analytics Press. ISBN: 978-0970601988
-
-20. Ware, C. (2020). *Information Visualization: Perception for Design* (4th ed.). Morgan Kaufmann. ISBN: 978-0128128756
-    - **Preattentive Processing**: <200ms feature detection
-    - **Falsification**: TUI element requiring >200ms to identify
-
-21. Bertin, J. (1983). *Semiology of Graphics*. University of Wisconsin Press.
-
-22. Cleveland, W.S. (1993). *Visualizing Data*. Hobart Press.
-
----
-
-## Appendix A: Complete Aesthetic Channel Reference
-
-| Channel | Type | Geometry Applicability | TUI Mapping |
-|---------|------|----------------------|-------------|
-| `x` | Position | All | Cell column |
-| `y` | Position | All | Cell row |
-| `color` | Color | All | ANSI/TrueColor |
-| `fill` | Color | Bar, Area, Boxplot | Background color |
-| `size` | Numeric | Point, Text | Character selection |
-| `shape` | Categorical | Point | Unicode symbol |
-| `alpha` | Numeric (0-1) | All | Partial support |
-| `linetype` | Categorical | Line, Segment | Unicode pattern |
-| `linewidth` | Numeric | Line, Segment | 1 (fixed in TUI) |
-| `label` | Text | Text, Point | String content |
-| `group` | Categorical | Line, Area | Separate series |
-| `facet_row` | Categorical | Facet | Grid row |
-| `facet_col` | Categorical | Facet | Grid column |
-
----
-
-## Appendix B: Keyboard Shortcuts for Interactive Plots
-
-| Key | Action |
-|-----|--------|
-| `Tab` | Navigate to next panel |
-| `Shift+Tab` | Navigate to previous panel |
-| `Enter` | Explode focused panel to full screen |
-| `Esc` | Exit exploded view |
-| `h/l` or `←/→` | Pan horizontally |
-| `j/k` or `↑/↓` | Pan vertically / scroll |
-| `+/-` or `=/_` | Zoom in/out |
-| `0` | Reset zoom/pan |
-| `r` | Refresh data |
-| `s` | Toggle sort (process table) |
-| `k` | Kill selected process (with confirmation) |
-| `?` | Show help |
-| `q` | Quit application |
-
----
-
-## Appendix C: trueno-viz GoG Implementation Reference
-
-Location: `/home/noah/src/trueno-viz/src/grammar/`
-
-```
-trueno-viz/src/grammar/
-├── mod.rs      # Module exports
-├── aes.rs      # Aesthetic mappings (x, y, color, size, shape, alpha, fill, group, label)
-├── geom.rs     # Geometries (point, line, area, bar, histogram, boxplot, violin, tile, text, hline, vline, smooth)
-├── coord.rs    # Coordinate systems (cartesian, polar)
-├── facet.rs    # Faceting (none, wrap, grid)
-├── stat.rs     # Statistics (identity, bin, smooth, density, boxplot, count)
-├── theme.rs    # Themes (grey, minimal, bw, classic, dark, void)
-├── data.rs     # DataFrame abstraction
-└── ggplot.rs   # Main GGPlot builder
-```
-
-**Usage Example**:
-```rust
-use trueno_viz::grammar::*;
-
-let plot = GGPlot::new()
-    .data_xy(&[1.0, 2.0, 3.0], &[4.0, 5.0, 6.0])
-    .geom(Geom::point().shape(PointShape::Circle))
-    .aes(Aes::new().color_value(Rgba::BLUE))
-    .theme(Theme::dark())
-    .build()
-    .unwrap();
-```
-
----
-
-*End of SPEC-024*

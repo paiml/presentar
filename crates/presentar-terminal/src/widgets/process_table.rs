@@ -9,6 +9,7 @@ use presentar_core::{
     LayoutResult, Point, Rect, Size, TextStyle, TypeId, Widget,
 };
 use std::any::Any;
+use std::cmp::Ordering;
 use std::fmt::Write as _;
 use std::time::Duration;
 
@@ -81,6 +82,16 @@ pub struct ProcessEntry {
     pub cgroup: Option<String>,
     /// Nice value (-20 to +19).
     pub nice: Option<i32>,
+    /// Thread count (CB-PROC-006).
+    pub threads: Option<u32>,
+    /// Parent process ID (CB-PROC-001 tree view).
+    pub parent_pid: Option<u32>,
+    /// Tree depth level for indentation (CB-PROC-001).
+    pub tree_depth: usize,
+    /// Whether this is the last child at its level (CB-PROC-001).
+    pub is_last_child: bool,
+    /// Tree prefix string (e.g., "│ └─") for display (CB-PROC-001).
+    pub tree_prefix: String,
 }
 
 impl ProcessEntry {
@@ -104,6 +115,11 @@ impl ProcessEntry {
             oom_score: None,
             cgroup: None,
             nice: None,
+            threads: None,
+            parent_pid: None,
+            tree_depth: 0,
+            is_last_child: false,
+            tree_prefix: String::new(),
         }
     }
 
@@ -141,6 +157,27 @@ impl ProcessEntry {
         self.nice = Some(nice);
         self
     }
+
+    /// Set thread count (CB-PROC-006).
+    #[must_use]
+    pub fn with_threads(mut self, threads: u32) -> Self {
+        self.threads = Some(threads);
+        self
+    }
+
+    /// Set parent PID (CB-PROC-001 tree view).
+    #[must_use]
+    pub fn with_parent_pid(mut self, ppid: u32) -> Self {
+        self.parent_pid = Some(ppid);
+        self
+    }
+
+    /// Set tree display info (CB-PROC-001 tree view).
+    pub fn set_tree_info(&mut self, depth: usize, is_last: bool, prefix: String) {
+        self.tree_depth = depth;
+        self.is_last_child = is_last;
+        self.tree_prefix = prefix;
+    }
 }
 
 /// Sort column for process table.
@@ -156,6 +193,7 @@ pub enum ProcessSort {
 
 /// Process table widget with color-coded CPU/Memory bars.
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct ProcessTable {
     /// Process entries.
     processes: Vec<ProcessEntry>,
@@ -179,6 +217,10 @@ pub struct ProcessTable {
     show_oom: bool,
     /// Show nice value column.
     show_nice: bool,
+    /// Show thread count column (CB-PROC-006).
+    show_threads: bool,
+    /// Tree view mode (CB-PROC-001).
+    tree_view: bool,
     /// Cached bounds.
     bounds: Rect,
 }
@@ -205,6 +247,8 @@ impl ProcessTable {
             compact: false,
             show_oom: false,
             show_nice: false,
+            show_threads: false,
+            tree_view: false,
             bounds: Rect::default(),
         }
     }
@@ -212,7 +256,12 @@ impl ProcessTable {
     /// Set processes.
     pub fn set_processes(&mut self, processes: Vec<ProcessEntry>) {
         self.processes = processes;
-        self.sort_processes();
+        // Tree view (CB-PROC-001) takes precedence over sorting
+        if self.tree_view {
+            self.build_tree();
+        } else {
+            self.sort_processes();
+        }
         // Clamp selection
         if !self.processes.is_empty() && self.selected >= self.processes.len() {
             self.selected = self.processes.len() - 1;
@@ -271,6 +320,34 @@ impl ProcessTable {
     pub fn with_nice_column(mut self) -> Self {
         self.show_nice = true;
         self
+    }
+
+    /// Show thread count column (CB-PROC-006).
+    #[must_use]
+    pub fn with_threads_column(mut self) -> Self {
+        self.show_threads = true;
+        self
+    }
+
+    /// Enable tree view mode (CB-PROC-001).
+    #[must_use]
+    pub fn with_tree_view(mut self) -> Self {
+        self.tree_view = true;
+        self
+    }
+
+    /// Toggle tree view mode (CB-PROC-001).
+    pub fn toggle_tree_view(&mut self) {
+        self.tree_view = !self.tree_view;
+        if self.tree_view {
+            self.build_tree();
+        }
+    }
+
+    /// Check if tree view is enabled (CB-PROC-001).
+    #[must_use]
+    pub fn is_tree_view(&self) -> bool {
+        self.tree_view
     }
 
     /// Set sort column.
@@ -340,6 +417,134 @@ impl ProcessTable {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.processes.is_empty()
+    }
+
+    /// Build process tree structure (CB-PROC-001).
+    ///
+    /// Reorganizes processes into a tree by parent-child relationships.
+    /// Uses ASCII art prefixes: └─ (last child), ├─ (middle child), │ (continuation).
+    fn build_tree(&mut self) {
+        use std::collections::HashMap;
+
+        if self.processes.is_empty() {
+            return;
+        }
+
+        // Build PID -> index map
+        let pid_to_idx: HashMap<u32, usize> = self
+            .processes
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (p.pid, i))
+            .collect();
+
+        // Build PPID -> children map
+        let mut children: HashMap<u32, Vec<usize>> = HashMap::new();
+        let mut roots: Vec<usize> = Vec::new();
+
+        for (idx, proc) in self.processes.iter().enumerate() {
+            if let Some(ppid) = proc.parent_pid {
+                if pid_to_idx.contains_key(&ppid) {
+                    children.entry(ppid).or_default().push(idx);
+                } else {
+                    // Parent not in list, treat as root
+                    roots.push(idx);
+                }
+            } else {
+                roots.push(idx);
+            }
+        }
+
+        // Sort children by CPU descending at each level
+        for children_list in children.values_mut() {
+            children_list.sort_by(|&a, &b| {
+                self.processes[b]
+                    .cpu_percent
+                    .partial_cmp(&self.processes[a].cpu_percent)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+        }
+
+        // Sort roots by CPU descending
+        roots.sort_by(|&a, &b| {
+            self.processes[b]
+                .cpu_percent
+                .partial_cmp(&self.processes[a].cpu_percent)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        // DFS walk to build tree order
+        let mut tree_order: Vec<(usize, usize, bool, String)> = Vec::new();
+
+        let roots_len = roots.len();
+        for (i, &root_idx) in roots.iter().enumerate() {
+            let is_last = i == roots_len - 1;
+            Self::build_tree_dfs(
+                root_idx,
+                0,
+                "",
+                is_last,
+                &self.processes,
+                &children,
+                &mut tree_order,
+            );
+        }
+
+        // Reorder processes and apply tree info
+        let old_processes = std::mem::take(&mut self.processes);
+        self.processes.reserve(tree_order.len());
+
+        for (idx, depth, is_last, prefix) in tree_order {
+            let mut proc = old_processes[idx].clone();
+            proc.set_tree_info(depth, is_last, prefix);
+            self.processes.push(proc);
+        }
+    }
+
+    fn build_tree_dfs(
+        idx: usize,
+        depth: usize,
+        prefix: &str,
+        is_last: bool,
+        processes: &[ProcessEntry],
+        children: &std::collections::HashMap<u32, Vec<usize>>,
+        tree_order: &mut Vec<(usize, usize, bool, String)>,
+    ) {
+        let proc = &processes[idx];
+        let current_prefix = if depth == 0 {
+            String::new()
+        } else if is_last {
+            format!("{prefix}└─")
+        } else {
+            format!("{prefix}├─")
+        };
+
+        tree_order.push((idx, depth, is_last, current_prefix));
+
+        // Calculate next prefix for children
+        let next_prefix = if depth == 0 {
+            String::new()
+        } else if is_last {
+            format!("{prefix}  ")
+        } else {
+            format!("{prefix}│ ")
+        };
+
+        if let Some(child_indices) = children.get(&proc.pid) {
+            let len = child_indices.len();
+            for (i, &child_idx) in child_indices.iter().enumerate() {
+                let child_is_last = i == len - 1;
+                Self::build_tree_dfs(
+                    child_idx,
+                    depth + 1,
+                    &next_prefix,
+                    child_is_last,
+                    processes,
+                    children,
+                    tree_order,
+                );
+            }
+        }
     }
 
     fn sort_processes(&mut self) {
@@ -426,12 +631,14 @@ impl ProcessTable {
     }
 
     fn truncate(s: &str, width: usize) -> String {
-        if s.len() <= width {
+        if s.chars().count() <= width {
             format!("{s:width$}")
-        } else if width > 3 {
-            format!("{}...", &s[..width - 3])
+        } else if width > 1 {
+            // Use proper ellipsis character "…" instead of "..."
+            let chars: String = s.chars().take(width - 1).collect();
+            format!("{chars}…")
         } else {
-            s[..width.min(s.len())].to_string()
+            s.chars().take(width).collect()
         }
     }
 }
@@ -513,18 +720,30 @@ impl Widget for ProcessTable {
             return;
         }
 
-        // Column layout - compact mode: PID S [OOM] [NI] C% M% COMMAND
-        let pid_w = 6;
+        // Column layout - compact mode: PID S [OOM] [NI] [TH] C% M% COMMAND
+        // PID can be up to 4194304 on Linux (7 digits), use 7 chars
+        let pid_w = 7;
         let state_w = if self.compact { 2 } else { 0 }; // State column in compact mode
         let oom_w = if self.show_oom { 4 } else { 0 }; // OOM column (3 digits + space)
         let nice_w = if self.show_nice { 4 } else { 0 }; // NI column (3 chars + space)
+        let threads_w = if self.show_threads { 4 } else { 0 }; // TH column (3 digits + space)
         let user_w = if self.compact { 0 } else { 8 };
         let cpu_w = 6;
         let mem_w = 6;
         let sep_w = if self.compact { 1 } else { 3 };
-        let extra_cols = usize::from(self.show_oom) + usize::from(self.show_nice);
+        let extra_cols = usize::from(self.show_oom)
+            + usize::from(self.show_nice)
+            + usize::from(self.show_threads);
         let num_seps = if self.compact { 3 } else { 4 } + extra_cols;
-        let fixed_w = pid_w + state_w + oom_w + nice_w + user_w + cpu_w + mem_w + sep_w * num_seps;
+        let fixed_w = pid_w
+            + state_w
+            + oom_w
+            + nice_w
+            + threads_w
+            + user_w
+            + cpu_w
+            + mem_w
+            + sep_w * num_seps;
         let cmd_w = width.saturating_sub(fixed_w);
 
         // Header style
@@ -551,6 +770,10 @@ impl Widget for ProcessTable {
         if self.show_nice {
             header.push_str(if self.compact { " " } else { " │ " });
             let _ = write!(header, "{:>3}", "NI");
+        }
+        if self.show_threads {
+            header.push_str(if self.compact { " " } else { " │ " });
+            let _ = write!(header, "{:>3}", "TH");
         }
         header.push_str(if self.compact { " " } else { " │ " });
         let _ = write!(
@@ -665,12 +888,10 @@ impl Widget for ProcessTable {
                 x += if self.compact { 1.0 } else { 3.0 };
                 let ni = proc.nice.unwrap_or(0);
                 // Color: negative nice (high priority) = cyan, positive (low priority) = gray
-                let ni_color = if ni < 0 {
-                    Color::new(0.3, 0.9, 0.9, 1.0) // Cyan - high priority
-                } else if ni > 0 {
-                    Color::new(0.6, 0.6, 0.6, 1.0) // Gray - low priority
-                } else {
-                    Color::new(0.8, 0.8, 0.8, 1.0) // White - normal
+                let ni_color = match ni.cmp(&0) {
+                    Ordering::Less => Color::new(0.3, 0.9, 0.9, 1.0), // Cyan - high priority
+                    Ordering::Greater => Color::new(0.6, 0.6, 0.6, 1.0), // Gray - low priority
+                    Ordering::Equal => Color::new(0.8, 0.8, 0.8, 1.0), // White - normal
                 };
                 let ni_str = format!("{ni:>3}");
                 canvas.draw_text(
@@ -678,6 +899,30 @@ impl Widget for ProcessTable {
                     Point::new(x, y),
                     &TextStyle {
                         color: ni_color,
+                        ..Default::default()
+                    },
+                );
+                x += 3.0;
+            }
+
+            // Thread count (if enabled) - CB-PROC-006
+            if self.show_threads {
+                x += if self.compact { 1.0 } else { 3.0 };
+                let th = proc.threads.unwrap_or(1);
+                // Color: high thread count (>50) = cyan, medium (10-50) = yellow, low = white
+                let th_color = if th > 50 {
+                    Color::new(0.3, 0.9, 0.9, 1.0) // Cyan - many threads
+                } else if th > 10 {
+                    Color::new(1.0, 0.8, 0.2, 1.0) // Yellow - moderate
+                } else {
+                    Color::new(0.8, 0.8, 0.8, 1.0) // White - normal
+                };
+                let th_str = format!("{th:>3}");
+                canvas.draw_text(
+                    &th_str,
+                    Point::new(x, y),
+                    &TextStyle {
+                        color: th_color,
                         ..Default::default()
                     },
                 );
@@ -712,23 +957,48 @@ impl Widget for ProcessTable {
             );
             x += mem_w as f32;
 
-            // Command
+            // Command (with tree prefix if enabled - CB-PROC-001)
             x += if self.compact { 1.0 } else { 3.0 };
             let cmd = if self.show_cmdline {
                 proc.cmdline.as_deref().unwrap_or(&proc.command)
             } else {
                 &proc.command
             };
-            let cmd_str = Self::truncate(cmd, cmd_w);
-            let cmd_style = if is_selected {
-                TextStyle {
-                    color: Color::new(1.0, 1.0, 1.0, 1.0),
+
+            // Draw tree prefix in dim color, then command
+            if self.tree_view && !proc.tree_prefix.is_empty() {
+                let prefix_len = proc.tree_prefix.chars().count();
+                let tree_style = TextStyle {
+                    color: Color::new(0.4, 0.5, 0.6, 1.0),
                     ..Default::default()
-                }
+                };
+                canvas.draw_text(&proc.tree_prefix, Point::new(x, y), &tree_style);
+                x += prefix_len as f32;
+
+                // Truncate command to remaining space
+                let remaining_w = cmd_w.saturating_sub(prefix_len);
+                let cmd_str = Self::truncate(cmd, remaining_w);
+                let cmd_style = if is_selected {
+                    TextStyle {
+                        color: Color::new(1.0, 1.0, 1.0, 1.0),
+                        ..Default::default()
+                    }
+                } else {
+                    default_style.clone()
+                };
+                canvas.draw_text(&cmd_str, Point::new(x, y), &cmd_style);
             } else {
-                default_style.clone()
-            };
-            canvas.draw_text(&cmd_str, Point::new(x, y), &cmd_style);
+                let cmd_str = Self::truncate(cmd, cmd_w);
+                let cmd_style = if is_selected {
+                    TextStyle {
+                        color: Color::new(1.0, 1.0, 1.0, 1.0),
+                        ..Default::default()
+                    }
+                } else {
+                    default_style.clone()
+                };
+                canvas.draw_text(&cmd_str, Point::new(x, y), &cmd_style);
+            }
         }
 
         // Show count in empty state
@@ -755,6 +1025,7 @@ impl Widget for ProcessTable {
                     Key::P => self.sort_by(ProcessSort::Pid),
                     Key::N => self.sort_by(ProcessSort::Command),
                     Key::O => self.sort_by(ProcessSort::Oom),
+                    Key::T => self.toggle_tree_view(), // CB-PROC-001
                     _ => {}
                 }
                 None
@@ -973,8 +1244,10 @@ mod tests {
     #[test]
     fn test_process_table_truncate() {
         assert_eq!(ProcessTable::truncate("hello", 10), "hello     ");
-        assert_eq!(ProcessTable::truncate("hello world", 8), "hello...");
+        assert_eq!(ProcessTable::truncate("hello world", 8), "hello w…");
         assert_eq!(ProcessTable::truncate("hi", 2), "hi");
+        // Ensure proper ellipsis character is used
+        assert!(ProcessTable::truncate("long text here", 6).ends_with('…'));
     }
 
     #[test]
@@ -1047,5 +1320,639 @@ mod tests {
         // Verify order is now ascending: low (100) -> high (800)
         assert_eq!(table.processes[0].command, "low_oom");
         assert_eq!(table.processes[1].command, "high_oom");
+    }
+
+    // ========================================================================
+    // Additional tests for paint() paths and better coverage
+    // ========================================================================
+
+    struct MockCanvas {
+        texts: Vec<(String, Point)>,
+        rects: Vec<Rect>,
+    }
+
+    impl MockCanvas {
+        fn new() -> Self {
+            Self {
+                texts: vec![],
+                rects: vec![],
+            }
+        }
+    }
+
+    impl Canvas for MockCanvas {
+        fn fill_rect(&mut self, rect: Rect, _color: Color) {
+            self.rects.push(rect);
+        }
+        fn stroke_rect(&mut self, _rect: Rect, _color: Color, _width: f32) {}
+        fn draw_text(&mut self, text: &str, position: Point, _style: &TextStyle) {
+            self.texts.push((text.to_string(), position));
+        }
+        fn draw_line(&mut self, _from: Point, _to: Point, _color: Color, _width: f32) {}
+        fn fill_circle(&mut self, _center: Point, _radius: f32, _color: Color) {}
+        fn stroke_circle(&mut self, _center: Point, _radius: f32, _color: Color, _width: f32) {}
+        fn fill_arc(&mut self, _c: Point, _r: f32, _s: f32, _e: f32, _color: Color) {}
+        fn draw_path(&mut self, _points: &[Point], _color: Color, _width: f32) {}
+        fn fill_polygon(&mut self, _points: &[Point], _color: Color) {}
+        fn push_clip(&mut self, _rect: Rect) {}
+        fn pop_clip(&mut self) {}
+        fn push_transform(&mut self, _transform: presentar_core::Transform2D) {}
+        fn pop_transform(&mut self) {}
+    }
+
+    #[test]
+    fn test_process_table_paint_basic() {
+        let mut table = ProcessTable::new();
+        table.set_processes(sample_processes());
+        table.bounds = Rect::new(0.0, 0.0, 80.0, 20.0);
+
+        let mut canvas = MockCanvas::new();
+        table.paint(&mut canvas);
+
+        // Should have rendered header, separator, and rows
+        assert!(!canvas.texts.is_empty());
+        // Check header contains "PID"
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains("PID")));
+    }
+
+    #[test]
+    fn test_process_table_paint_compact() {
+        let mut table = ProcessTable::new().compact();
+        table.set_processes(sample_processes());
+        table.bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+
+        let mut canvas = MockCanvas::new();
+        table.paint(&mut canvas);
+
+        // Check compact header has "C%" and "M%" instead of "CPU%" and "MEM%"
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains("C%")));
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains("M%")));
+    }
+
+    #[test]
+    fn test_process_table_paint_with_oom() {
+        let mut table = ProcessTable::new().with_oom();
+        let entries = vec![
+            ProcessEntry::new(1, "user", 10.0, 5.0, "low_oom").with_oom_score(100),
+            ProcessEntry::new(2, "user", 10.0, 5.0, "high_oom").with_oom_score(800),
+            ProcessEntry::new(3, "user", 10.0, 5.0, "med_oom").with_oom_score(400),
+        ];
+        table.set_processes(entries);
+        table.bounds = Rect::new(0.0, 0.0, 100.0, 20.0);
+
+        let mut canvas = MockCanvas::new();
+        table.paint(&mut canvas);
+
+        // Should have OOM header
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains("OOM")));
+        // Should have OOM values rendered
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains("100")));
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains("800")));
+    }
+
+    #[test]
+    fn test_process_table_paint_with_nice() {
+        let mut table = ProcessTable::new().with_nice_column();
+        let entries = vec![
+            ProcessEntry::new(1, "user", 10.0, 5.0, "high_pri").with_nice(-10),
+            ProcessEntry::new(2, "user", 10.0, 5.0, "low_pri").with_nice(10),
+            ProcessEntry::new(3, "user", 10.0, 5.0, "normal").with_nice(0),
+        ];
+        table.set_processes(entries);
+        table.bounds = Rect::new(0.0, 0.0, 100.0, 20.0);
+
+        let mut canvas = MockCanvas::new();
+        table.paint(&mut canvas);
+
+        // Should have NI header
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains("NI")));
+    }
+
+    #[test]
+    fn test_process_table_paint_with_selection() {
+        let mut table = ProcessTable::new();
+        table.set_processes(sample_processes());
+        table.select(1);
+        table.bounds = Rect::new(0.0, 0.0, 80.0, 20.0);
+
+        let mut canvas = MockCanvas::new();
+        table.paint(&mut canvas);
+
+        // Should have a selection rect
+        assert!(!canvas.rects.is_empty());
+    }
+
+    #[test]
+    fn test_process_table_paint_empty() {
+        let mut table = ProcessTable::new();
+        table.bounds = Rect::new(0.0, 0.0, 80.0, 20.0);
+
+        let mut canvas = MockCanvas::new();
+        table.paint(&mut canvas);
+
+        // Should show "No processes" message
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains("No processes")));
+    }
+
+    #[test]
+    fn test_process_table_paint_zero_bounds() {
+        let mut table = ProcessTable::new();
+        table.set_processes(sample_processes());
+        table.bounds = Rect::new(0.0, 0.0, 0.0, 0.0);
+
+        let mut canvas = MockCanvas::new();
+        table.paint(&mut canvas);
+
+        // Should return early, no output
+        assert!(canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_process_table_paint_with_cmdline() {
+        let mut table = ProcessTable::new().with_cmdline();
+        let entries = vec![
+            ProcessEntry::new(1, "root", 0.5, 0.1, "bash").with_cmdline("/bin/bash --login -i")
+        ];
+        table.set_processes(entries);
+        table.bounds = Rect::new(0.0, 0.0, 100.0, 20.0);
+
+        let mut canvas = MockCanvas::new();
+        table.paint(&mut canvas);
+
+        // Should show cmdline instead of command
+        assert!(canvas
+            .texts
+            .iter()
+            .any(|(t, _)| t.contains("/bin/bash") || t.contains("--login")));
+    }
+
+    #[test]
+    fn test_process_table_paint_compact_with_state() {
+        let mut table = ProcessTable::new().compact();
+        let entries = vec![
+            ProcessEntry::new(1, "root", 50.0, 10.0, "running").with_state(ProcessState::Running),
+            ProcessEntry::new(2, "user", 0.0, 0.5, "sleeping").with_state(ProcessState::Sleeping),
+            ProcessEntry::new(3, "user", 0.0, 0.1, "zombie").with_state(ProcessState::Zombie),
+        ];
+        table.set_processes(entries);
+        table.bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+
+        let mut canvas = MockCanvas::new();
+        table.paint(&mut canvas);
+
+        // Should have state characters
+        assert!(canvas.texts.iter().any(|(t, _)| t == "R")); // Running
+        assert!(canvas.texts.iter().any(|(t, _)| t == "S")); // Sleeping
+    }
+
+    #[test]
+    fn test_process_state_char() {
+        assert_eq!(ProcessState::Running.char(), 'R');
+        assert_eq!(ProcessState::Sleeping.char(), 'S');
+        assert_eq!(ProcessState::DiskWait.char(), 'D');
+        assert_eq!(ProcessState::Zombie.char(), 'Z');
+        assert_eq!(ProcessState::Stopped.char(), 'T');
+        assert_eq!(ProcessState::Idle.char(), 'I');
+    }
+
+    #[test]
+    fn test_process_state_color() {
+        // Each state should have a unique color
+        let running = ProcessState::Running.color();
+        let sleeping = ProcessState::Sleeping.color();
+        let zombie = ProcessState::Zombie.color();
+        assert_ne!(running, sleeping);
+        assert_ne!(running, zombie);
+    }
+
+    #[test]
+    fn test_process_state_default() {
+        assert_eq!(ProcessState::default(), ProcessState::Sleeping);
+    }
+
+    #[test]
+    fn test_process_entry_with_state() {
+        let proc = ProcessEntry::new(1, "root", 0.0, 0.0, "test").with_state(ProcessState::Running);
+        assert_eq!(proc.state, ProcessState::Running);
+    }
+
+    #[test]
+    fn test_process_entry_with_cgroup() {
+        let proc =
+            ProcessEntry::new(1, "root", 0.0, 0.0, "test").with_cgroup("/user.slice/user-1000");
+        assert_eq!(proc.cgroup.as_deref(), Some("/user.slice/user-1000"));
+    }
+
+    #[test]
+    fn test_process_entry_with_nice() {
+        let proc = ProcessEntry::new(1, "root", 0.0, 0.0, "test").with_nice(-5);
+        assert_eq!(proc.nice, Some(-5));
+    }
+
+    #[test]
+    fn test_process_entry_with_oom_score() {
+        let proc = ProcessEntry::new(1, "root", 0.0, 0.0, "test").with_oom_score(500);
+        assert_eq!(proc.oom_score, Some(500));
+    }
+
+    #[test]
+    fn test_process_entry_with_threads() {
+        let proc = ProcessEntry::new(1, "root", 0.0, 0.0, "test").with_threads(42);
+        assert_eq!(proc.threads, Some(42));
+    }
+
+    #[test]
+    fn test_process_table_with_threads_column() {
+        let table = ProcessTable::new().with_threads_column();
+        assert!(table.show_threads);
+    }
+
+    #[test]
+    fn test_process_table_scroll() {
+        let mut table = ProcessTable::new();
+        // Create many processes to trigger scrolling
+        let entries: Vec<ProcessEntry> = (0..50)
+            .map(|i| ProcessEntry::new(i, "user", i as f32, 0.0, format!("proc{i}")))
+            .collect();
+        table.set_processes(entries);
+        table.bounds = Rect::new(0.0, 0.0, 80.0, 10.0); // Only 8 visible rows
+        table.layout(table.bounds);
+
+        // Select a process beyond the visible area
+        table.select(45);
+        // scroll_offset should have been updated
+        assert!(table.scroll_offset > 0);
+    }
+
+    #[test]
+    fn test_process_table_ensure_visible_up() {
+        let mut table = ProcessTable::new();
+        let entries: Vec<ProcessEntry> = (0..20)
+            .map(|i| ProcessEntry::new(i, "user", 0.0, 0.0, format!("proc{i}")))
+            .collect();
+        table.set_processes(entries);
+        table.bounds = Rect::new(0.0, 0.0, 80.0, 10.0);
+        table.scroll_offset = 10;
+        table.selected = 5; // Above visible area
+
+        table.ensure_visible();
+        assert!(table.scroll_offset <= table.selected);
+    }
+
+    #[test]
+    fn test_process_table_select_empty() {
+        let mut table = ProcessTable::new();
+        // Should not panic on empty table
+        table.select(5);
+        table.select_next();
+        table.select_prev();
+        assert_eq!(table.selected(), 0);
+    }
+
+    #[test]
+    fn test_process_table_selected_process_empty() {
+        let table = ProcessTable::new();
+        assert!(table.selected_process().is_none());
+    }
+
+    #[test]
+    fn test_process_table_budget() {
+        let table = ProcessTable::new();
+        let budget = table.budget();
+        assert!(budget.paint_ms > 0);
+    }
+
+    #[test]
+    fn test_process_table_assertions() {
+        let table = ProcessTable::new();
+        assert!(!table.assertions().is_empty());
+    }
+
+    #[test]
+    fn test_process_table_set_processes_clamp_selection() {
+        let mut table = ProcessTable::new();
+        table.set_processes(sample_processes());
+        table.selected = 2; // Last item
+                            // Set fewer processes
+        table.set_processes(vec![ProcessEntry::new(1, "root", 0.0, 0.0, "test")]);
+        // Selection should be clamped
+        assert_eq!(table.selected(), 0);
+    }
+
+    #[test]
+    fn test_process_table_event_down() {
+        let mut table = ProcessTable::new();
+        table.set_processes(sample_processes());
+
+        table.event(&Event::KeyDown { key: Key::Down });
+        assert_eq!(table.selected(), 1);
+    }
+
+    #[test]
+    fn test_process_table_event_up() {
+        let mut table = ProcessTable::new();
+        table.set_processes(sample_processes());
+        table.select(2);
+
+        table.event(&Event::KeyDown { key: Key::Up });
+        assert_eq!(table.selected(), 1);
+    }
+
+    #[test]
+    fn test_process_table_event_c() {
+        let mut table = ProcessTable::new();
+        table.set_processes(sample_processes());
+        // First sort by something else
+        table.sort_by(ProcessSort::Pid);
+
+        table.event(&Event::KeyDown { key: Key::C });
+        assert_eq!(table.current_sort(), ProcessSort::Cpu);
+    }
+
+    #[test]
+    fn test_process_table_event_m() {
+        let mut table = ProcessTable::new();
+        table.set_processes(sample_processes());
+
+        table.event(&Event::KeyDown { key: Key::M });
+        assert_eq!(table.current_sort(), ProcessSort::Memory);
+    }
+
+    #[test]
+    fn test_process_table_event_n() {
+        let mut table = ProcessTable::new();
+        table.set_processes(sample_processes());
+
+        table.event(&Event::KeyDown { key: Key::N });
+        assert_eq!(table.current_sort(), ProcessSort::Command);
+    }
+
+    #[test]
+    fn test_process_table_event_o() {
+        let mut table = ProcessTable::new();
+        table.set_processes(sample_processes());
+
+        table.event(&Event::KeyDown { key: Key::O });
+        assert_eq!(table.current_sort(), ProcessSort::Oom);
+    }
+
+    #[test]
+    fn test_process_table_event_other() {
+        let mut table = ProcessTable::new();
+        table.set_processes(sample_processes());
+        let prev_selected = table.selected();
+
+        // Event that doesn't match any key
+        table.event(&Event::KeyDown { key: Key::A });
+        assert_eq!(table.selected(), prev_selected);
+    }
+
+    #[test]
+    fn test_process_table_event_non_keydown() {
+        let mut table = ProcessTable::new();
+        table.set_processes(sample_processes());
+
+        // Non-keydown event
+        let result = table.event(&Event::Resize {
+            width: 100.0,
+            height: 50.0,
+        });
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_process_table_with_cpu_gradient() {
+        let gradient = Gradient::from_hex(&["#0000FF", "#FF0000"]);
+        let table = ProcessTable::new().with_cpu_gradient(gradient);
+        // Just verify it compiles and doesn't panic
+        assert!(!table.is_empty() || table.is_empty());
+    }
+
+    #[test]
+    fn test_process_table_with_mem_gradient() {
+        let gradient = Gradient::from_hex(&["#00FF00", "#FF0000"]);
+        let table = ProcessTable::new().with_mem_gradient(gradient);
+        assert!(!table.is_empty() || table.is_empty());
+    }
+
+    #[test]
+    fn test_process_table_measure_compact() {
+        let table = ProcessTable::new().compact();
+        let size = table.measure(Constraints::new(0.0, 100.0, 0.0, 50.0));
+        assert!(size.width >= 40.0); // Compact mode has smaller min width
+    }
+
+    #[test]
+    fn test_process_table_truncate_exact() {
+        assert_eq!(ProcessTable::truncate("exact", 5), "exact");
+    }
+
+    #[test]
+    fn test_process_table_truncate_width_1() {
+        assert_eq!(ProcessTable::truncate("hello", 1), "h");
+    }
+
+    #[test]
+    fn test_process_table_paint_all_columns() {
+        // Test paint with all optional columns enabled
+        let mut table = ProcessTable::new()
+            .compact()
+            .with_oom()
+            .with_nice_column()
+            .with_cmdline();
+
+        let entries = vec![
+            ProcessEntry::new(1, "root", 50.0, 10.0, "bash")
+                .with_state(ProcessState::Running)
+                .with_oom_score(100)
+                .with_nice(-5)
+                .with_cmdline("/bin/bash"),
+            ProcessEntry::new(2, "user", 30.0, 5.0, "vim")
+                .with_state(ProcessState::Sleeping)
+                .with_oom_score(600)
+                .with_nice(10)
+                .with_cmdline("/usr/bin/vim"),
+        ];
+        table.set_processes(entries);
+        table.bounds = Rect::new(0.0, 0.0, 120.0, 20.0);
+
+        let mut canvas = MockCanvas::new();
+        table.paint(&mut canvas);
+
+        // All columns should be rendered
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains("PID")));
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains("OOM")));
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains("NI")));
+    }
+
+    #[test]
+    fn test_process_entry_clone() {
+        let proc = ProcessEntry::new(1, "root", 50.0, 10.0, "test")
+            .with_state(ProcessState::Running)
+            .with_oom_score(100);
+        let cloned = proc.clone();
+        assert_eq!(cloned.pid, proc.pid);
+        assert_eq!(cloned.state, proc.state);
+    }
+
+    #[test]
+    fn test_process_entry_debug() {
+        let proc = ProcessEntry::new(1, "root", 0.0, 0.0, "test");
+        let debug = format!("{:?}", proc);
+        assert!(debug.contains("ProcessEntry"));
+    }
+
+    #[test]
+    fn test_process_sort_debug() {
+        let sort = ProcessSort::Cpu;
+        let debug = format!("{:?}", sort);
+        assert!(debug.contains("Cpu"));
+    }
+
+    #[test]
+    fn test_process_table_clone() {
+        let mut table = ProcessTable::new();
+        table.set_processes(sample_processes());
+        let cloned = table.clone();
+        assert_eq!(cloned.len(), table.len());
+    }
+
+    #[test]
+    fn test_process_table_debug() {
+        let table = ProcessTable::new();
+        let debug = format!("{:?}", table);
+        assert!(debug.contains("ProcessTable"));
+    }
+
+    #[test]
+    fn test_process_state_debug() {
+        let state = ProcessState::Running;
+        let debug = format!("{:?}", state);
+        assert!(debug.contains("Running"));
+    }
+
+    // ========================================================================
+    // Tree view tests (CB-PROC-001)
+    // ========================================================================
+
+    #[test]
+    fn test_process_entry_with_parent_pid() {
+        let proc = ProcessEntry::new(100, "user", 10.0, 5.0, "child").with_parent_pid(1);
+        assert_eq!(proc.parent_pid, Some(1));
+    }
+
+    #[test]
+    fn test_process_entry_set_tree_info() {
+        let mut proc = ProcessEntry::new(100, "user", 10.0, 5.0, "child");
+        proc.set_tree_info(2, true, "│ └─".to_string());
+        assert_eq!(proc.tree_depth, 2);
+        assert!(proc.is_last_child);
+        assert_eq!(proc.tree_prefix, "│ └─");
+    }
+
+    #[test]
+    fn test_process_table_with_tree_view() {
+        let table = ProcessTable::new().with_tree_view();
+        assert!(table.is_tree_view());
+    }
+
+    #[test]
+    fn test_process_table_toggle_tree_view() {
+        let mut table = ProcessTable::new();
+        assert!(!table.is_tree_view());
+
+        table.toggle_tree_view();
+        assert!(table.is_tree_view());
+
+        table.toggle_tree_view();
+        assert!(!table.is_tree_view());
+    }
+
+    #[test]
+    fn test_process_table_tree_view_builds_tree() {
+        let mut table = ProcessTable::new().with_tree_view();
+
+        // Create parent-child hierarchy:
+        // 1 (systemd) -> 100 (bash) -> 200 (vim)
+        //             -> 101 (sshd)
+        let entries = vec![
+            ProcessEntry::new(200, "user", 5.0, 1.0, "vim").with_parent_pid(100),
+            ProcessEntry::new(100, "user", 10.0, 2.0, "bash").with_parent_pid(1),
+            ProcessEntry::new(101, "root", 1.0, 0.5, "sshd").with_parent_pid(1),
+            ProcessEntry::new(1, "root", 0.5, 0.1, "systemd"),
+        ];
+        table.set_processes(entries);
+
+        // After tree building, systemd should be first (root)
+        assert_eq!(table.processes[0].command, "systemd");
+
+        // Check tree prefixes
+        // systemd (root) has no prefix
+        assert_eq!(table.processes[0].tree_prefix, "");
+        // bash is child of systemd, and has higher CPU than sshd
+        // So bash should come before sshd
+    }
+
+    #[test]
+    fn test_process_table_tree_view_prefix_chars() {
+        let mut table = ProcessTable::new().with_tree_view();
+
+        // Create: 1 -> 2 -> 3
+        let entries = vec![
+            ProcessEntry::new(3, "user", 5.0, 1.0, "grandchild").with_parent_pid(2),
+            ProcessEntry::new(2, "user", 10.0, 2.0, "child").with_parent_pid(1),
+            ProcessEntry::new(1, "root", 0.5, 0.1, "parent"),
+        ];
+        table.set_processes(entries);
+
+        // Parent should have no prefix
+        assert_eq!(table.processes[0].tree_prefix, "");
+        // Child should have └─ (last child of parent)
+        assert!(
+            table.processes[1].tree_prefix.contains('└')
+                || table.processes[1].tree_prefix.contains('├')
+        );
+    }
+
+    #[test]
+    fn test_process_table_event_t_toggles_tree() {
+        let mut table = ProcessTable::new();
+        table.set_processes(sample_processes());
+        assert!(!table.is_tree_view());
+
+        table.event(&Event::KeyDown { key: Key::T });
+        assert!(table.is_tree_view());
+
+        table.event(&Event::KeyDown { key: Key::T });
+        assert!(!table.is_tree_view());
+    }
+
+    #[test]
+    fn test_process_table_tree_view_paint() {
+        let mut table = ProcessTable::new().with_tree_view();
+
+        let entries = vec![
+            ProcessEntry::new(2, "user", 10.0, 2.0, "child").with_parent_pid(1),
+            ProcessEntry::new(1, "root", 0.5, 0.1, "parent"),
+        ];
+        table.set_processes(entries);
+        table.bounds = Rect::new(0.0, 0.0, 80.0, 10.0);
+
+        let mut canvas = MockCanvas::new();
+        table.paint(&mut canvas);
+
+        // Should have tree prefix in output
+        assert!(canvas
+            .texts
+            .iter()
+            .any(|(t, _)| t.contains("└") || t.contains("├")));
+    }
+
+    #[test]
+    fn test_process_table_tree_empty() {
+        let mut table = ProcessTable::new().with_tree_view();
+        // Should not panic on empty
+        table.set_processes(vec![]);
+        assert!(table.is_empty());
     }
 }
