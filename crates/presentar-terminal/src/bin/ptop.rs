@@ -13,13 +13,15 @@ use std::time::{Duration, Instant};
 
 use clap::Parser;
 use crossterm::{
-    cursor, execute,
+    cursor,
+    event::{self, Event, KeyEventKind},
+    execute,
     terminal::{self, ClearType},
 };
 
 use presentar_core::{Rect, Widget};
 use presentar_terminal::direct::{CellBuffer, DiffRenderer, DirectTerminalCanvas};
-use presentar_terminal::ptop::{config::PtopConfig, ui, App, InputHandler, PtopView};
+use presentar_terminal::ptop::{config::PtopConfig, ui, App, PtopView};
 use presentar_terminal::ColorMode;
 
 /// Presentar System Monitor - widget composition demo
@@ -155,10 +157,12 @@ fn run_app(
     use_v2: bool,
 ) -> io::Result<()> {
     let mut renderer = DiffRenderer::with_color_mode(color_mode);
-    let collect_interval = Duration::from_millis(refresh_ms);
 
-    // CB-INPUT-001: Spawn dedicated input thread for sub-50ms latency
-    let input_handler = InputHandler::spawn();
+    // CB-INPUT-005 FIX: Decouple poll timeout from refresh interval
+    // - poll_timeout: 16ms for responsive input (~60fps)
+    // - collect_interval: user-specified refresh rate for data collection
+    let poll_timeout = Duration::from_millis(16);
+    let collect_interval = Duration::from_millis(refresh_ms);
 
     let mut last_collect = Instant::now();
     let mut frame_times: Vec<Duration> = Vec::with_capacity(60);
@@ -172,7 +176,7 @@ fn run_app(
         // Get terminal size
         let (width, height) = terminal::size()?;
 
-        // Collect metrics periodically
+        // Collect metrics periodically (independent of render rate)
         if last_collect.elapsed() >= collect_interval {
             app.collect_metrics();
             last_collect = Instant::now();
@@ -208,22 +212,16 @@ fn run_app(
         }
         app.update_frame_stats(&frame_times);
 
-        // CB-INPUT-001: Process all pending input events (non-blocking)
-        // This ensures no keystrokes are lost even during slow render cycles
-        for timestamped_key in input_handler.drain() {
-            if app.handle_key(timestamped_key.event.code, timestamped_key.event.modifiers) {
-                // Quit requested
-                return Ok(());
+        // CB-INPUT-005 FIX: Single-threaded input with short poll timeout
+        // Poll for 16ms max - ensures responsive input without threading issues
+        if event::poll(poll_timeout)? {
+            if let Event::Key(key) = event::read()? {
+                if key.kind == KeyEventKind::Press && app.handle_key(key.code, key.modifiers) {
+                    break;
+                }
             }
-        }
-
-        // Sleep briefly to avoid busy-waiting (render loop runs at ~60fps max)
-        let elapsed = frame_start.elapsed();
-        if elapsed < Duration::from_millis(16) {
-            std::thread::sleep(Duration::from_millis(16) - elapsed);
         }
     }
 
-    // InputHandler dropped here, thread exits cleanly (F-INPUT-004)
     Ok(())
 }

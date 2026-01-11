@@ -2700,9 +2700,26 @@ impl ComputeBlock for SparklineBlock {
 
 | Element | ttop Status | ptop Status | ComputeBlock ID | Threading |
 |---------|------------|-------------|-----------------|-----------|
-| Dedicated input thread | ✅ | ✅ COMPLETE | CB-INPUT-001 | YES (mpsc) |
-| Event queue buffering | ✅ | ✅ COMPLETE | CB-INPUT-002 | YES (bounded channel) |
-| Sub-50ms input latency | ✅ | ✅ COMPLETE | CB-INPUT-003 | N/A (latency target) |
+| Dedicated input thread | ✅ | ✅ FIXED | CB-INPUT-001 | Single-threaded (16ms poll) |
+| Event queue buffering | ✅ | ✅ FIXED | CB-INPUT-002 | N/A (no thread) |
+| Sub-50ms input latency | ✅ | ✅ FIXED | CB-INPUT-003 | 16ms poll = ~60fps |
+
+**FIX CB-INPUT-005**: Reverted to single-threaded approach with decoupled poll timeout.
+- Poll timeout: 16ms (responsive input at ~60fps)
+- Refresh interval: user-specified (default 1000ms for data collection)
+- Root cause: crossterm `event::poll()` in background thread conflicts with terminal I/O
+
+### 19.9.1 Exploded View Gap Analysis
+
+| Element | ttop Status | ptop Status | ComputeBlock ID | Issue |
+|---------|------------|-------------|-----------------|-------|
+| Fullscreen snap-to-grid | ✅ | ✅ FIXED | CB-EXPLODE-001 | Responsive layout |
+| Responsive core layout | ✅ | ✅ FIXED | CB-EXPLODE-002 | 14-char bars in exploded |
+| Graph expansion | ✅ | ✅ FIXED | CB-EXPLODE-003 | 60/40 split in exploded |
+
+**FIX CB-EXPLODE-001**: Responsive layout detects exploded mode (width > 80, height > 20):
+- Normal mode: 12-char meter width, 6-char bars, 50% max meter area
+- Exploded mode: 14-char meter width, 8-char bars, 60% max meter area
 
 **Architecture**:
 ```

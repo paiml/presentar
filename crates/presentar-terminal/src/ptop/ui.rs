@@ -747,15 +747,24 @@ fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
     let has_cpu_data = !app.deterministic || app.per_core_percent.iter().any(|&p| p > 0.0);
 
     if has_cpu_data {
+        // CB-EXPLODE-001 FIX: Responsive layout for exploded mode
+        // Detect exploded mode by checking if area is larger than typical panel
+        let is_exploded = inner.width > 80.0 && inner.height > 20.0;
+
         // ttop layout: per-core meters on LEFT, graph on RIGHT
-        let meter_bar_width = 12.0_f32;
+        // In exploded mode, use wider bars and allow more meter columns
+        let meter_bar_width = if is_exploded { 14.0_f32 } else { 12.0_f32 };
+        let bar_len = if is_exploded { 8 } else { 6 };
         let cores_per_col = core_area_height as usize;
         let num_meter_cols = if cores_per_col > 0 {
             core_count.div_ceil(cores_per_col)
         } else {
             1
         };
-        let meters_width = (num_meter_cols as f32 * meter_bar_width).min(inner.width / 2.0);
+        // In exploded mode, allow meters to take up to 60% of width
+        let max_meter_ratio = if is_exploded { 0.6 } else { 0.5 };
+        let meters_width =
+            (num_meter_cols as f32 * meter_bar_width).min(inner.width * max_meter_ratio);
 
         // Get per-core temperatures from sensor data (like ttop)
         // Look for sensors with labels like "Core 0", "Core 1", etc.
@@ -797,7 +806,7 @@ fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
             }
 
             let color = percent_color(percent);
-            let bar_len = 6;
+            // bar_len is set above based on is_exploded (8 for exploded, 6 for normal)
             let filled = ((percent / 100.0) * bar_len as f64) as usize;
             let bar: String =
                 "█".repeat(filled.min(bar_len)) + &"░".repeat(bar_len - filled.min(bar_len));
@@ -1438,7 +1447,126 @@ fn draw_memory_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: R
                         ..Default::default()
                     },
                 );
+
+                // Add swap thrashing indicator (CB-MEM-004) after Swap row
+                if *label == "Swap" {
+                    if let Some(swap_data) = app.analyzers.swap_data() {
+                        let (is_thrashing, severity) = swap_data.is_thrashing();
+                        if is_thrashing
+                            || swap_data.swap_in_rate > 0.0
+                            || swap_data.swap_out_rate > 0.0
+                        {
+                            let (indicator, ind_color) = if severity >= 1.0 {
+                                (
+                                    "●",
+                                    Color {
+                                        r: 1.0,
+                                        g: 0.3,
+                                        b: 0.3,
+                                        a: 1.0,
+                                    },
+                                ) // Red - critical
+                            } else if severity >= 0.7 {
+                                (
+                                    "◐",
+                                    Color {
+                                        r: 1.0,
+                                        g: 0.6,
+                                        b: 0.2,
+                                        a: 1.0,
+                                    },
+                                ) // Orange - thrashing
+                            } else if severity >= 0.4 {
+                                (
+                                    "◔",
+                                    Color {
+                                        r: 1.0,
+                                        g: 0.8,
+                                        b: 0.2,
+                                        a: 1.0,
+                                    },
+                                ) // Yellow - swapping
+                            } else {
+                                (
+                                    "○",
+                                    Color {
+                                        r: 0.5,
+                                        g: 0.5,
+                                        b: 0.5,
+                                        a: 1.0,
+                                    },
+                                ) // Gray - idle
+                            };
+                            let thrash_x = inner.x + 28.0 + bar_width as f32;
+                            let thrash_text = format!(
+                                " {indicator} I:{:.0}/O:{:.0}",
+                                swap_data.swap_in_rate, swap_data.swap_out_rate
+                            );
+                            canvas.draw_text(
+                                &thrash_text,
+                                Point::new(thrash_x, y),
+                                &TextStyle {
+                                    color: ind_color,
+                                    ..Default::default()
+                                },
+                            );
+                        }
+                    }
+                }
+
                 y += 1.0;
+            }
+
+            // Memory Pressure indicator (CB-MEM-003) - show PSI memory pressure
+            if y < inner.y + inner.height {
+                if let Some(psi) = app.psi_data() {
+                    let mem_some = psi.memory.some.avg10;
+                    let mem_full = psi.memory.full.as_ref().map_or(0.0, |f| f.avg10);
+
+                    // Choose indicator based on pressure level (ttop style)
+                    let (symbol, color) = if mem_some > 20.0 || mem_full > 5.0 {
+                        (
+                            "●",
+                            Color {
+                                r: 1.0,
+                                g: 0.3,
+                                b: 0.3,
+                                a: 1.0,
+                            },
+                        ) // Red - critical
+                    } else if mem_some > 10.0 || mem_full > 1.0 {
+                        (
+                            "◐",
+                            Color {
+                                r: 1.0,
+                                g: 0.8,
+                                b: 0.2,
+                                a: 1.0,
+                            },
+                        ) // Yellow - warning
+                    } else {
+                        (
+                            "○",
+                            Color {
+                                r: 0.3,
+                                g: 0.9,
+                                b: 0.3,
+                                a: 1.0,
+                            },
+                        ) // Green - healthy
+                    };
+
+                    let psi_text =
+                        format!("   PSI {symbol} {mem_some:>5.1}% some {mem_full:>5.1}% full");
+                    canvas.draw_text(
+                        &psi_text,
+                        Point::new(inner.x, y),
+                        &TextStyle {
+                            color,
+                            ..Default::default()
+                        },
+                    );
+                }
             }
         }
     }
@@ -1941,6 +2069,8 @@ fn draw_network_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
             }
             if let Some(rates) = stats_data.rates.get(name.as_str()) {
                 iface.set_rates(rates.errors_per_sec, rates.drops_per_sec);
+                // Set bandwidth utilization (CB-NET-006)
+                iface.set_utilization(rates.utilization_percent());
             }
         }
 
@@ -2118,7 +2248,8 @@ fn draw_process_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
                     entry = entry
                         .with_oom_score(extra.oom_score)
                         .with_cgroup(extra.cgroup_short())
-                        .with_nice(extra.nice);
+                        .with_nice(extra.nice)
+                        .with_threads(extra.num_threads);
                 }
             }
 
@@ -2126,11 +2257,11 @@ fn draw_process_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
         })
         .collect();
 
-    // In exploded mode, use full table with cmdline; otherwise compact
+    // In exploded mode, use full table with cmdline; otherwise compact with threads
     let mut table = if is_exploded {
-        ProcessTable::new().with_cmdline()
+        ProcessTable::new().with_cmdline().with_threads_column()
     } else {
-        ProcessTable::new().compact()
+        ProcessTable::new().compact().with_threads_column()
     };
     table.set_processes(entries);
     table.select(app.process_selected);
@@ -3395,8 +3526,32 @@ fn draw_connections_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, boun
             (0, 0, None)
         };
 
+    // Generate sparkline for connection history (CB-CONN-007)
+    let sparkline_str = if let Some(conn_data) = app.analyzers.connections_data() {
+        let sparkline_data = conn_data.established_sparkline();
+        if sparkline_data.len() >= 3 {
+            // Use braille-style sparkline characters: ▁▂▃▄▅▆▇█
+            let chars: Vec<char> = sparkline_data
+                .iter()
+                .rev() // Most recent on the right
+                .take(12) // Limit to 12 chars for title space
+                .rev()
+                .map(|&v| {
+                    let idx = ((v * 7.0).round() as usize).min(7);
+                    ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'][idx]
+                })
+                .collect();
+            format!(" {}", chars.iter().collect::<String>())
+        } else {
+            String::new()
+        }
+    } else {
+        String::new()
+    };
+
     // ttop-style title (Border adds outer spaces)
-    let title = format!("Connections │ {active_count} active │ {listen_count} listen");
+    let title =
+        format!("Connections │ {active_count} active │ {listen_count} listen{sparkline_str}");
 
     // Check if this panel is focused (SPEC-024 v5.0 Feature D)
     let is_focused = app.is_panel_focused(PanelType::Connections);
@@ -3435,8 +3590,8 @@ fn draw_connections_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, boun
 
     // Header for real data mode (ttop style: SVC LOCAL REMOTE GE ST AGE PROC)
     // GE (geo) simplified: L=local, R=remote
-    // AGE: would need connection tracking, show "-" for now
-    let header = "SVC   LOCAL        REMOTE            GE ST    PROC";
+    // AGE: connection duration (CB-CONN-001)
+    let header = "SVC   LOCAL        REMOTE            GE ST  AGE   PROC";
     canvas.draw_text(
         header,
         Point::new(inner.x, inner.y),
@@ -3564,9 +3719,16 @@ fn draw_connections_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, boun
             _ => dim_color,
         };
 
-        // Format: SVC   LOCAL        REMOTE            GE ST    PROC
-        let line =
-            format!("{svc:<5} {local:<12} {remote:<17} {geo:<2} {state_short:<5} {proc_name}");
+        // Get connection age (CB-CONN-001)
+        let age = conn.age_display();
+
+        // Get hot indicator (CB-CONN-006)
+        let (hot_indicator, _hot_level) = conn.hot_indicator();
+
+        // Format: SVC   LOCAL        REMOTE            GE ST  AGE   PROC
+        let line = format!(
+            "{svc:<5} {local:<12} {remote:<17} {geo:<2} {state_short:<3} {age:<5} {proc_name}"
+        );
         canvas.draw_text(
             &line,
             Point::new(inner.x, y),
@@ -3575,6 +3737,37 @@ fn draw_connections_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, boun
                 ..Default::default()
             },
         );
+
+        // Draw hot indicator after the line (CB-CONN-006)
+        if !hot_indicator.is_empty() {
+            let hot_color = if hot_indicator == "●" {
+                Color {
+                    r: 1.0,
+                    g: 0.4,
+                    b: 0.2,
+                    a: 1.0,
+                } // Orange for hot
+            } else {
+                Color {
+                    r: 1.0,
+                    g: 0.7,
+                    b: 0.3,
+                    a: 1.0,
+                } // Yellow for warm
+            };
+            // Draw at the end of the line
+            let hot_x = inner.x + 56.0;
+            if hot_x < inner.x + inner.width {
+                canvas.draw_text(
+                    hot_indicator,
+                    Point::new(hot_x, y),
+                    &TextStyle {
+                        color: hot_color,
+                        ..Default::default()
+                    },
+                );
+            }
+        }
     }
 
     // If no connections, show message
