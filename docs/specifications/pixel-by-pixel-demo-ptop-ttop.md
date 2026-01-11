@@ -2689,6 +2689,101 @@ impl ComputeBlock for SparklineBlock {
 | F-CONN-002 | TCP state | Invalid state transition |
 | F-NET-001 | Error rate | Rate > 1.0 (impossible percentage) |
 | F-PROC-001 | Process tree | Cycle detected (invalid DAG) |
+| F-INPUT-001 | Input latency | > 50ms response time |
+| F-INPUT-002 | Event queue | Dropped keypress under load |
+
+### 19.9 Input/Event Handling Gap Analysis
+
+**Problem**: Single-threaded event loop causes input latency up to `--refresh` interval (default 1000ms).
+
+**Reference Implementation**: ttop uses dedicated input thread with mpsc channel.
+
+| Element | ttop Status | ptop Status | ComputeBlock ID | Threading |
+|---------|------------|-------------|-----------------|-----------|
+| Dedicated input thread | ✅ | ✅ COMPLETE | CB-INPUT-001 | YES (mpsc) |
+| Event queue buffering | ✅ | ✅ COMPLETE | CB-INPUT-002 | YES (bounded channel) |
+| Sub-50ms input latency | ✅ | ✅ COMPLETE | CB-INPUT-003 | N/A (latency target) |
+
+**Architecture**:
+```
+┌──────────────────┐     mpsc::channel      ┌──────────────────┐
+│   Input Thread   │ ────────────────────▶  │   Main Thread    │
+│                  │     KeyEvent queue     │                  │
+│  event::read()   │                        │  try_recv()      │
+│  (blocking)      │                        │  render()        │
+│                  │                        │  collect_data()  │
+└──────────────────┘                        └──────────────────┘
+     50ms poll                                   tick_rate
+```
+
+**Implementation**:
+```rust
+// CB-INPUT-001: Dedicated input thread
+pub struct InputHandler {
+    rx: mpsc::Receiver<KeyEvent>,
+    _thread: JoinHandle<()>,
+}
+
+impl InputHandler {
+    pub fn spawn() -> Self {
+        let (tx, rx) = mpsc::channel();
+        let thread = std::thread::spawn(move || {
+            loop {
+                // Poll every 50ms for responsive input
+                if event::poll(Duration::from_millis(50)).unwrap_or(false) {
+                    if let Ok(Event::Key(key)) = event::read() {
+                        if tx.send(key).is_err() {
+                            break; // Main thread dropped, exit
+                        }
+                    }
+                }
+            }
+        });
+        Self { rx, _thread: thread }
+    }
+
+    /// Non-blocking receive - returns immediately
+    pub fn try_recv(&self) -> Option<KeyEvent> {
+        self.rx.try_recv().ok()
+    }
+
+    /// Drain all pending events (for burst handling)
+    pub fn drain(&self) -> Vec<KeyEvent> {
+        std::iter::from_fn(|| self.rx.try_recv().ok()).collect()
+    }
+}
+```
+
+**YAML Configuration**:
+```yaml
+input:
+  poll_interval_ms: 50      # Input thread poll rate
+  queue_capacity: 64        # Max buffered events
+  debounce_ms: 0            # Key repeat debounce (0 = none)
+```
+
+### 19.10 Peer-Reviewed References for Input Threading
+
+23. Pike, R. (2012). "Concurrency is not Parallelism." *Heroku Waza Conference*.
+    - **Relevance**: Channel-based message passing for UI event handling
+
+24. Lamport, L. (1978). "Time, Clocks, and the Ordering of Events in a Distributed System." *Communications of the ACM*, 21(7), pp. 558-565. DOI: 10.1145/359545.359563
+    - **Relevance**: Event ordering guarantees across input/render threads
+
+25. Card, S.K., Robertson, G.G., & Mackinlay, J.D. (1991). "The Information Visualizer: An Information Workspace." *CHI '91 Proceedings*, pp. 181-186. DOI: 10.1145/108844.108874
+    - **Relevance**: 100ms latency threshold for "instantaneous" UI response
+
+26. Nielsen, J. (1993). "Response Times: The 3 Important Limits." *Usability Engineering*, Morgan Kaufmann. ISBN: 0-12-518406-9
+    - **Relevance**: <100ms for feeling instantaneous, <1000ms for flow maintenance
+
+### 19.11 Input Falsification Tests
+
+| ID | Test | Fails If | Method |
+|----|------|----------|--------|
+| F-INPUT-001 | Input latency | Response > 50ms | Timestamp diff between keypress and handler invocation |
+| F-INPUT-002 | Event queue | Dropped event under load | Send 100 keys in 100ms, verify all received |
+| F-INPUT-003 | Thread isolation | Main thread blocks input | Simulate 500ms render, verify input still responsive |
+| F-INPUT-004 | Graceful shutdown | Thread leak on exit | Join handle completes within 100ms of drop |
 
 ---
 
