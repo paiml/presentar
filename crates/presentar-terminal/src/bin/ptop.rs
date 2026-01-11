@@ -158,19 +158,31 @@ fn run_app(
 ) -> io::Result<()> {
     let mut renderer = DiffRenderer::with_color_mode(color_mode);
 
-    // CB-INPUT-005 FIX: Decouple poll timeout from refresh interval
-    // - poll_timeout: 16ms for responsive input (~60fps)
-    // - collect_interval: user-specified refresh rate for data collection
-    let poll_timeout = Duration::from_millis(16);
+    // CB-INPUT-005 FIX v2: Input-first loop structure
+    // - Process ALL pending input before any slow operations
+    // - Use very short poll (1ms) to drain queue quickly
+    // - Render only after input is processed
     let collect_interval = Duration::from_millis(refresh_ms);
 
     let mut last_collect = Instant::now();
+    let mut last_render = Instant::now();
+    let render_interval = Duration::from_millis(16); // ~60fps max
     let mut frame_times: Vec<Duration> = Vec::with_capacity(60);
 
     // Initial collection
     app.collect_metrics();
 
     while app.running {
+        // PRIORITY 1: Process ALL pending input events FIRST (non-blocking drain)
+        // This ensures input is NEVER blocked by slow render/collect
+        while event::poll(Duration::from_millis(1))? {
+            if let Event::Key(key) = event::read()? {
+                if key.kind == KeyEventKind::Press && app.handle_key(key.code, key.modifiers) {
+                    return Ok(());
+                }
+            }
+        }
+
         let frame_start = Instant::now();
 
         // Get terminal size
@@ -180,6 +192,13 @@ fn run_app(
         if last_collect.elapsed() >= collect_interval {
             app.collect_metrics();
             last_collect = Instant::now();
+        }
+
+        // Rate-limit rendering to ~60fps to reduce CPU usage
+        if last_render.elapsed() < render_interval {
+            // Sleep briefly instead of busy-waiting
+            std::thread::sleep(Duration::from_millis(1));
+            continue;
         }
 
         // Draw to buffer
@@ -204,6 +223,8 @@ fn run_app(
         stdout.write_all(&output)?;
         stdout.flush()?;
 
+        last_render = Instant::now();
+
         // Track frame time
         let frame_time = frame_start.elapsed();
         frame_times.push(frame_time);
@@ -211,16 +232,6 @@ fn run_app(
             frame_times.remove(0);
         }
         app.update_frame_stats(&frame_times);
-
-        // CB-INPUT-005 FIX: Single-threaded input with short poll timeout
-        // Poll for 16ms max - ensures responsive input without threading issues
-        if event::poll(poll_timeout)? {
-            if let Event::Key(key) = event::read()? {
-                if key.kind == KeyEventKind::Press && app.handle_key(key.code, key.modifiers) {
-                    break;
-                }
-            }
-        }
     }
 
     Ok(())

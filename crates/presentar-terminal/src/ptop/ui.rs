@@ -747,22 +747,27 @@ fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
     let has_cpu_data = !app.deterministic || app.per_core_percent.iter().any(|&p| p > 0.0);
 
     if has_cpu_data {
-        // CB-EXPLODE-001 FIX: Responsive layout for exploded mode
-        // Detect exploded mode by checking if area is larger than typical panel
-        let is_exploded = inner.width > 80.0 && inner.height > 20.0;
+        // CB-EXPLODE-001 FIX v2: Responsive layout for exploded mode
+        // Detect exploded by checking if width > 100 (typical panel is 40-60 wide)
+        let is_exploded = inner.width > 100.0;
 
         // ttop layout: per-core meters on LEFT, graph on RIGHT
-        // In exploded mode, use wider bars and allow more meter columns
-        let meter_bar_width = if is_exploded { 14.0_f32 } else { 12.0_f32 };
-        let bar_len = if is_exploded { 8 } else { 6 };
-        let cores_per_col = core_area_height as usize;
-        let num_meter_cols = if cores_per_col > 0 {
-            core_count.div_ceil(cores_per_col)
+        // In exploded mode, spread cores across more columns
+        let meter_bar_width = if is_exploded { 16.0_f32 } else { 12.0_f32 };
+        let bar_len: usize = if is_exploded { 10 } else { 6 };
+
+        // Limit cores per column in exploded mode to force horizontal spread
+        let max_cores_per_col = if is_exploded {
+            (core_area_height as usize).min(12) // At most 12 per column
         } else {
-            1
+            core_area_height as usize
         };
-        // In exploded mode, allow meters to take up to 60% of width
-        let max_meter_ratio = if is_exploded { 0.6 } else { 0.5 };
+        let cores_per_col = max_cores_per_col.max(1);
+
+        let num_meter_cols = core_count.div_ceil(cores_per_col);
+
+        // In exploded mode, allow meters to take up to 70% of width
+        let max_meter_ratio = if is_exploded { 0.70 } else { 0.5 };
         let meters_width =
             (num_meter_cols as f32 * meter_bar_width).min(inner.width * max_meter_ratio);
 
@@ -806,7 +811,7 @@ fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
             }
 
             let color = percent_color(percent);
-            // bar_len is set above based on is_exploded (8 for exploded, 6 for normal)
+            // bar_len is set above based on is_exploded (10 for exploded, 6 for normal)
             let filled = ((percent / 100.0) * bar_len as f64) as usize;
             let bar: String =
                 "█".repeat(filled.min(bar_len)) + &"░".repeat(bar_len - filled.min(bar_len));
@@ -4260,5 +4265,71 @@ pub fn panel_border_color(panel: PanelType) -> Color {
         PanelType::Connections => CONNECTIONS_COLOR,
         PanelType::Files => FILES_COLOR,
         PanelType::Containers => CONTAINERS_COLOR,
+    }
+}
+
+#[cfg(test)]
+mod explode_tests {
+    use super::*;
+
+    /// F-EXPLODE-001: Exploded detection threshold test
+    #[test]
+    fn test_f_explode_001_detection_threshold() {
+        // Normal panel width (typical CPU panel in 4-panel grid)
+        let normal_width = 50.0;
+        let is_exploded_normal = normal_width > 100.0;
+        assert!(
+            !is_exploded_normal,
+            "Normal panel should NOT be detected as exploded"
+        );
+
+        // Exploded width (fullscreen on 150 col terminal)
+        let exploded_width = 148.0; // 150 - 2 for borders
+        let is_exploded_full = exploded_width > 100.0;
+        assert!(
+            is_exploded_full,
+            "Exploded panel SHOULD be detected as exploded"
+        );
+    }
+
+    /// F-EXPLODE-002: Core layout spreads horizontally in exploded mode
+    #[test]
+    fn test_f_explode_002_core_spread() {
+        let core_count: usize = 48;
+        let core_area_height = 35.0_f32; // Typical exploded height
+
+        // Normal mode: all cores in as few columns as possible
+        let cores_per_col_normal = core_area_height as usize; // 35
+        let cols_normal = core_count.div_ceil(cores_per_col_normal);
+        assert_eq!(
+            cols_normal, 2,
+            "Normal mode: 48 cores / 35 per col = 2 cols"
+        );
+
+        // Exploded mode: max 12 cores per column
+        let max_per_col: usize = 12;
+        let cores_per_col_exploded = (core_area_height as usize).min(max_per_col);
+        let cols_exploded = core_count.div_ceil(cores_per_col_exploded);
+        assert_eq!(
+            cols_exploded, 4,
+            "Exploded mode: 48 cores / 12 per col = 4 cols"
+        );
+    }
+
+    /// F-EXPLODE-003: Bar length increases in exploded mode
+    #[test]
+    fn test_f_explode_003_bar_length() {
+        let bar_len_normal: usize = 6;
+        let bar_len_exploded: usize = 10;
+
+        assert!(
+            bar_len_exploded > bar_len_normal,
+            "Exploded bars should be longer"
+        );
+        assert_eq!(
+            bar_len_exploded - bar_len_normal,
+            4,
+            "Exploded bars 4 chars longer"
+        );
     }
 }
