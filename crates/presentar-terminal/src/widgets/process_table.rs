@@ -1955,4 +1955,182 @@ mod tests {
         table.set_processes(vec![]);
         assert!(table.is_empty());
     }
+
+    // ========================================================================
+    // Falsification Tests for CB-PROC-001 (Phase 7 QA Gate)
+    // ========================================================================
+
+    /// F-TREE-001: "Orphaned Child" Test
+    /// Hierarchy MUST override sorting. Children MUST appear immediately below parent.
+    #[test]
+    fn test_f_tree_001_hierarchy_overrides_sorting() {
+        let mut table = ProcessTable::new().with_tree_view();
+
+        // sh (PID 100) with two sleep children (PIDs 200, 201)
+        // Higher CPU processes elsewhere should NOT split the hierarchy
+        let entries = vec![
+            ProcessEntry::new(999, "root", 99.0, 50.0, "chrome"), // High CPU unrelated
+            ProcessEntry::new(200, "user", 0.1, 0.1, "sleep").with_parent_pid(100),
+            ProcessEntry::new(201, "user", 0.1, 0.1, "sleep").with_parent_pid(100),
+            ProcessEntry::new(100, "user", 1.0, 0.5, "sh"),
+            ProcessEntry::new(1, "root", 0.5, 0.1, "systemd"),
+        ];
+        table.set_processes(entries);
+
+        // Find sh in the tree
+        let sh_idx = table
+            .processes
+            .iter()
+            .position(|p| p.command == "sh")
+            .expect("sh not found");
+
+        // Both sleep processes MUST be immediately after sh
+        let sleep1_idx = table
+            .processes
+            .iter()
+            .position(|p| p.command == "sleep" && p.pid == 200)
+            .expect("sleep 200 not found");
+        let sleep2_idx = table
+            .processes
+            .iter()
+            .position(|p| p.command == "sleep" && p.pid == 201)
+            .expect("sleep 201 not found");
+
+        // Children must appear IMMEDIATELY after parent (next indices)
+        assert!(
+            sleep1_idx > sh_idx && sleep1_idx <= sh_idx + 2,
+            "sleep 200 (idx {}) should be immediately after sh (idx {})",
+            sleep1_idx,
+            sh_idx
+        );
+        assert!(
+            sleep2_idx > sh_idx && sleep2_idx <= sh_idx + 2,
+            "sleep 201 (idx {}) should be immediately after sh (idx {})",
+            sleep2_idx,
+            sh_idx
+        );
+
+        // Unrelated high-CPU process should NOT be between sh and its children
+        let chrome_idx = table
+            .processes
+            .iter()
+            .position(|p| p.command == "chrome")
+            .expect("chrome not found");
+        assert!(
+            !(chrome_idx > sh_idx && chrome_idx < sleep1_idx.max(sleep2_idx)),
+            "Unrelated process should not split parent-child hierarchy"
+        );
+    }
+
+    /// F-TREE-002: "Live Re-Parenting" - Orphan handling
+    /// When parent is killed, orphans should gracefully become roots
+    #[test]
+    fn test_f_tree_002_orphan_handling() {
+        let mut table = ProcessTable::new().with_tree_view();
+
+        // Child processes whose parent (PID 100) is NOT in the list
+        let entries = vec![
+            ProcessEntry::new(200, "user", 5.0, 1.0, "orphan1").with_parent_pid(100), // Parent missing
+            ProcessEntry::new(201, "user", 3.0, 1.0, "orphan2").with_parent_pid(100), // Parent missing
+            ProcessEntry::new(1, "root", 0.5, 0.1, "systemd"),
+        ];
+        table.set_processes(entries);
+
+        // Should not panic - orphans become roots
+        assert_eq!(table.len(), 3);
+
+        // Orphans should have depth 0 (root level) since parent not found
+        let orphan1 = table
+            .processes
+            .iter()
+            .find(|p| p.command == "orphan1")
+            .unwrap();
+        let orphan2 = table
+            .processes
+            .iter()
+            .find(|p| p.command == "orphan2")
+            .unwrap();
+
+        // Orphans treated as roots have no tree prefix
+        assert_eq!(orphan1.tree_depth, 0);
+        assert_eq!(orphan2.tree_depth, 0);
+    }
+
+    /// F-TREE-003: "Deep Nesting" Boundary (15 levels)
+    /// Tree must handle deep hierarchies without overflow or crash
+    #[test]
+    fn test_f_tree_003_deep_nesting_15_levels() {
+        let mut table = ProcessTable::new().with_tree_view();
+
+        // Create 15-level deep hierarchy
+        let mut entries = vec![ProcessEntry::new(1, "root", 0.5, 0.1, "init")];
+
+        for depth in 1..=15 {
+            let pid = (depth + 1) as u32;
+            let ppid = depth as u32;
+            entries.push(
+                ProcessEntry::new(pid, "user", 0.1, 0.1, format!("level{depth}"))
+                    .with_parent_pid(ppid),
+            );
+        }
+
+        table.set_processes(entries);
+
+        // Should not panic
+        assert_eq!(table.len(), 16); // 1 root + 15 children
+
+        // Verify deepest process has depth 15
+        let deepest = table
+            .processes
+            .iter()
+            .find(|p| p.command == "level15")
+            .unwrap();
+        assert_eq!(deepest.tree_depth, 15);
+
+        // Verify prefix has correct structure (should have 14 "│ " or "  " segments)
+        let prefix_segments =
+            deepest.tree_prefix.matches("│").count() + deepest.tree_prefix.matches("  ").count();
+        // At depth 15, prefix should have accumulated continuation chars
+        assert!(
+            deepest.tree_prefix.len() > 20,
+            "Deep prefix should be substantial: '{}'",
+            deepest.tree_prefix
+        );
+    }
+
+    /// F-TREE-004: Verify DFS traversal order
+    /// Tree order must be parent, then all descendants, then next sibling
+    #[test]
+    fn test_f_tree_004_dfs_traversal_order() {
+        let mut table = ProcessTable::new().with_tree_view();
+
+        // Tree: A -> B -> D
+        //           -> E
+        //       -> C
+        let entries = vec![
+            ProcessEntry::new(5, "user", 1.0, 1.0, "E").with_parent_pid(2),
+            ProcessEntry::new(4, "user", 1.0, 1.0, "D").with_parent_pid(2),
+            ProcessEntry::new(3, "user", 1.0, 1.0, "C").with_parent_pid(1),
+            ProcessEntry::new(2, "user", 2.0, 1.0, "B").with_parent_pid(1), // Higher CPU
+            ProcessEntry::new(1, "root", 0.5, 0.1, "A"),
+        ];
+        table.set_processes(entries);
+
+        // Expected DFS order (sorted by CPU within siblings): A, B, D, E, C
+        // B comes before C because B has higher CPU
+        let commands: Vec<&str> = table.processes.iter().map(|p| p.command.as_str()).collect();
+
+        assert_eq!(commands[0], "A", "Root should be first");
+        assert_eq!(commands[1], "B", "B (higher CPU child) should be second");
+        // D and E are B's children
+        assert!(
+            commands[2] == "D" || commands[2] == "E",
+            "B's children should follow B"
+        );
+        assert!(
+            commands[3] == "D" || commands[3] == "E",
+            "B's children should follow B"
+        );
+        assert_eq!(commands[4], "C", "C should be after B's subtree");
+    }
 }
