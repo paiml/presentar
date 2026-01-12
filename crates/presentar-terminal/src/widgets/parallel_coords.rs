@@ -345,12 +345,124 @@ mod tests {
     }
 
     #[test]
+    fn test_parallel_coords_with_alpha_clamped() {
+        let columns = vec!["A".to_string()];
+        let data = vec![vec![1.0]];
+        let plot = ParallelCoordinates::new(columns, data)
+            .with_alpha(2.0); // Should clamp to 1.0
+        assert!((plot.alpha - 1.0).abs() < 0.01);
+
+        let columns2 = vec!["B".to_string()];
+        let data2 = vec![vec![1.0]];
+        let plot2 = ParallelCoordinates::new(columns2, data2)
+            .with_alpha(-0.5); // Should clamp to 0.0
+        assert!((plot2.alpha - 0.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_parallel_coords_with_labels() {
+        let columns = vec!["A".to_string()];
+        let data = vec![vec![1.0]];
+        let plot = ParallelCoordinates::new(columns, data)
+            .with_labels(false);
+        assert!(!plot.show_labels);
+    }
+
+    #[test]
     fn test_parallel_coords_paint() {
         let columns = vec!["A".to_string(), "B".to_string(), "C".to_string()];
         let data = vec![
             vec![1.0, 5.0, 3.0],
             vec![2.0, 4.0, 6.0],
             vec![3.0, 3.0, 1.0],
+        ];
+        let mut plot = ParallelCoordinates::new(columns, data);
+
+        let bounds = Rect::new(0.0, 0.0, 80.0, 20.0);
+        plot.layout(bounds);
+
+        let mut buffer = CellBuffer::new(80, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_parallel_coords_paint_empty_columns() {
+        let mut plot = ParallelCoordinates::default();
+        let bounds = Rect::new(0.0, 0.0, 80.0, 20.0);
+        plot.layout(bounds);
+
+        let mut buffer = CellBuffer::new(80, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas); // Should return early
+    }
+
+    #[test]
+    fn test_parallel_coords_paint_small_bounds() {
+        let columns = vec!["A".to_string(), "B".to_string()];
+        let data = vec![vec![1.0, 2.0]];
+        let mut plot = ParallelCoordinates::new(columns, data);
+        plot.bounds = Rect::new(0.0, 0.0, 10.0, 3.0); // Too small
+
+        let mut buffer = CellBuffer::new(20, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas); // Should return early
+    }
+
+    #[test]
+    fn test_parallel_coords_paint_no_labels() {
+        let columns = vec!["A".to_string(), "B".to_string(), "C".to_string()];
+        let data = vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]];
+        let mut plot = ParallelCoordinates::new(columns, data).with_labels(false);
+
+        let bounds = Rect::new(0.0, 0.0, 80.0, 20.0);
+        plot.layout(bounds);
+
+        let mut buffer = CellBuffer::new(80, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_parallel_coords_paint_with_color_by() {
+        let columns = vec!["A".to_string(), "B".to_string()];
+        let data = vec![vec![1.0, 2.0], vec![3.0, 4.0], vec![5.0, 6.0]];
+        let mut plot = ParallelCoordinates::new(columns, data)
+            .with_color_by(vec![0.0, 0.5, 1.0]);
+
+        let bounds = Rect::new(0.0, 0.0, 80.0, 20.0);
+        plot.layout(bounds);
+
+        let mut buffer = CellBuffer::new(80, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_parallel_coords_paint_mismatched_row_length() {
+        let columns = vec!["A".to_string(), "B".to_string(), "C".to_string()];
+        let data = vec![
+            vec![1.0, 2.0, 3.0],
+            vec![4.0, 5.0], // Wrong length - should be skipped
+            vec![7.0, 8.0, 9.0],
+        ];
+        let mut plot = ParallelCoordinates::new(columns, data);
+
+        let bounds = Rect::new(0.0, 0.0, 80.0, 20.0);
+        plot.layout(bounds);
+
+        let mut buffer = CellBuffer::new(80, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_parallel_coords_paint_with_nan() {
+        let columns = vec!["A".to_string(), "B".to_string()];
+        let data = vec![
+            vec![1.0, 2.0],
+            vec![f64::NAN, 3.0],  // NaN value
+            vec![f64::INFINITY, f64::NEG_INFINITY],  // Infinite values
         ];
         let mut plot = ParallelCoordinates::new(columns, data);
 
@@ -383,6 +495,63 @@ mod tests {
     }
 
     #[test]
+    fn test_parallel_coords_column_range_constant() {
+        let columns = vec!["A".to_string()];
+        let data = vec![vec![5.0], vec![5.0], vec![5.0]];
+        let plot = ParallelCoordinates::new(columns, data);
+        let (min, max) = plot.column_range(0);
+        // Range should be expanded when all values are the same
+        assert!(max > min);
+    }
+
+    #[test]
+    fn test_parallel_coords_column_range_with_nan() {
+        let columns = vec!["A".to_string()];
+        let data = vec![vec![1.0], vec![f64::NAN], vec![5.0]];
+        let plot = ParallelCoordinates::new(columns, data);
+        let (min, max) = plot.column_range(0);
+        // Should ignore NaN values
+        assert!((min - 1.0).abs() < 0.01);
+        assert!((max - 5.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_parallel_coords_get_row_color_no_color_by() {
+        let columns = vec!["A".to_string()];
+        let data = vec![vec![1.0], vec![2.0]];
+        let plot = ParallelCoordinates::new(columns, data);
+        let color = plot.get_row_color(0);
+        // Default color is blue-ish
+        assert!(color.b > color.r);
+    }
+
+    #[test]
+    fn test_parallel_coords_get_row_color_with_color_by() {
+        let columns = vec!["A".to_string()];
+        let data = vec![vec![1.0], vec![2.0], vec![3.0]];
+        let plot = ParallelCoordinates::new(columns, data)
+            .with_color_by(vec![0.0, 0.5, 1.0]);
+
+        let color0 = plot.get_row_color(0); // Low value - more blue
+        let color2 = plot.get_row_color(2); // High value - more red
+
+        assert!(color0.b > color0.r);
+        assert!(color2.r > color2.b);
+    }
+
+    #[test]
+    fn test_parallel_coords_get_row_color_out_of_range() {
+        let columns = vec!["A".to_string()];
+        let data = vec![vec![1.0]];
+        let plot = ParallelCoordinates::new(columns, data)
+            .with_color_by(vec![0.0]);
+
+        let color = plot.get_row_color(100); // Out of range
+        // Should return default color
+        assert!(color.b > 0.0);
+    }
+
+    #[test]
     fn test_parallel_coords_verify() {
         let mut plot =
             ParallelCoordinates::new(vec!["A".to_string(), "B".to_string()], vec![vec![1.0, 2.0]]);
@@ -391,8 +560,143 @@ mod tests {
     }
 
     #[test]
+    fn test_parallel_coords_verify_small_bounds() {
+        let mut plot =
+            ParallelCoordinates::new(vec!["A".to_string()], vec![vec![1.0]]);
+        plot.bounds = Rect::new(0.0, 0.0, 10.0, 3.0);
+        let verification = plot.verify();
+        assert!(!verification.failed.is_empty());
+    }
+
+    #[test]
     fn test_parallel_coords_brick_name() {
         let plot = ParallelCoordinates::default();
         assert_eq!(plot.brick_name(), "ParallelCoordinates");
+    }
+
+    #[test]
+    fn test_parallel_coords_assertions() {
+        let plot = ParallelCoordinates::default();
+        assert!(!plot.assertions().is_empty());
+    }
+
+    #[test]
+    fn test_parallel_coords_budget() {
+        let plot = ParallelCoordinates::default();
+        let budget = plot.budget();
+        assert!(budget.measure_ms > 0);
+    }
+
+    #[test]
+    fn test_parallel_coords_to_html() {
+        let plot = ParallelCoordinates::default();
+        assert!(plot.to_html().is_empty());
+    }
+
+    #[test]
+    fn test_parallel_coords_to_css() {
+        let plot = ParallelCoordinates::default();
+        assert!(plot.to_css().is_empty());
+    }
+
+    #[test]
+    fn test_parallel_coords_measure() {
+        let columns = vec!["A".to_string(), "B".to_string()];
+        let data = vec![vec![1.0, 2.0]];
+        let plot = ParallelCoordinates::new(columns, data);
+        let size = plot.measure(Constraints {
+            min_width: 0.0,
+            max_width: 100.0,
+            min_height: 0.0,
+            max_height: 50.0,
+        });
+        assert!(size.width > 0.0);
+        assert!(size.height > 0.0);
+    }
+
+    #[test]
+    fn test_parallel_coords_layout() {
+        let columns = vec!["A".to_string()];
+        let data = vec![vec![1.0]];
+        let mut plot = ParallelCoordinates::new(columns, data);
+        let result = plot.layout(Rect::new(10.0, 20.0, 80.0, 40.0));
+        assert!((plot.bounds.x - 10.0).abs() < f32::EPSILON);
+        assert!((plot.bounds.y - 20.0).abs() < f32::EPSILON);
+        assert!(result.size.width > 0.0);
+    }
+
+    #[test]
+    fn test_parallel_coords_type_id() {
+        let plot = ParallelCoordinates::default();
+        let type_id = Widget::type_id(&plot);
+        assert_eq!(type_id, TypeId::of::<ParallelCoordinates>());
+    }
+
+    #[test]
+    fn test_parallel_coords_children() {
+        let plot = ParallelCoordinates::default();
+        assert!(plot.children().is_empty());
+    }
+
+    #[test]
+    fn test_parallel_coords_children_mut() {
+        let mut plot = ParallelCoordinates::default();
+        assert!(plot.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_parallel_coords_event() {
+        let mut plot = ParallelCoordinates::default();
+        let result = plot.event(&Event::FocusIn);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_parallel_coords_clone() {
+        let columns = vec!["A".to_string(), "B".to_string()];
+        let data = vec![vec![1.0, 2.0]];
+        let plot = ParallelCoordinates::new(columns, data).with_alpha(0.8);
+        let cloned = plot.clone();
+        assert_eq!(cloned.columns.len(), 2);
+        assert!((cloned.alpha - 0.8).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_parallel_coords_debug() {
+        let plot = ParallelCoordinates::default();
+        let debug = format!("{:?}", plot);
+        assert!(debug.contains("ParallelCoordinates"));
+    }
+
+    #[test]
+    fn test_parallel_coords_single_column() {
+        // Edge case: single column (no lines to draw between columns)
+        let columns = vec!["A".to_string()];
+        let data = vec![vec![1.0], vec![2.0], vec![3.0]];
+        let mut plot = ParallelCoordinates::new(columns, data);
+
+        let bounds = Rect::new(0.0, 0.0, 80.0, 20.0);
+        plot.layout(bounds);
+
+        let mut buffer = CellBuffer::new(80, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_parallel_coords_long_column_names() {
+        let columns = vec![
+            "VeryLongColumnNameThatShouldBeTruncated".to_string(),
+            "AnotherLongName".to_string(),
+        ];
+        let data = vec![vec![1.0, 2.0]];
+        let mut plot = ParallelCoordinates::new(columns, data);
+
+        let bounds = Rect::new(0.0, 0.0, 80.0, 20.0);
+        plot.layout(bounds);
+
+        let mut buffer = CellBuffer::new(80, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas);
     }
 }

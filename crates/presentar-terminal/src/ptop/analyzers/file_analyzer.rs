@@ -461,4 +461,426 @@ mod tests {
         let result = analyzer.collect();
         assert!(result.is_ok());
     }
+
+    // Additional FileCategory tests
+    #[test]
+    fn test_file_category_symlink() {
+        assert_eq!(FileCategory::Symlink.as_str(), "link");
+    }
+
+    #[test]
+    fn test_file_category_fifo() {
+        assert_eq!(FileCategory::Fifo.as_str(), "fifo");
+    }
+
+    #[test]
+    fn test_file_category_block_device() {
+        assert_eq!(FileCategory::BlockDevice.as_str(), "blk");
+    }
+
+    #[test]
+    fn test_file_category_char_device() {
+        assert_eq!(FileCategory::CharDevice.as_str(), "chr");
+    }
+
+    #[test]
+    fn test_file_category_unknown() {
+        assert_eq!(FileCategory::Unknown.as_str(), "?");
+    }
+
+    #[test]
+    fn test_file_category_debug() {
+        let cat = FileCategory::Regular;
+        let debug = format!("{:?}", cat);
+        assert!(debug.contains("Regular"));
+    }
+
+    #[test]
+    fn test_file_category_clone() {
+        let cat = FileCategory::Socket;
+        let cloned = cat.clone();
+        assert_eq!(cat, cloned);
+    }
+
+    #[test]
+    fn test_file_category_copy() {
+        let cat = FileCategory::Directory;
+        let copied: FileCategory = cat;
+        assert_eq!(copied, FileCategory::Directory);
+    }
+
+    #[test]
+    fn test_file_category_eq() {
+        assert_eq!(FileCategory::Regular, FileCategory::Regular);
+        assert_ne!(FileCategory::Regular, FileCategory::Directory);
+    }
+
+    #[test]
+    fn test_file_category_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(FileCategory::Regular);
+        set.insert(FileCategory::Directory);
+        assert_eq!(set.len(), 2);
+        set.insert(FileCategory::Regular);
+        assert_eq!(set.len(), 2);
+    }
+
+    #[test]
+    fn test_file_category_from_metadata_regular() {
+        // Test with a real file
+        if let Ok(meta) = fs::metadata("/etc/passwd") {
+            let cat = FileCategory::from_metadata(&meta);
+            assert_eq!(cat, FileCategory::Regular);
+        }
+    }
+
+    #[test]
+    fn test_file_category_from_metadata_directory() {
+        if let Ok(meta) = fs::metadata("/tmp") {
+            let cat = FileCategory::from_metadata(&meta);
+            assert_eq!(cat, FileCategory::Directory);
+        }
+    }
+
+    // TrackedFile tests
+    #[test]
+    fn test_tracked_file_not_open() {
+        let file = TrackedFile {
+            path: PathBuf::from("/tmp/test"),
+            size: 0,
+            accessed: None,
+            modified: None,
+            open_count: 0,
+            open_by: vec![],
+            inode: 0,
+            device: 0,
+        };
+        assert!(!file.is_open());
+    }
+
+    #[test]
+    fn test_tracked_file_time_since_access_none() {
+        let file = TrackedFile {
+            path: PathBuf::from("/tmp/test"),
+            size: 0,
+            accessed: None,
+            modified: None,
+            open_count: 0,
+            open_by: vec![],
+            inode: 0,
+            device: 0,
+        };
+        assert!(file.time_since_access().is_none());
+    }
+
+    #[test]
+    fn test_tracked_file_not_hot_no_access() {
+        let file = TrackedFile {
+            path: PathBuf::from("/tmp/test"),
+            size: 0,
+            accessed: None,
+            modified: None,
+            open_count: 0,
+            open_by: vec![],
+            inode: 0,
+            device: 0,
+        };
+        assert!(!file.is_hot(Duration::from_secs(60)));
+    }
+
+    #[test]
+    fn test_tracked_file_debug() {
+        let file = TrackedFile {
+            path: PathBuf::from("/test"),
+            size: 100,
+            accessed: None,
+            modified: None,
+            open_count: 0,
+            open_by: vec![],
+            inode: 0,
+            device: 0,
+        };
+        let debug = format!("{:?}", file);
+        assert!(debug.contains("TrackedFile"));
+    }
+
+    #[test]
+    fn test_tracked_file_clone() {
+        let file = TrackedFile {
+            path: PathBuf::from("/test"),
+            size: 1000,
+            accessed: None,
+            modified: None,
+            open_count: 5,
+            open_by: vec![1, 2, 3],
+            inode: 123,
+            device: 1,
+        };
+        let cloned = file.clone();
+        assert_eq!(cloned.size, 1000);
+        assert_eq!(cloned.open_by.len(), 3);
+    }
+
+    #[test]
+    fn test_tracked_file_size_display_bytes() {
+        let file = TrackedFile {
+            path: PathBuf::from("/test"),
+            size: 500,
+            accessed: None,
+            modified: None,
+            open_count: 0,
+            open_by: vec![],
+            inode: 0,
+            device: 0,
+        };
+        assert_eq!(file.size_display(), "500B");
+    }
+
+    #[test]
+    fn test_tracked_file_size_display_gb() {
+        let file = TrackedFile {
+            path: PathBuf::from("/test"),
+            size: 2 * 1024 * 1024 * 1024, // 2GB
+            accessed: None,
+            modified: None,
+            open_count: 0,
+            open_by: vec![],
+            inode: 0,
+            device: 0,
+        };
+        assert!(file.size_display().contains("G"));
+    }
+
+    // InodeStats tests
+    #[test]
+    fn test_inode_stats_default() {
+        let stats = InodeStats::default();
+        assert_eq!(stats.total, 0);
+        assert_eq!(stats.used, 0);
+        assert_eq!(stats.free, 0);
+        assert!(stats.mount_point.is_empty());
+    }
+
+    #[test]
+    fn test_inode_stats_usage_zero_total() {
+        let stats = InodeStats {
+            total: 0,
+            used: 0,
+            free: 0,
+            mount_point: "/".to_string(),
+        };
+        assert!((stats.usage_percent() - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_inode_stats_not_critical() {
+        let stats = InodeStats {
+            total: 1000,
+            used: 500,
+            free: 500,
+            mount_point: "/".to_string(),
+        };
+        assert!(!stats.is_critical());
+    }
+
+    #[test]
+    fn test_inode_stats_debug() {
+        let stats = InodeStats::default();
+        let debug = format!("{:?}", stats);
+        assert!(debug.contains("InodeStats"));
+    }
+
+    #[test]
+    fn test_inode_stats_clone() {
+        let stats = InodeStats {
+            total: 1000,
+            used: 100,
+            free: 900,
+            mount_point: "/home".to_string(),
+        };
+        let cloned = stats.clone();
+        assert_eq!(cloned.mount_point, "/home");
+    }
+
+    // FileAnalyzerData tests
+    #[test]
+    fn test_file_analyzer_data_default() {
+        let data = FileAnalyzerData::default();
+        assert!(data.hot_files.is_empty());
+        assert!(data.open_files.is_empty());
+        assert!(data.inode_stats.is_empty());
+        assert_eq!(data.total_open_files, 0);
+        assert_eq!(data.total_hot_files, 0);
+    }
+
+    #[test]
+    fn test_file_analyzer_data_top_hot_files() {
+        let data = FileAnalyzerData {
+            hot_files: vec![
+                TrackedFile {
+                    path: PathBuf::from("/a"),
+                    size: 0,
+                    accessed: None,
+                    modified: None,
+                    open_count: 0,
+                    open_by: vec![],
+                    inode: 0,
+                    device: 0,
+                },
+                TrackedFile {
+                    path: PathBuf::from("/b"),
+                    size: 0,
+                    accessed: None,
+                    modified: None,
+                    open_count: 0,
+                    open_by: vec![],
+                    inode: 0,
+                    device: 0,
+                },
+            ],
+            open_files: HashMap::new(),
+            inode_stats: HashMap::new(),
+            total_open_files: 0,
+            total_hot_files: 2,
+        };
+        let top: Vec<_> = data.top_hot_files(1).collect();
+        assert_eq!(top.len(), 1);
+    }
+
+    #[test]
+    fn test_file_analyzer_data_files_by_pid() {
+        let mut open_files = HashMap::new();
+        open_files.insert(
+            PathBuf::from("/test"),
+            TrackedFile {
+                path: PathBuf::from("/test"),
+                size: 0,
+                accessed: None,
+                modified: None,
+                open_count: 1,
+                open_by: vec![1234],
+                inode: 0,
+                device: 0,
+            },
+        );
+        let data = FileAnalyzerData {
+            hot_files: vec![],
+            open_files,
+            inode_stats: HashMap::new(),
+            total_open_files: 1,
+            total_hot_files: 0,
+        };
+        let files: Vec<_> = data.files_by_pid(1234).collect();
+        assert_eq!(files.len(), 1);
+        let no_files: Vec<_> = data.files_by_pid(9999).collect();
+        assert_eq!(no_files.len(), 0);
+    }
+
+    #[test]
+    fn test_file_analyzer_data_debug() {
+        let data = FileAnalyzerData::default();
+        let debug = format!("{:?}", data);
+        assert!(debug.contains("FileAnalyzerData"));
+    }
+
+    #[test]
+    fn test_file_analyzer_data_clone() {
+        let data = FileAnalyzerData {
+            hot_files: vec![],
+            open_files: HashMap::new(),
+            inode_stats: HashMap::new(),
+            total_open_files: 10,
+            total_hot_files: 5,
+        };
+        let cloned = data.clone();
+        assert_eq!(cloned.total_open_files, 10);
+    }
+
+    // FileAnalyzer tests
+    #[test]
+    fn test_file_analyzer_default() {
+        let analyzer = FileAnalyzer::default();
+        assert_eq!(analyzer.name(), "file_analyzer");
+    }
+
+    #[test]
+    fn test_file_analyzer_data() {
+        let analyzer = FileAnalyzer::new();
+        let data = analyzer.data();
+        assert!(data.hot_files.is_empty());
+    }
+
+    #[test]
+    fn test_file_analyzer_interval() {
+        let analyzer = FileAnalyzer::new();
+        let interval = analyzer.interval();
+        assert_eq!(interval.as_secs(), 5);
+    }
+
+    #[test]
+    fn test_file_analyzer_set_hot_threshold() {
+        let mut analyzer = FileAnalyzer::new();
+        analyzer.set_hot_threshold(Duration::from_secs(120));
+        // Hot threshold is private, but we can test it via hot file detection
+    }
+
+    #[test]
+    fn test_file_analyzer_scan_open_files() {
+        let analyzer = FileAnalyzer::new();
+        let files = analyzer.scan_open_files();
+        // Should return some open files on a Linux system
+        let _ = files.len();
+    }
+
+    #[test]
+    fn test_file_analyzer_get_inode_stats() {
+        let analyzer = FileAnalyzer::new();
+        let stats = analyzer.get_inode_stats();
+        // Should return inode stats for mounted filesystems
+        let _ = stats.len();
+    }
+
+    #[test]
+    fn test_file_analyzer_identify_hot_files() {
+        let analyzer = FileAnalyzer::new();
+        let open_files = HashMap::new();
+        let hot = analyzer.identify_hot_files(&open_files);
+        assert!(hot.is_empty());
+    }
+
+    #[test]
+    fn test_file_analyzer_multiple_collects() {
+        let mut analyzer = FileAnalyzer::new();
+        let _ = analyzer.collect();
+        let _ = analyzer.collect();
+        let _ = analyzer.collect();
+        // Should not panic
+    }
+
+    // format_size tests
+    #[test]
+    fn test_format_size_zero() {
+        assert_eq!(format_size(0), "0B");
+    }
+
+    #[test]
+    fn test_format_size_kb() {
+        assert_eq!(format_size(1024), "1.0K");
+    }
+
+    #[test]
+    fn test_format_size_mb() {
+        assert_eq!(format_size(1024 * 1024), "1.0M");
+    }
+
+    #[test]
+    fn test_format_size_gb() {
+        assert_eq!(format_size(1024 * 1024 * 1024), "1.0G");
+    }
+
+    #[test]
+    fn test_format_size_large_gb() {
+        assert_eq!(format_size(10 * 1024 * 1024 * 1024), "10.0G");
+    }
 }

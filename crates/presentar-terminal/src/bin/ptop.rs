@@ -1,9 +1,6 @@
 //! ptop: System monitor using presentar-terminal widget composition
 //!
 //! Run: cargo run -p presentar-terminal --features ptop --bin ptop
-//!
-//! v1: Legacy mode (2800 lines, 83 `draw_text` calls)
-//! v2: Widget composition (250 lines, 0 `draw_text` calls) - use --v2 flag
 
 #![allow(clippy::struct_excessive_bools)]
 #![allow(clippy::unnecessary_debug_formatting)]
@@ -19,9 +16,8 @@ use crossterm::{
     terminal::{self, ClearType},
 };
 
-use presentar_core::{Rect, Widget};
-use presentar_terminal::direct::{CellBuffer, DiffRenderer, DirectTerminalCanvas};
-use presentar_terminal::ptop::{config::PtopConfig, ui, App, PanelType, PtopView};
+use presentar_terminal::direct::{CellBuffer, DiffRenderer};
+use presentar_terminal::ptop::{config::PtopConfig, ui, App, PanelType};
 use presentar_terminal::ColorMode;
 
 /// Presentar System Monitor - widget composition demo
@@ -51,10 +47,6 @@ struct Cli {
     /// Terminal height for render-once mode
     #[arg(long, default_value = "40")]
     height: u16,
-
-    /// Use v2 widget composition mode (default: v1 legacy mode)
-    #[arg(long)]
-    v2: bool,
 
     /// Path to custom config file (YAML)
     #[arg(short, long, value_name = "PATH")]
@@ -134,7 +126,6 @@ fn main() -> io::Result<()> {
         app,
         cli.refresh,
         color_mode,
-        cli.v2,
         cli.qa_timing,
     );
 
@@ -170,18 +161,19 @@ fn render_once(app: &App, width: u16, height: u16) -> io::Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
+#[allow(clippy::items_after_statements)]
 fn run_app(
     stdout: &mut io::Stdout,
     mut app: App,
     refresh_ms: u64,
     color_mode: ColorMode,
-    use_v2: bool,
     qa_timing: bool,
 ) -> io::Result<()> {
     use presentar_terminal::ptop::app::MetricsCollector;
     use presentar_terminal::AsyncCollector;
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-    use std::sync::mpsc;
+    use std::sync::{mpsc, Arc};
 
     let mut renderer = DiffRenderer::with_color_mode(color_mode);
 
@@ -235,7 +227,6 @@ fn run_app(
     let mut render_times: Vec<u64> = Vec::with_capacity(100);
     let mut qa_report_interval = Instant::now();
 
-    use std::sync::Arc;
     loop {
         // PRIORITY 1: Process ALL pending input events (non-blocking)
         let input_start = Instant::now();
@@ -273,15 +264,7 @@ fn run_app(
         // Render frame - direct access to app, no lock!
         let render_start = Instant::now();
         let mut buffer = CellBuffer::new(width, height);
-        if use_v2 {
-            let mut view = PtopView::from_app(&app);
-            let bounds = Rect::new(0.0, 0.0, f32::from(width), f32::from(height));
-            view.layout(bounds);
-            let mut canvas = DirectTerminalCanvas::new(&mut buffer);
-            view.paint(&mut canvas);
-        } else {
-            ui::draw(&app, &mut buffer);
-        }
+        ui::draw(&app, &mut buffer);
         let render_dur = render_start.elapsed();
         if qa_timing {
             render_times.push(render_dur.as_micros() as u64);

@@ -705,4 +705,155 @@ mod tests {
             ScatterPlot::new(vec![(1.0, 2.0), (3.0, 4.0)]).with_marker(MarkerStyle::Diamond);
         assert!(matches!(scatter.marker, MarkerStyle::Diamond));
     }
+
+    #[test]
+    fn test_scatter_set_points() {
+        let mut scatter = ScatterPlot::new(vec![(0.0, 0.0)]);
+        assert_eq!(scatter.points.len(), 1);
+        scatter.set_points(vec![(1.0, 1.0), (2.0, 2.0), (3.0, 3.0)]);
+        assert_eq!(scatter.points.len(), 3);
+    }
+
+    #[test]
+    fn test_scatter_with_axes_false() {
+        let mut scatter = ScatterPlot::new(vec![(0.0, 0.0), (10.0, 10.0)]).with_axes(false);
+        assert!(!scatter.show_axes);
+        let bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+        scatter.layout(bounds);
+        let mut buffer = CellBuffer::new(60, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        scatter.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_scatter_nan_values() {
+        let mut scatter = ScatterPlot::new(vec![(0.0, 0.0), (f64::NAN, f64::NAN), (2.0, 2.0)]);
+        let bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+        scatter.layout(bounds);
+        let mut buffer = CellBuffer::new(60, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        scatter.paint(&mut canvas); // Should not panic
+    }
+
+    #[test]
+    fn test_scatter_infinite_values() {
+        let mut scatter =
+            ScatterPlot::new(vec![(0.0, 0.0), (f64::INFINITY, f64::NEG_INFINITY), (2.0, 2.0)]);
+        let bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+        scatter.layout(bounds);
+        let mut buffer = CellBuffer::new(60, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        scatter.paint(&mut canvas); // Should not panic
+    }
+
+    #[test]
+    fn test_scatter_color_range_no_color_by() {
+        let scatter = ScatterPlot::new(vec![(0.0, 0.0), (1.0, 1.0)]);
+        let (c_min, c_max) = scatter.color_range();
+        assert_eq!(c_min, 0.0);
+        assert_eq!(c_max, 1.0);
+    }
+
+    #[test]
+    fn test_scatter_color_range_with_values() {
+        let scatter = ScatterPlot::new(vec![(0.0, 0.0), (1.0, 1.0), (2.0, 2.0)])
+            .with_color_by(vec![5.0, 10.0, 15.0], Gradient::two(Color::BLUE, Color::RED));
+        let (c_min, c_max) = scatter.color_range();
+        assert_eq!(c_min, 5.0);
+        assert_eq!(c_max, 15.0);
+    }
+
+    #[test]
+    fn test_scatter_color_range_empty_values() {
+        let scatter = ScatterPlot::new(vec![(0.0, 0.0)])
+            .with_color_by(vec![], Gradient::two(Color::BLUE, Color::RED));
+        let (c_min, c_max) = scatter.color_range();
+        // Empty values results in default range
+        assert_eq!(c_min, 0.0);
+        assert_eq!(c_max, 1.0);
+    }
+
+    #[test]
+    fn test_scatter_color_by_fewer_values_than_points() {
+        // More points than color values - fallback to default color
+        let mut scatter = ScatterPlot::new(vec![(0.0, 0.0), (1.0, 1.0), (2.0, 2.0)])
+            .with_color_by(vec![0.0, 1.0], Gradient::two(Color::BLUE, Color::RED));
+        let bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+        scatter.layout(bounds);
+        let mut buffer = CellBuffer::new(60, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        scatter.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_scatter_same_x_values() {
+        // When all x values are the same
+        let mut scatter = ScatterPlot::new(vec![(5.0, 0.0), (5.0, 5.0), (5.0, 10.0)]);
+        let bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+        scatter.layout(bounds);
+        let (x_min, x_max) = scatter.x_range();
+        // Same x values, with padding
+        let mut buffer = CellBuffer::new(60, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        scatter.paint(&mut canvas);
+        let _ = (x_min, x_max);
+    }
+
+    #[test]
+    fn test_scatter_same_y_values() {
+        // When all y values are the same
+        let mut scatter = ScatterPlot::new(vec![(0.0, 5.0), (5.0, 5.0), (10.0, 5.0)]);
+        let bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+        scatter.layout(bounds);
+        let mut buffer = CellBuffer::new(60, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        scatter.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_scatter_too_small_bounds() {
+        let mut scatter = ScatterPlot::new(vec![(0.0, 0.0), (1.0, 1.0)]);
+        let bounds = Rect::new(0.0, 0.0, 5.0, 3.0);
+        scatter.layout(bounds);
+        let mut buffer = CellBuffer::new(5, 3);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        scatter.paint(&mut canvas); // Should early return
+    }
+
+    #[test]
+    fn test_scatter_children_mut() {
+        let mut scatter = ScatterPlot::default();
+        assert!(scatter.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_scatter_measure() {
+        let scatter = ScatterPlot::default();
+        let size = scatter.measure(Constraints {
+            min_width: 0.0,
+            min_height: 0.0,
+            max_width: 100.0,
+            max_height: 50.0,
+        });
+        assert_eq!(size.width, 60.0);
+        assert_eq!(size.height, 20.0);
+    }
+
+    #[test]
+    fn test_scatter_clone() {
+        let original = ScatterPlot::new(vec![(1.0, 2.0), (3.0, 4.0)])
+            .with_marker(MarkerStyle::Star)
+            .with_color(Color::GREEN);
+        let cloned = original.clone();
+        assert_eq!(cloned.points.len(), 2);
+        assert_eq!(cloned.color, Color::GREEN);
+        assert!(matches!(cloned.marker, MarkerStyle::Star));
+    }
+
+    #[test]
+    fn test_scatter_debug() {
+        let scatter = ScatterPlot::default();
+        let debug = format!("{:?}", scatter);
+        assert!(debug.contains("ScatterPlot"));
+    }
 }

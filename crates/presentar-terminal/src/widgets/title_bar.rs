@@ -465,6 +465,11 @@ impl Widget for TitleBar {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+    // =========================================================================
+    // CREATION & BUILDER TESTS
+    // =========================================================================
 
     #[test]
     fn test_title_bar_creation() {
@@ -476,6 +481,59 @@ mod tests {
         assert_eq!(bar.version, Some("1.0.0".to_string()));
         assert_eq!(bar.search_placeholder, "Filter...");
     }
+
+    #[test]
+    fn test_title_bar_default() {
+        let bar = TitleBar::default();
+        assert_eq!(bar.app_name, "TUI");
+        assert!(bar.version.is_none());
+        assert!(!bar.search_active);
+        assert!(bar.keybinds.is_empty());
+        assert_eq!(bar.position, TitleBarPosition::Top);
+        assert_eq!(bar.style, TitleBarStyle::Standard);
+    }
+
+    #[test]
+    fn test_title_bar_with_search_text() {
+        let bar = TitleBar::new("test").with_search_text("filter");
+        assert_eq!(bar.search_text, "filter");
+    }
+
+    #[test]
+    fn test_title_bar_with_search_active() {
+        let bar = TitleBar::new("test").with_search_active(true);
+        assert!(bar.search_active);
+    }
+
+    #[test]
+    fn test_title_bar_with_primary_color() {
+        let color = Color::new(1.0, 0.0, 0.0, 1.0);
+        let bar = TitleBar::new("test").with_primary_color(color);
+        assert_eq!(bar.primary_color, color);
+    }
+
+    #[test]
+    fn test_title_bar_with_secondary_color() {
+        let color = Color::new(0.0, 1.0, 0.0, 1.0);
+        let bar = TitleBar::new("test").with_secondary_color(color);
+        assert_eq!(bar.secondary_color, color);
+    }
+
+    #[test]
+    fn test_title_bar_with_mode_indicator() {
+        let bar = TitleBar::new("test").with_mode_indicator("[FULLSCREEN]");
+        assert_eq!(bar.mode_indicator, Some("[FULLSCREEN]".to_string()));
+    }
+
+    #[test]
+    fn test_title_bar_with_position() {
+        let bar = TitleBar::new("test").with_position(TitleBarPosition::Bottom);
+        assert_eq!(bar.position, TitleBarPosition::Bottom);
+    }
+
+    // =========================================================================
+    // SEARCH TESTS
+    // =========================================================================
 
     #[test]
     fn test_title_bar_search() {
@@ -490,12 +548,35 @@ mod tests {
     }
 
     #[test]
+    fn test_title_bar_toggle_search_twice() {
+        let mut bar = TitleBar::new("test");
+        bar.toggle_search();
+        assert!(bar.is_search_active());
+        bar.toggle_search();
+        assert!(!bar.is_search_active());
+    }
+
+    // =========================================================================
+    // KEYBINDS TESTS
+    // =========================================================================
+
+    #[test]
     fn test_title_bar_keybinds() {
         let bar = TitleBar::new("test").with_keybinds(&[("q", "Quit"), ("?", "Help")]);
 
         assert_eq!(bar.keybinds.len(), 2);
         assert_eq!(bar.keybinds[0], ("q".to_string(), "Quit".to_string()));
     }
+
+    #[test]
+    fn test_title_bar_keybinds_empty() {
+        let bar = TitleBar::new("test").with_keybinds(&[]);
+        assert!(bar.keybinds.is_empty());
+    }
+
+    // =========================================================================
+    // STYLE TESTS
+    // =========================================================================
 
     #[test]
     fn test_title_bar_styles() {
@@ -507,6 +588,20 @@ mod tests {
         assert_eq!(standard.style, TitleBarStyle::Standard);
         assert_eq!(detailed.style, TitleBarStyle::Detailed);
     }
+
+    #[test]
+    fn test_title_bar_position_default() {
+        assert_eq!(TitleBarPosition::default(), TitleBarPosition::Top);
+    }
+
+    #[test]
+    fn test_title_bar_style_default() {
+        assert_eq!(TitleBarStyle::default(), TitleBarStyle::Standard);
+    }
+
+    // =========================================================================
+    // STATUS TESTS
+    // =========================================================================
 
     #[test]
     fn test_title_bar_status() {
@@ -522,5 +617,291 @@ mod tests {
 
         assert_eq!(bar.status_text, Some("Connected".to_string()));
         assert!(bar.status_color.is_some());
+    }
+
+    // =========================================================================
+    // BRICK TRAIT TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_title_bar_brick_name() {
+        let bar = TitleBar::new("test");
+        assert_eq!(bar.brick_name(), "title_bar");
+    }
+
+    #[test]
+    fn test_title_bar_assertions() {
+        let bar = TitleBar::new("test");
+        let assertions = bar.assertions();
+        assert!(!assertions.is_empty());
+    }
+
+    #[test]
+    fn test_title_bar_budget() {
+        let bar = TitleBar::new("test");
+        let budget = bar.budget();
+        assert!(budget.total_ms > 0);
+    }
+
+    #[test]
+    fn test_title_bar_verify() {
+        let bar = TitleBar::new("test");
+        let verification = bar.verify();
+        assert!(!verification.passed.is_empty());
+        assert!(verification.failed.is_empty());
+    }
+
+    #[test]
+    fn test_title_bar_to_html() {
+        let bar = TitleBar::new("ptop").with_search_text("filter");
+        let html = bar.to_html();
+        assert!(html.contains("ptop"));
+        assert!(html.contains("filter"));
+        assert!(html.contains("title-bar"));
+    }
+
+    #[test]
+    fn test_title_bar_to_css() {
+        let bar = TitleBar::new("ptop").with_search_text("filter");
+        let css = bar.to_css();
+        assert!(css.contains("ptop"));
+        assert!(css.contains("filter"));
+    }
+
+    // =========================================================================
+    // WIDGET TRAIT TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_title_bar_type_id() {
+        let bar = TitleBar::new("test");
+        let id = Widget::type_id(&bar);
+        assert_eq!(id, TypeId::of::<TitleBar>());
+    }
+
+    #[test]
+    fn test_title_bar_measure() {
+        let bar = TitleBar::new("test");
+        let constraints = Constraints::loose(Size::new(100.0, 50.0));
+        let size = bar.measure(constraints);
+        assert_eq!(size.width, 100.0);
+        assert_eq!(size.height, 1.0);
+    }
+
+    #[test]
+    fn test_title_bar_layout() {
+        let mut bar = TitleBar::new("test");
+        let bounds = Rect::new(0.0, 0.0, 100.0, 1.0);
+        let result = bar.layout(bounds);
+        assert_eq!(result.size.width, 100.0);
+        assert_eq!(result.size.height, 1.0);
+        assert_eq!(bar.bounds, bounds);
+    }
+
+    #[test]
+    fn test_title_bar_paint_standard() {
+        let mut buffer = CellBuffer::new(100, 5);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+
+        let mut bar = TitleBar::new("ptop")
+            .with_version("1.0.0")
+            .with_keybinds(&[("q", "Quit")]);
+        bar.layout(Rect::new(0.0, 0.0, 100.0, 1.0));
+        bar.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_title_bar_paint_minimal() {
+        let mut buffer = CellBuffer::new(100, 5);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+
+        let mut bar = TitleBar::new("ptop").with_style(TitleBarStyle::Minimal);
+        bar.layout(Rect::new(0.0, 0.0, 100.0, 1.0));
+        bar.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_title_bar_paint_with_search_active() {
+        let mut buffer = CellBuffer::new(100, 5);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+
+        let mut bar = TitleBar::new("ptop").with_search_active(true);
+        bar.layout(Rect::new(0.0, 0.0, 100.0, 1.0));
+        bar.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_title_bar_paint_with_search_text() {
+        let mut buffer = CellBuffer::new(100, 5);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+
+        let mut bar = TitleBar::new("ptop").with_search_text("filter text");
+        bar.layout(Rect::new(0.0, 0.0, 100.0, 1.0));
+        bar.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_title_bar_paint_with_long_search_text() {
+        let mut buffer = CellBuffer::new(100, 5);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+
+        let mut bar = TitleBar::new("ptop")
+            .with_search_text("this is a very long search text that should be truncated");
+        bar.layout(Rect::new(0.0, 0.0, 100.0, 1.0));
+        bar.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_title_bar_paint_with_mode_indicator() {
+        let mut buffer = CellBuffer::new(100, 5);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+
+        let mut bar = TitleBar::new("ptop").with_mode_indicator("[FULLSCREEN]");
+        bar.layout(Rect::new(0.0, 0.0, 100.0, 1.0));
+        bar.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_title_bar_paint_with_status() {
+        let mut buffer = CellBuffer::new(100, 5);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+
+        let mut bar =
+            TitleBar::new("ptop").with_status("Connected", Color::new(0.0, 1.0, 0.0, 1.0));
+        bar.layout(Rect::new(0.0, 0.0, 100.0, 1.0));
+        bar.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_title_bar_paint_too_small() {
+        let mut buffer = CellBuffer::new(10, 5);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+
+        let mut bar = TitleBar::new("ptop");
+        bar.layout(Rect::new(0.0, 0.0, 5.0, 1.0)); // Too small
+        bar.paint(&mut canvas); // Should return early
+    }
+
+    // =========================================================================
+    // EVENT HANDLING TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_title_bar_event_slash_activates_search() {
+        let mut bar = TitleBar::new("test");
+        assert!(!bar.search_active);
+
+        let event = Event::KeyDown { key: Key::Slash };
+        bar.event(&event);
+        assert!(bar.search_active);
+    }
+
+    #[test]
+    fn test_title_bar_event_slash_ignored_when_active() {
+        let mut bar = TitleBar::new("test").with_search_active(true);
+
+        let event = Event::KeyDown { key: Key::Slash };
+        bar.event(&event);
+        assert!(bar.search_active); // Still active
+    }
+
+    #[test]
+    fn test_title_bar_event_escape_deactivates_search() {
+        let mut bar = TitleBar::new("test")
+            .with_search_active(true)
+            .with_search_text("filter");
+
+        let event = Event::KeyDown { key: Key::Escape };
+        bar.event(&event);
+        assert!(!bar.search_active);
+        assert!(bar.search_text.is_empty()); // Cleared
+    }
+
+    #[test]
+    fn test_title_bar_event_escape_ignored_when_inactive() {
+        let mut bar = TitleBar::new("test");
+
+        let event = Event::KeyDown { key: Key::Escape };
+        bar.event(&event);
+        assert!(!bar.search_active);
+    }
+
+    #[test]
+    fn test_title_bar_event_enter_deactivates_search() {
+        let mut bar = TitleBar::new("test")
+            .with_search_active(true)
+            .with_search_text("filter");
+
+        let event = Event::KeyDown { key: Key::Enter };
+        bar.event(&event);
+        assert!(!bar.search_active);
+        assert_eq!(bar.search_text, "filter"); // Preserved
+    }
+
+    #[test]
+    fn test_title_bar_event_backspace_deletes_char() {
+        let mut bar = TitleBar::new("test")
+            .with_search_active(true)
+            .with_search_text("filter");
+
+        let event = Event::KeyDown {
+            key: Key::Backspace,
+        };
+        bar.event(&event);
+        assert_eq!(bar.search_text, "filte");
+    }
+
+    #[test]
+    fn test_title_bar_event_backspace_on_empty() {
+        let mut bar = TitleBar::new("test").with_search_active(true);
+
+        let event = Event::KeyDown {
+            key: Key::Backspace,
+        };
+        bar.event(&event);
+        assert!(bar.search_text.is_empty());
+    }
+
+    #[test]
+    fn test_title_bar_event_text_input() {
+        let mut bar = TitleBar::new("test").with_search_active(true);
+
+        let event = Event::TextInput {
+            text: "hello".to_string(),
+        };
+        bar.event(&event);
+        assert_eq!(bar.search_text, "hello");
+    }
+
+    #[test]
+    fn test_title_bar_event_text_input_ignored_when_inactive() {
+        let mut bar = TitleBar::new("test");
+
+        let event = Event::TextInput {
+            text: "hello".to_string(),
+        };
+        bar.event(&event);
+        assert!(bar.search_text.is_empty());
+    }
+
+    #[test]
+    fn test_title_bar_event_unhandled() {
+        let mut bar = TitleBar::new("test");
+
+        let event = Event::KeyDown { key: Key::Tab };
+        let result = bar.event(&event);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_title_bar_children() {
+        let bar = TitleBar::new("test");
+        assert!(bar.children().is_empty());
+    }
+
+    #[test]
+    fn test_title_bar_children_mut() {
+        let mut bar = TitleBar::new("test");
+        assert!(bar.children_mut().is_empty());
     }
 }

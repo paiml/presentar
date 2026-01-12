@@ -63,6 +63,106 @@ impl PanelType {
     }
 }
 
+/// Unix signals for process control (SPEC-024 Appendix G.6 P0)
+/// Matches ttop's SignalType for feature parity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignalType {
+    /// SIGTERM (15) - Graceful termination
+    Term,
+    /// SIGKILL (9) - Force kill
+    Kill,
+    /// SIGHUP (1) - Hangup / reload config
+    Hup,
+    /// SIGINT (2) - Interrupt
+    Int,
+    /// SIGUSR1 (10) - User-defined signal 1
+    Usr1,
+    /// SIGUSR2 (12) - User-defined signal 2
+    Usr2,
+    /// SIGSTOP (19) - Pause process
+    Stop,
+    /// SIGCONT (18) - Continue paused process
+    Cont,
+}
+
+impl SignalType {
+    /// Get the Unix signal number
+    #[cfg(unix)]
+    pub fn number(&self) -> i32 {
+        match self {
+            SignalType::Term => 15,
+            SignalType::Kill => 9,
+            SignalType::Hup => 1,
+            SignalType::Int => 2,
+            SignalType::Usr1 => 10,
+            SignalType::Usr2 => 12,
+            SignalType::Stop => 19,
+            SignalType::Cont => 18,
+        }
+    }
+
+    #[cfg(not(unix))]
+    pub fn number(&self) -> i32 {
+        0
+    }
+
+    /// Get the display name
+    pub fn name(&self) -> &'static str {
+        match self {
+            SignalType::Term => "TERM",
+            SignalType::Kill => "KILL",
+            SignalType::Hup => "HUP",
+            SignalType::Int => "INT",
+            SignalType::Usr1 => "USR1",
+            SignalType::Usr2 => "USR2",
+            SignalType::Stop => "STOP",
+            SignalType::Cont => "CONT",
+        }
+    }
+
+    /// Get key binding for this signal
+    pub fn key(&self) -> char {
+        match self {
+            SignalType::Term => 'x',
+            SignalType::Kill => 'K',
+            SignalType::Hup => 'H',
+            SignalType::Int => 'i',
+            SignalType::Usr1 => '1',
+            SignalType::Usr2 => '2',
+            SignalType::Stop => 'p',
+            SignalType::Cont => 'c',
+        }
+    }
+
+    /// Get description for help display
+    pub fn description(&self) -> &'static str {
+        match self {
+            SignalType::Term => "Graceful shutdown",
+            SignalType::Kill => "Force kill (cannot be caught)",
+            SignalType::Hup => "Reload config / hangup",
+            SignalType::Int => "Interrupt (like Ctrl+C)",
+            SignalType::Usr1 => "User signal 1",
+            SignalType::Usr2 => "User signal 2",
+            SignalType::Stop => "Pause process",
+            SignalType::Cont => "Resume paused process",
+        }
+    }
+
+    /// All available signals
+    pub fn all() -> &'static [SignalType] {
+        &[
+            SignalType::Term,
+            SignalType::Kill,
+            SignalType::Hup,
+            SignalType::Int,
+            SignalType::Usr1,
+            SignalType::Usr2,
+            SignalType::Stop,
+            SignalType::Cont,
+        ]
+    }
+}
+
 /// Detail level for adaptive panel rendering
 /// Reference: SPEC-024 Section 17.3
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -95,7 +195,7 @@ impl DetailLevel {
 }
 
 /// Layout type for panel arrangement
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum LayoutType {
     /// Adaptive grid with automatic column distribution
     #[default]
@@ -109,7 +209,7 @@ pub enum LayoutType {
 }
 
 /// Focus indicator style
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum FocusStyle {
     /// Double-line border (ttop default)
     #[default]
@@ -123,7 +223,7 @@ pub enum FocusStyle {
 }
 
 /// Histogram style for CPU/Memory bars
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum HistogramStyle {
     /// Braille characters (highest resolution)
     #[default]
@@ -878,5 +978,389 @@ min_panel_width: 30
         let config = PtopConfig::default();
         // No config files exist, should return None
         assert!(config.check_reload().is_none());
+    }
+
+    // SignalType tests
+    #[test]
+    fn test_signal_type_term() {
+        assert_eq!(SignalType::Term.name(), "TERM");
+        assert_eq!(SignalType::Term.key(), 'x');
+        assert!(SignalType::Term.description().contains("Graceful"));
+        #[cfg(unix)]
+        assert_eq!(SignalType::Term.number(), 15);
+    }
+
+    #[test]
+    fn test_signal_type_kill() {
+        assert_eq!(SignalType::Kill.name(), "KILL");
+        assert_eq!(SignalType::Kill.key(), 'K');
+        assert!(SignalType::Kill.description().contains("Force"));
+        #[cfg(unix)]
+        assert_eq!(SignalType::Kill.number(), 9);
+    }
+
+    #[test]
+    fn test_signal_type_hup() {
+        assert_eq!(SignalType::Hup.name(), "HUP");
+        assert_eq!(SignalType::Hup.key(), 'H');
+        #[cfg(unix)]
+        assert_eq!(SignalType::Hup.number(), 1);
+    }
+
+    #[test]
+    fn test_signal_type_int() {
+        assert_eq!(SignalType::Int.name(), "INT");
+        assert_eq!(SignalType::Int.key(), 'i');
+        #[cfg(unix)]
+        assert_eq!(SignalType::Int.number(), 2);
+    }
+
+    #[test]
+    fn test_signal_type_usr1() {
+        assert_eq!(SignalType::Usr1.name(), "USR1");
+        assert_eq!(SignalType::Usr1.key(), '1');
+        #[cfg(unix)]
+        assert_eq!(SignalType::Usr1.number(), 10);
+    }
+
+    #[test]
+    fn test_signal_type_usr2() {
+        assert_eq!(SignalType::Usr2.name(), "USR2");
+        assert_eq!(SignalType::Usr2.key(), '2');
+        #[cfg(unix)]
+        assert_eq!(SignalType::Usr2.number(), 12);
+    }
+
+    #[test]
+    fn test_signal_type_stop() {
+        assert_eq!(SignalType::Stop.name(), "STOP");
+        assert_eq!(SignalType::Stop.key(), 'p');
+        #[cfg(unix)]
+        assert_eq!(SignalType::Stop.number(), 19);
+    }
+
+    #[test]
+    fn test_signal_type_cont() {
+        assert_eq!(SignalType::Cont.name(), "CONT");
+        assert_eq!(SignalType::Cont.key(), 'c');
+        #[cfg(unix)]
+        assert_eq!(SignalType::Cont.number(), 18);
+    }
+
+    #[test]
+    fn test_signal_type_all() {
+        let all = SignalType::all();
+        assert_eq!(all.len(), 8);
+        assert_eq!(all[0], SignalType::Term);
+        assert_eq!(all[7], SignalType::Cont);
+    }
+
+    #[test]
+    fn test_signal_type_debug() {
+        let sig = SignalType::Kill;
+        let debug = format!("{:?}", sig);
+        assert!(debug.contains("Kill"));
+    }
+
+    #[test]
+    fn test_signal_type_clone() {
+        let sig = SignalType::Stop;
+        let cloned = sig.clone();
+        assert_eq!(sig, cloned);
+    }
+
+    // PanelType tests
+    #[test]
+    fn test_panel_type_all() {
+        let all = PanelType::all();
+        assert_eq!(all.len(), 12);
+        assert_eq!(all[0], PanelType::Cpu);
+        assert_eq!(all[11], PanelType::Containers);
+    }
+
+    #[test]
+    fn test_panel_type_debug() {
+        let panel = PanelType::Memory;
+        let debug = format!("{:?}", panel);
+        assert!(debug.contains("Memory"));
+    }
+
+    #[test]
+    fn test_panel_type_clone() {
+        let panel = PanelType::Disk;
+        let cloned = panel.clone();
+        assert_eq!(panel, cloned);
+    }
+
+    #[test]
+    fn test_panel_type_hash() {
+        let mut map = HashMap::new();
+        map.insert(PanelType::Cpu, "CPU");
+        map.insert(PanelType::Memory, "MEM");
+        assert_eq!(map.get(&PanelType::Cpu), Some(&"CPU"));
+    }
+
+    // DetailLevel tests
+    #[test]
+    fn test_detail_level_ordering() {
+        assert!(DetailLevel::Minimal < DetailLevel::Compact);
+        assert!(DetailLevel::Compact < DetailLevel::Normal);
+        assert!(DetailLevel::Normal < DetailLevel::Expanded);
+        assert!(DetailLevel::Expanded < DetailLevel::Exploded);
+    }
+
+    #[test]
+    fn test_detail_level_debug() {
+        let level = DetailLevel::Normal;
+        let debug = format!("{:?}", level);
+        assert!(debug.contains("Normal"));
+    }
+
+    #[test]
+    fn test_detail_level_clone() {
+        let level = DetailLevel::Expanded;
+        let cloned = level.clone();
+        assert_eq!(level, cloned);
+    }
+
+    // LayoutType tests
+    #[test]
+    fn test_layout_type_default() {
+        let layout = LayoutType::default();
+        assert_eq!(layout, LayoutType::AdaptiveGrid);
+    }
+
+    #[test]
+    fn test_layout_type_debug() {
+        let layout = LayoutType::Flexbox;
+        let debug = format!("{:?}", layout);
+        assert!(debug.contains("Flexbox"));
+    }
+
+    // FocusStyle tests
+    #[test]
+    fn test_focus_style_default() {
+        let style = FocusStyle::default();
+        assert_eq!(style, FocusStyle::DoubleBorder);
+    }
+
+    #[test]
+    fn test_focus_style_debug() {
+        let style = FocusStyle::Pulse;
+        let debug = format!("{:?}", style);
+        assert!(debug.contains("Pulse"));
+    }
+
+    // HistogramStyle tests
+    #[test]
+    fn test_histogram_style_default() {
+        let style = HistogramStyle::default();
+        assert_eq!(style, HistogramStyle::Braille);
+    }
+
+    #[test]
+    fn test_histogram_style_debug() {
+        let style = HistogramStyle::Block;
+        let debug = format!("{:?}", style);
+        assert!(debug.contains("Block"));
+    }
+
+    // PanelConfig tests
+    #[test]
+    fn test_panel_config_default() {
+        let config = PanelConfig::default();
+        assert!(config.enabled);
+        assert!(!config.auto_detect);
+        assert_eq!(config.span, 1);
+        assert!(config.auto_expand);
+        assert!(config.show_temperature);
+        assert!(config.show_frequency);
+        assert_eq!(config.max_processes, 5);
+        assert_eq!(config.sparkline_history, 60);
+    }
+
+    #[test]
+    fn test_panel_config_debug() {
+        let config = PanelConfig::default();
+        let debug = format!("{:?}", config);
+        assert!(debug.contains("PanelConfig"));
+    }
+
+    #[test]
+    fn test_panel_config_clone() {
+        let config = PanelConfig {
+            enabled: false,
+            max_processes: 10,
+            ..Default::default()
+        };
+        let cloned = config.clone();
+        assert!(!cloned.enabled);
+        assert_eq!(cloned.max_processes, 10);
+    }
+
+    // LayoutConfig tests
+    #[test]
+    fn test_layout_config_default() {
+        let config = LayoutConfig::default();
+        assert!(config.snap_to_grid);
+        assert_eq!(config.grid_size, 1);
+        assert_eq!(config.min_panel_width, 20);
+        assert_eq!(config.min_panel_height, 6);
+    }
+
+    #[test]
+    fn test_layout_config_debug() {
+        let config = LayoutConfig::default();
+        let debug = format!("{:?}", config);
+        assert!(debug.contains("LayoutConfig"));
+    }
+
+    // ThemeConfig tests
+    #[test]
+    fn test_theme_config_default() {
+        let config = ThemeConfig::default();
+        assert!(config.borders.contains_key("cpu"));
+        assert!(config.borders.contains_key("memory"));
+        assert_eq!(config.background, "default");
+        assert_eq!(config.focus_indicator, FocusStyle::DoubleBorder);
+    }
+
+    #[test]
+    fn test_theme_config_debug() {
+        let config = ThemeConfig::default();
+        let debug = format!("{:?}", config);
+        assert!(debug.contains("ThemeConfig"));
+    }
+
+    // KeybindingConfig tests
+    #[test]
+    fn test_keybinding_config_default() {
+        let config = KeybindingConfig::default();
+        assert_eq!(config.toggle_panel, "1-9");
+        assert!(config.quit.contains(&"q".to_string()));
+    }
+
+    #[test]
+    fn test_keybinding_config_debug() {
+        let config = KeybindingConfig::default();
+        let debug = format!("{:?}", config);
+        assert!(debug.contains("KeybindingConfig"));
+    }
+
+    // PtopConfig tests
+    #[test]
+    fn test_ptop_config_panel() {
+        let config = PtopConfig::default();
+        let cpu = config.panel(PanelType::Cpu);
+        assert!(cpu.enabled);
+    }
+
+    #[test]
+    fn test_ptop_config_panel_unknown() {
+        // Test fallback when panel type not in map
+        let mut config = PtopConfig::default();
+        config.panels.clear();
+        let panel = config.panel(PanelType::Cpu);
+        assert!(panel.enabled); // Default fallback
+    }
+
+    #[test]
+    fn test_ptop_config_debug() {
+        let config = PtopConfig::default();
+        let debug = format!("{:?}", config);
+        assert!(debug.contains("PtopConfig"));
+    }
+
+    #[test]
+    fn test_ptop_config_default_yaml() {
+        let yaml = PtopConfig::default_yaml();
+        assert!(yaml.contains("refresh_ms"));
+        assert!(yaml.contains("layout"));
+        assert!(yaml.contains("panels"));
+        assert!(yaml.contains("keybindings"));
+    }
+
+    #[test]
+    fn test_ptop_config_paths() {
+        let paths = PtopConfig::config_paths();
+        // May be empty if HOME not set, or may have entries
+        for path in &paths {
+            assert!(path.to_string_lossy().contains("ptop"));
+        }
+    }
+
+    #[test]
+    fn test_ptop_config_load_from_file_nonexistent() {
+        let result = PtopConfig::load_from_file(std::path::Path::new("/nonexistent/path.yaml"));
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_ptop_config_load_defaults_on_missing_file() {
+        // Should return default config
+        let config = PtopConfig::load();
+        assert_eq!(config.refresh_ms, 1000);
+    }
+
+    // PanelRect tests
+    #[test]
+    fn test_panel_rect_debug() {
+        let rect = PanelRect {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 50,
+        };
+        let debug = format!("{:?}", rect);
+        assert!(debug.contains("PanelRect"));
+    }
+
+    #[test]
+    fn test_panel_rect_clone() {
+        let rect = PanelRect {
+            x: 10,
+            y: 20,
+            width: 30,
+            height: 40,
+        };
+        let cloned = rect.clone();
+        assert_eq!(cloned.x, 10);
+        assert_eq!(cloned.y, 20);
+    }
+
+    // Grid layout edge cases
+    #[test]
+    fn test_calculate_grid_layout_zero_panels() {
+        let config = LayoutConfig::default();
+        let rects = calculate_grid_layout(0, 120, 40, &config);
+        assert!(rects.is_empty());
+    }
+
+    #[test]
+    fn test_calculate_grid_layout_five_panels() {
+        // 5 panels: row 1 gets 3, row 2 gets 2
+        let config = LayoutConfig::default();
+        let rects = calculate_grid_layout(5, 120, 40, &config);
+        assert_eq!(rects.len(), 5);
+    }
+
+    #[test]
+    fn test_snap_to_grid_zero() {
+        assert_eq!(snap_to_grid(0, 0), 0);
+        assert_eq!(snap_to_grid(10, 0), 10);
+    }
+
+    // Parse yaml edge cases
+    #[test]
+    fn test_parse_yaml_empty() {
+        let config = PtopConfig::parse_yaml("").unwrap();
+        assert_eq!(config.refresh_ms, 1000); // Default
+    }
+
+    #[test]
+    fn test_parse_yaml_only_comments() {
+        let yaml = "# comment\n# another comment\n";
+        let config = PtopConfig::parse_yaml(yaml).unwrap();
+        assert_eq!(config.refresh_ms, 1000); // Default
     }
 }

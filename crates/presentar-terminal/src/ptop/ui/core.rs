@@ -10,14 +10,17 @@
 
 use crate::direct::{CellBuffer, DirectTerminalCanvas};
 use crate::{
-    Border, BorderStyle, BrailleGraph, GraphMode, NetworkInterface, NetworkPanel, ProcessEntry,
-    ProcessState, ProcessTable, TitleBar, Treemap, TreemapNode,
+    Border, BorderStyle, BrailleGraph, CpuGrid, GraphMode, NetworkInterface, NetworkPanel,
+    ProcessEntry, ProcessState, ProcessTable, TitleBar, Treemap, TreemapNode,
 };
 use presentar_core::{Canvas, Color, Point, Rect, TextStyle, Widget};
 
-use super::analyzers::TcpState;
-use super::app::App;
-use super::config::{calculate_grid_layout, snap_to_grid, DetailLevel, PanelType};
+use crate::ptop::analyzers::{ContainerState, SensorStatus, SensorType, TcpState};
+use crate::ptop::app::{App, ProcessSortColumn};
+use crate::ptop::config::{calculate_grid_layout, snap_to_grid, DetailLevel, PanelType};
+// Atomic widget helpers (available for incremental adoption)
+#[allow(unused_imports)]
+use crate::ptop::ui_atoms::{draw_colored_text, severity_color, usage_color};
 
 // ttop panel border colors (exact RGB values from theme.rs)
 const CPU_COLOR: Color = Color {
@@ -108,39 +111,29 @@ const NET_TX_COLOR: Color = Color {
 }; // Red (upload)
 
 // =============================================================================
-// PATTERN 5 HYBRID: Focus/Navigation Colors (WCAG AAA Compliant)
+// TUFTE-INSPIRED SELECTION: Use framework widgets from widgets/selection.rs
 // =============================================================================
-/// Bright cyan for focus indicators (cursor, selected row, focused border)
-const FOCUS_ACCENT_COLOR: Color = Color {
-    r: 0.0,
-    g: 1.0,
-    b: 1.0,
-    a: 1.0,
-}; // #00FFFF - High visibility cyan
+use crate::widgets::selection::{SELECTION_ACCENT, SELECTION_BG};
 
-/// Row selection background (blue tint, visible but not overwhelming)
-const ROW_SELECT_BG: Color = Color {
-    r: 0.15,
-    g: 0.25,
-    b: 0.4,
-    a: 1.0,
-}; // Dark blue background
+// Re-export for local use (framework-first design)
+const FOCUS_ACCENT_COLOR: Color = SELECTION_ACCENT;
+const ROW_SELECT_BG: Color = SELECTION_BG;
 
-/// Column header selection background
+/// Column header selection background (slightly different from row)
 const COL_SELECT_BG: Color = Color {
-    r: 0.2,
-    g: 0.35,
-    b: 0.55,
+    r: 0.15,
+    g: 0.4,
+    b: 0.65,
     a: 1.0,
-}; // Brighter blue for headers
+};
 
 /// Status bar background
 const STATUS_BAR_BG: Color = Color {
-    r: 0.1,
-    g: 0.1,
-    b: 0.15,
+    r: 0.08,
+    g: 0.08,
+    b: 0.12,
     a: 1.0,
-}; // Dark gray
+};
 
 /// btop-style color gradient for percentage values (0-100)
 /// Uses smooth transition: cyan -> green -> yellow -> orange -> red
@@ -290,6 +283,42 @@ fn create_panel_border(title: &str, color: Color, is_focused: bool) -> Border {
         .with_style(style)
         .with_color(border_color)
         .with_title_left_aligned()
+}
+
+/// FRAMEWORK-LEVEL: Paint a panel with automatic clipping
+///
+/// This function:
+/// 1. Creates and paints the border
+/// 2. Pushes a clip region for the inner content area
+/// 3. Calls the content painter closure
+/// 4. Pops the clip region
+///
+/// All panel content is automatically constrained to the inner bounds,
+/// preventing text overflow into adjacent panels.
+#[allow(dead_code)] // Framework function for future use
+fn paint_panel_with_clip<F>(
+    canvas: &mut DirectTerminalCanvas<'_>,
+    title: &str,
+    color: Color,
+    is_focused: bool,
+    bounds: Rect,
+    content_painter: F,
+) where
+    F: FnOnce(&mut DirectTerminalCanvas<'_>, Rect),
+{
+    let mut border = create_panel_border(title, color, is_focused);
+    border.layout(bounds);
+    border.paint(canvas);
+    let inner = border.inner_rect();
+
+    if inner.height < 1.0 || inner.width < 1.0 {
+        return;
+    }
+
+    // Push clip to constrain content to panel bounds
+    canvas.push_clip(inner);
+    content_painter(canvas, inner);
+    canvas.pop_clip();
 }
 
 /// ZRAM statistics from /sys/block/zram*
@@ -510,6 +539,11 @@ pub fn draw(app: &App, buffer: &mut CellBuffer) {
         draw_help_overlay(&mut canvas, w, h);
     }
 
+    // Signal confirmation dialog (SPEC-024 Appendix G.6 P0)
+    if app.pending_signal.is_some() {
+        draw_signal_dialog(app, &mut canvas, w, h);
+    }
+
     if app.show_filter_input {
         draw_filter_overlay(app, &mut canvas, w, h);
     }
@@ -619,18 +653,18 @@ fn draw_status_bar(app: &App, canvas: &mut DirectTerminalCanvas<'_>, w: f32, h: 
     // PATTERN 5: Prominent focused panel indicator on right with ► cursor
     if let Some(panel) = app.focused_panel {
         let panel_name = match panel {
-            super::config::PanelType::Cpu => "CPU",
-            super::config::PanelType::Memory => "Memory",
-            super::config::PanelType::Disk => "Disk",
-            super::config::PanelType::Network => "Network",
-            super::config::PanelType::Process => "Process",
-            super::config::PanelType::Gpu => "GPU",
-            super::config::PanelType::Battery => "Battery",
-            super::config::PanelType::Sensors => "Sensors",
-            super::config::PanelType::Files => "Files",
-            super::config::PanelType::Connections => "Connections",
-            super::config::PanelType::Psi => "PSI",
-            super::config::PanelType::Containers => "Containers",
+            PanelType::Cpu => "CPU",
+            PanelType::Memory => "Memory",
+            PanelType::Disk => "Disk",
+            PanelType::Network => "Network",
+            PanelType::Process => "Process",
+            PanelType::Gpu => "GPU",
+            PanelType::Battery => "Battery",
+            PanelType::Sensors => "Sensors",
+            PanelType::Files => "Files",
+            PanelType::Connections => "Connections",
+            PanelType::Psi => "PSI",
+            PanelType::Containers => "Containers",
         };
         // Prominent focus indicator: "► CPU"
         let focus_text = format!("► {panel_name} ");
@@ -718,17 +752,48 @@ fn draw_top_panels(app: &App, canvas: &mut DirectTerminalCanvas<'_>, area: Rect)
         if app.panels.network {
             panels.push(draw_network_panel);
         }
+        // GPU: use display rules (SPEC-024 Appendix F)
         if app.panels.gpu {
-            panels.push(draw_gpu_panel);
+            use crate::widgets::DisplayAction;
+            match app.evaluate_panel_display(PanelType::Gpu) {
+                DisplayAction::Show | DisplayAction::Expand => panels.push(draw_gpu_panel),
+                DisplayAction::Hide => {}
+                DisplayAction::Compact | DisplayAction::ShowPlaceholder(_) => {
+                    panels.push(draw_gpu_panel)
+                }
+            }
         }
+        // Sensors: use display rules (SPEC-024 Appendix F)
         if app.panels.sensors {
-            panels.push(draw_sensors_panel);
+            use crate::widgets::DisplayAction;
+            match app.evaluate_panel_display(PanelType::Sensors) {
+                DisplayAction::Show | DisplayAction::Expand => panels.push(draw_sensors_panel),
+                DisplayAction::Hide => {}
+                DisplayAction::Compact => panels.push(draw_sensors_compact_panel),
+                DisplayAction::ShowPlaceholder(_) => panels.push(draw_sensors_panel),
+            }
         }
+        // PSI: use display rules - hide if not available (SPEC-024 Appendix F)
         if app.panels.psi {
-            panels.push(draw_psi_panel);
+            use crate::widgets::DisplayAction;
+            match app.evaluate_panel_display(PanelType::Psi) {
+                DisplayAction::Show | DisplayAction::Expand => panels.push(draw_psi_panel),
+                DisplayAction::Hide => {} // Desktop without PSI: don't show
+                DisplayAction::Compact | DisplayAction::ShowPlaceholder(_) => {
+                    panels.push(draw_psi_panel)
+                }
+            }
         }
+        // Battery: use display rules - hide on desktop (SPEC-024 Appendix F)
         if app.panels.battery {
-            panels.push(draw_battery_panel);
+            use crate::widgets::DisplayAction;
+            match app.evaluate_panel_display(PanelType::Battery) {
+                DisplayAction::Show | DisplayAction::Expand => panels.push(draw_battery_panel),
+                DisplayAction::Hide => {} // Desktop without battery: don't show
+                DisplayAction::Compact | DisplayAction::ShowPlaceholder(_) => {
+                    panels.push(draw_battery_panel)
+                }
+            }
         }
         if app.panels.sensors_compact {
             panels.push(draw_sensors_compact_panel);
@@ -812,6 +877,7 @@ fn build_cpu_title_compact(
 }
 
 /// Calculate CPU meter layout parameters.
+#[allow(dead_code)] // Fields used in calculation, stored for potential future reference
 struct CpuMeterLayout {
     bar_len: usize,
     meter_bar_width: f32,
@@ -919,9 +985,7 @@ fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
 
         // Calculate meter layout using helper
         let layout = CpuMeterLayout::calculate(core_count, core_area_height, is_exploded);
-        let bar_len = layout.bar_len;
         let meter_bar_width = layout.meter_bar_width;
-        let cores_per_col = layout.cores_per_col;
         let num_meter_cols = layout.num_meter_cols;
 
         // In exploded mode, allow meters to take up to 70% of width
@@ -929,155 +993,21 @@ fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
         let meters_width =
             (num_meter_cols as f32 * meter_bar_width).min(inner.width * max_meter_ratio);
 
-        // Check if we can fit all cores - if not, show summary mode
-        let visible_cols = (meters_width / meter_bar_width) as usize;
-        let visible_cores = visible_cols * cores_per_col;
-        let use_summary_mode = visible_cores < core_count && core_count > 8;
+        // FRAMEWORK INTEGRATION: Use CpuGrid widget instead of manual drawing
+        let mut grid = CpuGrid::new(app.per_core_percent.clone())
+            .with_frequencies(
+                app.per_core_freq.iter().map(|&f| f as u32).collect(),
+                vec![max_freq_mhz as u32; core_count],
+            )
+            .with_freq_indicators();
 
-        // Get per-core temperatures from sensor data (like ttop)
-        // Look for sensors with labels like "Core 0", "Core 1", etc.
-        let core_temps: std::collections::HashMap<usize, f64> = app
-            .analyzers
-            .sensor_health_data()
-            .map(|data| {
-                data.temperatures()
-                    .filter_map(|s| {
-                        // Parse "Core X" from label
-                        if s.label.starts_with("Core ") {
-                            s.label
-                                .strip_prefix("Core ")
-                                .and_then(|n| n.parse::<usize>().ok())
-                                .map(|idx| (idx, s.value))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        if use_summary_mode {
-            // Summary mode for high core count in narrow panels
-            // Show utilization buckets instead of individual cores
-            let mut high = 0_usize; // >70%
-            let mut med = 0_usize; // 30-70%
-            let mut low = 0_usize; // 1-30%
-            let mut idle = 0_usize; // <1%
-
-            for &pct in &app.per_core_percent {
-                if pct > 70.0 {
-                    high += 1;
-                } else if pct > 30.0 {
-                    med += 1;
-                } else if pct > 1.0 {
-                    low += 1;
-                } else {
-                    idle += 1;
-                }
-            }
-
-            let summary_lines = [
-                (
-                    high,
-                    "▓",
-                    Color {
-                        r: 1.0,
-                        g: 0.4,
-                        b: 0.4,
-                        a: 1.0,
-                    },
-                    ">70%",
-                ),
-                (
-                    med,
-                    "▒",
-                    Color {
-                        r: 1.0,
-                        g: 0.8,
-                        b: 0.3,
-                        a: 1.0,
-                    },
-                    "30-70",
-                ),
-                (
-                    low,
-                    "░",
-                    Color {
-                        r: 0.5,
-                        g: 0.9,
-                        b: 0.5,
-                        a: 1.0,
-                    },
-                    "1-30",
-                ),
-                (
-                    idle,
-                    " ",
-                    Color {
-                        r: 0.4,
-                        g: 0.4,
-                        b: 0.5,
-                        a: 1.0,
-                    },
-                    "idle",
-                ),
-            ];
-
-            let mut y = inner.y;
-            for (count, _char, color, label) in summary_lines {
-                if count > 0 && y < inner.y + core_area_height {
-                    let text = format!("{count:>2}c {label}");
-                    canvas.draw_text(
-                        &text,
-                        Point::new(inner.x, y),
-                        &TextStyle {
-                            color,
-                            ..Default::default()
-                        },
-                    );
-                    y += 1.0;
-                }
-            }
-        } else {
-            // Draw per-core meters on left side (normal mode)
-            for (i, &percent) in app.per_core_percent.iter().enumerate() {
-                if cores_per_col == 0 {
-                    break;
-                }
-                let col = i / cores_per_col;
-                let row = i % cores_per_col;
-
-                let cell_x = inner.x + col as f32 * meter_bar_width;
-                let cell_y = inner.y + row as f32;
-
-                if cell_x + meter_bar_width > inner.x + meters_width
-                    || cell_y >= inner.y + core_area_height
-                {
-                    continue;
-                }
-
-                let color = percent_color(percent);
-                // bar_len is set above based on is_exploded (8 for exploded, 6 for normal)
-                let filled = ((percent / 100.0) * bar_len as f64) as usize;
-                let bar: String =
-                    "█".repeat(filled.min(bar_len)) + &"░".repeat(bar_len - filled.min(bar_len));
-
-                // ttop style: show temp if available, otherwise show percent
-                let label = if let Some(&temp) = core_temps.get(&i) {
-                    format!("{i:>2} {bar} {temp:>2.0}°")
-                } else {
-                    format!("{i:>2} {bar} {percent:>3.0}")
-                };
-                canvas.draw_text(
-                    &label,
-                    Point::new(cell_x, cell_y),
-                    &TextStyle {
-                        color,
-                        ..Default::default()
-                    },
-                );
-            }
+        if is_exploded {
+            grid = grid.with_percentages();
         }
+
+        // Layout and paint CpuGrid
+        grid.layout(Rect::new(inner.x, inner.y, meters_width, core_area_height));
+        grid.paint(canvas);
 
         // Draw graph on right side
         let graph_x = inner.x + meters_width + 1.0;
@@ -2345,24 +2275,12 @@ fn draw_network_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    // Inject app's network history into the primary interface for sparklines
-    // The history is normalized 0-1, scale back to approximate bytes/s for display
-    if let Some(primary) = interfaces.first_mut() {
-        // Convert normalized history (0-1) to scaled values for sparkline
-        // Max expected rate is 1GB/s, so multiply by 1e9 and scale for display
-        let max_rate = 1_000_000_000.0_f64;
-        primary.rx_history = app
-            .net_rx_history
-            .as_slice()
-            .iter()
-            .map(|&v| v * max_rate)
-            .collect();
-        primary.tx_history = app
-            .net_tx_history
-            .as_slice()
-            .iter()
-            .map(|&v| v * max_rate)
-            .collect();
+    // Inject per-interface history for sparklines (SPEC-024 Task 4)
+    for iface in interfaces.iter_mut() {
+        if let Some((rx_hist, tx_hist)) = app.net_iface_history.get(&iface.name) {
+            iface.rx_history = rx_hist.as_slice().to_vec();
+            iface.tx_history = tx_hist.as_slice().to_vec();
+        }
     }
 
     interfaces.truncate(4);
@@ -2383,11 +2301,11 @@ fn draw_network_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
 fn draw_process_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
     // ttop uses "CPU%" not "CPU" for percentage-based columns
     let sort_name = match app.sort_column {
-        super::app::ProcessSortColumn::Cpu => "CPU%",
-        super::app::ProcessSortColumn::Mem => "MEM%",
-        super::app::ProcessSortColumn::Pid => "PID",
-        super::app::ProcessSortColumn::User => "USER",
-        super::app::ProcessSortColumn::Command => "CMD",
+        ProcessSortColumn::Cpu => "CPU%",
+        ProcessSortColumn::Mem => "MEM%",
+        ProcessSortColumn::Pid => "PID",
+        ProcessSortColumn::User => "USER",
+        ProcessSortColumn::Command => "CMD",
     };
     let arrow = if app.sort_descending { "▼" } else { "▲" };
     let filter_str = if app.filter.is_empty() {
@@ -2533,7 +2451,7 @@ fn draw_process_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
 
 fn draw_help_overlay(canvas: &mut DirectTerminalCanvas<'_>, w: f32, h: f32) {
     let popup_w = 55.0;
-    let popup_h = 24.0; // Expanded for new keybindings
+    let popup_h = 27.0; // Expanded for signal keybindings (SPEC-024 Appendix G.6)
     let px = (w - popup_w) / 2.0;
     let py = (h - popup_h) / 2.0;
 
@@ -2570,7 +2488,7 @@ fn draw_help_overlay(canvas: &mut DirectTerminalCanvas<'_>, w: f32, h: f32) {
         ..Default::default()
     };
 
-    // Help content with section headers (SPEC-024 v5.0 Feature D keybindings)
+    // Help content with section headers (SPEC-024 v5.0 Feature D, Appendix G.6)
     let help_lines: &[(&str, &str, bool)] = &[
         ("", "-- General --", true),
         ("q, Esc, Ctrl+C", "Quit", false),
@@ -2589,6 +2507,9 @@ fn draw_help_overlay(canvas: &mut DirectTerminalCanvas<'_>, w: f32, h: f32) {
         ("r", "Reverse sort", false),
         ("/, f", "Filter processes", false),
         ("Delete", "Clear filter", false),
+        ("", "-- Signals --", true),
+        ("x", "SIGTERM (graceful stop)", false),
+        ("X", "SIGKILL (force kill)", false),
         ("", "-- Panels --", true),
         ("1-5", "Toggle panels", false),
         ("0", "Reset panels", false),
@@ -2603,6 +2524,94 @@ fn draw_help_overlay(canvas: &mut DirectTerminalCanvas<'_>, w: f32, h: f32) {
             canvas.draw_text(desc, Point::new(px + 18.0, y), &text_style);
         }
     }
+}
+
+/// Draw signal confirmation dialog (SPEC-024 Appendix G.6 P0)
+fn draw_signal_dialog(app: &App, canvas: &mut DirectTerminalCanvas<'_>, w: f32, h: f32) {
+    use crate::ptop::config::SignalType;
+
+    let Some((pid, ref name, signal)) = app.pending_signal else {
+        return;
+    };
+
+    let popup_w = 50.0;
+    let popup_h = 7.0;
+    let px = (w - popup_w) / 2.0;
+    let py = (h - popup_h) / 2.0;
+
+    // Clear background
+    for y in 0..popup_h as u16 {
+        let spaces: String = (0..popup_w as usize).map(|_| ' ').collect();
+        canvas.draw_text(
+            &spaces,
+            Point::new(px, py + y as f32),
+            &TextStyle {
+                color: Color::new(0.15, 0.1, 0.1, 1.0),
+                ..Default::default()
+            },
+        );
+    }
+
+    // Border color based on signal severity
+    let border_color = match signal {
+        SignalType::Kill => Color::new(1.0, 0.3, 0.3, 1.0), // Red for SIGKILL
+        SignalType::Term => Color::new(1.0, 0.8, 0.2, 1.0), // Yellow for SIGTERM
+        SignalType::Stop => Color::new(0.8, 0.4, 1.0, 1.0), // Purple for SIGSTOP
+        _ => Color::new(0.3, 0.8, 0.9, 1.0),                // Cyan for others
+    };
+
+    let mut border = Border::new()
+        .with_title(format!(" Send SIG{} ", signal.name()))
+        .with_style(BorderStyle::Double)
+        .with_color(border_color);
+    border.layout(Rect::new(px, py, popup_w, popup_h));
+    border.paint(canvas);
+
+    let text_style = TextStyle {
+        color: Color::new(0.9, 0.9, 0.9, 1.0),
+        ..Default::default()
+    };
+    let warning_style = TextStyle {
+        color: border_color,
+        ..Default::default()
+    };
+    let hint_style = TextStyle {
+        color: Color::new(0.6, 0.6, 0.6, 1.0),
+        ..Default::default()
+    };
+
+    // Truncate process name if too long
+    let max_name_len = 25;
+    let display_name = if name.len() > max_name_len {
+        format!("{}...", &name[..max_name_len - 3])
+    } else {
+        name.clone()
+    };
+
+    // Dialog content
+    canvas.draw_text(
+        &format!("Process: {} (PID {})", display_name, pid),
+        Point::new(px + 2.0, py + 1.0),
+        &text_style,
+    );
+    canvas.draw_text(
+        &format!("Signal: {} - {}", signal.name(), signal.description()),
+        Point::new(px + 2.0, py + 2.0),
+        &warning_style,
+    );
+
+    // Confirmation prompt
+    canvas.draw_text("", Point::new(px + 2.0, py + 3.0), &text_style);
+    canvas.draw_text(
+        "Send signal? [Y]es / [n]o / [Esc] cancel",
+        Point::new(px + 2.0, py + 4.0),
+        &text_style,
+    );
+    canvas.draw_text(
+        "x=TERM  K=KILL  H=HUP  i=INT  p=STOP",
+        Point::new(px + 2.0, py + 5.0),
+        &hint_style,
+    );
 }
 
 fn draw_filter_overlay(app: &App, canvas: &mut DirectTerminalCanvas<'_>, w: f32, h: f32) {
@@ -2795,6 +2804,9 @@ fn draw_gpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
     if inner.height < 1.0 {
         return;
     }
+
+    // FRAMEWORK: Push clip to constrain all content to panel bounds
+    canvas.push_clip(inner);
 
     if let Some(g) = gpu {
         let mut y = inner.y;
@@ -3055,6 +3067,9 @@ fn draw_gpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
         );
     }
     // In deterministic mode with no GPU, leave panel interior empty (like ttop)
+
+    // FRAMEWORK: Pop clip to restore previous clip region
+    canvas.pop_clip();
 }
 
 /// Battery information from /`sys/class/power_supply`
@@ -3252,7 +3267,7 @@ fn draw_battery_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
 
 /// F008: Sensors Panel - shows temperature sensors with health indicators
 fn draw_sensors_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
-    use super::analyzers::{SensorStatus, SensorType};
+    use crate::ptop::analyzers::{SensorStatus, SensorType};
     use sysinfo::{Component, Components};
 
     // In deterministic mode, show 0°C like ttop
@@ -3268,7 +3283,7 @@ fn draw_sensors_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
     };
 
     // Get additional sensor data from analyzer (fan RPM, voltage, etc.)
-    let sensor_health_data = app.analyzers.sensor_health_data();
+    let sensor_health_data = app.snapshot_sensor_health.as_ref();
 
     // Build title with max temp and fan/voltage count
     let extra_info = if let Some(health_data) = sensor_health_data {
@@ -3556,14 +3571,14 @@ fn draw_containers_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bound
             let mut y = inner.y;
             for container in data.containers.iter().take(inner.height as usize) {
                 let status_icon = match container.state {
-                    super::analyzers::ContainerState::Running => "●",
-                    super::analyzers::ContainerState::Paused => "◐",
-                    super::analyzers::ContainerState::Exited => "○",
-                    super::analyzers::ContainerState::Created => "◎",
-                    super::analyzers::ContainerState::Restarting => "↻",
-                    super::analyzers::ContainerState::Removing => "⊘",
-                    super::analyzers::ContainerState::Dead => "✗",
-                    super::analyzers::ContainerState::Unknown => "?",
+                    ContainerState::Running => "●",
+                    ContainerState::Paused => "◐",
+                    ContainerState::Exited => "○",
+                    ContainerState::Created => "◎",
+                    ContainerState::Restarting => "↻",
+                    ContainerState::Removing => "⊘",
+                    ContainerState::Dead => "✗",
+                    ContainerState::Unknown => "?",
                 };
                 let name: String = container.name.chars().take(20).collect();
                 let cpu = container.stats.cpu_percent;
@@ -3770,9 +3785,9 @@ fn port_to_service(port: u16) -> &'static str {
 
 /// F012: Connections Panel - shows active network connections
 fn draw_connections_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
-    // Get connection data from analyzer
+    // Get connection data from snapshot (CB-INPUT-006: async pattern)
     let (listen_count, active_count, connections) =
-        if let Some(conn_data) = app.analyzers.connections_data() {
+        if let Some(ref conn_data) = app.snapshot_connections {
             let listen = conn_data
                 .connections
                 .iter()
@@ -3789,7 +3804,7 @@ fn draw_connections_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, boun
         };
 
     // Generate sparkline for connection history (CB-CONN-007)
-    let sparkline_str = if let Some(conn_data) = app.analyzers.connections_data() {
+    let sparkline_str = if let Some(ref conn_data) = app.snapshot_connections {
         let sparkline_data = conn_data.established_sparkline();
         if sparkline_data.len() >= 3 {
             // Use braille-style sparkline characters: ▁▂▃▄▅▆▇█
@@ -4334,19 +4349,44 @@ fn draw_treemap_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
     treemap.paint(canvas);
 }
 
-/// F014: Files Panel - file activity and large files (ttop style)
+/// F014: Files Panel - Tufte-style file/directory visualization
+///
+/// SPEC-024 Appendix F: Tufte Data-Ink Ratio
+/// - Every pixel must convey information
+/// - Proportional bars show relative size (no wasted ink)
+/// - Entropy indicators (🔒/🔓) show encryption status
+/// - Column layout uses format_column() to prevent bleeding
 fn draw_files_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
-    // Get treemap data if available
-    let treemap_data = app.analyzers.treemap_data();
+    use crate::widgets::display_rules::{format_column, ColumnAlign, TruncateStrategy};
 
-    // Calculate total size from treemap or disks
-    let total_size = treemap_data.map_or_else(
-        || app.disks.iter().map(sysinfo::Disk::total_space).sum(),
-        |d| d.total_size,
+    // Get data from snapshots (CB-INPUT-006: async pattern)
+    // Prioritize FileAnalyzer (fast /proc scan) over Treemap (slow / scan)
+    let file_data = app.snapshot_file_analyzer.as_ref();
+    let treemap_data = app.snapshot_treemap.as_ref();
+    let disk_entropy = app.snapshot_disk_entropy.as_ref();
+
+    // Calculate total size and file count
+    // If we have treemap data, it's more accurate for totals. Otherwise use disk info.
+    let (total_size, file_count): (u64, u32) = if let Some(t) = treemap_data {
+        (t.total_size, t.total_files)
+    } else {
+        (
+            app.disks.iter().map(sysinfo::Disk::total_space).sum(),
+            file_data.map_or(0, |f| f.total_open_files as u32),
+        )
+    };
+
+    // Encryption status from disk_entropy
+    let encrypted_count = disk_entropy.map_or(0, |d| d.encrypted_count);
+    let encryption_indicator = if encrypted_count > 0 { "🔒" } else { "" };
+
+    // ttop-style title
+    let title = format!(
+        "Files │ {} {} │ {} files",
+        format_bytes(total_size),
+        encryption_indicator,
+        file_count
     );
-
-    // ttop-style title (Border adds outer spaces)
-    let title = format!("Files │ {} total", format_bytes(total_size));
 
     // Check if this panel is focused (SPEC-024 v5.0 Feature D)
     let is_focused = app.is_panel_focused(PanelType::Files);
@@ -4359,18 +4399,13 @@ fn draw_files_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Re
         return;
     }
 
-    let dim_color = Color {
-        r: 0.5,
-        g: 0.5,
-        b: 0.5,
-        a: 1.0,
-    };
-    let file_color = Color {
-        r: 0.7,
-        g: 0.7,
-        b: 0.5,
-        a: 1.0,
-    };
+    let dim_color = Color::new(0.5, 0.5, 0.5, 1.0);
+    let file_color = Color::new(0.7, 0.7, 0.5, 1.0);
+    let dir_color = Color::new(0.5, 0.7, 0.9, 1.0);
+    let bg_color = Color::new(0.05, 0.05, 0.07, 1.0);
+
+    // CRITICAL: Clear panel area to prevent ghosting from previous frames
+    canvas.fill_rect(inner, bg_color);
 
     // In deterministic mode, ttop shows just "..." and empty lines
     if app.deterministic {
@@ -4385,10 +4420,18 @@ fn draw_files_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Re
         return;
     }
 
-    // Header
-    let header = "NAME                          SIZE";
+    // Tufte-style header: minimal, functional
+    let width = inner.width as usize;
+    let bar_width = 12.min(width.saturating_sub(20));
+    let name_width = width.saturating_sub(bar_width + 10);
+    let header = format!(
+        "{}{}  {}",
+        format_column("NAME", name_width, ColumnAlign::Left, TruncateStrategy::End),
+        format_column("SIZE", 7, ColumnAlign::Right, TruncateStrategy::End),
+        format_column("%", bar_width, ColumnAlign::Left, TruncateStrategy::End)
+    );
     canvas.draw_text(
-        header,
+        &header,
         Point::new(inner.x, inner.y),
         &TextStyle {
             color: FILES_COLOR,
@@ -4396,56 +4439,139 @@ fn draw_files_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Re
         },
     );
 
-    // Display top items from treemap
-    if let Some(data) = treemap_data {
-        let max_rows = (inner.height as usize).saturating_sub(1);
-        for (i, item) in data.top_items.iter().take(max_rows).enumerate() {
-            let y = inner.y + 1.0 + i as f32;
-            if y >= inner.y + inner.height {
-                break;
-            }
+    // Prepare items to display
+    // Mapped to a common structure: (name, size, is_dir, ratio)
+    struct DisplayItem {
+        name: String,
+        size: u64,
+        is_dir: bool,
+        ratio: f64,
+    }
 
-            // Truncate name if too long
-            let name = if item.name.len() > 26 {
-                format!("{}…", &item.name[..25])
-            } else {
-                item.name.clone()
-            };
-
-            // File icon based on type
-            let icon = if item.is_dir { "📁" } else { "📄" };
-
-            let line = format!("{} {:<25} {:>8}", icon, name, format_bytes(item.size));
-            canvas.draw_text(
-                &line,
-                Point::new(inner.x, y),
-                &TextStyle {
-                    color: file_color,
-                    ..Default::default()
-                },
-            );
-        }
-
-        if data.top_items.is_empty() {
-            canvas.draw_text(
-                "Scanning filesystem...",
-                Point::new(inner.x, inner.y + 1.0),
-                &TextStyle {
-                    color: dim_color,
-                    ..Default::default()
-                },
-            );
-        }
+    let items: Vec<DisplayItem> = if let Some(fd) = file_data {
+        // Use "Hot Files" from FileAnalyzer
+        // These are recently accessed files, sorted by access time
+        // We'll show them with ratio based on max size in the list
+        let max_size = fd
+            .hot_files
+            .iter()
+            .map(|f| f.size)
+            .max()
+            .unwrap_or(1)
+            .max(1);
+        fd.hot_files
+            .iter()
+            .take(inner.height as usize)
+            .map(|f| DisplayItem {
+                name: f
+                    .path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string(),
+                size: f.size,
+                is_dir: f.path.is_dir(),
+                ratio: (f.size as f64 / max_size as f64).min(1.0),
+            })
+            .collect()
+    } else if let Some(td) = treemap_data {
+        // Use "Top Items" from TreemapAnalyzer (by size)
+        let max_size = td.top_items.first().map_or(1, |i| i.size).max(1);
+        td.top_items
+            .iter()
+            .take(inner.height as usize)
+            .map(|i| DisplayItem {
+                name: i.name.clone(),
+                size: i.size,
+                is_dir: i.is_dir,
+                ratio: (i.size as f64 / max_size as f64).min(1.0),
+            })
+            .collect()
     } else {
-        // No treemap data available
+        Vec::new()
+    };
+
+    if items.is_empty() {
+        // No data available yet
+        let msg = if file_data.is_none() && treemap_data.is_none() {
+            "Scanning filesystem..."
+        } else {
+            "No files found"
+        };
         canvas.draw_text(
-            "Waiting for filesystem scan...",
+            msg,
             Point::new(inner.x, inner.y + 1.0),
             &TextStyle {
                 color: dim_color,
                 ..Default::default()
             },
         );
+    } else {
+        let max_rows = (inner.height as usize).saturating_sub(1);
+        for (i, item) in items.iter().take(max_rows).enumerate() {
+            let y = inner.y + 1.0 + i as f32;
+            if y >= inner.y + inner.height {
+                break;
+            }
+
+            // Color based on type
+            let item_color = if item.is_dir { dir_color } else { file_color };
+
+            // Truncate name to fit
+            let name = format_column(
+                &item.name,
+                name_width,
+                ColumnAlign::Left,
+                TruncateStrategy::Path,
+            );
+
+            // Size column
+            let size_str = format_column(
+                &format_bytes(item.size),
+                7,
+                ColumnAlign::Right,
+                TruncateStrategy::End,
+            );
+
+            // Tufte-style proportional bar (data-ink ratio: every char is data)
+            let filled = ((bar_width as f64 * item.ratio) as usize).max(1);
+            let bar: String = "█".repeat(filled) + &"░".repeat(bar_width.saturating_sub(filled));
+
+            // Draw name
+            canvas.draw_text(
+                &name,
+                Point::new(inner.x, y),
+                &TextStyle {
+                    color: item_color,
+                    ..Default::default()
+                },
+            );
+
+            // Draw size
+            canvas.draw_text(
+                &size_str,
+                Point::new(inner.x + name_width as f32, y),
+                &TextStyle {
+                    color: dim_color,
+                    ..Default::default()
+                },
+            );
+
+            // Draw proportional bar
+            canvas.draw_text(
+                &format!("  {}", bar),
+                Point::new(inner.x + name_width as f32 + 7.0, y),
+                &TextStyle {
+                    color: Color::new(
+                        0.4 + 0.4 * item.ratio as f32,
+                        0.6 - 0.3 * item.ratio as f32,
+                        0.3,
+                        1.0,
+                    ),
+                    ..Default::default()
+                },
+            );
+        }
     }
 }
 
@@ -4473,6 +4599,7 @@ fn draw_process_dataframe(app: &App, canvas: &mut DirectTerminalCanvas, area: Re
     use crate::widgets::display_rules::{
         format_column, format_percent, ColumnAlign, TruncateStrategy,
     };
+    use crate::HeatScheme;
 
     // Column widths: PID(7) USER(10) CPU%(8) MEM%(8) COMMAND(rest)
     // CRITICAL: All columns MUST use format_column() to prevent bleeding
@@ -4505,16 +4632,15 @@ fn draw_process_dataframe(app: &App, canvas: &mut DirectTerminalCanvas, area: Re
     canvas.fill_rect(Rect::new(x, y, area.width, 1.0), header_bg);
 
     let mut col_x = x;
+    // Clamp selected_column to valid range to prevent rendering artifacts
+    let valid_selected = app.selected_column.min(columns.len().saturating_sub(1));
     for (i, (col, label, width)) in columns.iter().enumerate() {
-        let is_selected = app.selected_column == i;
+        let is_selected = valid_selected == i;
         let is_sorted = app.sort_column == *col;
 
-        // Column selection highlight
+        // Column selection highlight (width only, no gap overlap)
         if is_selected {
-            canvas.fill_rect(
-                Rect::new(col_x, y, *width as f32 + 1.0, 1.0),
-                selected_col_bg,
-            );
+            canvas.fill_rect(Rect::new(col_x, y, *width as f32, 1.0), selected_col_bg);
         }
 
         // Header text with sort indicator (NEVER bleeds)
@@ -4655,8 +4781,19 @@ fn draw_process_dataframe(app: &App, canvas: &mut DirectTerminalCanvas, area: Re
         let is_selected = abs_idx == app.process_selected;
 
         // PATTERN 5 HYBRID: Row selection highlight with gutter cursor
+        // CRITICAL: Always paint row background to clear previous frame artifacts
+        // Terminal buffers retain previous pixels - must explicitly overwrite
         if is_selected {
             canvas.fill_rect(Rect::new(x, y, area.width, 1.0), selected_row_bg);
+        } else {
+            // Clear any previous selection artifact with default background
+            canvas.fill_rect(
+                Rect::new(x, y, area.width, 1.0),
+                Color::new(0.05, 0.05, 0.07, 1.0), // Dark terminal background
+            );
+        }
+
+        if is_selected {
             // Draw cursor indicator at start of row (▶ in gutter)
             canvas.draw_text(
                 "▶",
@@ -4708,18 +4845,15 @@ fn draw_process_dataframe(app: &App, canvas: &mut DirectTerminalCanvas, area: Re
         canvas.draw_text(&user, Point::new(col_x, y), &row_style);
         col_x += col_widths[1] as f32 + 1.0;
 
-        // CPU% with color gradient - right-aligned (NEVER bleeds)
+        // CPU% with thermal heat color encoding (Grammar of Graphics)
+        // Consistent with CoreStatsDataFrame and ProcessDataFrame widgets
         let cpu = proc.cpu_usage();
-        let cpu_color = if cpu > 80.0 {
-            Color::new(0.9, 0.2, 0.2, 1.0)
-        } else if cpu > 50.0 {
-            Color::new(0.9, 0.7, 0.1, 1.0)
-        } else if cpu > 10.0 {
-            Color::new(0.2, 0.8, 0.2, 1.0)
-        } else if is_selected {
+        let cpu_color = if is_selected {
+            // White text on blue selection background for readability
             Color::WHITE
         } else {
-            text_color
+            // Thermal heat scheme: green → yellow → red based on CPU usage
+            HeatScheme::Thermal.color_for_percent(cpu as f64)
         };
         let cpu_str = format_column(
             &format_percent(cpu),
@@ -4813,6 +4947,8 @@ fn draw_core_stats_dataframe(app: &App, canvas: &mut DirectTerminalCanvas, area:
     use crate::widgets::display_rules::{
         format_column, format_freq_mhz, format_percent, ColumnAlign, TruncateStrategy,
     };
+    use crate::widgets::selection::RowHighlight;
+    use crate::{HeatScheme, MicroHeatBar};
 
     // Column widths: CORE(4) FREQ(6) TEMP(5) USR%(5) SYS%(5) IO%(4) IDL%(5) BREAKDOWN(rest)
     let col_widths = [4usize, 6, 5, 5, 5, 4, 5];
@@ -4826,6 +4962,13 @@ fn draw_core_stats_dataframe(app: &App, canvas: &mut DirectTerminalCanvas, area:
     let user_color = Color::new(0.3, 0.7, 0.3, 1.0); // Green
     let sys_color = Color::new(0.9, 0.5, 0.2, 1.0); // Orange
     let io_color = Color::new(0.9, 0.2, 0.2, 1.0); // Red
+
+    // Selection state: use process_selected for row navigation in exploded view
+    let selected_row = if app.exploded_panel == Some(PanelType::Cpu) {
+        app.process_selected
+    } else {
+        usize::MAX // No selection in non-exploded mode
+    };
 
     let mut y = area.y;
     let x = area.x;
@@ -4882,11 +5025,22 @@ fn draw_core_stats_dataframe(app: &App, canvas: &mut DirectTerminalCanvas, area:
     // =========================================================================
     // DATA ROWS - one per core
     // Uses app.per_core_freq and app.per_core_temp (SPEC-024 async updates)
+    // Uses RowHighlight for selection, MicroHeatBar for breakdown (SPEC-024 v5.8)
     // =========================================================================
     let visible_rows = (area.height as usize).saturating_sub(2);
     let core_count = app.per_core_percent.len();
 
     for i in 0..core_count.min(visible_rows) {
+        // Draw row highlight FIRST (background)
+        let is_selected = i == selected_row;
+        let row_rect = Rect::new(x, y, area.width, 1.0);
+        let row_highlight = RowHighlight::new(row_rect, is_selected).with_gutter(is_selected);
+        row_highlight.paint(canvas);
+
+        // Get text style from highlight (selected = white text)
+        // Note: We keep semantic colors (user=green, sys=orange) regardless of selection
+        let _row_style = row_highlight.text_style();
+
         let mut col_x = x;
 
         // Get per-core percentage from async-updated app fields
@@ -4907,7 +5061,7 @@ fn draw_core_stats_dataframe(app: &App, canvas: &mut DirectTerminalCanvas, area:
             .copied()
             .filter(|&t| t > 0.0)
             .or_else(|| {
-                app.analyzers.sensor_health_data().and_then(|data| {
+                app.snapshot_sensor_health.as_ref().and_then(|data| {
                     data.temperatures()
                         .find(|s| s.label == format!("Core {i}"))
                         .map(|s| s.value as f32)
@@ -4956,14 +5110,11 @@ fn draw_core_stats_dataframe(app: &App, canvas: &mut DirectTerminalCanvas, area:
             ColumnAlign::Right,
             TruncateStrategy::End,
         );
+        // Use HeatScheme::Warm for temperature coloring (SPEC-024 framework requirement)
         let temp_color = temp.map_or(dim_color, |t| {
-            if t > 80.0 {
-                Color::new(0.9, 0.2, 0.2, 1.0)
-            } else if t > 60.0 {
-                Color::new(0.9, 0.7, 0.1, 1.0)
-            } else {
-                text_color
-            }
+            // Map temperature to percentage: 30°C = 0%, 100°C = 100%
+            let temp_pct = ((t - 30.0) / 70.0 * 100.0).clamp(0.0, 100.0);
+            HeatScheme::Warm.color_for_percent(temp_pct as f64)
         });
         canvas.draw_text(
             &temp_str,
@@ -5043,70 +5194,21 @@ fn draw_core_stats_dataframe(app: &App, canvas: &mut DirectTerminalCanvas, area:
         );
         col_x += col_widths[6] as f32 + 1.0;
 
-        // BREAKDOWN bar - stacked horizontal bar
+        // BREAKDOWN bar - using MicroHeatBar framework widget (SPEC-024 Section 30)
+        // MicroHeatBar provides: proportional encoding + heat coloring + Tufte principles
         if breakdown_width > 3 {
-            let bar_chars = breakdown_width.saturating_sub(1);
-            let user_chars = ((user_pct / 100.0) * bar_chars as f32).round() as usize;
-            let sys_chars = ((sys_pct / 100.0) * bar_chars as f32).round() as usize;
-            let io_chars = ((io_pct / 100.0) * bar_chars as f32).round() as usize;
+            let bar_width = breakdown_width.saturating_sub(1);
+            // MicroHeatBar shows usr/sys/io/idle proportionally with thermal coloring
+            let bar = MicroHeatBar::new(&[
+                user_pct as f64,
+                sys_pct as f64,
+                io_pct as f64,
+                idle_pct as f64,
+            ])
+            .with_width(bar_width)
+            .with_scheme(HeatScheme::Thermal);
 
-            let mut bar_x = col_x;
-
-            // User portion (green)
-            if user_chars > 0 {
-                let user_bar = "█".repeat(user_chars);
-                canvas.draw_text(
-                    &user_bar,
-                    Point::new(bar_x, y),
-                    &TextStyle {
-                        color: user_color,
-                        ..Default::default()
-                    },
-                );
-                bar_x += user_chars as f32;
-            }
-
-            // System portion (orange)
-            if sys_chars > 0 {
-                let sys_bar = "█".repeat(sys_chars);
-                canvas.draw_text(
-                    &sys_bar,
-                    Point::new(bar_x, y),
-                    &TextStyle {
-                        color: sys_color,
-                        ..Default::default()
-                    },
-                );
-                bar_x += sys_chars as f32;
-            }
-
-            // IO portion (red)
-            if io_chars > 0 {
-                let io_bar = "█".repeat(io_chars);
-                canvas.draw_text(
-                    &io_bar,
-                    Point::new(bar_x, y),
-                    &TextStyle {
-                        color: io_color,
-                        ..Default::default()
-                    },
-                );
-                bar_x += io_chars as f32;
-            }
-
-            // Idle portion (dim)
-            let used_chars = user_chars + sys_chars + io_chars;
-            if used_chars < bar_chars {
-                let idle_bar = "░".repeat(bar_chars - used_chars);
-                canvas.draw_text(
-                    &idle_bar,
-                    Point::new(bar_x, y),
-                    &TextStyle {
-                        color: dim_color,
-                        ..Default::default()
-                    },
-                );
-            }
+            bar.paint(canvas, Point::new(col_x, y));
         }
 
         y += 1.0;
@@ -5222,7 +5324,7 @@ fn draw_cpu_exploded(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect) {
     let mut status = SystemStatus::new(load.one, load.five, load.fifteen, core_count);
 
     // Add thermal data if available
-    if let Some(sensor_data) = app.analyzers.sensor_health_data() {
+    if let Some(sensor_data) = app.snapshot_sensor_health.as_ref() {
         let temps: Vec<f64> = sensor_data
             .temperatures()
             .filter(|s| s.label.starts_with("Core "))
@@ -5240,17 +5342,1589 @@ fn draw_cpu_exploded(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect) {
     status.paint(canvas);
 }
 
+/// Draw Memory panel in exploded (fullscreen) mode - SPEC-024 Section 30
+///
+/// FRAMEWORK REQUIREMENTS:
+/// - Uses RowHighlight for selection
+/// - Uses MicroHeatBar for breakdown visualization
+/// - Uses HeatScheme::Cool for memory coloring
+/// - Uses display_rules for ALL formatting
+/// - FILLS THE ENTIRE SCREEN
+#[allow(clippy::too_many_lines)]
+fn draw_memory_exploded(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect) {
+    use crate::widgets::display_rules::{
+        format_bytes_si, format_column, format_percent, ColumnAlign, TruncateStrategy,
+    };
+    use crate::widgets::selection::RowHighlight;
+    use crate::HeatScheme;
+
+    let gb = |b: u64| b as f64 / 1024.0 / 1024.0 / 1024.0;
+    let mem_pct = if app.mem_total > 0 {
+        (app.mem_used as f64 / app.mem_total as f64) * 100.0
+    } else {
+        0.0
+    };
+
+    // Build title with full details for exploded mode
+    let title = format!(
+        "Memory │ {:.1}G / {:.1}G ({:.0}%) │ Swap: {:.1}G / {:.1}G │ Cached: {:.1}G │ [FULLSCREEN]",
+        gb(app.mem_used),
+        gb(app.mem_total),
+        mem_pct,
+        gb(app.swap_used),
+        gb(app.swap_total),
+        gb(app.mem_cached),
+    );
+
+    let is_focused = app.is_panel_focused(PanelType::Memory);
+    let mut border = create_panel_border(&title, MEMORY_COLOR, is_focused);
+    border.layout(area);
+    border.paint(canvas);
+    let inner = border.inner_rect();
+
+    if inner.height < 10.0 || inner.width < 40.0 {
+        draw_memory_panel(app, canvas, area);
+        return;
+    }
+
+    // =========================================================================
+    // FULLSCREEN LAYOUT: Memory breakdown + Top memory consumers
+    // =========================================================================
+    // Top section (30%): Memory breakdown bars and stats
+    // Bottom section (70%): Per-process memory DataFrame
+    // =========================================================================
+
+    let breakdown_height = (inner.height * 0.25).max(6.0).min(12.0);
+    let process_height = inner.height - breakdown_height - 1.0;
+
+    let mut y = inner.y;
+
+    // =========================================================================
+    // SECTION 1: MEMORY BREAKDOWN (Top section)
+    // Uses MicroHeatBar for proportional visualization
+    // =========================================================================
+
+    // Row 1: Full-width stacked memory bar
+    let bar_width = inner.width as usize;
+    let used_pct = if app.mem_total > 0 {
+        ((app.mem_total - app.mem_available) as f64 / app.mem_total as f64) * 100.0
+    } else {
+        0.0
+    };
+    let cached_pct = if app.mem_total > 0 {
+        (app.mem_cached as f64 / app.mem_total as f64) * 100.0
+    } else {
+        0.0
+    };
+    let free_pct = 100.0 - used_pct;
+
+    // Draw stacked bar using thermal-like color scheme for memory
+    let used_chars = ((used_pct / 100.0) * bar_width as f64) as usize;
+    let cached_chars = ((cached_pct / 100.0) * bar_width as f64) as usize;
+    let free_chars = bar_width.saturating_sub(used_chars + cached_chars);
+
+    // Used: intensity based on pressure
+    let used_color = HeatScheme::Warm.color_for_percent(used_pct);
+    if used_chars > 0 {
+        canvas.draw_text(
+            &"█".repeat(used_chars),
+            Point::new(inner.x, y),
+            &TextStyle {
+                color: used_color,
+                ..Default::default()
+            },
+        );
+    }
+    if cached_chars > 0 {
+        canvas.draw_text(
+            &"▓".repeat(cached_chars),
+            Point::new(inner.x + used_chars as f32, y),
+            &TextStyle {
+                color: CACHED_COLOR,
+                ..Default::default()
+            },
+        );
+    }
+    if free_chars > 0 {
+        canvas.draw_text(
+            &"░".repeat(free_chars),
+            Point::new(inner.x + used_chars as f32 + cached_chars as f32, y),
+            &TextStyle {
+                color: Color::new(0.3, 0.3, 0.3, 1.0),
+                ..Default::default()
+            },
+        );
+    }
+    y += 1.0;
+
+    // Row 2-5: Memory segment details in columns
+    let col_width = (inner.width / 4.0).floor() as usize;
+    let segments = [
+        (
+            "Used",
+            app.mem_used,
+            used_pct,
+            HeatScheme::Warm.color_for_percent(used_pct),
+        ),
+        ("Cached", app.mem_cached, cached_pct, CACHED_COLOR),
+        ("Available", app.mem_available, free_pct, FREE_COLOR),
+        (
+            "Swap",
+            app.swap_used,
+            if app.swap_total > 0 {
+                (app.swap_used as f64 / app.swap_total as f64) * 100.0
+            } else {
+                0.0
+            },
+            swap_color(if app.swap_total > 0 {
+                (app.swap_used as f64 / app.swap_total as f64) * 100.0
+            } else {
+                0.0
+            }),
+        ),
+    ];
+
+    let dim_style = TextStyle {
+        color: Color::new(0.5, 0.5, 0.5, 1.0),
+        ..Default::default()
+    };
+
+    for (i, (label, bytes, pct, color)) in segments.iter().enumerate() {
+        let x = inner.x + (i as f32 * col_width as f32);
+        let text = format!("{}: {} ({:.0}%)", label, format_bytes_si(*bytes), pct);
+        canvas.draw_text(
+            &format_column(
+                &text,
+                col_width.saturating_sub(1),
+                ColumnAlign::Left,
+                TruncateStrategy::End,
+            ),
+            Point::new(x, y),
+            &TextStyle {
+                color: *color,
+                ..Default::default()
+            },
+        );
+    }
+    y += 1.0;
+
+    // Separator
+    canvas.draw_text(
+        &"─".repeat(inner.width as usize),
+        Point::new(inner.x, y),
+        &dim_style,
+    );
+    y += 1.0;
+
+    // =========================================================================
+    // SECTION 2: TOP MEMORY CONSUMERS (Bottom section - fills remaining space)
+    // Uses RowHighlight for selection, sorted by memory usage
+    // =========================================================================
+
+    let process_y = y;
+    let process_rect = Rect::new(inner.x, process_y, inner.width, process_height);
+
+    // Column widths for process memory table
+    let col_pid = 8;
+    let col_user = 10;
+    let col_mem_pct = 8;
+    let col_mem_bytes = 10;
+    let col_rss = 10;
+    let col_virt = 10;
+    let col_cmd = (inner.width as usize)
+        .saturating_sub(col_pid + col_user + col_mem_pct + col_mem_bytes + col_rss + col_virt + 10);
+
+    // Header
+    let header_bg = Color::new(0.12, 0.15, 0.22, 1.0);
+    canvas.fill_rect(
+        Rect::new(process_rect.x, process_rect.y, process_rect.width, 1.0),
+        header_bg,
+    );
+
+    let headers = ["PID", "USER", "MEM%", "MEM", "RSS", "VIRT", "COMMAND"];
+    let widths = [
+        col_pid,
+        col_user,
+        col_mem_pct,
+        col_mem_bytes,
+        col_rss,
+        col_virt,
+        col_cmd,
+    ];
+    let mut hx = process_rect.x;
+    for (header, width) in headers.iter().zip(widths.iter()) {
+        canvas.draw_text(
+            &format_column(header, *width, ColumnAlign::Left, TruncateStrategy::End),
+            Point::new(hx, process_rect.y),
+            &TextStyle {
+                color: MEMORY_COLOR,
+                ..Default::default()
+            },
+        );
+        hx += *width as f32 + 1.0;
+    }
+
+    // Separator
+    canvas.draw_text(
+        &"─".repeat(process_rect.width as usize),
+        Point::new(process_rect.x, process_rect.y + 1.0),
+        &dim_style,
+    );
+
+    // Process rows sorted by memory
+    let mut processes: Vec<_> = app.system.processes().iter().collect();
+    processes.sort_by(|a, b| b.1.memory().cmp(&a.1.memory()));
+
+    let visible_rows = (process_rect.height as usize).saturating_sub(2);
+    let mut row_y = process_rect.y + 2.0;
+
+    for (idx, (pid, proc)) in processes.iter().take(visible_rows).enumerate() {
+        let is_selected = idx == 0; // TODO: Add memory_selected to App state
+
+        // FRAMEWORK: Use RowHighlight for selection
+        let row_bounds = Rect::new(process_rect.x, row_y, process_rect.width, 1.0);
+        let highlight = RowHighlight::new(row_bounds, is_selected);
+        highlight.paint(canvas);
+        let text_style = highlight.text_style();
+
+        let mut col_x = process_rect.x;
+
+        // PID
+        canvas.draw_text(
+            &format_column(
+                &pid.as_u32().to_string(),
+                col_pid,
+                ColumnAlign::Right,
+                TruncateStrategy::End,
+            ),
+            Point::new(col_x, row_y),
+            &text_style,
+        );
+        col_x += col_pid as f32 + 1.0;
+
+        // USER
+        let user = proc
+            .user_id()
+            .and_then(|uid| app.users.get_user_by_id(uid))
+            .map(|u| u.name().to_string())
+            .unwrap_or_else(|| "-".to_string());
+        canvas.draw_text(
+            &format_column(&user, col_user, ColumnAlign::Left, TruncateStrategy::End),
+            Point::new(col_x, row_y),
+            &text_style,
+        );
+        col_x += col_user as f32 + 1.0;
+
+        // MEM%
+        let mem_pct = (proc.memory() as f64 / app.mem_total as f64) * 100.0;
+        let mem_color = if is_selected {
+            Color::WHITE
+        } else {
+            HeatScheme::Cool.color_for_percent(mem_pct * 10.0) // Scale up for visibility
+        };
+        canvas.draw_text(
+            &format_column(
+                &format_percent(mem_pct as f32),
+                col_mem_pct,
+                ColumnAlign::Right,
+                TruncateStrategy::End,
+            ),
+            Point::new(col_x, row_y),
+            &TextStyle {
+                color: mem_color,
+                ..Default::default()
+            },
+        );
+        col_x += col_mem_pct as f32 + 1.0;
+
+        // MEM bytes
+        canvas.draw_text(
+            &format_column(
+                &format_bytes_si(proc.memory()),
+                col_mem_bytes,
+                ColumnAlign::Right,
+                TruncateStrategy::End,
+            ),
+            Point::new(col_x, row_y),
+            &text_style,
+        );
+        col_x += col_mem_bytes as f32 + 1.0;
+
+        // RSS (same as memory for now)
+        canvas.draw_text(
+            &format_column(
+                &format_bytes_si(proc.memory()),
+                col_rss,
+                ColumnAlign::Right,
+                TruncateStrategy::End,
+            ),
+            Point::new(col_x, row_y),
+            &text_style,
+        );
+        col_x += col_rss as f32 + 1.0;
+
+        // VIRT
+        canvas.draw_text(
+            &format_column(
+                &format_bytes_si(proc.virtual_memory()),
+                col_virt,
+                ColumnAlign::Right,
+                TruncateStrategy::End,
+            ),
+            Point::new(col_x, row_y),
+            &text_style,
+        );
+        col_x += col_virt as f32 + 1.0;
+
+        // COMMAND
+        let cmd = proc.name().to_string_lossy().to_string();
+        canvas.draw_text(
+            &format_column(&cmd, col_cmd, ColumnAlign::Left, TruncateStrategy::Command),
+            Point::new(col_x, row_y),
+            &text_style,
+        );
+
+        row_y += 1.0;
+    }
+}
+
+/// FULL SCREEN disk exploded view
+/// SPEC-024 Section 30: Exploded views fill the screen
+fn draw_disk_exploded(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect) {
+    use crate::widgets::display_rules::{
+        format_bytes_si, format_column, format_percent, ColumnAlign, TruncateStrategy,
+    };
+    use crate::widgets::selection::{RowHighlight, DIMMED_BG};
+    use crate::HeatScheme;
+
+    // Header: DISK EXPLODED - with border
+    let border_color = DISK_COLOR;
+    let disk_io = app.disk_io_data();
+
+    let (total_read, total_write) = disk_io.map_or((0.0, 0.0), |io| {
+        (io.total_read_bytes_per_sec, io.total_write_bytes_per_sec)
+    });
+
+    let title = format!(
+        "▼ DISK │ R: {} │ W: {} │ {} Volumes",
+        format_bytes_rate(total_read),
+        format_bytes_rate(total_write),
+        app.disks.len()
+    );
+
+    let mut border = create_panel_border(&title, border_color, true);
+    border.layout(area);
+    border.paint(canvas);
+    let inner = border.inner_rect();
+
+    if inner.height < 1.0 {
+        return;
+    }
+
+    // Calculate layout: disk list at top, I/O details at bottom
+    let disk_count = app.disks.len();
+    let disk_section_height = (disk_count.min(inner.height as usize / 2)).max(4);
+    let io_section_height = (inner.height as usize).saturating_sub(disk_section_height + 2);
+
+    let dim_style = TextStyle {
+        color: Color::new(0.5, 0.5, 0.5, 1.0),
+        ..Default::default()
+    };
+
+    // =========================================================================
+    // SECTION 1: DISK VOLUMES (full list with usage bars)
+    // =========================================================================
+    let mut y = inner.y;
+
+    // Column widths
+    let col_mount = 25.min(inner.width as usize / 4);
+    let col_fs = 10;
+    let col_used = 10;
+    let col_total = 10;
+    let col_pct = 8;
+    let col_bar = (inner.width as usize)
+        .saturating_sub(col_mount + col_fs + col_used + col_total + col_pct + 8);
+
+    // Header
+    let header_bg = Color::new(0.12, 0.15, 0.22, 1.0);
+    canvas.fill_rect(Rect::new(inner.x, y, inner.width, 1.0), header_bg);
+
+    let headers = ["MOUNT", "FS", "USED", "TOTAL", "USE%", ""];
+    let widths = [col_mount, col_fs, col_used, col_total, col_pct, col_bar];
+    let mut hx = inner.x;
+    for (header, width) in headers.iter().zip(widths.iter()) {
+        canvas.draw_text(
+            &format_column(header, *width, ColumnAlign::Left, TruncateStrategy::End),
+            Point::new(hx, y),
+            &TextStyle {
+                color: border_color,
+                ..Default::default()
+            },
+        );
+        hx += *width as f32 + 1.0;
+    }
+    y += 1.0;
+
+    // Disk rows
+    for (i, disk) in app.disks.iter().enumerate() {
+        if (y - inner.y) as usize >= disk_section_height {
+            break;
+        }
+
+        let row_rect = Rect::new(inner.x, y, inner.width, 1.0);
+        // TODO: Add exploded_selected_row field to App for row navigation
+        let is_selected = i == 0; // First row selected by default
+
+        // Paint row background with RowHighlight
+        let row_hl = RowHighlight::new(row_rect, is_selected);
+        row_hl.paint(canvas);
+        let text_style = row_hl.text_style();
+
+        let mount = disk.mount_point().to_string_lossy().to_string();
+        let fs_type = disk.file_system().to_string_lossy().to_string();
+        let total = disk.total_space();
+        let available = disk.available_space();
+        let used = total.saturating_sub(available);
+        let use_pct = if total > 0 {
+            (used as f64 / total as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        let mut col_x = inner.x;
+
+        // MOUNT
+        canvas.draw_text(
+            &format_column(
+                &mount,
+                col_mount,
+                ColumnAlign::Left,
+                TruncateStrategy::Command,
+            ),
+            Point::new(col_x, y),
+            &text_style,
+        );
+        col_x += col_mount as f32 + 1.0;
+
+        // FS
+        canvas.draw_text(
+            &format_column(&fs_type, col_fs, ColumnAlign::Left, TruncateStrategy::End),
+            Point::new(col_x, y),
+            &text_style,
+        );
+        col_x += col_fs as f32 + 1.0;
+
+        // USED
+        canvas.draw_text(
+            &format_column(
+                &format_bytes_si(used),
+                col_used,
+                ColumnAlign::Right,
+                TruncateStrategy::End,
+            ),
+            Point::new(col_x, y),
+            &text_style,
+        );
+        col_x += col_used as f32 + 1.0;
+
+        // TOTAL
+        canvas.draw_text(
+            &format_column(
+                &format_bytes_si(total),
+                col_total,
+                ColumnAlign::Right,
+                TruncateStrategy::End,
+            ),
+            Point::new(col_x, y),
+            &text_style,
+        );
+        col_x += col_total as f32 + 1.0;
+
+        // USE%
+        let pct_color = HeatScheme::Warm.color_for_percent(use_pct);
+        canvas.draw_text(
+            &format_column(
+                &format_percent(use_pct as f32),
+                col_pct,
+                ColumnAlign::Right,
+                TruncateStrategy::End,
+            ),
+            Point::new(col_x, y),
+            &TextStyle {
+                color: if is_selected { Color::WHITE } else { pct_color },
+                ..Default::default()
+            },
+        );
+        col_x += col_pct as f32 + 1.0;
+
+        // Usage bar
+        if col_bar >= 3 {
+            let filled = ((use_pct / 100.0) * col_bar as f64) as usize;
+            let bar_color = HeatScheme::Warm.color_for_percent(use_pct);
+            let bar_str: String = "█".repeat(filled) + &"░".repeat(col_bar.saturating_sub(filled));
+            canvas.draw_text(
+                &bar_str,
+                Point::new(col_x, y),
+                &TextStyle {
+                    color: bar_color,
+                    ..Default::default()
+                },
+            );
+        }
+
+        y += 1.0;
+    }
+
+    // Separator
+    y += 0.5;
+    canvas.draw_text(
+        &"─".repeat(inner.width as usize),
+        Point::new(inner.x, y),
+        &dim_style,
+    );
+    y += 1.0;
+
+    // =========================================================================
+    // SECTION 2: I/O RATES BY DEVICE
+    // =========================================================================
+    if let Some(io) = disk_io {
+        let io_header = "I/O RATES BY DEVICE";
+        canvas.draw_text(
+            io_header,
+            Point::new(inner.x, y),
+            &TextStyle {
+                color: border_color,
+                ..Default::default()
+            },
+        );
+        y += 1.0;
+
+        // I/O column widths
+        let io_col_dev = 12;
+        let io_col_read = 12;
+        let io_col_write = 12;
+        let io_col_iops = 10;
+
+        // Header
+        canvas.fill_rect(Rect::new(inner.x, y, inner.width, 1.0), header_bg);
+        let io_headers = ["DEVICE", "READ/s", "WRITE/s", "IOPS"];
+        let io_widths = [io_col_dev, io_col_read, io_col_write, io_col_iops];
+        let mut ihx = inner.x;
+        for (h, w) in io_headers.iter().zip(io_widths.iter()) {
+            canvas.draw_text(
+                &format_column(h, *w, ColumnAlign::Left, TruncateStrategy::End),
+                Point::new(ihx, y),
+                &TextStyle {
+                    color: border_color,
+                    ..Default::default()
+                },
+            );
+            ihx += *w as f32 + 1.0;
+        }
+        y += 1.0;
+
+        // List physical disks with I/O
+        let mut devices: Vec<_> = io.physical_disks().collect();
+        devices.sort_by(|a, b| a.0.cmp(b.0));
+
+        for (dev_name, _stats) in devices.iter().take(io_section_height.saturating_sub(2)) {
+            let rates = io.rates.get(*dev_name);
+            let read_rate = rates.map_or(0.0, |r| r.read_bytes_per_sec);
+            let write_rate = rates.map_or(0.0, |r| r.write_bytes_per_sec);
+            let iops = rates.map_or(0.0, |r| r.reads_per_sec + r.writes_per_sec);
+
+            let row_rect = Rect::new(inner.x, y, inner.width, 1.0);
+            canvas.fill_rect(row_rect, DIMMED_BG);
+
+            let mut col_x = inner.x;
+
+            // Device name
+            canvas.draw_text(
+                &format_column(
+                    dev_name,
+                    io_col_dev,
+                    ColumnAlign::Left,
+                    TruncateStrategy::End,
+                ),
+                Point::new(col_x, y),
+                &TextStyle {
+                    color: Color::new(0.85, 0.85, 0.85, 1.0),
+                    ..Default::default()
+                },
+            );
+            col_x += io_col_dev as f32 + 1.0;
+
+            // Read rate
+            let read_color = if read_rate > 10_000_000.0 {
+                Color::new(0.3, 0.9, 0.5, 1.0)
+            } else {
+                Color::new(0.7, 0.7, 0.7, 1.0)
+            };
+            canvas.draw_text(
+                &format_column(
+                    &format_bytes_rate(read_rate),
+                    io_col_read,
+                    ColumnAlign::Right,
+                    TruncateStrategy::End,
+                ),
+                Point::new(col_x, y),
+                &TextStyle {
+                    color: read_color,
+                    ..Default::default()
+                },
+            );
+            col_x += io_col_read as f32 + 1.0;
+
+            // Write rate
+            let write_color = if write_rate > 10_000_000.0 {
+                Color::new(0.9, 0.6, 0.3, 1.0)
+            } else {
+                Color::new(0.7, 0.7, 0.7, 1.0)
+            };
+            canvas.draw_text(
+                &format_column(
+                    &format_bytes_rate(write_rate),
+                    io_col_write,
+                    ColumnAlign::Right,
+                    TruncateStrategy::End,
+                ),
+                Point::new(col_x, y),
+                &TextStyle {
+                    color: write_color,
+                    ..Default::default()
+                },
+            );
+            col_x += io_col_write as f32 + 1.0;
+
+            // IOPS
+            canvas.draw_text(
+                &format_column(
+                    &format!("{:.0}", iops),
+                    io_col_iops,
+                    ColumnAlign::Right,
+                    TruncateStrategy::End,
+                ),
+                Point::new(col_x, y),
+                &TextStyle {
+                    color: Color::new(0.7, 0.7, 0.7, 1.0),
+                    ..Default::default()
+                },
+            );
+
+            y += 1.0;
+        }
+    }
+}
+
+/// FULL SCREEN network exploded view
+/// SPEC-024 Section 30: Exploded views fill the screen
+fn draw_network_exploded(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect) {
+    use crate::widgets::display_rules::{
+        format_bytes_si, format_column, ColumnAlign, TruncateStrategy,
+    };
+    use crate::widgets::selection::RowHighlight;
+
+    let border_color = NETWORK_COLOR;
+
+    // Calculate totals
+    let (rx_total, tx_total): (u64, u64) = if app.deterministic {
+        (0, 0)
+    } else {
+        app.networks
+            .values()
+            .map(|d| (d.received(), d.transmitted()))
+            .fold((0, 0), |(ar, at), (r, t)| (ar + r, at + t))
+    };
+
+    let title = format!(
+        "▼ NETWORK │ ↓ {}/s │ ↑ {}/s │ {} Interfaces",
+        format_bytes(rx_total),
+        format_bytes(tx_total),
+        app.networks.len()
+    );
+
+    let mut border = create_panel_border(&title, border_color, true);
+    border.layout(area);
+    border.paint(canvas);
+    let inner = border.inner_rect();
+
+    if inner.height < 1.0 {
+        return;
+    }
+
+    let mut y = inner.y;
+
+    // Column widths
+    let col_iface = 15;
+    let col_rx = 12;
+    let col_tx = 12;
+    let col_rx_total = 14;
+    let col_tx_total = 14;
+    let col_bar = (inner.width as usize)
+        .saturating_sub(col_iface + col_rx + col_tx + col_rx_total + col_tx_total + 10);
+
+    // Header
+    let header_bg = Color::new(0.12, 0.15, 0.22, 1.0);
+    canvas.fill_rect(Rect::new(inner.x, y, inner.width, 1.0), header_bg);
+
+    let headers = ["INTERFACE", "↓ RX/s", "↑ TX/s", "TOTAL RX", "TOTAL TX", ""];
+    let widths = [
+        col_iface,
+        col_rx,
+        col_tx,
+        col_rx_total,
+        col_tx_total,
+        col_bar,
+    ];
+    let mut hx = inner.x;
+    for (header, width) in headers.iter().zip(widths.iter()) {
+        canvas.draw_text(
+            &format_column(header, *width, ColumnAlign::Left, TruncateStrategy::End),
+            Point::new(hx, y),
+            &TextStyle {
+                color: border_color,
+                ..Default::default()
+            },
+        );
+        hx += *width as f32 + 1.0;
+    }
+    y += 1.0;
+
+    // Network interface rows
+    let mut interfaces: Vec<_> = app.networks.iter().collect();
+    interfaces.sort_by(|a, b| b.1.received().cmp(&a.1.received()));
+
+    for (i, (iface_name, data)) in interfaces.iter().enumerate() {
+        if (y - inner.y) as usize >= (inner.height as usize).saturating_sub(2) {
+            break;
+        }
+
+        let row_rect = Rect::new(inner.x, y, inner.width, 1.0);
+        let is_selected = i == 0;
+
+        let row_hl = RowHighlight::new(row_rect, is_selected);
+        row_hl.paint(canvas);
+        let text_style = row_hl.text_style();
+
+        let rx_rate = data.received();
+        let tx_rate = data.transmitted();
+        let total_rx = data.total_received();
+        let total_tx = data.total_transmitted();
+
+        let mut col_x = inner.x;
+
+        // Interface name
+        canvas.draw_text(
+            &format_column(
+                iface_name,
+                col_iface,
+                ColumnAlign::Left,
+                TruncateStrategy::End,
+            ),
+            Point::new(col_x, y),
+            &text_style,
+        );
+        col_x += col_iface as f32 + 1.0;
+
+        // RX rate
+        let rx_color = if rx_rate > 1_000_000 {
+            Color::new(0.3, 0.9, 0.5, 1.0)
+        } else if is_selected {
+            Color::WHITE
+        } else {
+            Color::new(0.7, 0.7, 0.7, 1.0)
+        };
+        canvas.draw_text(
+            &format_column(
+                &format_bytes_rate(rx_rate as f64),
+                col_rx,
+                ColumnAlign::Right,
+                TruncateStrategy::End,
+            ),
+            Point::new(col_x, y),
+            &TextStyle {
+                color: rx_color,
+                ..Default::default()
+            },
+        );
+        col_x += col_rx as f32 + 1.0;
+
+        // TX rate
+        let tx_color = if tx_rate > 1_000_000 {
+            Color::new(0.9, 0.6, 0.3, 1.0)
+        } else if is_selected {
+            Color::WHITE
+        } else {
+            Color::new(0.7, 0.7, 0.7, 1.0)
+        };
+        canvas.draw_text(
+            &format_column(
+                &format_bytes_rate(tx_rate as f64),
+                col_tx,
+                ColumnAlign::Right,
+                TruncateStrategy::End,
+            ),
+            Point::new(col_x, y),
+            &TextStyle {
+                color: tx_color,
+                ..Default::default()
+            },
+        );
+        col_x += col_tx as f32 + 1.0;
+
+        // Total RX
+        canvas.draw_text(
+            &format_column(
+                &format_bytes_si(total_rx),
+                col_rx_total,
+                ColumnAlign::Right,
+                TruncateStrategy::End,
+            ),
+            Point::new(col_x, y),
+            &text_style,
+        );
+        col_x += col_rx_total as f32 + 1.0;
+
+        // Total TX
+        canvas.draw_text(
+            &format_column(
+                &format_bytes_si(total_tx),
+                col_tx_total,
+                ColumnAlign::Right,
+                TruncateStrategy::End,
+            ),
+            Point::new(col_x, y),
+            &text_style,
+        );
+        col_x += col_tx_total as f32 + 1.0;
+
+        // Activity bar
+        if col_bar >= 3 {
+            let max_rate = 100_000_000.0; // 100MB/s scale
+            let rx_pct = ((rx_rate as f64 / max_rate) * 100.0).min(100.0);
+            let tx_pct = ((tx_rate as f64 / max_rate) * 100.0).min(100.0);
+            let rx_chars = ((rx_pct / 100.0) * (col_bar / 2) as f64) as usize;
+            let tx_chars = ((tx_pct / 100.0) * (col_bar / 2) as f64) as usize;
+
+            let rx_bar: String = "▁".repeat(rx_chars);
+            let tx_bar: String = "▁".repeat(tx_chars);
+
+            canvas.draw_text(
+                &rx_bar,
+                Point::new(col_x, y),
+                &TextStyle {
+                    color: Color::new(0.3, 0.9, 0.5, 1.0),
+                    ..Default::default()
+                },
+            );
+            canvas.draw_text(
+                &tx_bar,
+                Point::new(col_x + (col_bar / 2) as f32, y),
+                &TextStyle {
+                    color: Color::new(0.9, 0.6, 0.3, 1.0),
+                    ..Default::default()
+                },
+            );
+        }
+
+        y += 1.0;
+    }
+}
+
+/// FULL SCREEN GPU exploded view
+/// SPEC-024 Section 30: Exploded views fill the screen
+fn draw_gpu_exploded(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect) {
+    use crate::widgets::display_rules::format_bytes_si;
+    use crate::HeatScheme;
+
+    let border_color = GPU_COLOR;
+
+    let gpu = app.gpu_info.clone();
+    let title = gpu
+        .as_ref()
+        .map(|g| {
+            let temp_str = g
+                .temperature
+                .map(|t| format!(" │ {}°C", t as i32))
+                .unwrap_or_default();
+            let power_str = g
+                .power_watts
+                .map(|p| format!(" │ {:.0}W", p))
+                .unwrap_or_default();
+            let util_str = g
+                .utilization
+                .map(|u| format!(" │ {}%", u as i32))
+                .unwrap_or_default();
+            format!("▼ GPU: {}{}{}{}", g.name, util_str, temp_str, power_str)
+        })
+        .unwrap_or_else(|| "▼ GPU │ No GPU detected".to_string());
+
+    let mut border = create_panel_border(&title, border_color, true);
+    border.layout(area);
+    border.paint(canvas);
+    let inner = border.inner_rect();
+
+    if inner.height < 1.0 {
+        return;
+    }
+
+    let mut y = inner.y;
+
+    if let Some(g) = gpu {
+        // GPU Utilization bar
+        let util = g.utilization.unwrap_or(0) as f64;
+        let util_bar_width = (inner.width as usize).min(60);
+        let filled = ((util / 100.0) * util_bar_width as f64) as usize;
+        let bar: String = "█".repeat(filled) + &"░".repeat(util_bar_width.saturating_sub(filled));
+        let util_color = HeatScheme::Warm.color_for_percent(util);
+
+        canvas.draw_text(
+            &format!("GPU Utilization: {} {:>5.1}%", bar, util),
+            Point::new(inner.x, y),
+            &TextStyle {
+                color: util_color,
+                ..Default::default()
+            },
+        );
+        y += 1.0;
+
+        // VRAM bar
+        let vram_used = g.vram_used.unwrap_or(0);
+        let vram_total = g.vram_total.unwrap_or(0);
+        let vram_pct = if vram_total > 0 {
+            (vram_used as f64 / vram_total as f64) * 100.0
+        } else {
+            0.0
+        };
+        let vram_filled = ((vram_pct / 100.0) * util_bar_width as f64) as usize;
+        let vram_bar: String =
+            "█".repeat(vram_filled) + &"░".repeat(util_bar_width.saturating_sub(vram_filled));
+        let vram_color = HeatScheme::Warm.color_for_percent(vram_pct);
+
+        canvas.draw_text(
+            &format!(
+                "VRAM:            {} {:>5.1}% ({} / {})",
+                vram_bar,
+                vram_pct,
+                format_bytes_si(vram_used),
+                format_bytes_si(vram_total)
+            ),
+            Point::new(inner.x, y),
+            &TextStyle {
+                color: vram_color,
+                ..Default::default()
+            },
+        );
+        y += 1.0;
+
+        // Temperature and Power
+        if let Some(temp) = g.temperature {
+            let temp_color = HeatScheme::Thermal.color_for_percent((temp as f64 / 100.0) * 100.0);
+            canvas.draw_text(
+                &format!("Temperature: {}°C", temp as i32),
+                Point::new(inner.x, y),
+                &TextStyle {
+                    color: temp_color,
+                    ..Default::default()
+                },
+            );
+        }
+        if let Some(power) = g.power_watts {
+            canvas.draw_text(
+                &format!("    Power: {:.1}W", power),
+                Point::new(inner.x + 25.0, y),
+                &TextStyle {
+                    color: Color::new(0.9, 0.7, 0.3, 1.0),
+                    ..Default::default()
+                },
+            );
+        }
+        y += 2.0;
+
+        // GPU processes header
+        let header_bg = Color::new(0.12, 0.15, 0.22, 1.0);
+        canvas.fill_rect(Rect::new(inner.x, y, inner.width, 1.0), header_bg);
+        canvas.draw_text(
+            "GPU PROCESSES",
+            Point::new(inner.x, y),
+            &TextStyle {
+                color: border_color,
+                ..Default::default()
+            },
+        );
+        y += 1.0;
+
+        // Note: GPU processes would come from app.analyzers.gpu_procs_data()
+        // For now show placeholder
+        canvas.draw_text(
+            "  (GPU process list requires nvidia-smi)",
+            Point::new(inner.x, y),
+            &TextStyle {
+                color: Color::new(0.5, 0.5, 0.5, 1.0),
+                ..Default::default()
+            },
+        );
+    } else {
+        canvas.draw_text(
+            "No GPU detected or nvidia-smi not available",
+            Point::new(inner.x, y),
+            &TextStyle {
+                color: Color::new(0.5, 0.5, 0.5, 1.0),
+                ..Default::default()
+            },
+        );
+    }
+}
+
+/// FULL SCREEN sensors exploded view
+/// SPEC-024 Section 30: Exploded views fill the screen
+fn draw_sensors_exploded(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect) {
+    use crate::widgets::display_rules::{format_column, ColumnAlign, TruncateStrategy};
+    use crate::widgets::selection::RowHighlight;
+    use crate::HeatScheme;
+
+    let border_color = SENSORS_COLOR;
+
+    // Get sensor data
+    let sensor_data = app.snapshot_sensor_health.as_ref();
+    let sensor_count = sensor_data.map(|d| d.sensors.len()).unwrap_or(0);
+
+    let title = format!("▼ SENSORS │ {} readings", sensor_count);
+
+    let mut border = create_panel_border(&title, border_color, true);
+    border.layout(area);
+    border.paint(canvas);
+    let inner = border.inner_rect();
+
+    if inner.height < 1.0 {
+        return;
+    }
+
+    let mut y = inner.y;
+
+    // Column widths
+    let col_name = 25;
+    let col_value = 15;
+    let col_status = 10;
+    let col_bar = (inner.width as usize).saturating_sub(col_name + col_value + col_status + 6);
+
+    // Header
+    let header_bg = Color::new(0.12, 0.15, 0.22, 1.0);
+    canvas.fill_rect(Rect::new(inner.x, y, inner.width, 1.0), header_bg);
+
+    let headers = ["SENSOR", "VALUE", "STATUS", ""];
+    let widths = [col_name, col_value, col_status, col_bar];
+    let mut hx = inner.x;
+    for (header, width) in headers.iter().zip(widths.iter()) {
+        canvas.draw_text(
+            &format_column(header, *width, ColumnAlign::Left, TruncateStrategy::End),
+            Point::new(hx, y),
+            &TextStyle {
+                color: border_color,
+                ..Default::default()
+            },
+        );
+        hx += *width as f32 + 1.0;
+    }
+    y += 1.0;
+
+    if let Some(data) = sensor_data {
+        for (i, reading) in data.sensors.iter().enumerate() {
+            if (y - inner.y) as usize >= (inner.height as usize).saturating_sub(2) {
+                break;
+            }
+
+            let row_rect = Rect::new(inner.x, y, inner.width, 1.0);
+            let is_selected = i == 0;
+
+            let row_hl = RowHighlight::new(row_rect, is_selected);
+            row_hl.paint(canvas);
+            let text_style = row_hl.text_style();
+
+            let mut col_x = inner.x;
+
+            // Name (label)
+            canvas.draw_text(
+                &format_column(
+                    &reading.label,
+                    col_name,
+                    ColumnAlign::Left,
+                    TruncateStrategy::End,
+                ),
+                Point::new(col_x, y),
+                &text_style,
+            );
+            col_x += col_name as f32 + 1.0;
+
+            // Value with thermal coloring (includes unit from value_display)
+            let value_color = match reading.sensor_type {
+                SensorType::Temperature => {
+                    HeatScheme::Thermal.color_for_percent(reading.value)
+                }
+                SensorType::Fan => Color::new(0.3, 0.7, 0.9, 1.0),
+                _ => {
+                    if is_selected {
+                        Color::WHITE
+                    } else {
+                        Color::new(0.8, 0.8, 0.8, 1.0)
+                    }
+                }
+            };
+            canvas.draw_text(
+                &format_column(
+                    &reading.value_display(),
+                    col_value,
+                    ColumnAlign::Right,
+                    TruncateStrategy::End,
+                ),
+                Point::new(col_x, y),
+                &TextStyle {
+                    color: value_color,
+                    ..Default::default()
+                },
+            );
+            col_x += col_value as f32 + 1.0;
+
+            // Status
+            let status_str = reading.status.as_str();
+            let status_color = match reading.status {
+                SensorStatus::Normal => Color::new(0.3, 0.9, 0.3, 1.0),
+                SensorStatus::Warning => Color::new(0.9, 0.7, 0.2, 1.0),
+                SensorStatus::Critical => Color::new(0.9, 0.2, 0.2, 1.0),
+                SensorStatus::Low => Color::new(0.3, 0.5, 0.9, 1.0),
+                SensorStatus::Fault => Color::new(0.5, 0.5, 0.5, 1.0),
+            };
+            canvas.draw_text(
+                &format_column(
+                    status_str,
+                    col_status,
+                    ColumnAlign::Left,
+                    TruncateStrategy::End,
+                ),
+                Point::new(col_x, y),
+                &TextStyle {
+                    color: if is_selected {
+                        Color::WHITE
+                    } else {
+                        status_color
+                    },
+                    ..Default::default()
+                },
+            );
+
+            y += 1.0;
+        }
+    } else {
+        canvas.draw_text(
+            "No sensor data available",
+            Point::new(inner.x, y),
+            &TextStyle {
+                color: Color::new(0.5, 0.5, 0.5, 1.0),
+                ..Default::default()
+            },
+        );
+    }
+}
+
+/// FULL SCREEN process exploded view
+/// SPEC-024 Section 30: Exploded views fill the screen
+fn draw_process_exploded(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect) {
+    use crate::widgets::display_rules::{
+        format_bytes_si, format_column, ColumnAlign, TruncateStrategy,
+    };
+    use crate::widgets::selection::RowHighlight;
+    use crate::HeatScheme;
+
+    let border_color = PROCESS_COLOR;
+    let proc_count = app.system.processes().len();
+
+    let title = format!("▼ PROCESSES │ {} total", proc_count);
+
+    let mut border = create_panel_border(&title, border_color, true);
+    border.layout(area);
+    border.paint(canvas);
+    let inner = border.inner_rect();
+
+    if inner.height < 1.0 {
+        return;
+    }
+
+    let mut y = inner.y;
+
+    // Column widths - full screen allows more columns
+    let col_pid = 8;
+    let col_user = 12;
+    let col_cpu = 7;
+    let col_mem = 7;
+    let col_virt = 10;
+    let col_rss = 10;
+    let col_state = 6;
+    let col_time = 10;
+    let col_cmd = (inner.width as usize).saturating_sub(
+        col_pid + col_user + col_cpu + col_mem + col_virt + col_rss + col_state + col_time + 12,
+    );
+
+    // Header
+    let header_bg = Color::new(0.12, 0.15, 0.22, 1.0);
+    canvas.fill_rect(Rect::new(inner.x, y, inner.width, 1.0), header_bg);
+
+    let headers = [
+        "PID", "USER", "CPU%", "MEM%", "VIRT", "RSS", "STATE", "TIME", "COMMAND",
+    ];
+    let widths = [
+        col_pid, col_user, col_cpu, col_mem, col_virt, col_rss, col_state, col_time, col_cmd,
+    ];
+    let mut hx = inner.x;
+    for (header, width) in headers.iter().zip(widths.iter()) {
+        canvas.draw_text(
+            &format_column(header, *width, ColumnAlign::Left, TruncateStrategy::End),
+            Point::new(hx, y),
+            &TextStyle {
+                color: border_color,
+                ..Default::default()
+            },
+        );
+        hx += *width as f32 + 1.0;
+    }
+    y += 1.0;
+
+    // Sort processes by CPU
+    let mut procs: Vec<_> = app.system.processes().iter().collect();
+    procs.sort_by(|a, b| {
+        b.1.cpu_usage()
+            .partial_cmp(&a.1.cpu_usage())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    for (i, (_pid, proc)) in procs.iter().enumerate() {
+        if (y - inner.y) as usize >= (inner.height as usize).saturating_sub(2) {
+            break;
+        }
+
+        let row_rect = Rect::new(inner.x, y, inner.width, 1.0);
+        let is_selected = app.process_selected == i;
+
+        let row_hl = RowHighlight::new(row_rect, is_selected);
+        row_hl.paint(canvas);
+        let text_style = row_hl.text_style();
+
+        let cpu_pct = proc.cpu_usage() as f64;
+        let mem_pct = (proc.memory() as f64 / app.mem_total as f64) * 100.0;
+
+        let mut col_x = inner.x;
+
+        // PID
+        canvas.draw_text(
+            &format_column(
+                &proc.pid().to_string(),
+                col_pid,
+                ColumnAlign::Right,
+                TruncateStrategy::End,
+            ),
+            Point::new(col_x, y),
+            &text_style,
+        );
+        col_x += col_pid as f32 + 1.0;
+
+        // USER
+        let user = proc
+            .user_id()
+            .map(|u| u.to_string())
+            .unwrap_or_else(|| "-".to_string());
+        canvas.draw_text(
+            &format_column(&user, col_user, ColumnAlign::Left, TruncateStrategy::End),
+            Point::new(col_x, y),
+            &text_style,
+        );
+        col_x += col_user as f32 + 1.0;
+
+        // CPU%
+        let cpu_color = HeatScheme::Warm.color_for_percent(cpu_pct);
+        canvas.draw_text(
+            &format_column(
+                &format!("{:.1}", cpu_pct),
+                col_cpu,
+                ColumnAlign::Right,
+                TruncateStrategy::End,
+            ),
+            Point::new(col_x, y),
+            &TextStyle {
+                color: if is_selected { Color::WHITE } else { cpu_color },
+                ..Default::default()
+            },
+        );
+        col_x += col_cpu as f32 + 1.0;
+
+        // MEM%
+        let mem_color = HeatScheme::Warm.color_for_percent(mem_pct);
+        canvas.draw_text(
+            &format_column(
+                &format!("{:.1}", mem_pct),
+                col_mem,
+                ColumnAlign::Right,
+                TruncateStrategy::End,
+            ),
+            Point::new(col_x, y),
+            &TextStyle {
+                color: if is_selected { Color::WHITE } else { mem_color },
+                ..Default::default()
+            },
+        );
+        col_x += col_mem as f32 + 1.0;
+
+        // VIRT
+        canvas.draw_text(
+            &format_column(
+                &format_bytes_si(proc.virtual_memory()),
+                col_virt,
+                ColumnAlign::Right,
+                TruncateStrategy::End,
+            ),
+            Point::new(col_x, y),
+            &text_style,
+        );
+        col_x += col_virt as f32 + 1.0;
+
+        // RSS
+        canvas.draw_text(
+            &format_column(
+                &format_bytes_si(proc.memory()),
+                col_rss,
+                ColumnAlign::Right,
+                TruncateStrategy::End,
+            ),
+            Point::new(col_x, y),
+            &text_style,
+        );
+        col_x += col_rss as f32 + 1.0;
+
+        // STATE
+        let state = format!("{:?}", proc.status());
+        canvas.draw_text(
+            &format_column(&state, col_state, ColumnAlign::Left, TruncateStrategy::End),
+            Point::new(col_x, y),
+            &text_style,
+        );
+        col_x += col_state as f32 + 1.0;
+
+        // TIME
+        let run_time = proc.run_time();
+        let time_str = format!(
+            "{}:{:02}:{:02}",
+            run_time / 3600,
+            (run_time % 3600) / 60,
+            run_time % 60
+        );
+        canvas.draw_text(
+            &format_column(
+                &time_str,
+                col_time,
+                ColumnAlign::Right,
+                TruncateStrategy::End,
+            ),
+            Point::new(col_x, y),
+            &text_style,
+        );
+        col_x += col_time as f32 + 1.0;
+
+        // COMMAND
+        let cmd = proc.name().to_string_lossy().to_string();
+        canvas.draw_text(
+            &format_column(&cmd, col_cmd, ColumnAlign::Left, TruncateStrategy::Command),
+            Point::new(col_x, y),
+            &text_style,
+        );
+
+        y += 1.0;
+    }
+}
+
+/// FULL SCREEN connections exploded view
+/// SPEC-024 Section 30: Exploded views fill the screen
+fn draw_connections_exploded(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect) {
+    use crate::widgets::display_rules::{format_column, ColumnAlign, TruncateStrategy};
+    use crate::widgets::selection::RowHighlight;
+
+    let border_color = CONNECTIONS_COLOR;
+
+    let conn_data = app.snapshot_connections.as_ref();
+    let conn_count = conn_data.map(|d| d.connections.len()).unwrap_or(0);
+
+    let title = format!("▼ CONNECTIONS │ {} active", conn_count);
+
+    let mut border = create_panel_border(&title, border_color, true);
+    border.layout(area);
+    border.paint(canvas);
+    let inner = border.inner_rect();
+
+    if inner.height < 1.0 {
+        return;
+    }
+
+    let mut y = inner.y;
+
+    // Column widths
+    let col_proto = 6;
+    let col_local = 25;
+    let col_remote = 25;
+    let col_state = 12;
+    let col_pid = 8;
+    let col_proc = (inner.width as usize)
+        .saturating_sub(col_proto + col_local + col_remote + col_state + col_pid + 10);
+
+    // Header
+    let header_bg = Color::new(0.12, 0.15, 0.22, 1.0);
+    canvas.fill_rect(Rect::new(inner.x, y, inner.width, 1.0), header_bg);
+
+    let headers = [
+        "PROTO",
+        "LOCAL ADDRESS",
+        "REMOTE ADDRESS",
+        "STATE",
+        "PID",
+        "PROCESS",
+    ];
+    let widths = [
+        col_proto, col_local, col_remote, col_state, col_pid, col_proc,
+    ];
+    let mut hx = inner.x;
+    for (header, width) in headers.iter().zip(widths.iter()) {
+        canvas.draw_text(
+            &format_column(header, *width, ColumnAlign::Left, TruncateStrategy::End),
+            Point::new(hx, y),
+            &TextStyle {
+                color: border_color,
+                ..Default::default()
+            },
+        );
+        hx += *width as f32 + 1.0;
+    }
+    y += 1.0;
+
+    if let Some(data) = conn_data {
+        for (i, conn) in data.connections.iter().enumerate() {
+            if (y - inner.y) as usize >= (inner.height as usize).saturating_sub(2) {
+                break;
+            }
+
+            let row_rect = Rect::new(inner.x, y, inner.width, 1.0);
+            let is_selected = i == 0;
+
+            let row_hl = RowHighlight::new(row_rect, is_selected);
+            row_hl.paint(canvas);
+            let text_style = row_hl.text_style();
+
+            let mut col_x = inner.x;
+
+            // Protocol
+            canvas.draw_text(
+                &format_column("TCP", col_proto, ColumnAlign::Left, TruncateStrategy::End),
+                Point::new(col_x, y),
+                &text_style,
+            );
+            col_x += col_proto as f32 + 1.0;
+
+            // Local address
+            let local = format!("{}:{}", conn.local_addr, conn.local_port);
+            canvas.draw_text(
+                &format_column(&local, col_local, ColumnAlign::Left, TruncateStrategy::End),
+                Point::new(col_x, y),
+                &text_style,
+            );
+            col_x += col_local as f32 + 1.0;
+
+            // Remote address
+            let remote = format!("{}:{}", conn.remote_addr, conn.remote_port);
+            canvas.draw_text(
+                &format_column(
+                    &remote,
+                    col_remote,
+                    ColumnAlign::Left,
+                    TruncateStrategy::End,
+                ),
+                Point::new(col_x, y),
+                &text_style,
+            );
+            col_x += col_remote as f32 + 1.0;
+
+            // State with color
+            let state_str = format!("{:?}", conn.state);
+            let state_color = match conn.state {
+                TcpState::Established => Color::new(0.3, 0.9, 0.3, 1.0),
+                TcpState::Listen => Color::new(0.3, 0.7, 0.9, 1.0),
+                TcpState::TimeWait => Color::new(0.7, 0.7, 0.3, 1.0),
+                TcpState::CloseWait => Color::new(0.9, 0.5, 0.3, 1.0),
+                _ => Color::new(0.6, 0.6, 0.6, 1.0),
+            };
+            canvas.draw_text(
+                &format_column(
+                    &state_str,
+                    col_state,
+                    ColumnAlign::Left,
+                    TruncateStrategy::End,
+                ),
+                Point::new(col_x, y),
+                &TextStyle {
+                    color: if is_selected {
+                        Color::WHITE
+                    } else {
+                        state_color
+                    },
+                    ..Default::default()
+                },
+            );
+            col_x += col_state as f32 + 1.0;
+
+            // PID
+            let pid_str = conn
+                .pid
+                .map(|p| p.to_string())
+                .unwrap_or_else(|| "-".to_string());
+            canvas.draw_text(
+                &format_column(&pid_str, col_pid, ColumnAlign::Right, TruncateStrategy::End),
+                Point::new(col_x, y),
+                &text_style,
+            );
+            col_x += col_pid as f32 + 1.0;
+
+            // Process name
+            let proc_name = conn.process_name.as_deref().unwrap_or("-");
+            canvas.draw_text(
+                &format_column(
+                    proc_name,
+                    col_proc,
+                    ColumnAlign::Left,
+                    TruncateStrategy::Command,
+                ),
+                Point::new(col_x, y),
+                &text_style,
+            );
+
+            y += 1.0;
+        }
+    } else {
+        canvas.draw_text(
+            "No connection data available",
+            Point::new(inner.x, y),
+            &TextStyle {
+                color: Color::new(0.5, 0.5, 0.5, 1.0),
+                ..Default::default()
+            },
+        );
+    }
+}
+
 /// Draw a single panel in fullscreen (exploded) mode
 fn draw_exploded_panel(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect, panel: PanelType) {
     match panel {
         PanelType::Cpu => draw_cpu_exploded(app, canvas, area),
-        PanelType::Memory => draw_memory_panel(app, canvas, area),
-        PanelType::Disk => draw_disk_panel(app, canvas, area),
-        PanelType::Network => draw_network_panel(app, canvas, area),
-        PanelType::Process => draw_process_panel(app, canvas, area),
-        PanelType::Gpu => draw_gpu_panel(app, canvas, area),
-        PanelType::Sensors => draw_sensors_panel(app, canvas, area),
-        PanelType::Connections => draw_connections_panel(app, canvas, area),
+        PanelType::Memory => draw_memory_exploded(app, canvas, area),
+        PanelType::Disk => draw_disk_exploded(app, canvas, area),
+        PanelType::Network => draw_network_exploded(app, canvas, area),
+        PanelType::Process => draw_process_exploded(app, canvas, area),
+        PanelType::Gpu => draw_gpu_exploded(app, canvas, area),
+        PanelType::Sensors => draw_sensors_exploded(app, canvas, area),
+        PanelType::Connections => draw_connections_exploded(app, canvas, area),
         PanelType::Psi => draw_psi_panel(app, canvas, area),
         PanelType::Files => draw_files_panel(app, canvas, area),
         PanelType::Battery => draw_battery_panel(app, canvas, area),
@@ -5340,5 +7014,859 @@ mod explode_tests {
             2,
             "Exploded bars 2 chars longer"
         );
+    }
+}
+
+#[cfg(test)]
+mod helper_tests {
+    use super::*;
+
+    // =========================================================================
+    // percent_color TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_percent_color_low() {
+        // Low values (0-25%): cyan to green
+        let color = percent_color(10.0);
+        assert!(color.b > 0.5, "Low percent should have blue/cyan component");
+        assert!(color.g > 0.5, "Low percent should have green component");
+    }
+
+    #[test]
+    fn test_percent_color_medium_low() {
+        // Medium-low (25-50%): green to yellow
+        let color = percent_color(35.0);
+        assert!(color.g > 0.7, "Medium-low should be greenish");
+    }
+
+    #[test]
+    fn test_percent_color_medium_high() {
+        // Medium-high (50-75%): yellow to orange
+        let color = percent_color(60.0);
+        assert!(color.r > 0.7, "Medium-high should have high red");
+        assert!(
+            color.g > 0.5,
+            "Medium-high should have some green (yellow-orange)"
+        );
+    }
+
+    #[test]
+    fn test_percent_color_high() {
+        // High (75-90%): orange-red
+        let color = percent_color(80.0);
+        assert_eq!(color.r, 1.0, "High should be red component");
+    }
+
+    #[test]
+    fn test_percent_color_critical() {
+        // Critical (90-100%): bright red
+        let color = percent_color(95.0);
+        assert_eq!(color.r, 1.0, "Critical should be full red");
+        assert!(color.g < 0.5, "Critical should have low green");
+    }
+
+    #[test]
+    fn test_percent_color_clamped() {
+        // Values outside 0-100 should be clamped
+        let neg = percent_color(-10.0);
+        let over = percent_color(150.0);
+
+        let zero = percent_color(0.0);
+        let hundred = percent_color(100.0);
+
+        // Clamped values should match boundaries
+        assert_eq!(neg.r, zero.r);
+        assert_eq!(over.r, hundred.r);
+    }
+
+    #[test]
+    fn test_percent_color_boundary_90() {
+        let color = percent_color(90.0);
+        assert_eq!(color.r, 1.0);
+        assert_eq!(color.g, 0.25);
+    }
+
+    #[test]
+    fn test_percent_color_boundary_75() {
+        let color = percent_color(75.0);
+        assert_eq!(color.r, 1.0);
+    }
+
+    #[test]
+    fn test_percent_color_boundary_50() {
+        let color = percent_color(50.0);
+        assert_eq!(color.r, 1.0);
+    }
+
+    #[test]
+    fn test_percent_color_boundary_25() {
+        let color = percent_color(25.0);
+        assert!(color.g > 0.8);
+    }
+
+    // =========================================================================
+    // format_bytes TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_format_bytes_small() {
+        assert_eq!(format_bytes(500), "500B");
+        assert_eq!(format_bytes(1023), "1023B");
+    }
+
+    #[test]
+    fn test_format_bytes_kb() {
+        assert_eq!(format_bytes(1024), "1.0K");
+        assert_eq!(format_bytes(1536), "1.5K");
+        assert_eq!(format_bytes(1024 * 10), "10.0K");
+    }
+
+    #[test]
+    fn test_format_bytes_mb() {
+        assert_eq!(format_bytes(1024 * 1024), "1.0M");
+        assert_eq!(format_bytes(1024 * 1024 * 5), "5.0M");
+    }
+
+    #[test]
+    fn test_format_bytes_gb() {
+        assert_eq!(format_bytes(1024 * 1024 * 1024), "1.0G");
+        assert_eq!(format_bytes(1024 * 1024 * 1024 * 8), "8.0G");
+    }
+
+    #[test]
+    fn test_format_bytes_tb() {
+        assert_eq!(format_bytes(1024u64 * 1024 * 1024 * 1024), "1.0T");
+        assert_eq!(format_bytes(1024u64 * 1024 * 1024 * 1024 * 2), "2.0T");
+    }
+
+    // =========================================================================
+    // format_bytes_rate TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_format_bytes_rate_small() {
+        assert_eq!(format_bytes_rate(500.0), "500B");
+    }
+
+    #[test]
+    fn test_format_bytes_rate_kb() {
+        assert_eq!(format_bytes_rate(1024.0), "1K");
+    }
+
+    #[test]
+    fn test_format_bytes_rate_mb() {
+        assert_eq!(format_bytes_rate(1024.0 * 1024.0), "1.0M");
+    }
+
+    #[test]
+    fn test_format_bytes_rate_gb() {
+        assert_eq!(format_bytes_rate(1024.0 * 1024.0 * 1024.0), "1.0G");
+    }
+
+    // =========================================================================
+    // format_uptime TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_format_uptime_seconds() {
+        // When both hours and minutes are 0, format shows "0m"
+        assert_eq!(format_uptime(30), "0m");
+        assert_eq!(format_uptime(59), "0m");
+    }
+
+    #[test]
+    fn test_format_uptime_minutes() {
+        assert_eq!(format_uptime(60), "1m");
+        assert_eq!(format_uptime(90), "1m");
+        assert_eq!(format_uptime(3599), "59m");
+    }
+
+    #[test]
+    fn test_format_uptime_hours() {
+        assert_eq!(format_uptime(3600), "1h 0m");
+        assert_eq!(format_uptime(3660), "1h 1m");
+        assert_eq!(format_uptime(7200), "2h 0m");
+    }
+
+    #[test]
+    fn test_format_uptime_days() {
+        assert_eq!(format_uptime(86400), "1d 0h");
+        assert_eq!(format_uptime(90000), "1d 1h");
+        assert_eq!(format_uptime(172800), "2d 0h");
+    }
+
+    // =========================================================================
+    // swap_color TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_swap_color_low() {
+        let color = swap_color(10.0);
+        // Low swap usage should be normal/green-ish
+        assert!(color.g > 0.5);
+    }
+
+    #[test]
+    fn test_swap_color_medium() {
+        let color = swap_color(40.0);
+        // Medium swap should be warning-ish
+        assert!(color.r > 0.5 || color.g > 0.5);
+    }
+
+    #[test]
+    fn test_swap_color_high() {
+        let color = swap_color(80.0);
+        // High swap should be red
+        assert!(color.r > 0.7);
+    }
+
+    #[test]
+    fn test_swap_color_clamped() {
+        let neg = swap_color(-10.0);
+        let over = swap_color(110.0);
+        // Should clamp and not panic
+        assert!(neg.r >= 0.0 && neg.r <= 1.0);
+        assert!(over.r >= 0.0 && over.r <= 1.0);
+    }
+
+    // =========================================================================
+    // pressure_symbol TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_pressure_symbol_none() {
+        // ≤1% returns "—"
+        assert_eq!(pressure_symbol(0.0), "—");
+        assert_eq!(pressure_symbol(0.5), "—");
+        assert_eq!(pressure_symbol(1.0), "—");
+    }
+
+    #[test]
+    fn test_pressure_symbol_low() {
+        // >1% to ≤5%: "◐"
+        assert_eq!(pressure_symbol(2.0), "◐");
+        // >5% to ≤20%: "▼"
+        assert_eq!(pressure_symbol(10.0), "▼");
+    }
+
+    #[test]
+    fn test_pressure_symbol_high() {
+        // >20% to ≤50%: "▲"
+        assert_eq!(pressure_symbol(30.0), "▲");
+        // >50%: "▲▲"
+        assert_eq!(pressure_symbol(60.0), "▲▲");
+    }
+
+    // =========================================================================
+    // pressure_color TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_pressure_color_none() {
+        let color = pressure_color(0.0);
+        // Should be dim
+        assert!(color.r < 0.5);
+    }
+
+    #[test]
+    fn test_pressure_color_low() {
+        let color = pressure_color(5.0);
+        // Low pressure should be green-ish
+        assert!(color.g > 0.0);
+    }
+
+    #[test]
+    fn test_pressure_color_high() {
+        let color = pressure_color(50.0);
+        // High pressure should be red
+        assert!(color.r > 0.5);
+    }
+
+    // =========================================================================
+    // port_to_service TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_port_to_service_known() {
+        assert_eq!(port_to_service(22), "SSH");
+        assert_eq!(port_to_service(80), "HTTP");
+        assert_eq!(port_to_service(443), "HTTPS");
+        assert_eq!(port_to_service(53), "DNS");
+        assert_eq!(port_to_service(25), "SMTP");
+        assert_eq!(port_to_service(21), "FTP");
+    }
+
+    #[test]
+    fn test_port_to_service_database() {
+        assert_eq!(port_to_service(3306), "MySQL");
+        assert_eq!(port_to_service(5432), "Pgsql");
+        assert_eq!(port_to_service(6379), "Redis");
+        assert_eq!(port_to_service(27017), "Mongo");
+    }
+
+    #[test]
+    fn test_port_to_service_unknown() {
+        // Unknown ports return empty string
+        assert_eq!(port_to_service(12345), "");
+    }
+
+    #[test]
+    fn test_port_to_service_app_range() {
+        // 9000-9999 range returns "App"
+        assert_eq!(port_to_service(9000), "App");
+        assert_eq!(port_to_service(9999), "App");
+    }
+
+    // =========================================================================
+    // COLOR CONSTANT TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_cpu_color_is_cyan() {
+        assert!(CPU_COLOR.b > 0.9);
+        assert!(CPU_COLOR.g > 0.7);
+    }
+
+    #[test]
+    fn test_memory_color_is_purple() {
+        assert!(MEMORY_COLOR.b > 0.9);
+        assert!(MEMORY_COLOR.r > 0.6);
+    }
+
+    #[test]
+    fn test_network_color_is_orange() {
+        assert!(NETWORK_COLOR.r > 0.9);
+        assert!(NETWORK_COLOR.g > 0.5);
+    }
+
+    #[test]
+    fn test_process_color_is_yellow() {
+        assert!(PROCESS_COLOR.r > 0.8);
+        assert!(PROCESS_COLOR.g > 0.6);
+    }
+
+    #[test]
+    fn test_gpu_color_is_green() {
+        assert!(GPU_COLOR.g > 0.9);
+        assert!(GPU_COLOR.b > 0.5);
+    }
+
+    // =========================================================================
+    // create_panel_border TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_create_panel_border_unfocused() {
+        let border = create_panel_border("Test", CPU_COLOR, false);
+        // Verify the border was created without panic
+        let _ = border;
+    }
+
+    #[test]
+    fn test_create_panel_border_focused() {
+        let border = create_panel_border("Test", CPU_COLOR, true);
+        // Verify focused border was created without panic
+        let _ = border;
+    }
+
+    // =========================================================================
+    // ADDITIONAL COVERAGE TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_selection_colors() {
+        // Verify selection colors match ttop style (bright green accent, subtle bg)
+        assert!(FOCUS_ACCENT_COLOR.g >= 0.9, "Accent should be bright green");
+        assert!(ROW_SELECT_BG.b > ROW_SELECT_BG.r, "Selection bg should have purple/blue tint");
+        assert!(ROW_SELECT_BG.r < 0.25, "Selection bg should be subtle/dark");
+    }
+
+    #[test]
+    fn test_status_bar_bg() {
+        // Status bar should be dark
+        assert!(STATUS_BAR_BG.r < 0.15);
+        assert!(STATUS_BAR_BG.g < 0.15);
+        assert!(STATUS_BAR_BG.b < 0.15);
+    }
+
+    #[test]
+    fn test_col_select_bg() {
+        // Column select should be blue-ish
+        assert!(COL_SELECT_BG.b > COL_SELECT_BG.r);
+    }
+
+    #[test]
+    fn test_net_colors() {
+        // RX (download) should be cyan
+        assert!(NET_RX_COLOR.b > 0.9);
+        // TX (upload) should be red
+        assert!(NET_TX_COLOR.r > 0.9);
+    }
+
+    // =========================================================================
+    // ZramStats TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_zram_stats_default() {
+        let stats = ZramStats::default();
+        assert_eq!(stats.orig_data_size, 0);
+        assert_eq!(stats.compr_data_size, 0);
+        assert!(stats.algorithm.is_empty());
+    }
+
+    #[test]
+    fn test_zram_stats_ratio_zero_compressed() {
+        let stats = ZramStats {
+            orig_data_size: 1000,
+            compr_data_size: 0,
+            algorithm: "lz4".to_string(),
+        };
+        assert!((stats.ratio() - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_zram_stats_ratio_normal() {
+        let stats = ZramStats {
+            orig_data_size: 1000,
+            compr_data_size: 500,
+            algorithm: "lz4".to_string(),
+        };
+        assert!((stats.ratio() - 2.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_zram_stats_ratio_high_compression() {
+        let stats = ZramStats {
+            orig_data_size: 10000,
+            compr_data_size: 1000,
+            algorithm: "zstd".to_string(),
+        };
+        assert!((stats.ratio() - 10.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_zram_stats_is_active_true() {
+        let stats = ZramStats {
+            orig_data_size: 100,
+            compr_data_size: 50,
+            algorithm: "lzo".to_string(),
+        };
+        assert!(stats.is_active());
+    }
+
+    #[test]
+    fn test_zram_stats_is_active_false() {
+        let stats = ZramStats {
+            orig_data_size: 0,
+            compr_data_size: 0,
+            algorithm: "".to_string(),
+        };
+        assert!(!stats.is_active());
+    }
+
+    #[test]
+    fn test_zram_stats_debug() {
+        let stats = ZramStats {
+            orig_data_size: 1024,
+            compr_data_size: 512,
+            algorithm: "lz4".to_string(),
+        };
+        let debug = format!("{:?}", stats);
+        assert!(debug.contains("ZramStats"));
+        assert!(debug.contains("1024"));
+        assert!(debug.contains("lz4"));
+    }
+
+    // =========================================================================
+    // CpuMeterLayout TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_cpu_meter_layout_normal_mode() {
+        let layout = CpuMeterLayout::calculate(8, 20.0, false);
+        assert_eq!(layout.bar_len, 6);
+        assert!(layout.meter_bar_width > 0.0);
+        assert!(layout.cores_per_col > 0);
+        assert!(layout.num_meter_cols > 0);
+    }
+
+    #[test]
+    fn test_cpu_meter_layout_exploded_mode() {
+        let layout = CpuMeterLayout::calculate(8, 20.0, true);
+        assert_eq!(layout.bar_len, 8);
+        assert!(layout.meter_bar_width > 0.0);
+    }
+
+    #[test]
+    fn test_cpu_meter_layout_exploded_caps_cores_per_col() {
+        // In exploded mode, max 12 cores per col
+        let layout = CpuMeterLayout::calculate(48, 35.0, true);
+        assert!(layout.cores_per_col <= 12);
+    }
+
+    #[test]
+    fn test_cpu_meter_layout_normal_uses_full_height() {
+        let layout = CpuMeterLayout::calculate(48, 35.0, false);
+        // Normal mode should use full height (35 cores per col)
+        assert_eq!(layout.cores_per_col, 35);
+    }
+
+    #[test]
+    fn test_cpu_meter_layout_single_core() {
+        let layout = CpuMeterLayout::calculate(1, 10.0, false);
+        assert_eq!(layout.num_meter_cols, 1);
+        assert_eq!(layout.cores_per_col, 10);
+    }
+
+    #[test]
+    fn test_cpu_meter_layout_zero_height() {
+        // Should have minimum 1 core per col
+        let layout = CpuMeterLayout::calculate(4, 0.0, false);
+        assert!(layout.cores_per_col >= 1);
+    }
+
+    #[test]
+    fn test_cpu_meter_layout_many_cores() {
+        let layout = CpuMeterLayout::calculate(128, 30.0, false);
+        // 128 cores / 30 height = 5 columns needed
+        assert!(layout.num_meter_cols >= 5);
+    }
+
+    #[test]
+    fn test_cpu_meter_layout_bar_width_calculation() {
+        let layout_normal = CpuMeterLayout::calculate(8, 20.0, false);
+        let layout_exploded = CpuMeterLayout::calculate(8, 20.0, true);
+        // Exploded mode has larger bar width (bar_len + 9)
+        assert!(layout_exploded.meter_bar_width > layout_normal.meter_bar_width);
+    }
+
+    // =========================================================================
+    // MemoryStats TESTS (requires App)
+    // =========================================================================
+
+    #[test]
+    fn test_memory_stats_creation() {
+        use crate::ptop::app::App;
+        let app = App::new(true);
+        let stats = MemoryStats::from_app(&app);
+        // In deterministic mode, memory values are set
+        assert!(stats.used_gb >= 0.0);
+        assert!(stats.cached_gb >= 0.0);
+        assert!(stats.free_gb >= 0.0);
+    }
+
+    // =========================================================================
+    // panel_border_color TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_panel_border_color_cpu() {
+        use crate::ptop::config::PanelType;
+        let color = panel_border_color(PanelType::Cpu);
+        assert_eq!(color.r, CPU_COLOR.r);
+        assert_eq!(color.g, CPU_COLOR.g);
+        assert_eq!(color.b, CPU_COLOR.b);
+    }
+
+    #[test]
+    fn test_panel_border_color_memory() {
+        use crate::ptop::config::PanelType;
+        let color = panel_border_color(PanelType::Memory);
+        assert_eq!(color.r, MEMORY_COLOR.r);
+    }
+
+    #[test]
+    fn test_panel_border_color_disk() {
+        use crate::ptop::config::PanelType;
+        let color = panel_border_color(PanelType::Disk);
+        assert_eq!(color.r, DISK_COLOR.r);
+    }
+
+    #[test]
+    fn test_panel_border_color_network() {
+        use crate::ptop::config::PanelType;
+        let color = panel_border_color(PanelType::Network);
+        assert_eq!(color.r, NETWORK_COLOR.r);
+    }
+
+    #[test]
+    fn test_panel_border_color_process() {
+        use crate::ptop::config::PanelType;
+        let color = panel_border_color(PanelType::Process);
+        assert_eq!(color.r, PROCESS_COLOR.r);
+    }
+
+    #[test]
+    fn test_panel_border_color_gpu() {
+        use crate::ptop::config::PanelType;
+        let color = panel_border_color(PanelType::Gpu);
+        assert_eq!(color.r, GPU_COLOR.r);
+    }
+
+    #[test]
+    fn test_panel_border_color_battery() {
+        use crate::ptop::config::PanelType;
+        let color = panel_border_color(PanelType::Battery);
+        assert_eq!(color.r, BATTERY_COLOR.r);
+    }
+
+    #[test]
+    fn test_panel_border_color_sensors() {
+        use crate::ptop::config::PanelType;
+        let color = panel_border_color(PanelType::Sensors);
+        assert_eq!(color.r, SENSORS_COLOR.r);
+    }
+
+    #[test]
+    fn test_panel_border_color_psi() {
+        use crate::ptop::config::PanelType;
+        let color = panel_border_color(PanelType::Psi);
+        assert_eq!(color.r, PSI_COLOR.r);
+    }
+
+    #[test]
+    fn test_panel_border_color_connections() {
+        use crate::ptop::config::PanelType;
+        let color = panel_border_color(PanelType::Connections);
+        assert_eq!(color.r, CONNECTIONS_COLOR.r);
+    }
+
+    #[test]
+    fn test_panel_border_color_files() {
+        use crate::ptop::config::PanelType;
+        let color = panel_border_color(PanelType::Files);
+        assert_eq!(color.r, FILES_COLOR.r);
+    }
+
+    #[test]
+    fn test_panel_border_color_containers() {
+        use crate::ptop::config::PanelType;
+        let color = panel_border_color(PanelType::Containers);
+        assert_eq!(color.r, CONTAINERS_COLOR.r);
+    }
+
+    // =========================================================================
+    // ADDITIONAL HELPER FUNCTION TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_format_bytes_zero() {
+        assert_eq!(format_bytes(0), "0B");
+    }
+
+    #[test]
+    fn test_format_bytes_rate_zero() {
+        assert_eq!(format_bytes_rate(0.0), "0B");
+    }
+
+    #[test]
+    fn test_format_uptime_zero() {
+        assert_eq!(format_uptime(0), "0m");
+    }
+
+    #[test]
+    fn test_format_uptime_large() {
+        // Test 365 days
+        let secs = 365 * 24 * 60 * 60;
+        let result = format_uptime(secs);
+        assert!(result.contains("365d"));
+    }
+
+    #[test]
+    fn test_percent_color_exact_boundaries() {
+        // Test exact boundary values
+        let _ = percent_color(0.0);
+        let _ = percent_color(25.0);
+        let _ = percent_color(50.0);
+        let _ = percent_color(75.0);
+        let _ = percent_color(90.0);
+        let _ = percent_color(100.0);
+    }
+
+    #[test]
+    fn test_swap_color_boundaries() {
+        // Test exact boundaries
+        let low = swap_color(10.0);
+        let med = swap_color(10.1);
+        let high = swap_color(50.1);
+        assert!(low.g > 0.8); // Green
+        assert!(med.g > 0.7); // Yellow (still has green)
+        assert!(high.r > 0.9); // Red
+    }
+
+    #[test]
+    fn test_pressure_symbol_boundary_values() {
+        assert_eq!(pressure_symbol(1.0), "—");
+        assert_eq!(pressure_symbol(1.1), "◐");
+        assert_eq!(pressure_symbol(5.0), "◐");
+        assert_eq!(pressure_symbol(5.1), "▼");
+        assert_eq!(pressure_symbol(20.0), "▼");
+        assert_eq!(pressure_symbol(20.1), "▲");
+        assert_eq!(pressure_symbol(50.0), "▲");
+        assert_eq!(pressure_symbol(50.1), "▲▲");
+    }
+
+    #[test]
+    fn test_pressure_color_boundaries() {
+        let none = pressure_color(1.0);
+        let low = pressure_color(5.0);
+        let med = pressure_color(20.0);
+        let high = pressure_color(50.0);
+        // Just verify they return valid colors
+        assert!(none.r >= 0.0 && none.r <= 1.0);
+        assert!(low.g >= 0.0 && low.g <= 1.0);
+        assert!(med.r >= 0.0 && med.r <= 1.0);
+        assert!(high.r >= 0.0 && high.r <= 1.0);
+    }
+
+    #[test]
+    fn test_port_to_service_edge_cases() {
+        // Ports just outside known ranges
+        assert_eq!(port_to_service(8999), "");
+        assert_eq!(port_to_service(10000), "");
+    }
+
+    #[test]
+    fn test_dim_color_constant() {
+        assert!(DIM_COLOR.r < 0.5);
+        assert!(DIM_COLOR.g < 0.5);
+        assert!(DIM_COLOR.b < 0.5);
+    }
+
+    #[test]
+    fn test_cached_color_constant() {
+        assert!(CACHED_COLOR.g > 0.7);
+        assert!(CACHED_COLOR.b > 0.8);
+    }
+
+    #[test]
+    fn test_free_color_constant() {
+        assert!(FREE_COLOR.b > 0.8);
+    }
+
+    #[test]
+    fn test_battery_color_is_yellow() {
+        assert!(BATTERY_COLOR.r > 0.9);
+        assert!(BATTERY_COLOR.g > 0.8);
+    }
+
+    #[test]
+    fn test_sensors_color_is_pink() {
+        assert!(SENSORS_COLOR.r > 0.9);
+        assert!(SENSORS_COLOR.b > 0.5);
+    }
+
+    #[test]
+    fn test_psi_color_is_red() {
+        assert!(PSI_COLOR.r > 0.7);
+    }
+
+    #[test]
+    fn test_disk_color_is_blue() {
+        assert!(DISK_COLOR.b > 0.9);
+    }
+
+    #[test]
+    fn test_files_color_is_brown() {
+        assert!(FILES_COLOR.r > 0.6);
+        assert!(FILES_COLOR.g > 0.4);
+    }
+
+    #[test]
+    fn test_containers_color_is_docker_blue() {
+        assert!(CONTAINERS_COLOR.b > 0.8);
+    }
+
+    #[test]
+    fn test_connections_color_is_light_blue() {
+        assert!(CONNECTIONS_COLOR.b > 0.8);
+    }
+}
+
+#[cfg(test)]
+mod draw_integration_tests {
+    use super::*;
+    use crate::direct::CellBuffer;
+
+    #[test]
+    fn test_draw_small_terminal() {
+        use crate::ptop::app::App;
+        let app = App::new(true);
+        let mut buffer = CellBuffer::new(80, 24);
+        draw(&app, &mut buffer);
+        // Should complete without panic
+    }
+
+    #[test]
+    fn test_draw_large_terminal() {
+        use crate::ptop::app::App;
+        let app = App::new(true);
+        let mut buffer = CellBuffer::new(160, 50);
+        draw(&app, &mut buffer);
+        // Should complete without panic
+    }
+
+    #[test]
+    fn test_draw_minimum_size() {
+        use crate::ptop::app::App;
+        let app = App::new(true);
+        let mut buffer = CellBuffer::new(10, 5);
+        draw(&app, &mut buffer);
+        // Should complete without panic (minimum viable size)
+    }
+
+    #[test]
+    fn test_draw_too_small_width() {
+        use crate::ptop::app::App;
+        let app = App::new(true);
+        let mut buffer = CellBuffer::new(5, 24);
+        draw(&app, &mut buffer);
+        // Should early-return without panic
+    }
+
+    #[test]
+    fn test_draw_too_small_height() {
+        use crate::ptop::app::App;
+        let app = App::new(true);
+        let mut buffer = CellBuffer::new(80, 3);
+        draw(&app, &mut buffer);
+        // Should early-return without panic
+    }
+
+    #[test]
+    fn test_draw_standard_sizes() {
+        use crate::ptop::app::App;
+        let app = App::new(true);
+
+        // Test common terminal sizes
+        let sizes = [(80, 24), (120, 40), (132, 43), (200, 60)];
+        for (w, h) in sizes {
+            let mut buffer = CellBuffer::new(w, h);
+            draw(&app, &mut buffer);
+        }
+    }
+
+    #[test]
+    fn test_draw_multiple_times() {
+        use crate::ptop::app::App;
+        let app = App::new(true);
+        let mut buffer = CellBuffer::new(100, 30);
+
+        // Simulate multiple frame renders
+        for _ in 0..10 {
+            draw(&app, &mut buffer);
+        }
+    }
+
+    #[test]
+    fn test_count_top_panels() {
+        use crate::ptop::app::App;
+        let app = App::new(true);
+        let count = count_top_panels(&app);
+        // In deterministic mode, we have a default panel configuration
+        assert!(count >= 2);
+        assert!(count <= 10);
     }
 }

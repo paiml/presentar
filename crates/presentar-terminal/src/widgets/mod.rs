@@ -40,6 +40,7 @@ mod line_chart;
 mod loss_curve;
 mod memory_bar;
 mod meter;
+mod micro_heat_bar;
 mod multi_bar;
 mod network_panel;
 mod parallel_coords;
@@ -51,6 +52,7 @@ mod roc_pr_curve;
 mod scatter_plot;
 mod scrollbar;
 mod segmented_meter;
+pub mod selection;
 mod sensors_panel;
 mod sparkline;
 mod symbols;
@@ -95,6 +97,7 @@ pub use line_chart::{Axis, LegendPosition, LineChart, LineStyle, Series, Simplif
 pub use loss_curve::{EmaConfig, LossCurve, LossSeries};
 pub use memory_bar::{HugePages, MemoryBar, MemorySegment};
 pub use meter::Meter;
+pub use micro_heat_bar::{BarStyle as HeatBarStyle, CompactBreakdown, HeatScheme, MicroHeatBar};
 pub use multi_bar::{MultiBarGraph, MultiBarMode};
 pub use network_panel::{NetworkInterface, NetworkPanel};
 pub use parallel_coords::ParallelCoordinates;
@@ -108,6 +111,10 @@ pub use roc_pr_curve::{CurveData, CurveMode, RocPrCurve};
 pub use scatter_plot::{MarkerStyle, ScatterAxis, ScatterPlot};
 pub use scrollbar::{ScrollOrientation, Scrollbar, ScrollbarChars};
 pub use segmented_meter::{Segment, SegmentedMeter};
+pub use selection::{
+    ColumnHighlight, Cursor, FocusRing, RowHighlight, DIMMED_BG, SELECTION_ACCENT, SELECTION_BG,
+    SELECTION_GUTTER,
+};
 pub use sensors_panel::{SensorReading, SensorStatus, SensorsPanel};
 pub use sparkline::{Sparkline, TrendDirection};
 pub use symbols::{
@@ -144,11 +151,37 @@ pub use display_rules::{
     format_rate,
     format_temp_c,
     truncate as truncate_display,
+    // Declarative Display Rules (SPEC-024 Appendix F)
+    BatteryDisplayRules,
     // Column formatting (NEVER bleeds) - use DisplayColumnAlign to avoid conflict with dataframe::ColumnAlign
     ColumnAlign as DisplayColumnAlign,
+    DataAvailability,
+    DefaultDisplayRules,
+    DisplayAction,
+    DisplayContext,
+    DisplayRules,
+    FilesDisplayRules,
     // O(1) fuzzy search
     FuzzyIndex,
+    GpuDisplayRules,
+    PsiDisplayRules,
     SearchResult,
+    SensorsDisplayRules,
+    SystemCapabilities,
+    TerminalSize as DisplayTerminalSize,
     // Truncation
     TruncateStrategy,
 };
+mod proportional_bar;
+pub use proportional_bar::{BarSegment, ProportionalBar};
+
+// Atomic Widget Layer (SPEC-024 Appendix I)
+mod flex_cell;
+mod gutter_cursor;
+mod labeled_bar;
+mod semantic_label;
+
+pub use flex_cell::{Alignment as FlexAlignment, FlexCell, Overflow};
+pub use gutter_cursor::{CursorStyle, GutterCursor, SelectionState};
+pub use labeled_bar::{LabeledBar, LabeledBarLayout};
+pub use semantic_label::{SemanticLabel, SemanticStatus};

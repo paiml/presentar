@@ -250,4 +250,141 @@ mod tests {
             assert!(analyzer.data().io.full.is_some());
         }
     }
+
+    #[test]
+    fn test_psi_analyzer_default() {
+        let analyzer = PsiAnalyzer::default();
+        assert_eq!(analyzer.name(), "psi");
+        assert_eq!(analyzer.interval(), Duration::from_secs(1));
+    }
+
+    #[test]
+    fn test_psi_data_default() {
+        let data = PsiData::default();
+        assert!(!data.available);
+        assert!(!data.is_under_pressure());
+    }
+
+    #[test]
+    fn test_psi_averages_default() {
+        let avgs = PsiAverages::default();
+        assert_eq!(avgs.avg10, 0.0);
+        assert_eq!(avgs.avg60, 0.0);
+        assert_eq!(avgs.avg300, 0.0);
+        assert_eq!(avgs.total_us, 0);
+    }
+
+    #[test]
+    fn test_psi_resource_default() {
+        let resource = PsiResource::default();
+        assert_eq!(resource.some.avg10, 0.0);
+        assert!(resource.full.is_none());
+    }
+
+    #[test]
+    fn test_highest_pressure_memory() {
+        let mut data = PsiData::default();
+        data.memory.some.avg10 = 20.0;
+        data.cpu.some.avg10 = 5.0;
+        data.io.some.avg10 = 10.0;
+        let (resource, value) = data.highest_pressure();
+        assert_eq!(resource, "memory");
+        assert!((value - 20.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_highest_pressure_io() {
+        let mut data = PsiData::default();
+        data.io.some.avg10 = 30.0;
+        data.cpu.some.avg10 = 5.0;
+        data.memory.some.avg10 = 10.0;
+        let (resource, value) = data.highest_pressure();
+        assert_eq!(resource, "io");
+        assert!((value - 30.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_highest_pressure_equal() {
+        let mut data = PsiData::default();
+        data.cpu.some.avg10 = 10.0;
+        data.memory.some.avg10 = 10.0;
+        data.io.some.avg10 = 10.0;
+        let (resource, _) = data.highest_pressure();
+        // When equal, CPU wins (first in order)
+        assert_eq!(resource, "cpu");
+    }
+
+    #[test]
+    fn test_is_under_pressure_thresholds() {
+        let mut data = PsiData::default();
+
+        // Just under threshold
+        data.cpu.some.avg10 = 4.9;
+        assert!(!data.is_under_pressure());
+
+        // At threshold
+        data.cpu.some.avg10 = 5.0;
+        assert!(!data.is_under_pressure());
+
+        // Over threshold
+        data.cpu.some.avg10 = 5.1;
+        assert!(data.is_under_pressure());
+    }
+
+    #[test]
+    fn test_parse_averages_partial() {
+        // Test with missing keys
+        let parts = ["avg10=1.5"];
+        let avgs = PsiAnalyzer::parse_averages(&parts).unwrap();
+        assert!((avgs.avg10 - 1.5).abs() < 0.01);
+        assert_eq!(avgs.avg60, 0.0);
+        assert_eq!(avgs.avg300, 0.0);
+    }
+
+    #[test]
+    fn test_parse_averages_invalid() {
+        // Test with invalid values
+        let parts = ["avg10=invalid", "avg60=2.5"];
+        let avgs = PsiAnalyzer::parse_averages(&parts).unwrap();
+        assert_eq!(avgs.avg10, 0.0); // Invalid parses as 0
+        assert!((avgs.avg60 - 2.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_parse_averages_unknown_key() {
+        let parts = ["unknown=123", "avg10=5.0"];
+        let avgs = PsiAnalyzer::parse_averages(&parts).unwrap();
+        assert!((avgs.avg10 - 5.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_psi_data_clone() {
+        let mut data = PsiData::default();
+        data.cpu.some.avg10 = 15.0;
+        data.available = true;
+
+        let cloned = data.clone();
+        assert_eq!(cloned.available, data.available);
+        assert!((cloned.cpu.some.avg10 - 15.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_psi_data_debug() {
+        let data = PsiData::default();
+        let debug_str = format!("{:?}", data);
+        assert!(debug_str.contains("PsiData"));
+    }
+
+    #[test]
+    fn test_psi_averages_copy() {
+        let avgs = PsiAverages {
+            avg10: 1.0,
+            avg60: 2.0,
+            avg300: 3.0,
+            total_us: 1000,
+        };
+        let copied = avgs; // Copy
+        assert_eq!(copied.avg10, 1.0);
+        assert_eq!(copied.total_us, 1000);
+    }
 }

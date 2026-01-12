@@ -495,4 +495,200 @@ mod tests {
         let result = analyzer.collect();
         assert!(result.is_ok());
     }
+
+    #[test]
+    fn test_swap_type_as_str() {
+        assert_eq!(SwapType::Partition.as_str(), "partition");
+        assert_eq!(SwapType::File.as_str(), "file");
+        assert_eq!(SwapType::Unknown.as_str(), "unknown");
+    }
+
+    #[test]
+    fn test_swap_type_default() {
+        let default = SwapType::default();
+        assert_eq!(default, SwapType::Partition);
+    }
+
+    #[test]
+    fn test_swap_device_default() {
+        let device = SwapDevice::default();
+        assert!(device.filename.is_empty());
+        assert_eq!(device.swap_type, SwapType::Partition);
+        assert_eq!(device.size, 0);
+        assert_eq!(device.used, 0);
+        assert_eq!(device.priority, 0);
+    }
+
+    #[test]
+    fn test_swap_device_usage_percent_zero_size() {
+        let device = SwapDevice {
+            filename: "/dev/sda2".to_string(),
+            swap_type: SwapType::Partition,
+            size: 0,
+            used: 0,
+            priority: 0,
+        };
+        assert_eq!(device.usage_percent(), 0.0);
+    }
+
+    #[test]
+    fn test_swap_data_usage_percent() {
+        let mut data = SwapData::default();
+        data.total = 1000;
+        data.used = 250;
+        assert!((data.usage_percent() - 25.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_swap_data_usage_percent_zero_total() {
+        let data = SwapData::default();
+        assert_eq!(data.usage_percent(), 0.0);
+    }
+
+    #[test]
+    fn test_swap_data_device_count() {
+        let mut data = SwapData::default();
+        assert_eq!(data.device_count(), 0);
+
+        data.devices.push(SwapDevice::default());
+        data.devices.push(SwapDevice::default());
+        assert_eq!(data.device_count(), 2);
+    }
+
+    #[test]
+    fn test_swap_data_default() {
+        let data = SwapData::default();
+        assert!(data.devices.is_empty());
+        assert_eq!(data.total, 0);
+        assert_eq!(data.used, 0);
+        assert_eq!(data.free, 0);
+        assert_eq!(data.cached, 0);
+        assert_eq!(data.swap_in_rate, 0.0);
+        assert_eq!(data.swap_out_rate, 0.0);
+    }
+
+    #[test]
+    fn test_format_size_tb() {
+        // 1.5TB
+        let tb_bytes = 1_649_267_441_664u64;
+        let result = format_size(tb_bytes);
+        assert!(result.contains("T"));
+    }
+
+    #[test]
+    fn test_analyzer_default() {
+        let analyzer = SwapAnalyzer::default();
+        assert_eq!(analyzer.name(), "swap");
+    }
+
+    #[test]
+    fn test_analyzer_interval() {
+        let analyzer = SwapAnalyzer::new();
+        assert_eq!(analyzer.interval(), Duration::from_secs(2));
+    }
+
+    #[test]
+    fn test_analyzer_data() {
+        let analyzer = SwapAnalyzer::new();
+        let data = analyzer.data();
+        assert!(data.devices.is_empty());
+    }
+
+    #[test]
+    fn test_swap_device_clone() {
+        let device = SwapDevice {
+            filename: "/dev/sda2".to_string(),
+            swap_type: SwapType::Partition,
+            size: 1000,
+            used: 500,
+            priority: -1,
+        };
+        let cloned = device.clone();
+        assert_eq!(cloned.filename, "/dev/sda2");
+        assert_eq!(cloned.priority, -1);
+    }
+
+    #[test]
+    fn test_swap_data_clone() {
+        let mut data = SwapData::default();
+        data.total = 1000;
+        data.used = 500;
+        let cloned = data.clone();
+        assert_eq!(cloned.total, 1000);
+        assert_eq!(cloned.used, 500);
+    }
+
+    #[test]
+    fn test_swap_type_clone_copy() {
+        let t = SwapType::File;
+        let copied = t;
+        assert_eq!(copied, SwapType::File);
+    }
+
+    #[test]
+    fn test_swap_device_available_saturating() {
+        // Test when used > size (shouldn't happen, but handle gracefully)
+        let device = SwapDevice {
+            filename: "/dev/sda2".to_string(),
+            swap_type: SwapType::Partition,
+            size: 100,
+            used: 200, // More than size
+            priority: 0,
+        };
+        assert_eq!(device.available(), 0); // Should saturate to 0
+    }
+
+    #[test]
+    fn test_swap_device_debug() {
+        let device = SwapDevice {
+            filename: "/dev/sda2".to_string(),
+            swap_type: SwapType::File,
+            size: 1024,
+            used: 512,
+            priority: 5,
+        };
+        let debug = format!("{device:?}");
+        assert!(debug.contains("sda2"));
+        assert!(debug.contains("File"));
+    }
+
+    #[test]
+    fn test_swap_data_debug() {
+        let data = SwapData::default();
+        let debug = format!("{data:?}");
+        assert!(debug.contains("SwapData"));
+    }
+
+    #[test]
+    fn test_swap_type_eq() {
+        assert_eq!(SwapType::Partition, SwapType::Partition);
+        assert_ne!(SwapType::Partition, SwapType::File);
+        assert_ne!(SwapType::File, SwapType::Unknown);
+    }
+
+    #[test]
+    fn test_parse_meminfo_value_empty() {
+        // Test with line that doesn't have enough parts
+        let result = parse_meminfo_value("SwapTotal:");
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_parse_meminfo_value_invalid() {
+        let result = parse_meminfo_value("SwapTotal: invalid");
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_parse_meminfo_value_valid() {
+        let result = parse_meminfo_value("SwapTotal: 1024 kB");
+        assert_eq!(result, 1024 * 1024); // Converted to bytes
+    }
+
+    #[test]
+    fn test_format_size_edge_cases() {
+        assert_eq!(format_size(0), "0B");
+        assert_eq!(format_size(1), "1B");
+        assert_eq!(format_size(1023), "1023B");
+    }
 }

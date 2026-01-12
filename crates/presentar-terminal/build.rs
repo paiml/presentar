@@ -37,6 +37,7 @@ fn main() {
 }
 
 /// SPEC-024: Enforce that async data flow tests exist for ptop
+#[allow(clippy::too_many_lines)]
 fn enforce_ptop_tests() {
     let tests_dir = Path::new("tests");
 

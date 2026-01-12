@@ -623,6 +623,7 @@ impl Analyzer for GpuProcsAnalyzer {
 mod tests {
     use super::*;
 
+    // GpuVendor tests
     #[test]
     fn test_gpu_vendor_display() {
         assert_eq!(GpuVendor::Nvidia.as_str(), "NVIDIA");
@@ -630,6 +631,12 @@ mod tests {
         assert_eq!(GpuVendor::Intel.as_str(), "Intel");
     }
 
+    #[test]
+    fn test_gpu_vendor_unknown() {
+        assert_eq!(GpuVendor::Unknown.as_str(), "Unknown");
+    }
+
+    // GpuInfo tests
     #[test]
     fn test_gpu_info_memory_percent() {
         let gpu = GpuInfo {
@@ -653,6 +660,51 @@ mod tests {
     }
 
     #[test]
+    fn test_gpu_info_zero_memory() {
+        let gpu = GpuInfo {
+            index: 0,
+            name: "Empty GPU".to_string(),
+            vendor: GpuVendor::Unknown,
+            total_memory: 0,
+            used_memory: 0,
+            free_memory: 0,
+            utilization: 0.0,
+            memory_utilization: 0.0,
+            temperature: None,
+            power_draw: None,
+            power_limit: None,
+            fan_speed: None,
+            driver_version: None,
+        };
+
+        // Division by zero case
+        assert_eq!(gpu.memory_percent(), 0.0);
+        assert_eq!(gpu.display_memory(), "0/0 MB");
+    }
+
+    #[test]
+    fn test_gpu_info_full_memory() {
+        let gpu = GpuInfo {
+            index: 1,
+            name: "Full GPU".to_string(),
+            vendor: GpuVendor::Amd,
+            total_memory: 16 * 1024 * 1024 * 1024,
+            used_memory: 16 * 1024 * 1024 * 1024,
+            free_memory: 0,
+            utilization: 100.0,
+            memory_utilization: 100.0,
+            temperature: Some(90.0),
+            power_draw: Some(300.0),
+            power_limit: Some(350.0),
+            fan_speed: Some(100),
+            driver_version: Some("latest".to_string()),
+        };
+
+        assert!((gpu.memory_percent() - 100.0).abs() < 0.01);
+    }
+
+    // GpuProcess tests
+    #[test]
     fn test_gpu_process_display() {
         let proc = GpuProcess {
             pid: 1234,
@@ -668,6 +720,22 @@ mod tests {
     }
 
     #[test]
+    fn test_gpu_process_small_memory() {
+        let proc = GpuProcess {
+            pid: 5678,
+            name: "desktop".to_string(),
+            gpu_index: 0,
+            used_memory: 512 * 1024, // 512 KB
+            gpu_util: None,
+            mem_util: None,
+            process_type: "Graphics".to_string(),
+        };
+
+        assert_eq!(proc.display_memory(), "0 MB"); // Less than 1 MB
+    }
+
+    // GpuProcsData tests
+    #[test]
     fn test_gpu_procs_data_empty() {
         let data = GpuProcsData::default();
         assert!(!data.has_gpu());
@@ -676,12 +744,97 @@ mod tests {
     }
 
     #[test]
+    fn test_gpu_procs_data_with_gpus() {
+        let data = GpuProcsData {
+            gpus: vec![
+                GpuInfo {
+                    index: 0,
+                    name: "GPU 0".to_string(),
+                    vendor: GpuVendor::Nvidia,
+                    total_memory: 8 * 1024 * 1024 * 1024,
+                    used_memory: 4 * 1024 * 1024 * 1024,
+                    free_memory: 4 * 1024 * 1024 * 1024,
+                    utilization: 50.0,
+                    memory_utilization: 50.0,
+                    temperature: Some(65.0),
+                    power_draw: Some(150.0),
+                    power_limit: Some(250.0),
+                    fan_speed: Some(40),
+                    driver_version: Some("535".to_string()),
+                },
+                GpuInfo {
+                    index: 1,
+                    name: "GPU 1".to_string(),
+                    vendor: GpuVendor::Nvidia,
+                    total_memory: 8 * 1024 * 1024 * 1024,
+                    used_memory: 2 * 1024 * 1024 * 1024,
+                    free_memory: 6 * 1024 * 1024 * 1024,
+                    utilization: 25.0,
+                    memory_utilization: 25.0,
+                    temperature: Some(55.0),
+                    power_draw: Some(100.0),
+                    power_limit: Some(250.0),
+                    fan_speed: Some(30),
+                    driver_version: Some("535".to_string()),
+                },
+            ],
+            processes: vec![GpuProcess {
+                pid: 1234,
+                name: "test".to_string(),
+                gpu_index: 0,
+                used_memory: 1024 * 1024 * 1024,
+                gpu_util: Some(50.0),
+                mem_util: Some(12.5),
+                process_type: "Compute".to_string(),
+            }],
+            vendor: Some(GpuVendor::Nvidia),
+            total_vram_used: 6 * 1024 * 1024 * 1024,
+            total_vram: 16 * 1024 * 1024 * 1024,
+            avg_gpu_util: 37.5,
+            max_temperature: Some(65.0),
+            total_power: Some(250.0),
+        };
+
+        assert!(data.has_gpu());
+        assert_eq!(data.gpu_count(), 2);
+        assert_eq!(data.process_count(), 1);
+    }
+
+    // GpuProcsAnalyzer tests
+    #[test]
     fn test_analyzer_creation() {
         let analyzer = GpuProcsAnalyzer::new();
         // Just verify it doesn't panic
         let _ = analyzer.available();
     }
 
+    #[test]
+    fn test_analyzer_default() {
+        let analyzer = GpuProcsAnalyzer::default();
+        assert_eq!(analyzer.name(), "gpu_procs");
+    }
+
+    #[test]
+    fn test_analyzer_name() {
+        let analyzer = GpuProcsAnalyzer::new();
+        assert_eq!(analyzer.name(), "gpu_procs");
+    }
+
+    #[test]
+    fn test_analyzer_interval() {
+        let analyzer = GpuProcsAnalyzer::new();
+        assert_eq!(analyzer.interval(), Duration::from_secs(2));
+    }
+
+    #[test]
+    fn test_analyzer_data() {
+        let analyzer = GpuProcsAnalyzer::new();
+        let data = analyzer.data();
+        // Data should be default empty initially
+        assert_eq!(data.gpu_count(), 0);
+    }
+
+    // Parsing tests
     #[test]
     fn test_parse_nvidia_gpu_line() {
         let analyzer = GpuProcsAnalyzer::new();
@@ -700,6 +853,41 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_nvidia_gpu_line_with_na() {
+        let analyzer = GpuProcsAnalyzer::new();
+        let line = "0, Test GPU, 8192, 4096, 4096, 50, 50, 70, 100.00, 200.00, 50, [N/A]";
+
+        let gpu = analyzer.parse_nvidia_gpu_line(line);
+        assert!(gpu.is_some());
+        let gpu = gpu.unwrap();
+        assert!(gpu.driver_version.is_none());
+    }
+
+    #[test]
+    fn test_parse_nvidia_gpu_line_empty_driver() {
+        let analyzer = GpuProcsAnalyzer::new();
+        let line = "0, Test GPU, 8192, 4096, 4096, 50, 50, 70, 100.00, 200.00, 50, ";
+
+        let gpu = analyzer.parse_nvidia_gpu_line(line);
+        assert!(gpu.is_some());
+        let gpu = gpu.unwrap();
+        assert!(gpu.driver_version.is_none());
+    }
+
+    #[test]
+    fn test_parse_nvidia_gpu_line_invalid() {
+        let analyzer = GpuProcsAnalyzer::new();
+
+        // Too few parts
+        assert!(analyzer.parse_nvidia_gpu_line("0, GPU").is_none());
+
+        // Invalid numbers
+        assert!(analyzer
+            .parse_nvidia_gpu_line("invalid, GPU, x, y, z, a, b, c, d, e, f, g")
+            .is_none());
+    }
+
+    #[test]
     fn test_parse_nvidia_process_line() {
         let analyzer = GpuProcsAnalyzer::new();
         let line = "1234, python3, 0, 2048";
@@ -712,5 +900,310 @@ mod tests {
         assert_eq!(proc.name, "python3");
         assert_eq!(proc.gpu_index, 0);
         assert_eq!(proc.used_memory, 2048 * 1024 * 1024);
+        assert_eq!(proc.process_type, "Compute");
+    }
+
+    #[test]
+    fn test_parse_nvidia_process_line_invalid() {
+        let analyzer = GpuProcsAnalyzer::new();
+
+        // Too few parts
+        assert!(analyzer.parse_nvidia_process_line("1234, python").is_none());
+
+        // Invalid PID
+        assert!(analyzer
+            .parse_nvidia_process_line("invalid, python, 0, 100")
+            .is_none());
+
+        // Invalid GPU index
+        assert!(analyzer
+            .parse_nvidia_process_line("1234, python, invalid, 100")
+            .is_none());
+
+        // Invalid memory
+        assert!(analyzer
+            .parse_nvidia_process_line("1234, python, 0, invalid")
+            .is_none());
+    }
+
+    #[test]
+    fn test_parse_nvidia_process_line_different_gpu() {
+        let analyzer = GpuProcsAnalyzer::new();
+        let line = "5678, cuda_app, 1, 4096";
+
+        let proc = analyzer.parse_nvidia_process_line(line);
+        assert!(proc.is_some());
+
+        let proc = proc.unwrap();
+        assert_eq!(proc.gpu_index, 1);
+        assert_eq!(proc.used_memory, 4096 * 1024 * 1024);
+    }
+
+    // Analyzer trait tests
+    #[test]
+    fn test_analyzer_collect_no_gpu() {
+        let mut analyzer = GpuProcsAnalyzer {
+            data: GpuProcsData::default(),
+            interval: Duration::from_secs(2),
+            vendor: None,
+            nvidia_smi_path: None,
+        };
+
+        let result = analyzer.collect();
+        assert!(result.is_err());
+        if let Err(AnalyzerError::NotAvailable(msg)) = result {
+            assert!(msg.contains("No GPU"));
+        }
+    }
+
+    #[test]
+    fn test_analyzer_collect_intel_not_supported() {
+        let mut analyzer = GpuProcsAnalyzer {
+            data: GpuProcsData::default(),
+            interval: Duration::from_secs(2),
+            vendor: Some(GpuVendor::Intel),
+            nvidia_smi_path: None,
+        };
+
+        let result = analyzer.collect();
+        assert!(result.is_err());
+        if let Err(AnalyzerError::NotAvailable(msg)) = result {
+            assert!(msg.contains("Intel"));
+        }
+    }
+
+    #[test]
+    fn test_analyzer_available_with_vendor() {
+        let analyzer = GpuProcsAnalyzer {
+            data: GpuProcsData::default(),
+            interval: Duration::from_secs(2),
+            vendor: Some(GpuVendor::Nvidia),
+            nvidia_smi_path: Some("/usr/bin/nvidia-smi".to_string()),
+        };
+
+        assert!(analyzer.available());
+    }
+
+    #[test]
+    fn test_analyzer_available_without_vendor() {
+        let analyzer = GpuProcsAnalyzer {
+            data: GpuProcsData::default(),
+            interval: Duration::from_secs(2),
+            vendor: None,
+            nvidia_smi_path: None,
+        };
+
+        assert!(!analyzer.available());
+    }
+
+    // Additional GpuVendor tests
+    #[test]
+    fn test_gpu_vendor_debug() {
+        let vendor = GpuVendor::Nvidia;
+        let debug = format!("{:?}", vendor);
+        assert!(debug.contains("Nvidia"));
+    }
+
+    #[test]
+    fn test_gpu_vendor_clone() {
+        let vendor = GpuVendor::Amd;
+        let cloned = vendor.clone();
+        assert_eq!(vendor, cloned);
+    }
+
+    #[test]
+    fn test_gpu_vendor_copy() {
+        let vendor = GpuVendor::Intel;
+        let copied: GpuVendor = vendor;
+        assert_eq!(copied, GpuVendor::Intel);
+    }
+
+    // Additional GpuInfo tests
+    #[test]
+    fn test_gpu_info_debug() {
+        let gpu = GpuInfo {
+            index: 0,
+            name: "Test".to_string(),
+            vendor: GpuVendor::Nvidia,
+            total_memory: 0,
+            used_memory: 0,
+            free_memory: 0,
+            utilization: 0.0,
+            memory_utilization: 0.0,
+            temperature: None,
+            power_draw: None,
+            power_limit: None,
+            fan_speed: None,
+            driver_version: None,
+        };
+        let debug = format!("{:?}", gpu);
+        assert!(debug.contains("GpuInfo"));
+    }
+
+    #[test]
+    fn test_gpu_info_clone() {
+        let gpu = GpuInfo {
+            index: 0,
+            name: "Clone Test".to_string(),
+            vendor: GpuVendor::Nvidia,
+            total_memory: 1024,
+            used_memory: 512,
+            free_memory: 512,
+            utilization: 25.0,
+            memory_utilization: 50.0,
+            temperature: Some(60.0),
+            power_draw: Some(100.0),
+            power_limit: Some(200.0),
+            fan_speed: Some(50),
+            driver_version: Some("test".to_string()),
+        };
+        let cloned = gpu.clone();
+        assert_eq!(cloned.name, "Clone Test");
+        assert_eq!(cloned.index, 0);
+    }
+
+    // Additional GpuProcess tests
+    #[test]
+    fn test_gpu_process_debug() {
+        let proc = GpuProcess {
+            pid: 1,
+            name: "test".to_string(),
+            gpu_index: 0,
+            used_memory: 0,
+            gpu_util: None,
+            mem_util: None,
+            process_type: "Compute".to_string(),
+        };
+        let debug = format!("{:?}", proc);
+        assert!(debug.contains("GpuProcess"));
+    }
+
+    #[test]
+    fn test_gpu_process_clone() {
+        let proc = GpuProcess {
+            pid: 1234,
+            name: "clone_test".to_string(),
+            gpu_index: 1,
+            used_memory: 2048,
+            gpu_util: Some(50.0),
+            mem_util: Some(25.0),
+            process_type: "Graphics".to_string(),
+        };
+        let cloned = proc.clone();
+        assert_eq!(cloned.pid, 1234);
+        assert_eq!(cloned.name, "clone_test");
+    }
+
+    // Additional GpuProcsData tests
+    #[test]
+    fn test_gpu_procs_data_debug() {
+        let data = GpuProcsData::default();
+        let debug = format!("{:?}", data);
+        assert!(debug.contains("GpuProcsData"));
+    }
+
+    #[test]
+    fn test_gpu_procs_data_clone() {
+        let data = GpuProcsData {
+            gpus: vec![],
+            processes: vec![],
+            vendor: Some(GpuVendor::Amd),
+            total_vram_used: 1000,
+            total_vram: 2000,
+            avg_gpu_util: 50.0,
+            max_temperature: Some(75.0),
+            total_power: Some(200.0),
+        };
+        let cloned = data.clone();
+        assert_eq!(cloned.vendor, Some(GpuVendor::Amd));
+        assert_eq!(cloned.total_vram_used, 1000);
+    }
+
+    // AMD sysfs helper function tests
+    #[test]
+    fn test_read_amd_gpu_name_nonexistent() {
+        let path = Path::new("/nonexistent/path");
+        let name = GpuProcsAnalyzer::read_amd_gpu_name(path);
+        assert_eq!(name, "AMD GPU");
+    }
+
+    #[test]
+    fn test_read_amd_vram_total_nonexistent() {
+        let path = Path::new("/nonexistent/path");
+        let total = GpuProcsAnalyzer::read_amd_vram_total(path);
+        assert_eq!(total, 0);
+    }
+
+    #[test]
+    fn test_read_amd_vram_used_nonexistent() {
+        let path = Path::new("/nonexistent/path");
+        let used = GpuProcsAnalyzer::read_amd_vram_used(path);
+        assert_eq!(used, 0);
+    }
+
+    #[test]
+    fn test_read_amd_gpu_busy_nonexistent() {
+        let path = Path::new("/nonexistent/path");
+        let busy = GpuProcsAnalyzer::read_amd_gpu_busy(path);
+        assert!((busy - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_read_amd_temperature_nonexistent() {
+        let path = Path::new("/nonexistent/path");
+        let temp = GpuProcsAnalyzer::read_amd_temperature(path);
+        assert!(temp.is_none());
+    }
+
+    #[test]
+    fn test_read_amd_power_nonexistent() {
+        let path = Path::new("/nonexistent/path");
+        let power = GpuProcsAnalyzer::read_amd_power(path);
+        assert!(power.is_none());
+    }
+
+    #[test]
+    fn test_read_amd_fan_speed_nonexistent() {
+        let path = Path::new("/nonexistent/path");
+        let speed = GpuProcsAnalyzer::read_amd_fan_speed(path);
+        assert!(speed.is_none());
+    }
+
+    // Test detect_gpu function
+    #[test]
+    fn test_detect_gpu() {
+        // This just tests that the function runs without panicking
+        let (vendor, path) = GpuProcsAnalyzer::detect_gpu();
+        // Result depends on system hardware - just verify types
+        let _ = vendor;
+        let _ = path;
+    }
+
+    // Test query methods with mock analyzer
+    #[test]
+    fn test_query_nvidia_no_nvidia_smi() {
+        let mut analyzer = GpuProcsAnalyzer {
+            data: GpuProcsData::default(),
+            interval: Duration::from_secs(2),
+            vendor: Some(GpuVendor::Nvidia),
+            nvidia_smi_path: None,
+        };
+
+        let result = analyzer.query_nvidia();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_query_amd_no_drm() {
+        // Create analyzer that will fail because there's no AMD GPU
+        let mut analyzer = GpuProcsAnalyzer {
+            data: GpuProcsData::default(),
+            interval: Duration::from_secs(2),
+            vendor: Some(GpuVendor::Amd),
+            nvidia_smi_path: None,
+        };
+
+        // This may succeed or fail depending on system
+        let _ = analyzer.query_amd();
     }
 }

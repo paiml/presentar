@@ -456,4 +456,257 @@ mod tests {
         assert_eq!(series.name, "Test");
         assert_eq!(series.values.len(), 3);
     }
+
+    // =========================================================================
+    // Additional coverage tests
+    // =========================================================================
+
+    #[test]
+    fn test_with_fill_alpha() {
+        let plot = RadarPlot::default().with_fill_alpha(0.5);
+        assert!((plot.fill_alpha - 0.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_with_fill_alpha_clamped() {
+        let plot = RadarPlot::default().with_fill_alpha(2.0);
+        assert!((plot.fill_alpha - 1.0).abs() < 0.01);
+
+        let plot2 = RadarPlot::default().with_fill_alpha(-0.5);
+        assert!((plot2.fill_alpha - 0.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_with_labels() {
+        let plot = RadarPlot::default().with_labels(false);
+        assert!(!plot.show_labels);
+    }
+
+    #[test]
+    fn test_with_grid() {
+        let plot = RadarPlot::default().with_grid(false);
+        assert!(!plot.show_grid);
+    }
+
+    #[test]
+    fn test_with_fill() {
+        let plot = RadarPlot::default().with_fill(false);
+        assert!(!plot.fill);
+    }
+
+    #[test]
+    fn test_max_value_with_nan() {
+        let axes = vec!["A".to_string(), "B".to_string()];
+        let series = RadarSeries::new("Test", vec![f64::NAN, 5.0], Color::BLUE);
+        let plot = RadarPlot::new(axes).with_series(series);
+        // NaN should be skipped
+        assert!((plot.max_value() - 5.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_max_value_with_infinity() {
+        let axes = vec!["A".to_string(), "B".to_string()];
+        let series = RadarSeries::new("Test", vec![f64::INFINITY, 5.0], Color::BLUE);
+        let plot = RadarPlot::new(axes).with_series(series);
+        // Infinity should be skipped (not is_finite)
+        assert!((plot.max_value() - 5.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_max_value_negative() {
+        let axes = vec!["A".to_string()];
+        let series = RadarSeries::new("Test", vec![-5.0], Color::BLUE);
+        let plot = RadarPlot::new(axes).with_series(series);
+        // max_value returns at least 1.0
+        assert!((plot.max_value() - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_paint_too_small() {
+        let mut plot = RadarPlot::new(vec!["A".to_string()]);
+        plot.bounds = Rect::new(0.0, 0.0, 0.5, 0.5); // Too small
+
+        let mut buffer = CellBuffer::new(1, 1);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas); // Should return early
+    }
+
+    #[test]
+    fn test_paint_no_grid_no_labels() {
+        let axes = vec!["A".to_string(), "B".to_string(), "C".to_string()];
+        let series = RadarSeries::new("Test", vec![5.0, 6.0, 7.0], Color::BLUE);
+        let mut plot = RadarPlot::new(axes)
+            .with_series(series)
+            .with_grid(false)
+            .with_labels(false);
+        plot.bounds = Rect::new(0.0, 0.0, 40.0, 20.0);
+
+        let mut buffer = CellBuffer::new(40, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_paint_mismatched_series() {
+        let axes = vec!["A".to_string(), "B".to_string(), "C".to_string()];
+        // Series has 2 values but there are 3 axes - should be skipped
+        let series = RadarSeries::new("Test", vec![1.0, 2.0], Color::BLUE);
+        let mut plot = RadarPlot::new(axes).with_series(series);
+        plot.bounds = Rect::new(0.0, 0.0, 40.0, 20.0);
+
+        let mut buffer = CellBuffer::new(40, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas); // Series should be skipped
+    }
+
+    #[test]
+    fn test_paint_empty_axes() {
+        let mut plot = RadarPlot::new(vec![]); // No axes
+        plot.bounds = Rect::new(0.0, 0.0, 40.0, 20.0);
+
+        let mut buffer = CellBuffer::new(40, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_paint_negative_values() {
+        let axes = vec!["A".to_string(), "B".to_string(), "C".to_string()];
+        let series = RadarSeries::new("Test", vec![-1.0, 5.0, 3.0], Color::BLUE);
+        let mut plot = RadarPlot::new(axes).with_series(series);
+        plot.bounds = Rect::new(0.0, 0.0, 40.0, 20.0);
+
+        let mut buffer = CellBuffer::new(40, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas); // Negative values clamped to 0
+    }
+
+    #[test]
+    fn test_verify_too_small() {
+        let mut plot = RadarPlot::new(vec!["A".to_string()]);
+        plot.bounds = Rect::new(0.0, 0.0, 5.0, 3.0); // Too small
+        let result = plot.verify();
+        assert!(!result.failed.is_empty());
+    }
+
+    #[test]
+    fn test_widget_type_id() {
+        let plot = RadarPlot::default();
+        let id = Widget::type_id(&plot);
+        assert_eq!(id, TypeId::of::<RadarPlot>());
+    }
+
+    #[test]
+    fn test_widget_measure() {
+        let plot = RadarPlot::default();
+        let constraints = Constraints::tight(Size::new(100.0, 50.0));
+        let size = plot.measure(constraints);
+        assert!(size.width <= 40.0);
+        assert!(size.height <= 40.0);
+    }
+
+    #[test]
+    fn test_widget_layout() {
+        let mut plot = RadarPlot::default();
+        let bounds = Rect::new(10.0, 20.0, 30.0, 25.0);
+        let result = plot.layout(bounds);
+        assert_eq!(result.size.width, 30.0);
+        assert_eq!(result.size.height, 25.0);
+        assert_eq!(plot.bounds, bounds);
+    }
+
+    #[test]
+    fn test_widget_event() {
+        let mut plot = RadarPlot::default();
+        let result = plot.event(&Event::FocusIn);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_widget_children() {
+        let plot = RadarPlot::default();
+        assert!(plot.children().is_empty());
+    }
+
+    #[test]
+    fn test_widget_children_mut() {
+        let mut plot = RadarPlot::default();
+        assert!(plot.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_brick_assertions() {
+        let plot = RadarPlot::default();
+        let assertions = plot.assertions();
+        assert!(!assertions.is_empty());
+    }
+
+    #[test]
+    fn test_brick_budget() {
+        let plot = RadarPlot::default();
+        let budget = plot.budget();
+        assert!(budget.total_ms > 0);
+    }
+
+    #[test]
+    fn test_brick_to_html() {
+        let plot = RadarPlot::default();
+        assert!(plot.to_html().is_empty());
+    }
+
+    #[test]
+    fn test_brick_to_css() {
+        let plot = RadarPlot::default();
+        assert!(plot.to_css().is_empty());
+    }
+
+    #[test]
+    fn test_clone() {
+        let axes = vec!["A".to_string(), "B".to_string()];
+        let series = RadarSeries::new("Test", vec![1.0, 2.0], Color::GREEN);
+        let plot = RadarPlot::new(axes)
+            .with_series(series)
+            .with_fill(false)
+            .with_grid(false)
+            .with_labels(false)
+            .with_fill_alpha(0.5);
+
+        let cloned = plot.clone();
+        assert_eq!(cloned.axes.len(), 2);
+        assert_eq!(cloned.series.len(), 1);
+        assert!(!cloned.fill);
+        assert!(!cloned.show_grid);
+        assert!(!cloned.show_labels);
+    }
+
+    #[test]
+    fn test_debug() {
+        let plot = RadarPlot::default();
+        let debug_str = format!("{:?}", plot);
+        assert!(debug_str.contains("RadarPlot"));
+    }
+
+    #[test]
+    fn test_radar_series_clone() {
+        let series = RadarSeries::new("Test", vec![1.0, 2.0], Color::RED);
+        let cloned = series.clone();
+        assert_eq!(cloned.name, "Test");
+        assert_eq!(cloned.values.len(), 2);
+    }
+
+    #[test]
+    fn test_radar_series_debug() {
+        let series = RadarSeries::new("Test", vec![1.0], Color::BLUE);
+        let debug_str = format!("{:?}", series);
+        assert!(debug_str.contains("RadarSeries"));
+    }
+
+    #[test]
+    fn test_default_values() {
+        let plot = RadarPlot::new(vec!["A".to_string()]);
+        assert!(plot.fill);
+        assert!((plot.fill_alpha - 0.3).abs() < 0.01);
+        assert!(plot.show_labels);
+        assert!(plot.show_grid);
+    }
 }

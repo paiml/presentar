@@ -157,8 +157,10 @@ impl AnalyzerRegistry {
         };
 
         let sensor_health = {
-            let analyzer = SensorHealthAnalyzer::new();
+            let mut analyzer = SensorHealthAnalyzer::new();
             if analyzer.available() {
+                // Collect immediately so sensors are available for panel visibility check
+                let _ = analyzer.collect();
                 Some(analyzer)
             } else {
                 None
@@ -388,5 +390,318 @@ mod tests {
         let mut registry = AnalyzerRegistry::new();
         registry.collect_all();
         // Should not panic
+    }
+
+    // AnalyzerError tests
+    #[test]
+    fn test_analyzer_error_io_error_display() {
+        let err = AnalyzerError::IoError("test error".to_string());
+        let display = format!("{}", err);
+        assert!(display.contains("I/O error"));
+        assert!(display.contains("test error"));
+    }
+
+    #[test]
+    fn test_analyzer_error_parse_error_display() {
+        let err = AnalyzerError::ParseError("parse failed".to_string());
+        let display = format!("{}", err);
+        assert!(display.contains("Parse error"));
+        assert!(display.contains("parse failed"));
+    }
+
+    #[test]
+    fn test_analyzer_error_not_available_display() {
+        let err = AnalyzerError::NotAvailable("feature missing".to_string());
+        let display = format!("{}", err);
+        assert!(display.contains("Not available"));
+        assert!(display.contains("feature missing"));
+    }
+
+    #[test]
+    fn test_analyzer_error_is_error_trait() {
+        let err: Box<dyn std::error::Error> = Box::new(AnalyzerError::IoError("test".to_string()));
+        let _ = err.to_string();
+    }
+
+    #[test]
+    fn test_analyzer_error_debug() {
+        let err = AnalyzerError::IoError("test".to_string());
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("IoError"));
+    }
+
+    // AnalyzerRegistry default
+    #[test]
+    fn test_registry_default() {
+        let registry = AnalyzerRegistry::default();
+        // Verify default creates same as new
+        let _ = registry.psi;
+        let _ = registry.connections;
+    }
+
+    // Data accessor tests
+    #[test]
+    fn test_registry_psi_data() {
+        let registry = AnalyzerRegistry::new();
+        // May be Some or None depending on system
+        let _ = registry.psi_data();
+    }
+
+    #[test]
+    fn test_registry_connections_data() {
+        let registry = AnalyzerRegistry::new();
+        let _ = registry.connections_data();
+    }
+
+    #[test]
+    fn test_registry_process_extra_data() {
+        let registry = AnalyzerRegistry::new();
+        let _ = registry.process_extra_data();
+    }
+
+    #[test]
+    fn test_registry_sensor_health_data() {
+        let registry = AnalyzerRegistry::new();
+        let _ = registry.sensor_health_data();
+    }
+
+    #[test]
+    fn test_registry_containers_data() {
+        let registry = AnalyzerRegistry::new();
+        let _ = registry.containers_data();
+    }
+
+    #[test]
+    fn test_registry_gpu_procs_data() {
+        let registry = AnalyzerRegistry::new();
+        let _ = registry.gpu_procs_data();
+    }
+
+    #[test]
+    fn test_registry_treemap_data() {
+        let registry = AnalyzerRegistry::new();
+        let _ = registry.treemap_data();
+    }
+
+    #[test]
+    fn test_registry_disk_io_data() {
+        let registry = AnalyzerRegistry::new();
+        let _ = registry.disk_io_data();
+    }
+
+    #[test]
+    fn test_registry_network_stats_data() {
+        let registry = AnalyzerRegistry::new();
+        let _ = registry.network_stats_data();
+    }
+
+    #[test]
+    fn test_registry_swap_data() {
+        let registry = AnalyzerRegistry::new();
+        let _ = registry.swap_data();
+    }
+
+    #[test]
+    fn test_registry_storage_data() {
+        let registry = AnalyzerRegistry::new();
+        let _ = registry.storage_data();
+    }
+
+    #[test]
+    fn test_registry_disk_entropy_data() {
+        let registry = AnalyzerRegistry::new();
+        let _ = registry.disk_entropy_data();
+    }
+
+    #[test]
+    fn test_registry_file_analyzer_data() {
+        let registry = AnalyzerRegistry::new();
+        let _ = registry.file_analyzer_data();
+    }
+
+    // Test collect_all updates analyzers
+    #[test]
+    fn test_collect_all_multiple_times() {
+        let mut registry = AnalyzerRegistry::new();
+        registry.collect_all();
+        registry.collect_all();
+        registry.collect_all();
+        // Should not panic on multiple collects
+    }
+
+    // Test individual analyzer availability
+    #[test]
+    fn test_psi_analyzer_available() {
+        let analyzer = PsiAnalyzer::new();
+        // Just check the method returns without panic
+        let _ = analyzer.available();
+    }
+
+    #[test]
+    fn test_connections_analyzer_available() {
+        let analyzer = ConnectionsAnalyzer::new();
+        let _ = analyzer.available();
+    }
+
+    #[test]
+    fn test_process_extra_analyzer_available() {
+        let analyzer = ProcessExtraAnalyzer::new();
+        let _ = analyzer.available();
+    }
+
+    #[test]
+    fn test_sensor_health_analyzer_available() {
+        let analyzer = SensorHealthAnalyzer::new();
+        let _ = analyzer.available();
+    }
+
+    #[test]
+    fn test_containers_analyzer_available() {
+        let analyzer = ContainersAnalyzer::new();
+        let _ = analyzer.available();
+    }
+
+    #[test]
+    fn test_gpu_procs_analyzer_available() {
+        let analyzer = GpuProcsAnalyzer::new();
+        let _ = analyzer.available();
+    }
+
+    #[test]
+    fn test_treemap_analyzer_available() {
+        let analyzer = TreemapAnalyzer::new();
+        let _ = analyzer.available();
+    }
+
+    #[test]
+    fn test_disk_io_analyzer_available() {
+        let analyzer = DiskIoAnalyzer::new();
+        let _ = analyzer.available();
+    }
+
+    #[test]
+    fn test_network_stats_analyzer_available() {
+        let analyzer = NetworkStatsAnalyzer::new();
+        let _ = analyzer.available();
+    }
+
+    #[test]
+    fn test_swap_analyzer_available() {
+        let analyzer = SwapAnalyzer::new();
+        let _ = analyzer.available();
+    }
+
+    #[test]
+    fn test_storage_analyzer_available() {
+        let analyzer = StorageAnalyzer::new();
+        let _ = analyzer.available();
+    }
+
+    #[test]
+    fn test_disk_entropy_analyzer_available() {
+        let analyzer = DiskEntropyAnalyzer::new();
+        let _ = analyzer.available();
+    }
+
+    #[test]
+    fn test_file_analyzer_available() {
+        let analyzer = FileAnalyzer::new();
+        let _ = analyzer.available();
+    }
+
+    // Test analyzer names
+    #[test]
+    fn test_psi_analyzer_name() {
+        let analyzer = PsiAnalyzer::new();
+        let name = analyzer.name();
+        assert!(!name.is_empty());
+    }
+
+    #[test]
+    fn test_connections_analyzer_name() {
+        let analyzer = ConnectionsAnalyzer::new();
+        let name = analyzer.name();
+        assert!(!name.is_empty());
+    }
+
+    #[test]
+    fn test_process_extra_analyzer_name() {
+        let analyzer = ProcessExtraAnalyzer::new();
+        let name = analyzer.name();
+        assert!(!name.is_empty());
+    }
+
+    #[test]
+    fn test_disk_io_analyzer_name() {
+        let analyzer = DiskIoAnalyzer::new();
+        let name = analyzer.name();
+        assert!(!name.is_empty());
+    }
+
+    #[test]
+    fn test_network_stats_analyzer_name() {
+        let analyzer = NetworkStatsAnalyzer::new();
+        let name = analyzer.name();
+        assert!(!name.is_empty());
+    }
+
+    // Test analyzer intervals
+    #[test]
+    fn test_psi_analyzer_interval() {
+        let analyzer = PsiAnalyzer::new();
+        let interval = analyzer.interval();
+        assert!(interval.as_millis() > 0);
+    }
+
+    #[test]
+    fn test_connections_analyzer_interval() {
+        let analyzer = ConnectionsAnalyzer::new();
+        let interval = analyzer.interval();
+        assert!(interval.as_millis() > 0);
+    }
+
+    #[test]
+    fn test_disk_io_analyzer_interval() {
+        let analyzer = DiskIoAnalyzer::new();
+        let interval = analyzer.interval();
+        assert!(interval.as_millis() > 0);
+    }
+
+    // Test collect on individual analyzers
+    #[test]
+    fn test_psi_analyzer_collect() {
+        let mut analyzer = PsiAnalyzer::new();
+        // May succeed or fail depending on system
+        let _ = analyzer.collect();
+    }
+
+    #[test]
+    fn test_connections_analyzer_collect() {
+        let mut analyzer = ConnectionsAnalyzer::new();
+        let _ = analyzer.collect();
+    }
+
+    #[test]
+    fn test_disk_io_analyzer_collect() {
+        let mut analyzer = DiskIoAnalyzer::new();
+        let _ = analyzer.collect();
+    }
+
+    #[test]
+    fn test_network_stats_analyzer_collect() {
+        let mut analyzer = NetworkStatsAnalyzer::new();
+        let _ = analyzer.collect();
+    }
+
+    #[test]
+    fn test_swap_analyzer_collect() {
+        let mut analyzer = SwapAnalyzer::new();
+        let _ = analyzer.collect();
+    }
+
+    #[test]
+    fn test_storage_analyzer_collect() {
+        let mut analyzer = StorageAnalyzer::new();
+        let _ = analyzer.collect();
     }
 }

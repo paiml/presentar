@@ -462,4 +462,410 @@ mod tests {
         let colors = ClusterPlot::default_colors();
         assert!(colors.len() >= 10);
     }
+
+    // =========================================================================
+    // Additional coverage tests
+    // =========================================================================
+
+    #[test]
+    fn test_with_show_centroids() {
+        let plot = ClusterPlot::default().with_show_centroids(false);
+        assert!(!plot.show_centroids);
+
+        let plot2 = plot.with_show_centroids(true);
+        assert!(plot2.show_centroids);
+    }
+
+    #[test]
+    fn test_with_colors() {
+        let custom_colors = vec![Color::RED, Color::GREEN, Color::BLUE];
+        let plot = ClusterPlot::default().with_colors(custom_colors.clone());
+        assert_eq!(plot.colors.len(), 3);
+    }
+
+    #[test]
+    fn test_get_cluster_color_noise() {
+        let plot = ClusterPlot::default();
+        let noise_color = plot.get_cluster_color(-1);
+        // Noise color should be grayish with low alpha
+        assert!(noise_color.a < 1.0);
+    }
+
+    #[test]
+    fn test_get_cluster_color_normal() {
+        let plot = ClusterPlot::default();
+        let color0 = plot.get_cluster_color(0);
+        let color1 = plot.get_cluster_color(1);
+        // Different clusters should have different colors
+        assert!(color0.r != color1.r || color0.g != color1.g || color0.b != color1.b);
+    }
+
+    #[test]
+    fn test_get_cluster_color_wraps() {
+        let plot = ClusterPlot::default();
+        let colors_len = plot.colors.len();
+        // Should wrap around
+        let color_high = plot.get_cluster_color(colors_len as i32 + 2);
+        let color_wrapped = plot.get_cluster_color(2);
+        assert_eq!(color_high, color_wrapped);
+    }
+
+    #[test]
+    fn test_x_range_empty() {
+        let plot = ClusterPlot::default();
+        let (x_min, x_max) = plot.x_range();
+        assert_eq!(x_min, 0.0);
+        assert_eq!(x_max, 1.0);
+    }
+
+    #[test]
+    fn test_x_range_with_data() {
+        let points = vec![(0.0, 0.0), (10.0, 5.0), (5.0, 2.0)];
+        let plot = ClusterPlot::new(points, vec![0, 0, 0]);
+        let (x_min, x_max) = plot.x_range();
+        // Should have 10% padding
+        assert!(x_min < 0.0);
+        assert!(x_max > 10.0);
+    }
+
+    #[test]
+    fn test_x_range_with_nan() {
+        let points = vec![(f64::NAN, 0.0), (5.0, 1.0), (10.0, 2.0)];
+        let plot = ClusterPlot::new(points, vec![0, 0, 0]);
+        let (x_min, x_max) = plot.x_range();
+        // Should ignore NaN
+        assert!(x_min < 5.0);
+        assert!(x_max > 10.0);
+    }
+
+    #[test]
+    fn test_y_range_empty() {
+        let plot = ClusterPlot::default();
+        let (y_min, y_max) = plot.y_range();
+        assert_eq!(y_min, 0.0);
+        assert_eq!(y_max, 1.0);
+    }
+
+    #[test]
+    fn test_y_range_with_data() {
+        let points = vec![(0.0, 0.0), (1.0, 10.0), (2.0, 5.0)];
+        let plot = ClusterPlot::new(points, vec![0, 0, 0]);
+        let (y_min, y_max) = plot.y_range();
+        assert!(y_min < 0.0);
+        assert!(y_max > 10.0);
+    }
+
+    #[test]
+    fn test_y_range_with_nan() {
+        let points = vec![(0.0, f64::NAN), (1.0, 5.0), (2.0, 10.0)];
+        let plot = ClusterPlot::new(points, vec![0, 0, 0]);
+        let (y_min, y_max) = plot.y_range();
+        assert!(y_min < 5.0);
+        assert!(y_max > 10.0);
+    }
+
+    #[test]
+    fn test_paint_too_small_width() {
+        let mut plot = ClusterPlot::new(vec![(0.0, 0.0)], vec![0]);
+        plot.bounds = Rect::new(0.0, 0.0, 5.0, 20.0); // Too narrow
+
+        let mut buffer = CellBuffer::new(5, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas); // Should not crash
+    }
+
+    #[test]
+    fn test_paint_too_small_height() {
+        let mut plot = ClusterPlot::new(vec![(0.0, 0.0)], vec![0]);
+        plot.bounds = Rect::new(0.0, 0.0, 60.0, 3.0); // Too short
+
+        let mut buffer = CellBuffer::new(60, 3);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas); // Should not crash
+    }
+
+    #[test]
+    fn test_paint_with_noise_points() {
+        let points = vec![
+            (0.0, 0.0),
+            (1.0, 1.0),
+            (5.0, 5.0), // Noise point
+        ];
+        let labels = vec![0, 0, -1]; // -1 = noise
+        let mut plot = ClusterPlot::new(points, labels);
+        plot.bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+
+        let mut buffer = CellBuffer::new(60, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_paint_without_centroids() {
+        let points = vec![(0.0, 0.0), (1.0, 1.0)];
+        let labels = vec![0, 0];
+        let mut plot = ClusterPlot::new(points, labels)
+            .with_centroids(vec![(0.5, 0.5)])
+            .with_show_centroids(false);
+        plot.bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+
+        let mut buffer = CellBuffer::new(60, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_paint_with_nan_centroid() {
+        let points = vec![(0.0, 0.0), (1.0, 1.0)];
+        let labels = vec![0, 0];
+        let mut plot = ClusterPlot::new(points, labels)
+            .with_centroids(vec![(f64::NAN, 0.5), (0.5, f64::NAN)]);
+        plot.bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+
+        let mut buffer = CellBuffer::new(60, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas); // Should skip NaN centroids
+    }
+
+    #[test]
+    fn test_paint_with_nan_point() {
+        let points = vec![(f64::NAN, 0.0), (0.0, f64::NAN), (1.0, 1.0)];
+        let labels = vec![0, 0, 0];
+        let mut plot = ClusterPlot::new(points, labels);
+        plot.bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+
+        let mut buffer = CellBuffer::new(60, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas); // Should skip NaN points
+    }
+
+    #[test]
+    fn test_paint_single_point() {
+        // Single point means x_min == x_max, y_min == y_max
+        let points = vec![(5.0, 5.0)];
+        let labels = vec![0];
+        let mut plot = ClusterPlot::new(points, labels);
+        plot.bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+
+        let mut buffer = CellBuffer::new(60, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_paint_negative_plot_dimensions() {
+        let mut plot = ClusterPlot::new(vec![(0.0, 0.0)], vec![0]);
+        // Set bounds that result in negative plot_width/height after margin
+        plot.bounds = Rect::new(0.0, 0.0, 2.0, 2.0);
+
+        let mut buffer = CellBuffer::new(10, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas); // Should handle gracefully
+    }
+
+    #[test]
+    fn test_algorithm_hierarchical() {
+        let plot = ClusterPlot::default().with_algorithm(ClusterAlgorithm::Hierarchical { n_clusters: 4 });
+        assert!(matches!(
+            plot.algorithm,
+            ClusterAlgorithm::Hierarchical { n_clusters: 4 }
+        ));
+    }
+
+    #[test]
+    fn test_algorithm_hdbscan() {
+        let plot = ClusterPlot::default().with_algorithm(ClusterAlgorithm::HDBSCAN { min_cluster_size: 10 });
+        assert!(matches!(
+            plot.algorithm,
+            ClusterAlgorithm::HDBSCAN { min_cluster_size: 10 }
+        ));
+    }
+
+    #[test]
+    fn test_verify_too_small() {
+        let mut plot = ClusterPlot::new(vec![(0.0, 0.0)], vec![0]);
+        plot.bounds = Rect::new(0.0, 0.0, 5.0, 3.0); // Too small
+        let result = plot.verify();
+        assert!(!result.failed.is_empty());
+    }
+
+    #[test]
+    fn test_brick_assertions() {
+        let plot = ClusterPlot::default();
+        let assertions = plot.assertions();
+        assert!(!assertions.is_empty());
+    }
+
+    #[test]
+    fn test_brick_budget() {
+        let plot = ClusterPlot::default();
+        let budget = plot.budget();
+        assert!(budget.total_ms > 0);
+    }
+
+    #[test]
+    fn test_brick_to_html() {
+        let plot = ClusterPlot::default();
+        assert!(plot.to_html().is_empty());
+    }
+
+    #[test]
+    fn test_brick_to_css() {
+        let plot = ClusterPlot::default();
+        assert!(plot.to_css().is_empty());
+    }
+
+    #[test]
+    fn test_widget_type_id() {
+        let plot = ClusterPlot::default();
+        let id = Widget::type_id(&plot);
+        assert_eq!(id, TypeId::of::<ClusterPlot>());
+    }
+
+    #[test]
+    fn test_widget_measure() {
+        let plot = ClusterPlot::default();
+        let constraints = Constraints::tight(Size::new(100.0, 50.0));
+        let size = plot.measure(constraints);
+        assert!(size.width <= 60.0);
+        assert!(size.height <= 20.0);
+    }
+
+    #[test]
+    fn test_widget_layout() {
+        let mut plot = ClusterPlot::default();
+        let bounds = Rect::new(10.0, 20.0, 40.0, 15.0);
+        let result = plot.layout(bounds);
+        assert_eq!(result.size.width, 40.0);
+        assert_eq!(result.size.height, 15.0);
+        assert_eq!(plot.bounds, bounds);
+    }
+
+    #[test]
+    fn test_widget_event() {
+        let mut plot = ClusterPlot::default();
+        let result = plot.event(&Event::FocusIn);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_widget_children() {
+        let plot = ClusterPlot::default();
+        assert!(plot.children().is_empty());
+    }
+
+    #[test]
+    fn test_widget_children_mut() {
+        let mut plot = ClusterPlot::default();
+        assert!(plot.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_cluster_algorithm_default() {
+        let algo = ClusterAlgorithm::default();
+        assert!(matches!(algo, ClusterAlgorithm::KMeans { k: 3 }));
+    }
+
+    #[test]
+    fn test_cluster_count_all_noise() {
+        let points = vec![(0.0, 0.0), (1.0, 1.0)];
+        let labels = vec![-1, -1]; // All noise
+        let plot = ClusterPlot::new(points, labels);
+        assert_eq!(plot.cluster_count(), 0);
+    }
+
+    #[test]
+    fn test_cluster_count_duplicates() {
+        // Labels with duplicates should count unique clusters
+        let points = vec![(0.0, 0.0); 10];
+        let labels = vec![0, 0, 0, 1, 1, 2, 2, 2, 2, 0];
+        let plot = ClusterPlot::new(points, labels);
+        assert_eq!(plot.cluster_count(), 3);
+    }
+
+    #[test]
+    fn test_paint_all_algorithms_legend() {
+        // Test legend rendering for each algorithm type
+        let points = vec![(0.0, 0.0), (1.0, 1.0)];
+        let labels = vec![0, 0];
+
+        let algorithms = vec![
+            ClusterAlgorithm::KMeans { k: 3 },
+            ClusterAlgorithm::DBSCAN {
+                eps: 0.5,
+                min_samples: 5,
+            },
+            ClusterAlgorithm::Hierarchical { n_clusters: 3 },
+            ClusterAlgorithm::HDBSCAN { min_cluster_size: 5 },
+        ];
+
+        for algo in algorithms {
+            let mut plot = ClusterPlot::new(points.clone(), labels.clone()).with_algorithm(algo);
+            plot.bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+
+            let mut buffer = CellBuffer::new(60, 20);
+            let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+            plot.paint(&mut canvas);
+        }
+    }
+
+    #[test]
+    fn test_paint_missing_label() {
+        // More points than labels
+        let points = vec![(0.0, 0.0), (1.0, 1.0), (2.0, 2.0)];
+        let labels = vec![0]; // Only 1 label for 3 points
+        let mut plot = ClusterPlot::new(points, labels);
+        plot.bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+
+        let mut buffer = CellBuffer::new(60, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas); // Should handle gracefully (default to -1)
+    }
+
+    #[test]
+    fn test_clone() {
+        let plot = ClusterPlot::new(vec![(0.0, 0.0)], vec![0])
+            .with_centroids(vec![(0.5, 0.5)])
+            .with_algorithm(ClusterAlgorithm::DBSCAN {
+                eps: 0.3,
+                min_samples: 2,
+            })
+            .with_show_centroids(true)
+            .with_colors(vec![Color::RED]);
+
+        let cloned = plot.clone();
+        assert_eq!(cloned.points.len(), 1);
+        assert_eq!(cloned.centroids.len(), 1);
+        assert!(cloned.show_centroids);
+    }
+
+    #[test]
+    fn test_debug() {
+        let plot = ClusterPlot::default();
+        let debug_str = format!("{:?}", plot);
+        assert!(debug_str.contains("ClusterPlot"));
+    }
+
+    #[test]
+    fn test_algorithm_debug() {
+        let algo = ClusterAlgorithm::KMeans { k: 5 };
+        let debug_str = format!("{:?}", algo);
+        assert!(debug_str.contains("KMeans"));
+    }
+
+    #[test]
+    fn test_algorithm_clone() {
+        let algo = ClusterAlgorithm::DBSCAN {
+            eps: 0.5,
+            min_samples: 3,
+        };
+        let cloned = algo.clone();
+        assert!(matches!(
+            cloned,
+            ClusterAlgorithm::DBSCAN {
+                eps: _,
+                min_samples: 3
+            }
+        ));
+    }
 }

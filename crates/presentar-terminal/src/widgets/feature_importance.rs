@@ -361,4 +361,287 @@ mod tests {
         let plot = FeatureImportance::default();
         assert_eq!(plot.brick_name(), "FeatureImportance");
     }
+
+    // =========================================================================
+    // Additional coverage tests
+    // =========================================================================
+
+    #[test]
+    fn test_sorted_indices_unsorted() {
+        let features = vec!["A".to_string(), "B".to_string(), "C".to_string()];
+        let importances = vec![0.2, 0.5, 0.3];
+        let plot = FeatureImportance::new(features, importances).with_sorted(false);
+        let indices = plot.sorted_indices();
+        // Should maintain original order
+        assert_eq!(indices[0], 0);
+        assert_eq!(indices[1], 1);
+        assert_eq!(indices[2], 2);
+    }
+
+    #[test]
+    fn test_sorted_indices_with_nan() {
+        let features = vec!["A".to_string(), "B".to_string(), "C".to_string()];
+        let importances = vec![0.2, f64::NAN, 0.5];
+        let plot = FeatureImportance::new(features, importances);
+        let indices = plot.sorted_indices();
+        // NaN comparison should not panic
+        assert_eq!(indices.len(), 3);
+    }
+
+    #[test]
+    fn test_sorted_indices_truncates() {
+        let features: Vec<String> = (0..30).map(|i| format!("F{i}")).collect();
+        let importances: Vec<f64> = (0..30).map(|i| i as f64 / 30.0).collect();
+        let plot = FeatureImportance::new(features, importances).with_max_features(5);
+        let indices = plot.sorted_indices();
+        assert_eq!(indices.len(), 5);
+    }
+
+    #[test]
+    fn test_max_importance_empty() {
+        let plot = FeatureImportance::default();
+        let max = plot.max_importance();
+        // Should return minimum value to avoid division by zero
+        assert!(max > 0.0);
+    }
+
+    #[test]
+    fn test_max_importance_all_nan() {
+        let features = vec!["A".to_string(), "B".to_string()];
+        let importances = vec![f64::NAN, f64::NAN];
+        let plot = FeatureImportance::new(features, importances);
+        let max = plot.max_importance();
+        // Should return minimum to avoid div by zero
+        assert!(max > 0.0);
+    }
+
+    #[test]
+    fn test_max_importance_with_infinity() {
+        let features = vec!["A".to_string(), "B".to_string()];
+        let importances = vec![f64::INFINITY, 0.5];
+        let plot = FeatureImportance::new(features, importances);
+        let max = plot.max_importance();
+        // Should filter infinity
+        assert!(max < f64::INFINITY);
+    }
+
+    #[test]
+    fn test_max_importance_negative() {
+        let features = vec!["A".to_string(), "B".to_string()];
+        let importances = vec![-0.5, -0.3];
+        let plot = FeatureImportance::new(features, importances);
+        let max = plot.max_importance();
+        // max should at least be the min threshold
+        assert!(max > 0.0);
+    }
+
+    #[test]
+    fn test_paint_too_small_width() {
+        let features = vec!["A".to_string()];
+        let importances = vec![0.5];
+        let mut plot = FeatureImportance::new(features, importances);
+        plot.bounds = Rect::new(0.0, 0.0, 10.0, 10.0); // Too narrow
+
+        let mut buffer = CellBuffer::new(10, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas); // Should return early
+    }
+
+    #[test]
+    fn test_paint_too_small_height() {
+        let features = vec!["A".to_string()];
+        let importances = vec![0.5];
+        let mut plot = FeatureImportance::new(features, importances);
+        plot.bounds = Rect::new(0.0, 0.0, 60.0, 2.0); // Too short
+
+        let mut buffer = CellBuffer::new(60, 2);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas); // Should return early
+    }
+
+    #[test]
+    fn test_paint_empty_features() {
+        let plot = FeatureImportance::default();
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas); // Should return early
+    }
+
+    #[test]
+    fn test_paint_without_values() {
+        let features = vec!["feature_a".to_string(), "feature_b".to_string()];
+        let importances = vec![0.5, 0.3];
+        let mut plot = FeatureImportance::new(features, importances).with_show_values(false);
+        plot.bounds = Rect::new(0.0, 0.0, 60.0, 10.0);
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_paint_with_truncation() {
+        // More features than available rows
+        let features: Vec<String> = (0..20).map(|i| format!("F{i}")).collect();
+        let importances: Vec<f64> = (0..20).map(|i| i as f64 / 20.0).collect();
+        let mut plot = FeatureImportance::new(features, importances);
+        plot.bounds = Rect::new(0.0, 0.0, 60.0, 8.0); // Only ~6 rows for features
+
+        let mut buffer = CellBuffer::new(60, 8);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas); // Should show "... and X more"
+    }
+
+    #[test]
+    fn test_paint_long_feature_names() {
+        let features = vec!["very_long_feature_name_that_exceeds_14_chars".to_string()];
+        let importances = vec![0.5];
+        let mut plot = FeatureImportance::new(features, importances);
+        plot.bounds = Rect::new(0.0, 0.0, 60.0, 10.0);
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas); // Should truncate name
+    }
+
+    #[test]
+    fn test_paint_zero_bar_width() {
+        let features = vec!["A".to_string()];
+        let importances = vec![0.0]; // Zero importance
+        let mut plot = FeatureImportance::new(features, importances);
+        plot.bounds = Rect::new(0.0, 0.0, 60.0, 10.0);
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_paint_negative_importance() {
+        let features = vec!["A".to_string()];
+        let importances = vec![-0.5]; // Negative importance
+        let mut plot = FeatureImportance::new(features, importances);
+        plot.bounds = Rect::new(0.0, 0.0, 60.0, 10.0);
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas); // Should handle gracefully (clamp to 0)
+    }
+
+    #[test]
+    fn test_verify_too_small() {
+        let features = vec!["A".to_string()];
+        let importances = vec![0.5];
+        let mut plot = FeatureImportance::new(features, importances);
+        plot.bounds = Rect::new(0.0, 0.0, 10.0, 2.0); // Too small
+        let result = plot.verify();
+        assert!(!result.failed.is_empty());
+    }
+
+    #[test]
+    fn test_widget_type_id() {
+        let plot = FeatureImportance::default();
+        let id = Widget::type_id(&plot);
+        assert_eq!(id, TypeId::of::<FeatureImportance>());
+    }
+
+    #[test]
+    fn test_widget_measure() {
+        let features = vec!["A".to_string(), "B".to_string(), "C".to_string()];
+        let importances = vec![0.5, 0.3, 0.2];
+        let plot = FeatureImportance::new(features, importances);
+        let constraints = Constraints::tight(Size::new(100.0, 50.0));
+        let size = plot.measure(constraints);
+        assert!(size.width <= 60.0);
+        assert!(size.height <= 50.0);
+    }
+
+    #[test]
+    fn test_widget_layout() {
+        let mut plot = FeatureImportance::default();
+        let bounds = Rect::new(10.0, 20.0, 40.0, 15.0);
+        let result = plot.layout(bounds);
+        assert_eq!(result.size.width, 40.0);
+        assert_eq!(result.size.height, 15.0);
+        assert_eq!(plot.bounds, bounds);
+    }
+
+    #[test]
+    fn test_widget_event() {
+        let mut plot = FeatureImportance::default();
+        let result = plot.event(&Event::FocusIn);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_widget_children() {
+        let plot = FeatureImportance::default();
+        assert!(plot.children().is_empty());
+    }
+
+    #[test]
+    fn test_widget_children_mut() {
+        let mut plot = FeatureImportance::default();
+        assert!(plot.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_brick_assertions() {
+        let plot = FeatureImportance::default();
+        let assertions = plot.assertions();
+        assert!(!assertions.is_empty());
+    }
+
+    #[test]
+    fn test_brick_budget() {
+        let plot = FeatureImportance::default();
+        let budget = plot.budget();
+        assert!(budget.total_ms > 0);
+    }
+
+    #[test]
+    fn test_brick_to_html() {
+        let plot = FeatureImportance::default();
+        assert!(plot.to_html().is_empty());
+    }
+
+    #[test]
+    fn test_brick_to_css() {
+        let plot = FeatureImportance::default();
+        assert!(plot.to_css().is_empty());
+    }
+
+    #[test]
+    fn test_clone() {
+        let features = vec!["A".to_string(), "B".to_string()];
+        let importances = vec![0.5, 0.3];
+        let plot = FeatureImportance::new(features, importances)
+            .with_sorted(true)
+            .with_show_values(false)
+            .with_color(Color::GREEN)
+            .with_max_features(5);
+
+        let cloned = plot.clone();
+        assert_eq!(cloned.features.len(), 2);
+        assert!(cloned.sorted);
+        assert!(!cloned.show_values);
+        assert_eq!(cloned.max_features, 5);
+    }
+
+    #[test]
+    fn test_debug() {
+        let plot = FeatureImportance::default();
+        let debug_str = format!("{:?}", plot);
+        assert!(debug_str.contains("FeatureImportance"));
+    }
+
+    #[test]
+    fn test_default_values() {
+        let features = vec!["A".to_string()];
+        let importances = vec![0.5];
+        let plot = FeatureImportance::new(features, importances);
+        assert!(plot.sorted);
+        assert!(plot.show_values);
+        assert_eq!(plot.max_features, 20);
+    }
 }

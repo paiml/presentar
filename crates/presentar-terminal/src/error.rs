@@ -136,4 +136,68 @@ mod tests {
         let err = TuiError::VerificationFailed(VerificationError::from(verification));
         assert!(err.to_string().contains("Brick verification failed"));
     }
+
+    #[test]
+    fn test_verification_error_debug() {
+        let verification = BrickVerification {
+            passed: vec![],
+            failed: vec![(BrickAssertion::max_latency_ms(16), "too slow".to_string())],
+            verification_time: Duration::from_micros(10),
+        };
+        let err = VerificationError::from(verification);
+        let debug_str = format!("{:?}", err);
+        assert!(debug_str.contains("VerificationError"));
+    }
+
+    #[test]
+    fn test_verification_error_multiple_failures() {
+        let verification = BrickVerification {
+            passed: vec![BrickAssertion::max_latency_ms(100)],
+            failed: vec![
+                (BrickAssertion::max_latency_ms(16), "too slow".to_string()),
+                (BrickAssertion::max_latency_ms(8), "way too slow".to_string()),
+            ],
+            verification_time: Duration::from_micros(50),
+        };
+        let err = VerificationError::from(verification);
+        assert!(err.to_string().contains("2 assertion(s) failed"));
+        assert!(err.verification.passed.len() == 1);
+        assert!(err.verification.failed.len() == 2);
+    }
+
+    #[test]
+    fn test_tui_error_debug() {
+        let err = TuiError::TerminalNotAvailable;
+        let debug_str = format!("{:?}", err);
+        assert!(debug_str.contains("TerminalNotAvailable"));
+    }
+
+    #[test]
+    fn test_tui_error_io_from() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "access denied");
+        let tui_err = TuiError::from(io_err);
+        assert!(tui_err.to_string().contains("IO error"));
+        assert!(tui_err.to_string().contains("access denied"));
+    }
+
+    #[test]
+    fn test_budget_exceeded_all_fields() {
+        let err = TuiError::BudgetExceeded {
+            phase: "layout".to_string(),
+            elapsed_ms: 100,
+            budget_ms: 50,
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("Budget exceeded"));
+        assert!(msg.contains("layout"));
+        assert!(msg.contains("100ms"));
+        assert!(msg.contains("50ms"));
+    }
+
+    #[test]
+    fn test_invalid_brick_with_details() {
+        let err = TuiError::InvalidBrick("Missing required field: title".to_string());
+        assert!(err.to_string().contains("Invalid brick"));
+        assert!(err.to_string().contains("Missing required field"));
+    }
 }

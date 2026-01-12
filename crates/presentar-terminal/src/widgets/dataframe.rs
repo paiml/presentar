@@ -666,9 +666,18 @@ mod tests {
     use super::*;
     use crate::direct::{CellBuffer, DirectTerminalCanvas};
 
+    // ==================== DataFrame Basic Tests ====================
+
     #[test]
     fn test_dataframe_new() {
         let df = DataFrame::new();
+        assert_eq!(df.row_count(), 0);
+        assert_eq!(df.column_count(), 0);
+    }
+
+    #[test]
+    fn test_dataframe_default() {
+        let df = DataFrame::default();
         assert_eq!(df.row_count(), 0);
         assert_eq!(df.column_count(), 0);
     }
@@ -680,6 +689,62 @@ mod tests {
             .with_column(Column::from_f64("B", &[4.0, 5.0, 6.0]));
         assert_eq!(df.row_count(), 3);
         assert_eq!(df.column_count(), 2);
+    }
+
+    #[test]
+    fn test_dataframe_with_visible_rows() {
+        let df = DataFrame::new().with_visible_rows(50);
+        assert_eq!(df.visible_rows, 50);
+    }
+
+    #[test]
+    fn test_dataframe_with_header() {
+        let df = DataFrame::new().with_header(false);
+        assert!(!df.show_header);
+    }
+
+    #[test]
+    fn test_dataframe_with_row_numbers() {
+        let df = DataFrame::new().with_row_numbers(false);
+        assert!(!df.show_row_numbers);
+    }
+
+    // ==================== CellValue Tests ====================
+
+    #[test]
+    fn test_cell_value_null() {
+        let (rendered, _) = CellValue::Null.render(5);
+        assert!(rendered.is_empty());
+    }
+
+    #[test]
+    fn test_cell_value_bool_true() {
+        let (rendered, _) = CellValue::Bool(true).render(5);
+        assert_eq!(rendered, "true");
+    }
+
+    #[test]
+    fn test_cell_value_bool_false() {
+        let (rendered, _) = CellValue::Bool(false).render(5);
+        assert_eq!(rendered, "false");
+    }
+
+    #[test]
+    fn test_cell_value_int64() {
+        let (rendered, _) = CellValue::Int64(42).render(5);
+        assert_eq!(rendered, "42");
+    }
+
+    #[test]
+    fn test_cell_value_float64() {
+        let (rendered, _) = CellValue::Float64(3.14159).render(10);
+        assert!(rendered.contains("3.14"));
+    }
+
+    #[test]
+    fn test_cell_value_string() {
+        let (rendered, _) = CellValue::String(CompactString::from("hello")).render(10);
+        assert_eq!(rendered, "hello");
     }
 
     #[test]
@@ -696,9 +761,47 @@ mod tests {
     }
 
     #[test]
+    fn test_cell_value_render_sparkline_with_nan() {
+        let values = vec![1.0, f64::NAN, 3.0, f64::INFINITY, 2.0];
+        let (rendered, _) = CellValue::Sparkline(values).render(5);
+        // Should handle NaN gracefully with spaces
+        assert_eq!(rendered.chars().count(), 5);
+    }
+
+    #[test]
+    fn test_cell_value_render_sparkline_constant() {
+        // All same values - tests edge case where range is 0
+        let values = vec![5.0, 5.0, 5.0, 5.0];
+        let (rendered, _) = CellValue::Sparkline(values).render(4);
+        assert_eq!(rendered.chars().count(), 4);
+    }
+
+    #[test]
     fn test_cell_value_render_progress() {
         let (rendered, _) = CellValue::ProgressBar(50.0).render(10);
         assert!(rendered.contains("50%"));
+    }
+
+    #[test]
+    fn test_cell_value_render_progress_zero() {
+        let (rendered, _) = CellValue::ProgressBar(0.0).render(10);
+        assert!(rendered.contains("0%"));
+    }
+
+    #[test]
+    fn test_cell_value_render_progress_hundred() {
+        let (rendered, _) = CellValue::ProgressBar(100.0).render(10);
+        assert!(rendered.contains("100%"));
+    }
+
+    #[test]
+    fn test_cell_value_render_progress_clamp() {
+        // Test clamping of values outside 0-100
+        let (rendered, _) = CellValue::ProgressBar(150.0).render(10);
+        assert!(rendered.contains("100%"));
+
+        let (rendered2, _) = CellValue::ProgressBar(-10.0).render(10);
+        assert!(rendered2.contains("0%"));
     }
 
     #[test]
@@ -706,6 +809,24 @@ mod tests {
         let (rendered, color) = CellValue::TrendArrow(0.15).render(10);
         assert!(rendered.contains('↑'));
         assert!(color.g > color.r); // Green-ish
+    }
+
+    #[test]
+    fn test_cell_value_render_trend_slight_up() {
+        let (rendered, _) = CellValue::TrendArrow(0.05).render(10);
+        assert!(rendered.contains('↗'));
+    }
+
+    #[test]
+    fn test_cell_value_render_trend_flat() {
+        let (rendered, _) = CellValue::TrendArrow(0.0).render(10);
+        assert!(rendered.contains('→'));
+    }
+
+    #[test]
+    fn test_cell_value_render_trend_slight_down() {
+        let (rendered, _) = CellValue::TrendArrow(-0.05).render(10);
+        assert!(rendered.contains('↘'));
     }
 
     #[test]
@@ -734,6 +855,206 @@ mod tests {
     }
 
     #[test]
+    fn test_cell_value_render_microbar_full() {
+        let (rendered, _) = CellValue::MicroBar {
+            value: 10.0,
+            max: 10.0,
+        }
+        .render(10);
+        // Should be all filled
+        assert_eq!(rendered.chars().filter(|&c| c == '█').count(), 10);
+    }
+
+    #[test]
+    fn test_cell_value_render_microbar_zero_max() {
+        let (rendered, _) = CellValue::MicroBar {
+            value: 5.0,
+            max: 0.0,
+        }
+        .render(10);
+        // Should handle divide by zero gracefully
+        assert!(!rendered.is_empty());
+    }
+
+    #[test]
+    fn test_cell_value_default() {
+        let value = CellValue::default();
+        assert!(matches!(value, CellValue::Null));
+    }
+
+    // ==================== SparkBar Tests ====================
+
+    #[test]
+    fn test_sparkbar() {
+        let values = vec![0.25, 0.5, 0.75, 1.0];
+        let (rendered, _) = CellValue::SparkBar(values).render(4);
+        assert_eq!(rendered.chars().count(), 4);
+    }
+
+    #[test]
+    fn test_sparkbar_empty() {
+        let (rendered, _) = CellValue::SparkBar(vec![]).render(5);
+        assert_eq!(rendered.len(), 5);
+    }
+
+    #[test]
+    fn test_sparkbar_with_nan() {
+        let values = vec![0.5, f64::NAN, 0.75];
+        let (rendered, _) = CellValue::SparkBar(values).render(3);
+        assert_eq!(rendered.chars().count(), 3);
+    }
+
+    #[test]
+    fn test_sparkbar_with_negative() {
+        let values = vec![0.5, -0.5, 0.75];
+        let (rendered, _) = CellValue::SparkBar(values).render(3);
+        assert_eq!(rendered.chars().count(), 3);
+    }
+
+    // ==================== SparkWinLoss Tests ====================
+
+    #[test]
+    fn test_sparkwinloss() {
+        let values = vec![1, -1, 0, 1, -1];
+        let (rendered, _) = CellValue::SparkWinLoss(values).render(5);
+        assert!(rendered.contains('▲'));
+        assert!(rendered.contains('▼'));
+        assert!(rendered.contains('─'));
+    }
+
+    #[test]
+    fn test_sparkwinloss_empty() {
+        let values: Vec<i8> = vec![];
+        let (rendered, _) = CellValue::SparkWinLoss(values).render(5);
+        assert!(rendered.is_empty());
+    }
+
+    // ==================== Status Level Tests ====================
+
+    #[test]
+    fn test_status_levels() {
+        assert!(matches!(StatusLevel::default(), StatusLevel::Ok));
+
+        let (_, ok_color) = StatusLevel::Ok.render();
+        let (_, warn_color) = StatusLevel::Warning.render();
+        let (_, crit_color) = StatusLevel::Critical.render();
+
+        assert!(ok_color.g > ok_color.r);
+        assert!(warn_color.r > 0.5 && warn_color.g > 0.5);
+        assert!(crit_color.r > crit_color.g);
+    }
+
+    #[test]
+    fn test_status_level_unknown() {
+        let (ch, _) = StatusLevel::Unknown.render();
+        assert_eq!(ch, '○');
+    }
+
+    #[test]
+    fn test_status_level_clone_eq() {
+        let s1 = StatusLevel::Ok;
+        let s2 = s1.clone();
+        assert_eq!(s1, s2);
+    }
+
+    #[test]
+    fn test_status_level_debug() {
+        let status = StatusLevel::Warning;
+        let debug = format!("{:?}", status);
+        assert!(debug.contains("Warning"));
+    }
+
+    // ==================== Column Tests ====================
+
+    #[test]
+    fn test_column_new() {
+        let col = Column::new("Test");
+        assert_eq!(col.name.as_str(), "Test");
+        assert!(col.values.is_empty());
+        assert_eq!(col.width, 10);
+    }
+
+    #[test]
+    fn test_column_alignment() {
+        let col = Column::new("Test")
+            .with_align(ColumnAlign::Right)
+            .with_width(10);
+        assert!(matches!(col.align, ColumnAlign::Right));
+        assert_eq!(col.width, 10);
+    }
+
+    #[test]
+    fn test_column_with_values() {
+        let col = Column::new("Test")
+            .with_values(vec![CellValue::Int64(1), CellValue::Int64(2)]);
+        assert_eq!(col.values.len(), 2);
+    }
+
+    #[test]
+    fn test_column_from_f64() {
+        let col = Column::from_f64("Numbers", &[1.0, 2.0, 3.0]);
+        assert_eq!(col.values.len(), 3);
+        assert!(matches!(col.align, ColumnAlign::Right));
+    }
+
+    #[test]
+    fn test_column_from_i64() {
+        let col = Column::from_i64("Ints", &[1, 2, 3]);
+        assert_eq!(col.values.len(), 3);
+        assert!(matches!(col.align, ColumnAlign::Right));
+    }
+
+    #[test]
+    fn test_column_from_strings() {
+        let col = Column::from_strings("Names", &["Alice", "Bob"]);
+        assert_eq!(col.values.len(), 2);
+        assert!(matches!(col.align, ColumnAlign::Left));
+        assert_eq!(col.width, 15);
+    }
+
+    #[test]
+    fn test_column_sparkline_from_rows() {
+        let rows = vec![
+            vec![1.0, 2.0, 3.0],
+            vec![4.0, 5.0, 6.0],
+        ];
+        let col = Column::sparkline_from_rows("Sparklines", rows);
+        assert_eq!(col.values.len(), 2);
+        assert_eq!(col.width, 12);
+    }
+
+    #[test]
+    fn test_column_clone() {
+        let col = Column::new("Test").with_width(20);
+        let cloned = col.clone();
+        assert_eq!(cloned.name, col.name);
+        assert_eq!(cloned.width, 20);
+    }
+
+    #[test]
+    fn test_column_debug() {
+        let col = Column::new("Test");
+        let debug = format!("{:?}", col);
+        assert!(debug.contains("Column"));
+    }
+
+    // ==================== ColumnAlign Tests ====================
+
+    #[test]
+    fn test_column_align_default() {
+        let align = ColumnAlign::default();
+        assert!(matches!(align, ColumnAlign::Left));
+    }
+
+    #[test]
+    fn test_column_align_center() {
+        let col = Column::new("Test").with_align(ColumnAlign::Center);
+        assert!(matches!(col.align, ColumnAlign::Center));
+    }
+
+    // ==================== DataFrame Sparkline Column ====================
+
+    #[test]
     fn test_dataframe_sparkline_column() {
         let mut df = DataFrame::new()
             .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]))
@@ -747,6 +1068,18 @@ mod tests {
         let sparkline_col = &df.columns[3];
         assert_eq!(sparkline_col.values.len(), 3);
     }
+
+    #[test]
+    fn test_dataframe_sparkline_column_invalid_source() {
+        let mut df = DataFrame::new()
+            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
+
+        // Reference non-existent column
+        df.add_sparkline_column("Trend", &[0, 99]);
+        assert_eq!(df.column_count(), 2);
+    }
+
+    // ==================== DataFrame Layout/Paint Tests ====================
 
     #[test]
     fn test_dataframe_layout() {
@@ -771,6 +1104,81 @@ mod tests {
     }
 
     #[test]
+    fn test_dataframe_paint_small_bounds() {
+        let mut df = DataFrame::new()
+            .with_column(Column::from_f64("A", &[1.0, 2.0]));
+
+        df.bounds = Rect::new(0.0, 0.0, 5.0, 2.0); // Too small
+
+        let mut buffer = CellBuffer::new(10, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        df.paint(&mut canvas); // Should return early without panic
+    }
+
+    #[test]
+    fn test_dataframe_paint_no_header() {
+        let mut df = DataFrame::new()
+            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]))
+            .with_header(false);
+
+        let bounds = Rect::new(0.0, 0.0, 80.0, 24.0);
+        df.layout(bounds);
+
+        let mut buffer = CellBuffer::new(80, 24);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        df.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_dataframe_paint_no_row_numbers() {
+        let mut df = DataFrame::new()
+            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]))
+            .with_row_numbers(false);
+
+        let bounds = Rect::new(0.0, 0.0, 80.0, 24.0);
+        df.layout(bounds);
+
+        let mut buffer = CellBuffer::new(80, 24);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        df.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_dataframe_paint_with_selection() {
+        let mut df = DataFrame::new()
+            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
+        df.select_row(Some(1));
+
+        let bounds = Rect::new(0.0, 0.0, 80.0, 24.0);
+        df.layout(bounds);
+
+        let mut buffer = CellBuffer::new(80, 24);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        df.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_dataframe_paint_with_all_cell_types() {
+        let mut df = DataFrame::new()
+            .with_column(Column::new("Types").with_values(vec![
+                CellValue::Null,
+                CellValue::Bool(true),
+                CellValue::Int64(42),
+                CellValue::Float64(3.14),
+                CellValue::String(CompactString::from("text")),
+            ]));
+
+        let bounds = Rect::new(0.0, 0.0, 80.0, 24.0);
+        df.layout(bounds);
+
+        let mut buffer = CellBuffer::new(80, 24);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        df.paint(&mut canvas);
+    }
+
+    // ==================== DataFrame Scroll/Select Tests ====================
+
+    #[test]
     fn test_dataframe_scroll() {
         let mut df = DataFrame::new().with_column(Column::from_f64(
             "A",
@@ -780,6 +1188,15 @@ mod tests {
         df.visible_rows = 10;
         df.scroll_to(50);
         assert_eq!(df.scroll_offset, 50);
+    }
+
+    #[test]
+    fn test_dataframe_scroll_beyond_end() {
+        let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
+        df.visible_rows = 10;
+        df.scroll_to(100); // Beyond data
+        // Should clamp to valid range
+        assert!(df.scroll_offset <= df.row_count());
     }
 
     #[test]
@@ -793,10 +1210,190 @@ mod tests {
         assert_eq!(df.selected_row, None);
     }
 
+    // ==================== DataFrame Event Tests ====================
+
+    #[test]
+    fn test_dataframe_event_up() {
+        let mut df = DataFrame::new()
+            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
+        df.select_row(Some(2));
+
+        let result = df.event(&Event::KeyDown { key: Key::Up });
+        assert!(result.is_none());
+        assert_eq!(df.selected_row, Some(1));
+    }
+
+    #[test]
+    fn test_dataframe_event_down() {
+        let mut df = DataFrame::new()
+            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
+        df.select_row(Some(0));
+
+        let result = df.event(&Event::KeyDown { key: Key::Down });
+        assert!(result.is_none());
+        assert_eq!(df.selected_row, Some(1));
+    }
+
+    #[test]
+    fn test_dataframe_event_k() {
+        let mut df = DataFrame::new()
+            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
+        df.select_row(Some(2));
+
+        let _ = df.event(&Event::KeyDown { key: Key::K });
+        assert_eq!(df.selected_row, Some(1));
+    }
+
+    #[test]
+    fn test_dataframe_event_j() {
+        let mut df = DataFrame::new()
+            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
+        df.select_row(Some(0));
+
+        let _ = df.event(&Event::KeyDown { key: Key::J });
+        assert_eq!(df.selected_row, Some(1));
+    }
+
+    #[test]
+    fn test_dataframe_event_up_at_top() {
+        let mut df = DataFrame::new()
+            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
+        df.select_row(Some(0));
+
+        let _ = df.event(&Event::KeyDown { key: Key::Up });
+        assert_eq!(df.selected_row, Some(0)); // Should stay at top
+    }
+
+    #[test]
+    fn test_dataframe_event_down_at_bottom() {
+        let mut df = DataFrame::new()
+            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
+        df.select_row(Some(2));
+
+        let _ = df.event(&Event::KeyDown { key: Key::Down });
+        assert_eq!(df.selected_row, Some(2)); // Should stay at bottom
+    }
+
+    #[test]
+    fn test_dataframe_event_up_no_selection() {
+        let mut df = DataFrame::new()
+            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
+        df.select_row(None);
+
+        let _ = df.event(&Event::KeyDown { key: Key::Up });
+        assert_eq!(df.selected_row, Some(0)); // Should select first row
+    }
+
+    #[test]
+    fn test_dataframe_event_down_no_selection() {
+        let mut df = DataFrame::new()
+            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
+        df.select_row(None);
+
+        let _ = df.event(&Event::KeyDown { key: Key::Down });
+        assert_eq!(df.selected_row, Some(0)); // Should select first row
+    }
+
+    #[test]
+    fn test_dataframe_event_pageup() {
+        let mut df = DataFrame::new()
+            .with_column(Column::from_f64("A", &(0..50).map(|i| i as f64).collect::<Vec<_>>()));
+        df.visible_rows = 10;
+        df.scroll_offset = 30;
+        df.select_row(Some(35));
+
+        let _ = df.event(&Event::KeyDown { key: Key::PageUp });
+        assert!(df.scroll_offset < 30);
+    }
+
+    #[test]
+    fn test_dataframe_event_pagedown() {
+        let mut df = DataFrame::new()
+            .with_column(Column::from_f64("A", &(0..50).map(|i| i as f64).collect::<Vec<_>>()));
+        df.visible_rows = 10;
+        df.scroll_offset = 0;
+        df.select_row(Some(5));
+
+        let _ = df.event(&Event::KeyDown { key: Key::PageDown });
+        assert!(df.scroll_offset > 0);
+    }
+
+    #[test]
+    fn test_dataframe_event_other_key() {
+        let mut df = DataFrame::new()
+            .with_column(Column::from_f64("A", &[1.0, 2.0]));
+        df.select_row(Some(0));
+
+        let _ = df.event(&Event::KeyDown { key: Key::A });
+        // Other keys should not change selection
+        assert_eq!(df.selected_row, Some(0));
+    }
+
+    #[test]
+    fn test_dataframe_event_non_keydown() {
+        let mut df = DataFrame::new()
+            .with_column(Column::from_f64("A", &[1.0, 2.0]));
+        df.select_row(Some(0));
+
+        let _ = df.event(&Event::FocusIn);
+        // Non-key events should not change anything
+        assert_eq!(df.selected_row, Some(0));
+    }
+
+    // ==================== DataFrame Widget Trait Tests ====================
+
+    #[test]
+    fn test_dataframe_measure() {
+        let df = DataFrame::new()
+            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]).with_width(10));
+        let size = df.measure(Constraints {
+            min_width: 0.0,
+            max_width: 100.0,
+            min_height: 0.0,
+            max_height: 50.0,
+        });
+        assert!(size.width > 0.0);
+        assert!(size.height > 0.0);
+    }
+
+    #[test]
+    fn test_dataframe_type_id() {
+        let df = DataFrame::new();
+        let type_id = Widget::type_id(&df);
+        assert_eq!(type_id, TypeId::of::<DataFrame>());
+    }
+
+    #[test]
+    fn test_dataframe_children() {
+        let df = DataFrame::new();
+        assert!(df.children().is_empty());
+    }
+
+    #[test]
+    fn test_dataframe_children_mut() {
+        let mut df = DataFrame::new();
+        assert!(df.children_mut().is_empty());
+    }
+
+    // ==================== DataFrame Brick Trait Tests ====================
+
     #[test]
     fn test_dataframe_brick_name() {
         let df = DataFrame::new();
         assert_eq!(df.brick_name(), "DataFrame");
+    }
+
+    #[test]
+    fn test_dataframe_assertions() {
+        let df = DataFrame::new();
+        assert!(!df.assertions().is_empty());
+    }
+
+    #[test]
+    fn test_dataframe_budget() {
+        let df = DataFrame::new();
+        let budget = df.budget();
+        assert!(budget.measure_ms > 0);
     }
 
     #[test]
@@ -807,40 +1404,93 @@ mod tests {
     }
 
     #[test]
-    fn test_column_alignment() {
-        let col = Column::new("Test")
-            .with_align(ColumnAlign::Right)
-            .with_width(10);
-        assert!(matches!(col.align, ColumnAlign::Right));
-        assert_eq!(col.width, 10);
+    fn test_dataframe_verify_small_bounds() {
+        let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
+        df.bounds = Rect::new(0.0, 0.0, 5.0, 2.0);
+        let verification = df.verify();
+        assert!(!verification.failed.is_empty());
     }
 
     #[test]
-    fn test_sparkwinloss() {
-        let values = vec![1, -1, 0, 1, -1];
-        let (rendered, _) = CellValue::SparkWinLoss(values).render(5);
-        assert!(rendered.contains('▲'));
-        assert!(rendered.contains('▼'));
-        assert!(rendered.contains('─'));
+    fn test_dataframe_verify_inconsistent_columns() {
+        let mut df = DataFrame::new()
+            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]))
+            .with_column(Column::from_f64("B", &[1.0, 2.0])); // Different length
+        df.bounds = Rect::new(0.0, 0.0, 80.0, 24.0);
+        let verification = df.verify();
+        // Should report inconsistent column lengths
+        assert!(!verification.failed.is_empty());
     }
 
     #[test]
-    fn test_sparkbar() {
-        let values = vec![0.25, 0.5, 0.75, 1.0];
-        let (rendered, _) = CellValue::SparkBar(values).render(4);
-        assert_eq!(rendered.chars().count(), 4);
+    fn test_dataframe_to_html() {
+        let df = DataFrame::new();
+        assert!(df.to_html().is_empty());
     }
 
     #[test]
-    fn test_status_levels() {
-        assert!(matches!(StatusLevel::default(), StatusLevel::Ok));
+    fn test_dataframe_to_css() {
+        let df = DataFrame::new();
+        assert!(df.to_css().is_empty());
+    }
 
-        let (_, ok_color) = StatusLevel::Ok.render();
-        let (_, warn_color) = StatusLevel::Warning.render();
-        let (_, crit_color) = StatusLevel::Critical.render();
+    // ==================== DataFrame Clone/Debug Tests ====================
 
-        assert!(ok_color.g > ok_color.r);
-        assert!(warn_color.r > 0.5 && warn_color.g > 0.5);
-        assert!(crit_color.r > crit_color.g);
+    #[test]
+    fn test_dataframe_clone() {
+        let df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0]));
+        let cloned = df.clone();
+        assert_eq!(cloned.column_count(), 1);
+        assert_eq!(cloned.row_count(), 2);
+    }
+
+    #[test]
+    fn test_dataframe_debug() {
+        let df = DataFrame::new();
+        let debug = format!("{:?}", df);
+        assert!(debug.contains("DataFrame"));
+    }
+
+    // ==================== CellValue Clone/Debug Tests ====================
+
+    #[test]
+    fn test_cell_value_clone() {
+        let value = CellValue::Int64(42);
+        let cloned = value.clone();
+        assert!(matches!(cloned, CellValue::Int64(42)));
+    }
+
+    #[test]
+    fn test_cell_value_debug() {
+        let value = CellValue::String(CompactString::from("test"));
+        let debug = format!("{:?}", value);
+        assert!(debug.contains("String"));
+    }
+
+    // ==================== render_cell Tests ====================
+
+    #[test]
+    fn test_render_cell_left_align() {
+        let df = DataFrame::new();
+        let value = CellValue::String(CompactString::from("hi"));
+        let (content, _) = df.render_cell(&value, 10, ColumnAlign::Left);
+        assert!(content.starts_with("hi"));
+    }
+
+    #[test]
+    fn test_render_cell_right_align() {
+        let df = DataFrame::new();
+        let value = CellValue::String(CompactString::from("hi"));
+        let (content, _) = df.render_cell(&value, 10, ColumnAlign::Right);
+        assert!(content.ends_with("hi"));
+    }
+
+    #[test]
+    fn test_render_cell_center_align() {
+        let df = DataFrame::new();
+        let value = CellValue::String(CompactString::from("hi"));
+        let (content, _) = df.render_cell(&value, 10, ColumnAlign::Center);
+        // Centered text should have spaces on both sides
+        assert!(content.len() <= 10);
     }
 }

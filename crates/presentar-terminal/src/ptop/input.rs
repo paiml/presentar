@@ -361,4 +361,80 @@ mod tests {
             drop_time
         );
     }
+
+    /// Test has_pending always returns false (current limitation).
+    #[test]
+    fn test_has_pending_always_false() {
+        let handler = InputHandler::spawn();
+        thread::sleep(Duration::from_millis(20));
+
+        // has_pending always returns false (mpsc limitation)
+        assert!(!handler.has_pending());
+
+        drop(handler);
+    }
+
+    /// Test TimestampedKey clone.
+    #[test]
+    fn test_timestamped_key_clone() {
+        let original = TimestampedKey {
+            event: KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL),
+            timestamp: Instant::now(),
+        };
+
+        let cloned = original.clone();
+        assert_eq!(cloned.event.code, original.event.code);
+        assert_eq!(cloned.event.modifiers, original.event.modifiers);
+        assert_eq!(cloned.timestamp, original.timestamp);
+    }
+
+    /// Test TimestampedKey debug.
+    #[test]
+    fn test_timestamped_key_debug() {
+        let key = TimestampedKey {
+            event: KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+            timestamp: Instant::now(),
+        };
+
+        let debug = format!("{:?}", key);
+        assert!(debug.contains("TimestampedKey"));
+        assert!(debug.contains("event"));
+        assert!(debug.contains("timestamp"));
+    }
+
+    /// Test try_recv returns None on disconnected channel.
+    #[test]
+    fn test_try_recv_disconnected() {
+        // Create a channel and immediately drop the sender
+        let (tx, rx): (Sender<TimestampedKey>, Receiver<TimestampedKey>) = mpsc::channel();
+        drop(tx);
+
+        // Create a mock handler with the disconnected receiver
+        // We can't easily test this with the real handler, so we verify the behavior
+        // of try_recv on a disconnected channel
+        match rx.try_recv() {
+            Err(TryRecvError::Disconnected) => {
+                // This is the expected behavior - channel disconnected
+                assert!(true);
+            }
+            _ => panic!("Expected Disconnected error"),
+        }
+    }
+
+    /// Test multiple consecutive spawns.
+    #[test]
+    fn test_rapid_spawn_and_shutdown() {
+        for _ in 0..3 {
+            let handler = InputHandler::spawn();
+            handler.shutdown();
+            thread::sleep(Duration::from_millis(60));
+            drop(handler);
+        }
+    }
+
+    /// Test INPUT_POLL_MS constant is reasonable.
+    #[test]
+    fn test_input_poll_constant() {
+        assert_eq!(INPUT_POLL_MS, 50, "Poll interval should be 50ms");
+    }
 }

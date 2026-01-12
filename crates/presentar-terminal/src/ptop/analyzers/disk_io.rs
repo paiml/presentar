@@ -451,4 +451,216 @@ mod tests {
         assert_eq!(rates.write_rate_display(), "488.3K/s");
         assert!((rates.total_iops() - 150.0).abs() < 0.01);
     }
+
+    #[test]
+    fn test_disk_io_stats_default() {
+        let stats = DiskIoStats::default();
+        assert!(stats.device.is_empty());
+        assert_eq!(stats.major, 0);
+        assert_eq!(stats.minor, 0);
+        assert_eq!(stats.reads_completed, 0);
+        assert_eq!(stats.sectors_read, 0);
+    }
+
+    #[test]
+    fn test_disk_io_rates_default() {
+        let rates = DiskIoRates::default();
+        assert!(rates.device.is_empty());
+        assert_eq!(rates.read_bytes_per_sec, 0.0);
+        assert_eq!(rates.write_bytes_per_sec, 0.0);
+    }
+
+    #[test]
+    fn test_disk_io_data_default() {
+        let data = DiskIoData::default();
+        assert!(data.stats.is_empty());
+        assert!(data.rates.is_empty());
+        assert_eq!(data.total_read_bytes_per_sec, 0.0);
+        assert_eq!(data.total_write_bytes_per_sec, 0.0);
+    }
+
+    #[test]
+    fn test_disk_io_data_physical_disks() {
+        let mut data = DiskIoData::default();
+        data.stats.insert(
+            "sda".to_string(),
+            DiskIoStats {
+                device: "sda".to_string(),
+                ..Default::default()
+            },
+        );
+        data.stats.insert(
+            "sda1".to_string(),
+            DiskIoStats {
+                device: "sda1".to_string(),
+                ..Default::default()
+            },
+        );
+
+        let physical: Vec<_> = data.physical_disks().collect();
+        assert_eq!(physical.len(), 1);
+        assert_eq!(physical[0].0, "sda");
+    }
+
+    #[test]
+    fn test_disk_io_data_physical_disk_rates() {
+        let mut data = DiskIoData::default();
+        data.stats.insert(
+            "sda".to_string(),
+            DiskIoStats {
+                device: "sda".to_string(),
+                ..Default::default()
+            },
+        );
+        data.stats.insert(
+            "sda1".to_string(),
+            DiskIoStats {
+                device: "sda1".to_string(),
+                ..Default::default()
+            },
+        );
+        data.rates.insert(
+            "sda".to_string(),
+            DiskIoRates {
+                device: "sda".to_string(),
+                read_bytes_per_sec: 1000.0,
+                ..Default::default()
+            },
+        );
+        data.rates.insert(
+            "sda1".to_string(),
+            DiskIoRates {
+                device: "sda1".to_string(),
+                read_bytes_per_sec: 500.0,
+                ..Default::default()
+            },
+        );
+
+        let physical: Vec<_> = data.physical_disk_rates().collect();
+        assert_eq!(physical.len(), 1);
+        assert_eq!(physical[0].0, "sda");
+    }
+
+    #[test]
+    fn test_disk_io_stats_nvme_variants() {
+        // nvme0n1 is a whole disk
+        let nvme = DiskIoStats {
+            device: "nvme0n1".to_string(),
+            ..Default::default()
+        };
+        assert!(!nvme.is_partition());
+
+        // nvme0n1p2 is a partition
+        let nvme_part = DiskIoStats {
+            device: "nvme0n1p2".to_string(),
+            ..Default::default()
+        };
+        assert!(nvme_part.is_partition());
+    }
+
+    #[test]
+    fn test_disk_io_stats_sd_variants() {
+        // sdb is a whole disk
+        let sd = DiskIoStats {
+            device: "sdb".to_string(),
+            ..Default::default()
+        };
+        assert!(!sd.is_partition());
+
+        // sdb3 is a partition
+        let sd_part = DiskIoStats {
+            device: "sdb3".to_string(),
+            ..Default::default()
+        };
+        assert!(sd_part.is_partition());
+    }
+
+    #[test]
+    fn test_disk_io_analyzer_default() {
+        let analyzer = DiskIoAnalyzer::default();
+        assert_eq!(analyzer.name(), "disk_io");
+    }
+
+    #[test]
+    fn test_disk_io_analyzer_interval() {
+        let analyzer = DiskIoAnalyzer::new();
+        assert_eq!(analyzer.interval(), Duration::from_secs(1));
+    }
+
+    #[test]
+    fn test_disk_io_analyzer_data() {
+        let analyzer = DiskIoAnalyzer::new();
+        let data = analyzer.data();
+        assert!(data.stats.is_empty());
+    }
+
+    #[test]
+    fn test_format_bytes_rate_edge_cases() {
+        assert_eq!(format_bytes_rate(0.0), "0B/s");
+        assert_eq!(format_bytes_rate(1023.0), "1023B/s");
+        assert_eq!(format_bytes_rate(1024.0), "1.0K/s");
+        assert_eq!(format_bytes_rate(1048576.0), "1.0M/s");
+        assert_eq!(format_bytes_rate(1073741824.0), "1.0G/s");
+    }
+
+    #[test]
+    fn test_disk_io_rates_latency_values() {
+        let rates = DiskIoRates {
+            device: "sda".to_string(),
+            avg_read_latency_ms: 1.5,
+            avg_write_latency_ms: 2.5,
+            utilization_percent: 75.0,
+            ..Default::default()
+        };
+        assert!((rates.avg_read_latency_ms - 1.5).abs() < 0.01);
+        assert!((rates.avg_write_latency_ms - 2.5).abs() < 0.01);
+        assert!((rates.utilization_percent - 75.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_disk_io_stats_extended_fields() {
+        let stats = DiskIoStats {
+            device: "sda".to_string(),
+            discards_completed: Some(100),
+            sectors_discarded: Some(50000),
+            flush_requests: Some(10),
+            ..Default::default()
+        };
+        assert_eq!(stats.discards_completed, Some(100));
+        assert_eq!(stats.sectors_discarded, Some(50000));
+        assert_eq!(stats.flush_requests, Some(10));
+    }
+
+    #[test]
+    fn test_disk_io_stats_clone() {
+        let stats = DiskIoStats {
+            device: "sda".to_string(),
+            sectors_read: 1000,
+            sectors_written: 2000,
+            ..Default::default()
+        };
+        let cloned = stats.clone();
+        assert_eq!(cloned.device, "sda");
+        assert_eq!(cloned.sectors_read, 1000);
+    }
+
+    #[test]
+    fn test_disk_io_rates_clone() {
+        let rates = DiskIoRates {
+            device: "sda".to_string(),
+            read_bytes_per_sec: 1000.0,
+            ..Default::default()
+        };
+        let cloned = rates.clone();
+        assert_eq!(cloned.device, "sda");
+        assert_eq!(cloned.read_bytes_per_sec, 1000.0);
+    }
+
+    #[test]
+    fn test_disk_io_data_clone() {
+        let mut data = DiskIoData::default();
+        data.total_read_bytes_per_sec = 5000.0;
+        let cloned = data.clone();
+        assert_eq!(cloned.total_read_bytes_per_sec, 5000.0);
+    }
 }

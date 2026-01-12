@@ -491,4 +491,210 @@ mod tests {
         let result = average_delta_e(&colors1, &colors2);
         assert!(result > 0.0);
     }
+
+    #[test]
+    fn test_lab_new() {
+        let lab = Lab::new(50.0, 25.0, -30.0);
+        assert_eq!(lab.l, 50.0);
+        assert_eq!(lab.a, 25.0);
+        assert_eq!(lab.b, -30.0);
+    }
+
+    #[test]
+    fn test_lab_clone() {
+        let lab1 = Lab::new(50.0, 25.0, -30.0);
+        let lab2 = lab1.clone();
+        assert_eq!(lab1, lab2);
+    }
+
+    #[test]
+    fn test_lab_copy() {
+        let lab1 = Lab::new(50.0, 25.0, -30.0);
+        let lab2 = lab1; // Copy
+        assert_eq!(lab1, lab2);
+    }
+
+    #[test]
+    fn test_rgb_new() {
+        let rgb = Rgb::new(255, 128, 64);
+        assert_eq!(rgb.r, 255);
+        assert_eq!(rgb.g, 128);
+        assert_eq!(rgb.b, 64);
+    }
+
+    #[test]
+    fn test_rgb_clone() {
+        let rgb1 = Rgb::new(100, 150, 200);
+        let rgb2 = rgb1.clone();
+        assert_eq!(rgb1, rgb2);
+    }
+
+    #[test]
+    fn test_rgb_to_lab_green() {
+        let green = rgb_to_lab(Rgb::new(0, 255, 0));
+        // sRGB green should be approximately L=88, a=-86, b=83
+        assert!(green.l > 85.0 && green.l < 90.0);
+        assert!(green.a < -80.0);
+        assert!(green.b > 75.0);
+    }
+
+    #[test]
+    fn test_rgb_to_lab_blue() {
+        let blue = rgb_to_lab(Rgb::new(0, 0, 255));
+        // sRGB blue should be approximately L=32, a=79, b=-108
+        assert!(blue.l > 30.0 && blue.l < 35.0);
+        assert!(blue.a > 75.0);
+        assert!(blue.b < -100.0);
+    }
+
+    #[test]
+    fn test_rgb_to_lab_gray() {
+        let gray = rgb_to_lab(Rgb::new(128, 128, 128));
+        // Gray should have neutral a and b
+        assert!(gray.a.abs() < 1.0);
+        assert!(gray.b.abs() < 1.0);
+        assert!(gray.l > 50.0 && gray.l < 55.0);
+    }
+
+    #[test]
+    fn test_delta_e_category_boundary_values() {
+        // Exactly at boundaries
+        assert_eq!(DeltaECategory::from_delta_e(0.0), DeltaECategory::Imperceptible);
+        assert_eq!(DeltaECategory::from_delta_e(0.9999), DeltaECategory::Imperceptible);
+        assert_eq!(DeltaECategory::from_delta_e(1.0), DeltaECategory::BarelyPerceptible);
+        assert_eq!(DeltaECategory::from_delta_e(1.9999), DeltaECategory::BarelyPerceptible);
+        assert_eq!(DeltaECategory::from_delta_e(2.0), DeltaECategory::Noticeable);
+        assert_eq!(DeltaECategory::from_delta_e(9.9999), DeltaECategory::Noticeable);
+        assert_eq!(DeltaECategory::from_delta_e(10.0), DeltaECategory::Distinct);
+        assert_eq!(DeltaECategory::from_delta_e(49.9999), DeltaECategory::Distinct);
+        assert_eq!(DeltaECategory::from_delta_e(50.0), DeltaECategory::VeryDistinct);
+    }
+
+    #[test]
+    fn test_delta_e_category_debug() {
+        let cat = DeltaECategory::Noticeable;
+        let debug = format!("{:?}", cat);
+        assert!(debug.contains("Noticeable"));
+    }
+
+    #[test]
+    fn test_delta_e_category_clone() {
+        let cat1 = DeltaECategory::Distinct;
+        let cat2 = cat1.clone();
+        assert_eq!(cat1, cat2);
+    }
+
+    #[test]
+    fn test_hue_angle_quadrants() {
+        // Test hue angle in all four quadrants
+        // Quadrant 1: +a, +b
+        let h1 = hue_angle(1.0, 1.0);
+        assert!(h1 > 0.0 && h1 < 90.0);
+
+        // Quadrant 2: -a, +b
+        let h2 = hue_angle(-1.0, 1.0);
+        assert!(h2 > 90.0 && h2 < 180.0);
+
+        // Quadrant 3: -a, -b
+        let h3 = hue_angle(-1.0, -1.0);
+        assert!(h3 > 180.0 && h3 < 270.0);
+
+        // Quadrant 4: +a, -b
+        let h4 = hue_angle(1.0, -1.0);
+        assert!(h4 > 270.0 && h4 < 360.0);
+    }
+
+    #[test]
+    fn test_hue_angle_axes() {
+        let h_pos_a = hue_angle(1.0, 0.0);
+        assert!(h_pos_a.abs() < 0.01); // 0 degrees
+
+        let h_pos_b = hue_angle(0.0, 1.0);
+        assert!((h_pos_b - 90.0).abs() < 0.01); // 90 degrees
+
+        let h_neg_a = hue_angle(-1.0, 0.0);
+        assert!((h_neg_a - 180.0).abs() < 0.01); // 180 degrees
+
+        let h_neg_b = hue_angle(0.0, -1.0);
+        assert!((h_neg_b - 270.0).abs() < 0.01); // 270 degrees
+    }
+
+    #[test]
+    fn test_srgb_to_linear_threshold() {
+        // Test near the threshold (0.04045)
+        let below = srgb_to_linear(0.04);
+        let above = srgb_to_linear(0.05);
+
+        // Values should be continuous around threshold
+        assert!(below < above);
+        assert!(below > 0.0);
+    }
+
+    #[test]
+    fn test_srgb_to_linear_endpoints() {
+        let at_zero = srgb_to_linear(0.0);
+        let at_one = srgb_to_linear(1.0);
+
+        assert!(at_zero.abs() < 0.0001);
+        assert!((at_one - 1.0).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_lab_f_threshold() {
+        // Test near the threshold (6/29)^3 ≈ 0.008856
+        let delta = 6.0_f64 / 29.0;
+        let delta_cube = delta * delta * delta;
+        let below = lab_f(delta_cube * 0.9);
+        let above = lab_f(delta_cube * 1.1);
+
+        // Function should be continuous
+        assert!(above > below);
+    }
+
+    #[test]
+    fn test_ciede2000_large_difference() {
+        // Very different colors
+        let red = Lab::new(53.0, 80.0, 67.0);
+        let cyan = Lab::new(91.0, -48.0, -14.0);
+
+        let de = ciede2000(red, cyan);
+        assert!(de > 50.0); // Should be a large difference
+    }
+
+    #[test]
+    fn test_ciede2000_similar_colors() {
+        // Very similar colors (same hue, slight difference)
+        let lab1 = Lab::new(50.0, 10.0, 10.0);
+        let lab2 = Lab::new(50.5, 10.0, 10.0);
+
+        let de = ciede2000(lab1, lab2);
+        assert!(de < 1.0); // Should be imperceptible
+    }
+
+    #[test]
+    fn test_average_delta_e_single() {
+        let colors1 = vec![Lab::new(50.0, 0.0, 0.0)];
+        let colors2 = vec![Lab::new(60.0, 0.0, 0.0)];
+        let result = average_delta_e(&colors1, &colors2);
+
+        // Should equal the single pairwise comparison
+        let expected = ciede2000(colors1[0], colors2[0]);
+        assert!((result - expected).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_lab_debug() {
+        let lab = Lab::new(50.0, 25.0, -30.0);
+        let debug = format!("{:?}", lab);
+        assert!(debug.contains("Lab"));
+        assert!(debug.contains("50"));
+    }
+
+    #[test]
+    fn test_rgb_debug() {
+        let rgb = Rgb::new(255, 128, 0);
+        let debug = format!("{:?}", rgb);
+        assert!(debug.contains("Rgb"));
+        assert!(debug.contains("255"));
+    }
 }

@@ -631,4 +631,474 @@ mod tests {
             "/run/podman/podman.sock"
         );
     }
+
+    // Additional ContainerRuntime tests
+    #[test]
+    fn test_container_runtime_as_str() {
+        assert_eq!(ContainerRuntime::Docker.as_str(), "Docker");
+        assert_eq!(ContainerRuntime::Podman.as_str(), "Podman");
+    }
+
+    #[test]
+    fn test_container_runtime_debug() {
+        let rt = ContainerRuntime::Docker;
+        let debug = format!("{:?}", rt);
+        assert!(debug.contains("Docker"));
+    }
+
+    #[test]
+    fn test_container_runtime_clone() {
+        let rt = ContainerRuntime::Podman;
+        let cloned = rt.clone();
+        assert_eq!(rt, cloned);
+    }
+
+    #[test]
+    fn test_container_runtime_copy() {
+        let rt = ContainerRuntime::Docker;
+        let copied: ContainerRuntime = rt;
+        assert_eq!(copied, ContainerRuntime::Docker);
+    }
+
+    // ContainerState tests
+    #[test]
+    fn test_container_state_paused() {
+        assert_eq!(ContainerState::from_str("paused"), ContainerState::Paused);
+        assert_eq!(ContainerState::Paused.as_str(), "Paused");
+        assert_eq!(ContainerState::Paused.short(), "PAUSE");
+    }
+
+    #[test]
+    fn test_container_state_created() {
+        assert_eq!(ContainerState::from_str("created"), ContainerState::Created);
+        assert_eq!(ContainerState::Created.as_str(), "Created");
+        assert_eq!(ContainerState::Created.short(), "NEW");
+    }
+
+    #[test]
+    fn test_container_state_restarting() {
+        assert_eq!(
+            ContainerState::from_str("restarting"),
+            ContainerState::Restarting
+        );
+        assert_eq!(ContainerState::Restarting.as_str(), "Restarting");
+        assert_eq!(ContainerState::Restarting.short(), "RSTR");
+    }
+
+    #[test]
+    fn test_container_state_removing() {
+        assert_eq!(
+            ContainerState::from_str("removing"),
+            ContainerState::Removing
+        );
+        assert_eq!(ContainerState::Removing.as_str(), "Removing");
+        assert_eq!(ContainerState::Removing.short(), "DEL");
+    }
+
+    #[test]
+    fn test_container_state_dead() {
+        assert_eq!(ContainerState::from_str("dead"), ContainerState::Dead);
+        assert_eq!(ContainerState::Dead.as_str(), "Dead");
+        assert_eq!(ContainerState::Dead.short(), "DEAD");
+    }
+
+    #[test]
+    fn test_container_state_unknown() {
+        assert_eq!(ContainerState::Unknown.as_str(), "Unknown");
+        assert_eq!(ContainerState::Unknown.short(), "?");
+    }
+
+    #[test]
+    fn test_container_state_debug() {
+        let state = ContainerState::Running;
+        let debug = format!("{:?}", state);
+        assert!(debug.contains("Running"));
+    }
+
+    #[test]
+    fn test_container_state_clone() {
+        let state = ContainerState::Exited;
+        let cloned = state.clone();
+        assert_eq!(state, cloned);
+    }
+
+    #[test]
+    fn test_container_state_hash() {
+        let mut map: HashMap<ContainerState, usize> = HashMap::new();
+        map.insert(ContainerState::Running, 5);
+        map.insert(ContainerState::Exited, 3);
+        assert_eq!(map.get(&ContainerState::Running), Some(&5));
+    }
+
+    // ContainerStats tests
+    #[test]
+    fn test_container_stats_default() {
+        let stats = ContainerStats::default();
+        assert!((stats.cpu_percent - 0.0).abs() < f32::EPSILON);
+        assert_eq!(stats.memory_bytes, 0);
+        assert_eq!(stats.memory_limit, 0);
+        assert_eq!(stats.net_rx_bytes, 0);
+        assert_eq!(stats.net_tx_bytes, 0);
+        assert_eq!(stats.block_read_bytes, 0);
+        assert_eq!(stats.block_write_bytes, 0);
+        assert_eq!(stats.pids, 0);
+    }
+
+    #[test]
+    fn test_container_stats_debug() {
+        let stats = ContainerStats::default();
+        let debug = format!("{:?}", stats);
+        assert!(debug.contains("ContainerStats"));
+    }
+
+    #[test]
+    fn test_container_stats_clone() {
+        let stats = ContainerStats {
+            cpu_percent: 50.0,
+            memory_bytes: 1024,
+            memory_limit: 2048,
+            memory_percent: 50.0,
+            net_rx_bytes: 100,
+            net_tx_bytes: 200,
+            block_read_bytes: 300,
+            block_write_bytes: 400,
+            pids: 5,
+        };
+        let cloned = stats.clone();
+        assert_eq!(cloned.cpu_percent, 50.0);
+        assert_eq!(cloned.memory_bytes, 1024);
+    }
+
+    // Container tests
+    #[test]
+    fn test_container_display_name_short() {
+        let container = Container {
+            id: "abc".to_string(),
+            name: "short".to_string(),
+            image: "nginx".to_string(),
+            state: ContainerState::Running,
+            status: "Up".to_string(),
+            runtime: ContainerRuntime::Docker,
+            stats: ContainerStats::default(),
+            created: 0,
+            ports: vec![],
+        };
+        assert_eq!(container.display_name(10), "short");
+    }
+
+    #[test]
+    fn test_container_display_image_no_registry() {
+        let container = Container {
+            id: "abc".to_string(),
+            name: "test".to_string(),
+            image: "nginx:latest".to_string(),
+            state: ContainerState::Running,
+            status: "Up".to_string(),
+            runtime: ContainerRuntime::Docker,
+            stats: ContainerStats::default(),
+            created: 0,
+            ports: vec![],
+        };
+        assert_eq!(container.display_image(), "nginx:latest");
+    }
+
+    #[test]
+    fn test_container_display_memory() {
+        let container = Container {
+            id: "abc".to_string(),
+            name: "test".to_string(),
+            image: "nginx".to_string(),
+            state: ContainerState::Running,
+            status: "Up".to_string(),
+            runtime: ContainerRuntime::Docker,
+            stats: ContainerStats {
+                memory_bytes: 1024 * 1024, // 1MB
+                memory_limit: 2 * 1024 * 1024,
+                ..Default::default()
+            },
+            created: 0,
+            ports: vec![],
+        };
+        assert_eq!(container.display_memory(), "1.0M");
+        assert_eq!(container.display_memory_limit(), "2.0M");
+    }
+
+    #[test]
+    fn test_container_debug() {
+        let container = Container {
+            id: "abc".to_string(),
+            name: "test".to_string(),
+            image: "nginx".to_string(),
+            state: ContainerState::Running,
+            status: "Up".to_string(),
+            runtime: ContainerRuntime::Docker,
+            stats: ContainerStats::default(),
+            created: 0,
+            ports: vec![],
+        };
+        let debug = format!("{:?}", container);
+        assert!(debug.contains("Container"));
+    }
+
+    #[test]
+    fn test_container_clone() {
+        let container = Container {
+            id: "abc".to_string(),
+            name: "test".to_string(),
+            image: "nginx".to_string(),
+            state: ContainerState::Running,
+            status: "Up".to_string(),
+            runtime: ContainerRuntime::Docker,
+            stats: ContainerStats::default(),
+            created: 12345,
+            ports: vec![(8080, 80)],
+        };
+        let cloned = container.clone();
+        assert_eq!(cloned.id, "abc");
+        assert_eq!(cloned.created, 12345);
+        assert_eq!(cloned.ports.len(), 1);
+    }
+
+    // ContainersData tests
+    #[test]
+    fn test_containers_data_default() {
+        let data = ContainersData::default();
+        assert!(data.containers.is_empty());
+        assert!(data.runtime.is_none());
+        assert!(data.state_counts.is_empty());
+        assert!((data.total_cpu - 0.0).abs() < f32::EPSILON);
+        assert_eq!(data.total_memory, 0);
+    }
+
+    #[test]
+    fn test_containers_data_running() {
+        let data = ContainersData {
+            containers: vec![
+                Container {
+                    id: "1".to_string(),
+                    name: "running".to_string(),
+                    image: "nginx".to_string(),
+                    state: ContainerState::Running,
+                    status: "Up".to_string(),
+                    runtime: ContainerRuntime::Docker,
+                    stats: ContainerStats::default(),
+                    created: 0,
+                    ports: vec![],
+                },
+                Container {
+                    id: "2".to_string(),
+                    name: "stopped".to_string(),
+                    image: "redis".to_string(),
+                    state: ContainerState::Exited,
+                    status: "Exited".to_string(),
+                    runtime: ContainerRuntime::Docker,
+                    stats: ContainerStats::default(),
+                    created: 0,
+                    ports: vec![],
+                },
+            ],
+            runtime: Some(ContainerRuntime::Docker),
+            state_counts: HashMap::new(),
+            total_cpu: 0.0,
+            total_memory: 0,
+        };
+        let running: Vec<_> = data.running().collect();
+        assert_eq!(running.len(), 1);
+        assert_eq!(running[0].name, "running");
+    }
+
+    #[test]
+    fn test_containers_data_total() {
+        let data = ContainersData {
+            containers: vec![
+                Container {
+                    id: "1".to_string(),
+                    name: "a".to_string(),
+                    image: "nginx".to_string(),
+                    state: ContainerState::Running,
+                    status: "Up".to_string(),
+                    runtime: ContainerRuntime::Docker,
+                    stats: ContainerStats::default(),
+                    created: 0,
+                    ports: vec![],
+                },
+                Container {
+                    id: "2".to_string(),
+                    name: "b".to_string(),
+                    image: "redis".to_string(),
+                    state: ContainerState::Exited,
+                    status: "Exited".to_string(),
+                    runtime: ContainerRuntime::Docker,
+                    stats: ContainerStats::default(),
+                    created: 0,
+                    ports: vec![],
+                },
+            ],
+            runtime: Some(ContainerRuntime::Docker),
+            state_counts: HashMap::new(),
+            total_cpu: 0.0,
+            total_memory: 0,
+        };
+        assert_eq!(data.total(), 2);
+    }
+
+    #[test]
+    fn test_containers_data_running_count() {
+        let mut state_counts = HashMap::new();
+        state_counts.insert(ContainerState::Running, 3);
+        state_counts.insert(ContainerState::Exited, 2);
+        let data = ContainersData {
+            containers: vec![],
+            runtime: None,
+            state_counts,
+            total_cpu: 0.0,
+            total_memory: 0,
+        };
+        assert_eq!(data.running_count(), 3);
+    }
+
+    #[test]
+    fn test_containers_data_running_count_zero() {
+        let data = ContainersData::default();
+        assert_eq!(data.running_count(), 0);
+    }
+
+    #[test]
+    fn test_containers_data_debug() {
+        let data = ContainersData::default();
+        let debug = format!("{:?}", data);
+        assert!(debug.contains("ContainersData"));
+    }
+
+    #[test]
+    fn test_containers_data_clone() {
+        let data = ContainersData {
+            containers: vec![],
+            runtime: Some(ContainerRuntime::Podman),
+            state_counts: HashMap::new(),
+            total_cpu: 10.0,
+            total_memory: 1024,
+        };
+        let cloned = data.clone();
+        assert_eq!(cloned.runtime, Some(ContainerRuntime::Podman));
+        assert_eq!(cloned.total_cpu, 10.0);
+    }
+
+    // ContainersAnalyzer tests
+    #[test]
+    fn test_containers_analyzer_default() {
+        let analyzer = ContainersAnalyzer::default();
+        let _ = analyzer.name();
+    }
+
+    #[test]
+    fn test_containers_analyzer_name() {
+        let analyzer = ContainersAnalyzer::new();
+        assert_eq!(analyzer.name(), "containers");
+    }
+
+    #[test]
+    fn test_containers_analyzer_data() {
+        let analyzer = ContainersAnalyzer::new();
+        let data = analyzer.data();
+        assert!(data.containers.is_empty());
+    }
+
+    #[test]
+    fn test_containers_analyzer_interval() {
+        let analyzer = ContainersAnalyzer::new();
+        let interval = analyzer.interval();
+        assert_eq!(interval.as_secs(), 2);
+    }
+
+    #[test]
+    fn test_containers_analyzer_parse_container_list_empty() {
+        let analyzer = ContainersAnalyzer::new();
+        let result = analyzer.parse_container_list("[]");
+        // May fail if no runtime available
+        let _ = result;
+    }
+
+    #[test]
+    fn test_containers_analyzer_parse_container_list_invalid() {
+        let analyzer = ContainersAnalyzer::new();
+        let result = analyzer.parse_container_list("not json");
+        // Should return empty or error
+        let _ = result;
+    }
+
+    #[test]
+    fn test_containers_analyzer_parse_container_stats_empty() {
+        let analyzer = ContainersAnalyzer::new();
+        let result = analyzer.parse_container_stats("{}");
+        assert!(result.is_some());
+    }
+
+    // Helper function tests
+    #[test]
+    fn test_extract_string_after() {
+        let result = extract_string_after(r#""test""#, "");
+        assert_eq!(result, Some("test".to_string()));
+    }
+
+    #[test]
+    fn test_extract_string_after_no_quote() {
+        let result = extract_string_after("no quotes", "");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_extract_json_string_nested() {
+        let json = r#"{"outer":{"Name":"inner"}}"#;
+        let result = extract_json_string(json, "Name");
+        assert_eq!(result, Some("inner".to_string()));
+    }
+
+    #[test]
+    fn test_extract_json_number_negative() {
+        let json = r#"{"value":-123}"#;
+        let result = extract_json_number(json, "value");
+        assert_eq!(result, Some(-123));
+    }
+
+    #[test]
+    fn test_extract_json_number_with_spaces() {
+        let json = r#"{"value": 456}"#;
+        let result = extract_json_number(json, "value");
+        assert_eq!(result, Some(456));
+    }
+
+    #[test]
+    fn test_extract_name_from_names_with_slash() {
+        let json = r#""Names":["\/my-container"]"#;
+        let result = extract_name_from_names(json);
+        assert_eq!(result, Some("my-container".to_string()));
+    }
+
+    #[test]
+    fn test_extract_name_from_names_missing() {
+        let json = r#"{"Id":"123"}"#;
+        let result = extract_name_from_names(json);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_format_bytes_zero() {
+        assert_eq!(format_bytes(0), "0B");
+    }
+
+    #[test]
+    fn test_format_bytes_exact_kb() {
+        assert_eq!(format_bytes(1024), "1.0K");
+    }
+
+    #[test]
+    fn test_format_bytes_exact_mb() {
+        assert_eq!(format_bytes(1024 * 1024), "1.0M");
+    }
+
+    #[test]
+    fn test_format_bytes_exact_gb() {
+        assert_eq!(format_bytes(1024 * 1024 * 1024), "1.0G");
+    }
 }

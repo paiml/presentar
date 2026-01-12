@@ -446,4 +446,155 @@ mod tests {
         analyzer.set_root_path(new_path.clone());
         assert_eq!(analyzer.data().root_path, new_path);
     }
+
+    #[test]
+    fn test_analyzer_name() {
+        let analyzer = TreemapAnalyzer::new();
+        assert_eq!(analyzer.name(), "treemap");
+    }
+
+    #[test]
+    fn test_analyzer_interval() {
+        let analyzer = TreemapAnalyzer::new();
+        assert_eq!(analyzer.interval(), Duration::from_secs(60));
+    }
+
+    #[test]
+    fn test_treemap_data_default() {
+        let data = TreemapData::default();
+        assert!(data.root.is_none());
+        assert!(data.top_items.is_empty());
+        assert_eq!(data.total_size, 0);
+        assert_eq!(data.total_files, 0);
+        assert_eq!(data.total_dirs, 0);
+        assert!(data.last_scan.is_none());
+    }
+
+    #[test]
+    fn test_treemap_data_clone() {
+        let mut data = TreemapData::default();
+        data.total_size = 1000;
+        data.total_files = 10;
+
+        let cloned = data.clone();
+        assert_eq!(cloned.total_size, 1000);
+        assert_eq!(cloned.total_files, 10);
+    }
+
+    #[test]
+    fn test_treemap_config_clone() {
+        let config = TreemapConfig::default();
+        let cloned = config.clone();
+        assert_eq!(cloned.max_depth, config.max_depth);
+        assert_eq!(cloned.skip_hidden, config.skip_hidden);
+    }
+
+    #[test]
+    fn test_treemap_node_clone() {
+        let node = TreemapNode::file("test.txt".to_string(), PathBuf::from("/tmp/test.txt"), 1024, 0);
+        let cloned = node.clone();
+        assert_eq!(cloned.name, node.name);
+        assert_eq!(cloned.size, node.size);
+    }
+
+    #[test]
+    fn test_format_size_kb() {
+        assert_eq!(format_size(2048), "2.0K");
+        assert_eq!(format_size(3072), "3.0K");
+    }
+
+    #[test]
+    fn test_format_size_mb() {
+        assert_eq!(format_size(5 * 1024 * 1024), "5.0M");
+        assert_eq!(format_size(10 * 1024 * 1024), "10.0M");
+    }
+
+    #[test]
+    fn test_format_size_gb() {
+        assert_eq!(format_size(2 * 1024 * 1024 * 1024), "2.0G");
+    }
+
+    #[test]
+    fn test_set_max_depth() {
+        let mut analyzer = TreemapAnalyzer::new();
+        analyzer.set_max_depth(5);
+        // Can't easily verify, but should not panic
+    }
+
+    #[test]
+    fn test_treemap_node_debug() {
+        let node = TreemapNode::file("test".to_string(), PathBuf::from("/test"), 100, 0);
+        let debug = format!("{:?}", node);
+        assert!(debug.contains("TreemapNode"));
+    }
+
+    #[test]
+    fn test_treemap_data_debug() {
+        let data = TreemapData::default();
+        let debug = format!("{:?}", data);
+        assert!(debug.contains("TreemapData"));
+    }
+
+    #[test]
+    fn test_treemap_config_debug() {
+        let config = TreemapConfig::default();
+        let debug = format!("{:?}", config);
+        assert!(debug.contains("TreemapConfig"));
+    }
+
+    #[test]
+    fn test_set_root_path_same_path() {
+        let mut analyzer = TreemapAnalyzer::new();
+        let path = analyzer.data().root_path.clone();
+
+        // Set same path - should not force re-scan
+        analyzer.set_root_path(path.clone());
+        // Should not panic
+    }
+
+    #[test]
+    fn test_analyzer_default() {
+        let analyzer = TreemapAnalyzer::default();
+        assert_eq!(analyzer.name(), "treemap");
+    }
+
+    #[test]
+    fn test_collect_nonexistent_path() {
+        let config = TreemapConfig {
+            root_path: PathBuf::from("/nonexistent/path/that/does/not/exist"),
+            ..Default::default()
+        };
+        let mut analyzer = TreemapAnalyzer::with_config(config);
+        let result = analyzer.collect();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_available_nonexistent() {
+        let config = TreemapConfig {
+            root_path: PathBuf::from("/nonexistent/path"),
+            ..Default::default()
+        };
+        let analyzer = TreemapAnalyzer::with_config(config);
+        assert!(!analyzer.available());
+    }
+
+    #[test]
+    fn test_treemap_node_children() {
+        let mut parent = TreemapNode::directory("parent".to_string(), PathBuf::from("/parent"), 0);
+        let child = TreemapNode::file("child.txt".to_string(), PathBuf::from("/parent/child.txt"), 100, 1);
+        parent.children.push(child);
+
+        assert_eq!(parent.children.len(), 1);
+        assert_eq!(parent.children[0].name, "child.txt");
+    }
+
+    #[test]
+    fn test_cache_not_stale() {
+        let mut data = TreemapData::default();
+        data.last_scan = Some(Instant::now());
+
+        // Very long TTL, should not be stale
+        assert!(!data.is_stale(Duration::from_secs(3600)));
+    }
 }

@@ -516,4 +516,166 @@ mod tests {
         let c = parse_hex("FF0000");
         assert!((c.r - 1.0).abs() < 0.01); // 0-1 range
     }
+
+    #[test]
+    fn test_parse_hex_blue() {
+        let c = parse_hex("#0000FF");
+        assert!((c.r - 0.0).abs() < 0.01);
+        assert!((c.g - 0.0).abs() < 0.01);
+        assert!((c.b - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_parse_hex_mixed() {
+        let c = parse_hex("#808080");
+        assert!((c.r - 0.5).abs() < 0.01);
+        assert!((c.g - 0.5).abs() < 0.01);
+        assert!((c.b - 0.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_gradient_default() {
+        let g = Gradient::default();
+        // Green -> Yellow -> Red
+        let start = g.sample(0.0);
+        assert!(start.g > 0.9); // Green
+        let end = g.sample(1.0);
+        assert!(end.r > 0.9); // Red
+    }
+
+    #[test]
+    fn test_theme_new() {
+        let t = Theme::new();
+        assert_eq!(t.name, "tokyo_night");
+    }
+
+    #[test]
+    fn test_theme_colors_non_panic() {
+        let t = Theme::default();
+        // Test all color functions don't panic
+        for pct in [0.0, 25.0, 50.0, 75.0, 100.0] {
+            let _ = t.cpu_color(pct);
+            let _ = t.memory_color(pct);
+            let _ = t.gpu_color(pct);
+        }
+        for temp in [0.0, 25.0, 50.0, 75.0, 100.0] {
+            let _ = t.temp_color(temp, 100.0);
+        }
+    }
+
+    #[test]
+    fn test_temp_color_cold() {
+        let t = Theme::default();
+        let cold = t.temp_color(0.0, 100.0);
+        let hot = t.temp_color(100.0, 100.0);
+        // Cold and hot should be different
+        assert!((cold.r - hot.r).abs() > 0.1 || (cold.g - hot.g).abs() > 0.1);
+    }
+
+    #[test]
+    fn test_temp_color_clamped() {
+        let t = Theme::default();
+        // Over max should clamp to 100%
+        let over = t.temp_color(150.0, 100.0);
+        let at_max = t.temp_color(100.0, 100.0);
+        assert!((over.r - at_max.r).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_gradient_four_stops() {
+        // Test gradient with more stops
+        let g = Gradient {
+            stops: vec![Color::RED, Color::GREEN, Color::BLUE, Color::WHITE],
+        };
+        let _ = g.sample(0.0);
+        let _ = g.sample(0.33);
+        let _ = g.sample(0.66);
+        let _ = g.sample(1.0);
+    }
+
+    #[test]
+    fn test_theme_background_foreground() {
+        let t = Theme::tokyo_night();
+        // Background should be dark
+        assert!(t.background.r < 0.2);
+        assert!(t.background.g < 0.2);
+        // Foreground should be light
+        assert!(t.foreground.r > 0.5);
+        assert!(t.foreground.g > 0.5);
+    }
+
+    #[test]
+    fn test_theme_border_dim() {
+        let t = Theme::dracula();
+        // Border and dim should be mid-range
+        assert!(t.border.r > 0.2 && t.border.r < 0.8);
+        assert!(t.dim.r > 0.1 && t.dim.r < 0.5);
+    }
+
+    #[test]
+    fn test_interpolate_lab_midpoint() {
+        let start = Color::new(0.0, 0.0, 0.0, 1.0); // Black
+        let end = Color::new(1.0, 1.0, 1.0, 1.0); // White
+        let mid = interpolate_lab(start, end, 0.5);
+        // Middle gray should be around 0.5
+        assert!(mid.r > 0.3 && mid.r < 0.7);
+    }
+
+    #[test]
+    fn test_rgb_lab_roundtrip_black() {
+        let black = Color::new(0.0, 0.0, 0.0, 1.0);
+        let lab = rgb_to_lab(black);
+        let back = lab_to_rgb(lab.0, lab.1, lab.2);
+        assert!((back.r - 0.0).abs() < 0.02);
+    }
+
+    #[test]
+    fn test_rgb_lab_roundtrip_white() {
+        let white = Color::new(1.0, 1.0, 1.0, 1.0);
+        let lab = rgb_to_lab(white);
+        let back = lab_to_rgb(lab.0, lab.1, lab.2);
+        assert!((back.r - 1.0).abs() < 0.02);
+    }
+
+    #[test]
+    fn test_gradient_segment_boundary() {
+        let g = Gradient::three(Color::RED, Color::GREEN, Color::BLUE);
+        // At exactly 0.5, should be at/near green
+        let at_half = g.sample(0.5);
+        assert!(at_half.g > at_half.r);
+        assert!(at_half.g > at_half.b);
+    }
+
+    #[test]
+    fn test_all_themes_valid() {
+        let themes = [
+            Theme::tokyo_night(),
+            Theme::dracula(),
+            Theme::nord(),
+            Theme::monokai(),
+        ];
+        for t in themes {
+            assert!(!t.name.is_empty());
+            // All gradients should work
+            let _ = t.cpu.sample(0.5);
+            let _ = t.memory.sample(0.5);
+            let _ = t.gpu.sample(0.5);
+            let _ = t.temperature.sample(0.5);
+            let _ = t.network.sample(0.5);
+        }
+    }
+
+    #[test]
+    fn test_parse_hex_short() {
+        // Too short should return white
+        let c = parse_hex("#FFF");
+        assert_eq!(c, Color::WHITE);
+    }
+
+    #[test]
+    fn test_parse_hex_long() {
+        // Too long should return white
+        let c = parse_hex("#FFFFFFFF");
+        assert_eq!(c, Color::WHITE);
+    }
 }

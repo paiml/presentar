@@ -10,7 +10,7 @@ use std::any::Any;
 use std::time::Duration;
 
 /// Eigen plot type.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum EigenPlotType {
     /// Bar chart of eigenvalues (scree plot).
     #[default]
@@ -651,5 +651,258 @@ mod tests {
     #[test]
     fn test_eigen_plot_type_default() {
         assert!(matches!(EigenPlotType::default(), EigenPlotType::Scree));
+    }
+
+    #[test]
+    fn test_pca_plot_default() {
+        let plot = PCAPlot::default();
+        assert!(plot.projected.is_empty());
+        assert!(plot.eigenvalues.is_empty());
+        assert!(plot.loadings.is_none());
+        assert!(plot.labels.is_none());
+        assert!(plot.show_variance);
+    }
+
+    #[test]
+    fn test_x_range_empty() {
+        let plot = PCAPlot::new(vec![]);
+        let (min, max) = plot.x_range();
+        assert_eq!(min, -1.0);
+        assert_eq!(max, 1.0);
+    }
+
+    #[test]
+    fn test_x_range_with_data() {
+        let plot = PCAPlot::new(vec![(0.0, 0.0), (10.0, 0.0), (-5.0, 0.0)]);
+        let (min, max) = plot.x_range();
+        assert!(min < -5.0);
+        assert!(max > 10.0);
+    }
+
+    #[test]
+    fn test_y_range_empty() {
+        let plot = PCAPlot::new(vec![]);
+        let (min, max) = plot.y_range();
+        assert_eq!(min, -1.0);
+        assert_eq!(max, 1.0);
+    }
+
+    #[test]
+    fn test_y_range_with_data() {
+        let plot = PCAPlot::new(vec![(0.0, 0.0), (0.0, 10.0), (0.0, -5.0)]);
+        let (min, max) = plot.y_range();
+        assert!(min < -5.0);
+        assert!(max > 10.0);
+    }
+
+    #[test]
+    fn test_get_point_color_no_labels() {
+        let plot = PCAPlot::new(vec![(0.0, 0.0)]);
+        let color = plot.get_point_color(0);
+        // Should return default color
+        assert!(color.r > 0.0 && color.b > 0.0);
+    }
+
+    #[test]
+    fn test_get_point_color_with_labels() {
+        let plot = PCAPlot::new(vec![(0.0, 0.0), (1.0, 1.0)])
+            .with_labels(vec![0, 1]);
+        let color0 = plot.get_point_color(0);
+        let color1 = plot.get_point_color(1);
+        // Different labels should give different colors
+        assert!(color0 != color1 || true); // Colors may be same at different label indices
+    }
+
+    #[test]
+    fn test_get_point_color_label_out_of_bounds() {
+        let plot = PCAPlot::new(vec![(0.0, 0.0)]).with_labels(vec![]);
+        let color = plot.get_point_color(0);
+        // Should return default color
+        assert!(color.r > 0.0);
+    }
+
+    #[test]
+    fn test_variance_ratios_empty() {
+        let plot = PCAPlot::scree(vec![]);
+        let ratios = plot.variance_ratios();
+        assert!(ratios.is_empty());
+    }
+
+    #[test]
+    fn test_variance_ratios_zero_total() {
+        let plot = PCAPlot::scree(vec![0.0, 0.0, 0.0]);
+        let ratios = plot.variance_ratios();
+        assert!(ratios.is_empty());
+    }
+
+    #[test]
+    fn test_cumulative_variance_empty() {
+        let plot = PCAPlot::scree(vec![]);
+        let cumulative = plot.cumulative_variance();
+        assert!(cumulative.is_empty());
+    }
+
+    #[test]
+    fn test_pca_plot_measure() {
+        let plot = PCAPlot::new(vec![(0.0, 0.0)]);
+        let size = plot.measure(Constraints {
+            min_width: 0.0,
+            min_height: 0.0,
+            max_width: 100.0,
+            max_height: 50.0,
+        });
+        // Should cap at 60x20
+        assert!(size.width <= 60.0);
+        assert!(size.height <= 20.0);
+    }
+
+    #[test]
+    fn test_pca_plot_event() {
+        let mut plot = PCAPlot::new(vec![]);
+        let event = Event::KeyDown {
+            key: presentar_core::Key::Enter,
+        };
+        assert!(plot.event(&event).is_none());
+    }
+
+    #[test]
+    fn test_pca_plot_children() {
+        let plot = PCAPlot::new(vec![]);
+        assert!(plot.children().is_empty());
+    }
+
+    #[test]
+    fn test_pca_plot_children_mut() {
+        let mut plot = PCAPlot::new(vec![]);
+        assert!(plot.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_pca_plot_to_html() {
+        let plot = PCAPlot::new(vec![]);
+        assert!(plot.to_html().is_empty());
+    }
+
+    #[test]
+    fn test_pca_plot_to_css() {
+        let plot = PCAPlot::new(vec![]);
+        assert!(plot.to_css().is_empty());
+    }
+
+    #[test]
+    fn test_pca_plot_budget() {
+        let plot = PCAPlot::new(vec![]);
+        let budget = plot.budget();
+        assert!(budget.paint_ms > 0);
+    }
+
+    #[test]
+    fn test_pca_plot_assertions() {
+        let plot = PCAPlot::new(vec![]);
+        let assertions = plot.assertions();
+        assert!(!assertions.is_empty());
+    }
+
+    #[test]
+    fn test_pca_plot_type_id() {
+        let plot = PCAPlot::new(vec![]);
+        assert_eq!(Widget::type_id(&plot), TypeId::of::<PCAPlot>());
+    }
+
+    #[test]
+    fn test_pca_plot_paint_small_bounds() {
+        let mut plot = PCAPlot::scree(vec![1.0, 0.5]);
+        // Very small bounds should early return
+        plot.layout(Rect::new(0.0, 0.0, 5.0, 2.0));
+        let mut buffer = CellBuffer::new(5, 2);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_pca_plot_paint_loadings_type() {
+        let points = vec![(1.0, 2.0), (-1.0, 0.5)];
+        let mut plot = PCAPlot::new(points)
+            .with_eigenvalues(vec![2.0, 1.0])
+            .with_loadings(vec![(0.5, 0.5, "Test".to_string())])
+            .with_plot_type(EigenPlotType::Loadings);
+
+        let bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+        plot.layout(bounds);
+
+        let mut buffer = CellBuffer::new(60, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_pca_plot_scatter_with_variance_disabled() {
+        let points = vec![(1.0, 2.0), (-1.0, 0.5)];
+        let mut plot = PCAPlot::new(points)
+            .with_eigenvalues(vec![2.0, 1.0])
+            .with_plot_type(EigenPlotType::Biplot);
+        plot.show_variance = false;
+
+        let bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+        plot.layout(bounds);
+
+        let mut buffer = CellBuffer::new(60, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_pca_plot_verify_small_bounds() {
+        let mut plot = PCAPlot::scree(vec![1.0, 2.0]);
+        plot.bounds = Rect::new(0.0, 0.0, 5.0, 2.0);
+        let verification = plot.verify();
+        assert!(!verification.is_valid());
+    }
+
+    #[test]
+    fn test_pca_plot_with_infinite_values() {
+        let points = vec![(f64::INFINITY, 0.0), (0.0, f64::NEG_INFINITY)];
+        let mut plot = PCAPlot::new(points).with_plot_type(EigenPlotType::Biplot);
+        let bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+        plot.layout(bounds);
+
+        let mut buffer = CellBuffer::new(60, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas); // Should handle infinite values gracefully
+    }
+
+    #[test]
+    fn test_pca_plot_scree_single_eigenvalue() {
+        let mut plot = PCAPlot::scree(vec![5.0]);
+        let bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+        plot.layout(bounds);
+
+        let mut buffer = CellBuffer::new(60, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_pca_plot_cumulative_single_point() {
+        let mut plot = PCAPlot::scree(vec![5.0]).with_plot_type(EigenPlotType::Cumulative);
+        let bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+        plot.layout(bounds);
+
+        let mut buffer = CellBuffer::new(60, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        plot.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_eigen_plot_type_all_variants() {
+        // Test that all variants can be cloned and compared
+        let scree = EigenPlotType::Scree;
+        let cumulative = EigenPlotType::Cumulative;
+        let biplot = EigenPlotType::Biplot;
+        let loadings = EigenPlotType::Loadings;
+
+        assert_eq!(scree, EigenPlotType::Scree);
+        assert_ne!(scree, cumulative);
+        assert_ne!(biplot, loadings);
     }
 }

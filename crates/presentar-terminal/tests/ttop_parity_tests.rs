@@ -10,10 +10,9 @@
 
 #![cfg(feature = "ptop")]
 
-use presentar_core::{Rect, Widget};
 use presentar_terminal::ptop::app::App;
-use presentar_terminal::ptop::ui_v2::PtopView;
-use presentar_terminal::{CellBuffer, DirectTerminalCanvas};
+use presentar_terminal::ptop::ui;
+use presentar_terminal::CellBuffer;
 
 /// Capture a ptop frame and return the rendered text
 fn capture_ptop_frame(width: u16, height: u16) -> String {
@@ -22,12 +21,7 @@ fn capture_ptop_frame(width: u16, height: u16) -> String {
     app.collect_metrics();
 
     let mut buffer = CellBuffer::new(width, height);
-    let mut view = PtopView::from_app(&app);
-    let bounds = Rect::new(0.0, 0.0, width as f32, height as f32);
-    view.layout(bounds);
-
-    let mut canvas = DirectTerminalCanvas::new(&mut buffer);
-    view.paint(&mut canvas);
+    ui::draw(&app, &mut buffer);
 
     // Convert buffer to string
     let mut output = String::new();

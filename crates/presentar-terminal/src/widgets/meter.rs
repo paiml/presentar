@@ -523,4 +523,56 @@ mod tests {
         meter.paint(&mut canvas);
         assert!(!canvas.texts.is_empty());
     }
+
+    #[test]
+    fn test_meter_verify_value_over_max() {
+        let mut meter = Meter::new(50.0, 100.0);
+        meter.value = 150.0;
+        assert!(!meter.verify().is_valid());
+    }
+
+    #[test]
+    fn test_meter_layout_with_small_height() {
+        let mut meter = Meter::percentage(50.0);
+        let bounds = Rect::new(0.0, 0.0, 80.0, 0.5);
+        let result = meter.layout(bounds);
+        assert_eq!(result.size.height, 1.0);
+    }
+
+    #[test]
+    fn test_meter_paint_with_gradient() {
+        let mut meter = Meter::percentage(50.0).with_gradient(Color::GREEN, Color::RED);
+        meter.bounds = Rect::new(0.0, 0.0, 50.0, 1.0);
+        let mut canvas = MockCanvas::new();
+        meter.paint(&mut canvas);
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_meter_clone() {
+        let meter = Meter::percentage(75.0)
+            .with_label("Clone Test")
+            .with_color(Color::BLUE);
+        let cloned = meter.clone();
+        assert_eq!(cloned.value, 75.0);
+        assert_eq!(cloned.label, "Clone Test");
+        assert_eq!(cloned.fill_color, Color::BLUE);
+    }
+
+    #[test]
+    fn test_meter_debug() {
+        let meter = Meter::percentage(50.0);
+        let debug = format!("{:?}", meter);
+        assert!(debug.contains("Meter"));
+        assert!(debug.contains("value"));
+    }
+
+    #[test]
+    fn test_meter_measure_small_constraints() {
+        let meter = Meter::percentage(50.0);
+        let constraints = Constraints::new(0.0, 5.0, 0.0, 10.0);
+        let size = meter.measure(constraints);
+        // max(5.0, 10.0) = 10.0, then constrained to 5.0
+        assert_eq!(size.width, 5.0);
+    }
 }

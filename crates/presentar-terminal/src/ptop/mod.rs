@@ -3,8 +3,7 @@
 //! This module provides the application logic for ptop, mirroring ttop's structure:
 //! - `app`: Application state and data collectors
 //! - `config`: YAML configuration and layout algorithms (SPEC-024 v5.0 Features A, B)
-//! - `ui`: Layout and rendering using presentar-terminal widgets (v1 - raw `draw_text`)
-//! - `ui_v2`: Pure widget composition (v2 - zero `draw_text`)
+//! - `ui`: Layout and rendering using presentar-terminal widgets
 //! - `analyzers`: System analyzers for detailed metrics
 //!
 //! # SPEC-024 Architectural Enforcement
@@ -68,12 +67,23 @@ pub const _ENFORCE_PANELS_INTERFACE: &str = include_str!("../../tests/ptop_panel
 #[doc(hidden)]
 pub const _ENFORCE_WIDGET_INTERFACE: &str = include_str!("../../tests/widget_interface_tests.rs");
 
+/// ENFORCEMENT: ExplodedView interface tests MUST exist (SPEC-024 Section 30)
+/// ExplodedView = FULL SCREEN panel takeover. No cramped side-by-side.
+#[doc(hidden)]
+pub const _ENFORCE_EXPLODED_VIEW: &str = include_str!("../../tests/exploded_view_interface.rs");
+
+/// ENFORCEMENT: Design principles interface tests MUST exist (SPEC-024 Appendix E.6)
+/// Citations: Tufte (1983), Popper (1959), Nielsen (1994), Beck (2002), Meyer (1992)
+#[doc(hidden)]
+pub const _ENFORCE_DESIGN_PRINCIPLES: &str =
+    include_str!("../../tests/design_principles_interface.rs");
+
 pub mod analyzers;
 pub mod app;
 pub mod config;
 pub mod input;
 pub mod ui;
-pub mod ui_v2;
+pub mod ui_atoms;
 
 pub use analyzers::{
     AnalyzerRegistry, ConnectionsAnalyzer, ConnectionsData, PsiAnalyzer, PsiData, TcpConnection,
@@ -85,4 +95,3 @@ pub use config::{
     PanelRect, PanelType, PtopConfig,
 };
 pub use input::{InputHandler, TimestampedKey};
-pub use ui_v2::PtopView;

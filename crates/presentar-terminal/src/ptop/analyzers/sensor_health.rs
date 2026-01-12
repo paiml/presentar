@@ -577,4 +577,329 @@ mod tests {
 
         assert!((data.max_temperature().unwrap() - 55.0).abs() < 0.01);
     }
+
+    #[test]
+    fn test_sensor_type_prefix() {
+        assert_eq!(SensorType::Temperature.prefix(), "temp");
+        assert_eq!(SensorType::Fan.prefix(), "fan");
+        assert_eq!(SensorType::Voltage.prefix(), "in");
+        assert_eq!(SensorType::Current.prefix(), "curr");
+        assert_eq!(SensorType::Power.prefix(), "power");
+    }
+
+    #[test]
+    fn test_sensor_type_all_units() {
+        assert_eq!(SensorType::Current.unit(), "A");
+        assert_eq!(SensorType::Power.unit(), "W");
+    }
+
+    #[test]
+    fn test_sensor_status_default() {
+        let status = SensorStatus::default();
+        assert_eq!(status, SensorStatus::Normal);
+    }
+
+    #[test]
+    fn test_sensor_status_all_variants() {
+        assert_eq!(SensorStatus::Low.as_str(), "LOW");
+        assert_eq!(SensorStatus::Fault.as_str(), "FAULT");
+    }
+
+    #[test]
+    fn test_current_conversion() {
+        // Current: 2500 mA = 2.5 A
+        let current = SensorHealthAnalyzer::convert_value(2500, SensorType::Current);
+        assert!((current - 2.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_sensor_reading_value_display_all_types() {
+        // Fan
+        let fan = SensorReading {
+            device: "nct6795".to_string(),
+            sensor_type: SensorType::Fan,
+            label: "CPU Fan".to_string(),
+            index: 1,
+            value: 1200.0,
+            critical: None,
+            max: None,
+            min: None,
+            status: SensorStatus::Normal,
+            hwmon_path: PathBuf::from("/sys/class/hwmon/hwmon1"),
+        };
+        assert_eq!(fan.value_display(), "1200 RPM");
+
+        // Voltage
+        let volt = SensorReading {
+            device: "nct6795".to_string(),
+            sensor_type: SensorType::Voltage,
+            label: "Vcore".to_string(),
+            index: 1,
+            value: 1.25,
+            critical: None,
+            max: None,
+            min: None,
+            status: SensorStatus::Normal,
+            hwmon_path: PathBuf::from("/sys/class/hwmon/hwmon1"),
+        };
+        assert_eq!(volt.value_display(), "1.25V");
+
+        // Current
+        let curr = SensorReading {
+            device: "test".to_string(),
+            sensor_type: SensorType::Current,
+            label: "CPU Current".to_string(),
+            index: 1,
+            value: 45.5,
+            critical: None,
+            max: None,
+            min: None,
+            status: SensorStatus::Normal,
+            hwmon_path: PathBuf::from("/sys/class/hwmon/hwmon1"),
+        };
+        assert_eq!(curr.value_display(), "45.50A");
+
+        // Power
+        let pwr = SensorReading {
+            device: "test".to_string(),
+            sensor_type: SensorType::Power,
+            label: "Package Power".to_string(),
+            index: 1,
+            value: 65.0,
+            critical: None,
+            max: None,
+            min: None,
+            status: SensorStatus::Normal,
+            hwmon_path: PathBuf::from("/sys/class/hwmon/hwmon1"),
+        };
+        assert_eq!(pwr.value_display(), "65.0W");
+    }
+
+    #[test]
+    fn test_data_by_type() {
+        let mut data = SensorHealthData::default();
+        data.sensors.push(SensorReading {
+            device: "test".to_string(),
+            sensor_type: SensorType::Temperature,
+            label: "Temp1".to_string(),
+            index: 1,
+            value: 45.0,
+            critical: None,
+            max: None,
+            min: None,
+            status: SensorStatus::Normal,
+            hwmon_path: PathBuf::from("/test"),
+        });
+        data.sensors.push(SensorReading {
+            device: "test".to_string(),
+            sensor_type: SensorType::Fan,
+            label: "Fan1".to_string(),
+            index: 1,
+            value: 1200.0,
+            critical: None,
+            max: None,
+            min: None,
+            status: SensorStatus::Normal,
+            hwmon_path: PathBuf::from("/test"),
+        });
+
+        assert_eq!(data.by_type(SensorType::Temperature).count(), 1);
+        assert_eq!(data.by_type(SensorType::Fan).count(), 1);
+        assert_eq!(data.by_type(SensorType::Voltage).count(), 0);
+    }
+
+    #[test]
+    fn test_data_temperatures() {
+        let mut data = SensorHealthData::default();
+        data.sensors.push(SensorReading {
+            device: "test".to_string(),
+            sensor_type: SensorType::Temperature,
+            label: "Temp1".to_string(),
+            index: 1,
+            value: 45.0,
+            critical: None,
+            max: None,
+            min: None,
+            status: SensorStatus::Normal,
+            hwmon_path: PathBuf::from("/test"),
+        });
+
+        assert_eq!(data.temperatures().count(), 1);
+    }
+
+    #[test]
+    fn test_data_fans() {
+        let mut data = SensorHealthData::default();
+        data.sensors.push(SensorReading {
+            device: "test".to_string(),
+            sensor_type: SensorType::Fan,
+            label: "Fan1".to_string(),
+            index: 1,
+            value: 1200.0,
+            critical: None,
+            max: None,
+            min: None,
+            status: SensorStatus::Normal,
+            hwmon_path: PathBuf::from("/test"),
+        });
+
+        assert_eq!(data.fans().count(), 1);
+    }
+
+    #[test]
+    fn test_data_alerts() {
+        let mut data = SensorHealthData::default();
+        data.sensors.push(SensorReading {
+            device: "test".to_string(),
+            sensor_type: SensorType::Temperature,
+            label: "Normal".to_string(),
+            index: 1,
+            value: 45.0,
+            critical: None,
+            max: None,
+            min: None,
+            status: SensorStatus::Normal,
+            hwmon_path: PathBuf::from("/test"),
+        });
+        data.sensors.push(SensorReading {
+            device: "test".to_string(),
+            sensor_type: SensorType::Temperature,
+            label: "Warning".to_string(),
+            index: 2,
+            value: 85.0,
+            critical: None,
+            max: None,
+            min: None,
+            status: SensorStatus::Warning,
+            hwmon_path: PathBuf::from("/test"),
+        });
+        data.sensors.push(SensorReading {
+            device: "test".to_string(),
+            sensor_type: SensorType::Temperature,
+            label: "Critical".to_string(),
+            index: 3,
+            value: 100.0,
+            critical: None,
+            max: None,
+            min: None,
+            status: SensorStatus::Critical,
+            hwmon_path: PathBuf::from("/test"),
+        });
+        data.sensors.push(SensorReading {
+            device: "test".to_string(),
+            sensor_type: SensorType::Temperature,
+            label: "Fault".to_string(),
+            index: 4,
+            value: 0.0,
+            critical: None,
+            max: None,
+            min: None,
+            status: SensorStatus::Fault,
+            hwmon_path: PathBuf::from("/test"),
+        });
+
+        assert_eq!(data.alerts().count(), 3); // Warning, Critical, and Fault
+    }
+
+    #[test]
+    fn test_status_determination_no_thresholds() {
+        let status = SensorHealthAnalyzer::determine_status(50.0, None, None, None);
+        assert_eq!(status, SensorStatus::Normal);
+    }
+
+    #[test]
+    fn test_status_determination_critical_priority() {
+        // Critical should take priority over Warning
+        let status = SensorHealthAnalyzer::determine_status(100.0, Some(95.0), Some(85.0), None);
+        assert_eq!(status, SensorStatus::Critical);
+    }
+
+    #[test]
+    fn test_status_determination_just_below_critical() {
+        let status = SensorHealthAnalyzer::determine_status(94.9, Some(95.0), Some(85.0), None);
+        assert_eq!(status, SensorStatus::Warning);
+    }
+
+    #[test]
+    fn test_status_determination_at_min() {
+        let status = SensorHealthAnalyzer::determine_status(10.0, Some(95.0), Some(85.0), Some(10.0));
+        assert_eq!(status, SensorStatus::Low);
+    }
+
+    #[test]
+    fn test_analyzer_interval() {
+        let analyzer = SensorHealthAnalyzer::new();
+        assert_eq!(analyzer.interval(), Duration::from_secs(2));
+    }
+
+    #[test]
+    fn test_analyzer_name() {
+        let analyzer = SensorHealthAnalyzer::new();
+        assert_eq!(analyzer.name(), "sensor_health");
+    }
+
+    #[test]
+    fn test_sensor_health_data_default() {
+        let data = SensorHealthData::default();
+        assert!(data.sensors.is_empty());
+        assert!(data.type_counts.is_empty());
+        assert!(data.status_counts.is_empty());
+    }
+
+    #[test]
+    fn test_sensor_reading_short_label_exactly_12() {
+        let reading = SensorReading {
+            device: "test".to_string(),
+            sensor_type: SensorType::Temperature,
+            label: "123456789012".to_string(), // Exactly 12 chars
+            index: 1,
+            value: 45.0,
+            critical: None,
+            max: None,
+            min: None,
+            status: SensorStatus::Normal,
+            hwmon_path: PathBuf::from("/test"),
+        };
+        assert_eq!(reading.short_label(), "123456789012");
+    }
+
+    #[test]
+    fn test_sensor_reading_clone() {
+        let reading = SensorReading {
+            device: "test".to_string(),
+            sensor_type: SensorType::Temperature,
+            label: "Test".to_string(),
+            index: 1,
+            value: 45.0,
+            critical: Some(100.0),
+            max: Some(85.0),
+            min: Some(10.0),
+            status: SensorStatus::Normal,
+            hwmon_path: PathBuf::from("/test"),
+        };
+        let cloned = reading.clone();
+        assert_eq!(cloned.device, "test");
+        assert_eq!(cloned.value, 45.0);
+    }
+
+    #[test]
+    fn test_sensor_type_hash_eq() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(SensorType::Temperature);
+        set.insert(SensorType::Fan);
+        assert!(set.contains(&SensorType::Temperature));
+        assert!(set.contains(&SensorType::Fan));
+        assert!(!set.contains(&SensorType::Voltage));
+    }
+
+    #[test]
+    fn test_sensor_status_hash_eq() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(SensorStatus::Normal);
+        set.insert(SensorStatus::Warning);
+        assert!(set.contains(&SensorStatus::Normal));
+        assert!(!set.contains(&SensorStatus::Critical));
+    }
 }

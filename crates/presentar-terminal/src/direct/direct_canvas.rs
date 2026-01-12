@@ -297,7 +297,6 @@ impl Canvas for DirectTerminalCanvas<'_> {
 
         let modifiers = Self::style_to_modifiers(style);
         let fg = style.color;
-        let bg = Color::TRANSPARENT;
 
         // Render grapheme by grapheme
         for grapheme in text.graphemes(true) {
@@ -312,7 +311,16 @@ impl Canvas for DirectTerminalCanvas<'_> {
             }
 
             if xu >= clip.x {
-                self.set_cell(xu, y, grapheme, fg, bg, modifiers);
+                // CRITICAL FIX: Preserve existing background when drawing text.
+                // Text rendering should NOT overwrite background colors set by fill_rect.
+                // This fixes the selection artifact bug where blue backgrounds persisted
+                // after row deselection because draw_text was setting bg to TRANSPARENT.
+                let existing_bg = self
+                    .buffer
+                    .get(xu, y)
+                    .map(|c| c.bg)
+                    .unwrap_or(Color::TRANSPARENT);
+                self.set_cell(xu, y, grapheme, fg, existing_bg, modifiers);
             }
 
             x += UnicodeWidthStr::width(grapheme) as i32;
@@ -1019,5 +1027,112 @@ mod tests {
             let mut canvas = DirectTerminalCanvas::new(&mut buffer);
             canvas.fill_rect(Rect::new(5.0, 5.0, 0.0, 0.0), Color::RED);
         }
+    }
+
+    // =========================================================================
+    // REGRESSION TESTS
+    // =========================================================================
+
+    /// Regression test for selection artifact bug.
+    ///
+    /// Bug: When a row was selected (blue background), then deselected,
+    /// the blue background persisted because draw_text was overwriting
+    /// the fill_rect background with TRANSPARENT.
+    ///
+    /// Fix: draw_text now preserves the existing background color instead
+    /// of setting it to TRANSPARENT.
+    #[test]
+    fn test_draw_text_preserves_fill_rect_background() {
+        let mut buffer = create_canvas(20, 5);
+        {
+            let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+
+            // Step 1: Fill row with selection background (simulates selected row)
+            canvas.fill_rect(Rect::new(0.0, 1.0, 20.0, 1.0), Color::BLUE);
+
+            // Step 2: Draw text on top (simulates rendering row content)
+            canvas.draw_text("Process 1234", Point::new(0.0, 1.0), &TextStyle::default());
+
+            // CRITICAL: Text characters MUST preserve the BLUE background
+            // This was the bug - draw_text was setting bg to TRANSPARENT
+            let cell = buffer.get(0, 1).unwrap();
+            assert_eq!(
+                cell.bg, Color::BLUE,
+                "Text draw MUST preserve fill_rect background, got {:?}",
+                cell.bg
+            );
+        }
+    }
+
+    /// Regression test: Selection change clears old selection properly.
+    ///
+    /// Simulates the full selection lifecycle:
+    /// 1. Row 1 selected (highlighted bg)
+    /// 2. Selection moves to row 2
+    /// 3. Row 1 should now have dimmed bg (not highlighted!)
+    #[test]
+    fn test_selection_change_clears_old_background() {
+        let dimmed_bg = Color::new(0.08, 0.08, 0.1, 1.0);
+        let selection_bg = Color::new(0.15, 0.12, 0.22, 1.0); // ttop-style subtle selection
+
+        let mut buffer = create_canvas(20, 5);
+
+        // Frame 1: Row 1 selected
+        {
+            let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+            canvas.fill_rect(Rect::new(0.0, 1.0, 20.0, 1.0), selection_bg);
+            canvas.draw_text("Selected Row", Point::new(0.0, 1.0), &TextStyle::default());
+
+            canvas.fill_rect(Rect::new(0.0, 2.0, 20.0, 1.0), dimmed_bg);
+            canvas.draw_text("Normal Row", Point::new(0.0, 2.0), &TextStyle::default());
+        }
+
+        // Verify frame 1
+        assert_eq!(buffer.get(0, 1).unwrap().bg, selection_bg);
+        assert_eq!(buffer.get(0, 2).unwrap().bg, dimmed_bg);
+
+        // Frame 2: Selection moves to row 2
+        {
+            let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+            // Row 1 now dimmed
+            canvas.fill_rect(Rect::new(0.0, 1.0, 20.0, 1.0), dimmed_bg);
+            canvas.draw_text("Normal Row", Point::new(0.0, 1.0), &TextStyle::default());
+
+            // Row 2 now selected
+            canvas.fill_rect(Rect::new(0.0, 2.0, 20.0, 1.0), selection_bg);
+            canvas.draw_text("Selected Row", Point::new(0.0, 2.0), &TextStyle::default());
+        }
+
+        // CRITICAL: Row 1 must now have dimmed background, NOT selection_bg
+        assert_eq!(
+            buffer.get(0, 1).unwrap().bg,
+            dimmed_bg,
+            "Old selection must be cleared to dimmed_bg"
+        );
+        assert_eq!(
+            buffer.get(0, 2).unwrap().bg,
+            selection_bg,
+            "New selection must have selection_bg"
+        );
+    }
+
+    /// Test that text color is set correctly while preserving background.
+    #[test]
+    fn test_draw_text_sets_foreground_color() {
+        let mut buffer = create_canvas(20, 5);
+        {
+            let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+            canvas.fill_rect(Rect::new(0.0, 0.0, 20.0, 1.0), Color::BLACK);
+
+            let style = TextStyle {
+                color: Color::YELLOW,
+                ..Default::default()
+            };
+            canvas.draw_text("Test", Point::new(0.0, 0.0), &style);
+        }
+
+        let cell = buffer.get(0, 0).unwrap();
+        assert_eq!(cell.fg, Color::YELLOW);
+        assert_eq!(cell.bg, Color::BLACK);
     }
 }

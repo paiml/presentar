@@ -479,4 +479,186 @@ mod tests {
         tracer.clear();
         assert!(tracer.stats.is_empty());
     }
+
+    #[test]
+    fn test_perf_tracer_default() {
+        let tracer = PerfTracer::default();
+        assert!(tracer.stats.is_empty());
+    }
+
+    #[test]
+    fn test_all_stats() {
+        let mut tracer = PerfTracer::new();
+        tracer.trace("op1", || {});
+        tracer.trace("op2", || {});
+
+        let all = tracer.all_stats();
+        assert_eq!(all.len(), 2);
+        assert!(all.contains_key("op1"));
+        assert!(all.contains_key("op2"));
+    }
+
+    #[test]
+    fn test_get_stats_nonexistent() {
+        let tracer = PerfTracer::new();
+        assert!(tracer.get_stats("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_should_escalate_nonexistent() {
+        let tracer = PerfTracer::new();
+        assert!(!tracer.should_escalate("nonexistent"));
+    }
+
+    #[test]
+    fn test_trace_stats_efficiency_percent() {
+        let stats = TraceStats::new(Duration::from_micros(500), 1000, false);
+        let eff = stats.efficiency_percent();
+        // Budget 1000μs, avg 500μs -> efficiency = 1000/500*100 = 200%, clamped to 100%
+        assert!(eff <= 100.0 && eff > 50.0);
+    }
+
+    #[test]
+    fn test_trace_stats_efficiency_zero_budget() {
+        let stats = TraceStats::new(Duration::from_micros(500), 0, false);
+        assert_eq!(stats.efficiency_percent(), 100.0);
+    }
+
+    #[test]
+    fn test_trace_stats_avg_duration_zero_count() {
+        let stats = TraceStats::default();
+        assert_eq!(stats.avg_duration(), Duration::ZERO);
+    }
+
+    #[test]
+    fn test_trace_stats_cv_single_sample() {
+        let stats = TraceStats::new(Duration::from_micros(100), 1000, false);
+        assert_eq!(stats.cv_percent(), 0.0);
+    }
+
+    #[test]
+    fn test_trace_stats_cv_zero_avg() {
+        let stats = TraceStats::new(Duration::ZERO, 1000, false);
+        assert_eq!(stats.cv_percent(), 0.0);
+    }
+
+    #[test]
+    fn test_trace_event_debug() {
+        let event = TraceEvent {
+            name: "test".to_string(),
+            duration: Duration::from_micros(100),
+            timestamp_us: 1000,
+            budget_exceeded: false,
+            budget_us: Some(200),
+        };
+        let debug = format!("{:?}", event);
+        assert!(debug.contains("TraceEvent"));
+        assert!(debug.contains("test"));
+    }
+
+    #[test]
+    fn test_trace_event_clone() {
+        let event = TraceEvent {
+            name: "test".to_string(),
+            duration: Duration::from_micros(100),
+            timestamp_us: 1000,
+            budget_exceeded: true,
+            budget_us: Some(50),
+        };
+        let cloned = event.clone();
+        assert_eq!(cloned.name, "test");
+        assert!(cloned.budget_exceeded);
+    }
+
+    #[test]
+    fn test_trace_stats_clone() {
+        let stats = TraceStats::new(Duration::from_micros(100), 1000, false);
+        let cloned = stats.clone();
+        assert_eq!(cloned.count, 1);
+    }
+
+    #[test]
+    fn test_trace_stats_debug() {
+        let stats = TraceStats::new(Duration::from_micros(100), 1000, false);
+        let debug = format!("{:?}", stats);
+        assert!(debug.contains("TraceStats"));
+    }
+
+    #[test]
+    fn test_escalation_thresholds_default() {
+        let thresholds = EscalationThresholds::default();
+        assert_eq!(thresholds.cv_percent, 15.0);
+        assert_eq!(thresholds.efficiency_percent, 25.0);
+        assert_eq!(thresholds.max_traces_per_sec, 100);
+    }
+
+    #[test]
+    fn test_escalation_thresholds_clone() {
+        let thresholds = EscalationThresholds::default();
+        let cloned = thresholds.clone();
+        assert_eq!(cloned.cv_percent, 15.0);
+    }
+
+    #[test]
+    fn test_escalation_thresholds_copy() {
+        let thresholds = EscalationThresholds::default();
+        let copied = thresholds; // Copy
+        assert_eq!(copied.cv_percent, 15.0);
+    }
+
+    #[test]
+    fn test_escalation_thresholds_debug() {
+        let thresholds = EscalationThresholds::default();
+        let debug = format!("{:?}", thresholds);
+        assert!(debug.contains("EscalationThresholds"));
+    }
+
+    #[test]
+    fn test_perf_tracer_debug() {
+        let tracer = PerfTracer::new();
+        let debug = format!("{:?}", tracer);
+        assert!(debug.contains("PerfTracer"));
+    }
+
+    #[test]
+    fn test_trace_stats_min_max() {
+        let mut stats = TraceStats::new(Duration::from_micros(100), 1000, false);
+        stats.update(Duration::from_micros(50), false);
+        stats.update(Duration::from_micros(200), false);
+
+        assert_eq!(stats.min_duration, Duration::from_micros(50));
+        assert_eq!(stats.max_duration, Duration::from_micros(200));
+    }
+
+    #[test]
+    fn test_trace_stats_budget_violations() {
+        let mut stats = TraceStats::new(Duration::from_micros(100), 50, true);
+        stats.update(Duration::from_micros(100), true);
+        stats.update(Duration::from_micros(30), false);
+
+        assert_eq!(stats.budget_violations, 2);
+    }
+
+    #[test]
+    fn test_recent_events_ring_buffer() {
+        let mut tracer = PerfTracer::new();
+        // Set max_recent to 100 by default
+        // Add more than 100 events
+        for i in 0..150 {
+            tracer.trace(&format!("op_{}", i), || {});
+        }
+        // Should still have <= 100 recent events
+        assert!(tracer.recent_events.len() <= 100);
+    }
+
+    #[test]
+    fn test_rate_limiting_reset() {
+        let mut tracer = PerfTracer::new();
+        tracer.trace("op1", || {});
+        assert_eq!(tracer.traces_this_second, 1);
+
+        // More traces in same "second"
+        tracer.trace("op2", || {});
+        assert_eq!(tracer.traces_this_second, 2);
+    }
 }

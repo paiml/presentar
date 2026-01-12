@@ -473,4 +473,175 @@ mod tests {
         assert_eq!(sorted[1].pid, 3);
         assert_eq!(sorted[2].pid, 1); // Lowest OOM score
     }
+
+    #[test]
+    fn test_io_priority_class_default() {
+        let default = IoPriorityClass::default();
+        assert_eq!(default, IoPriorityClass::BestEffort);
+    }
+
+    #[test]
+    fn test_io_priority_class_none() {
+        assert_eq!(IoPriorityClass::None.as_str(), "-");
+    }
+
+    #[test]
+    fn test_process_extra_default() {
+        let extra = ProcessExtra::default();
+        assert_eq!(extra.pid, 0);
+        assert!(extra.cgroup.is_empty());
+        assert_eq!(extra.oom_score, 0);
+        assert_eq!(extra.oom_score_adj, 0);
+        assert_eq!(extra.nice, 0);
+        assert!(extra.cpu_affinity.is_empty());
+        assert_eq!(extra.io_class, IoPriorityClass::BestEffort);
+        assert_eq!(extra.io_priority, 0);
+        assert_eq!(extra.num_threads, 0);
+    }
+
+    #[test]
+    fn test_process_extra_data_default() {
+        let data = ProcessExtraData::default();
+        assert!(data.processes.is_empty());
+    }
+
+    #[test]
+    fn test_process_extra_data_get_none() {
+        let data = ProcessExtraData::default();
+        assert!(data.get(999).is_none());
+    }
+
+    #[test]
+    fn test_high_oom_risk_count() {
+        let mut data = ProcessExtraData::default();
+
+        // Add process with low OOM risk
+        let mut p1 = ProcessExtra::default();
+        p1.pid = 1;
+        p1.oom_score = 200; // 20%
+        data.processes.insert(1, p1);
+
+        // Add process with high OOM risk
+        let mut p2 = ProcessExtra::default();
+        p2.pid = 2;
+        p2.oom_score = 600; // 60%
+        data.processes.insert(2, p2);
+
+        // Add another high risk process
+        let mut p3 = ProcessExtra::default();
+        p3.pid = 3;
+        p3.oom_score = 800; // 80%
+        data.processes.insert(3, p3);
+
+        assert_eq!(data.high_oom_risk_count(), 2);
+    }
+
+    #[test]
+    fn test_analyzer_default() {
+        let analyzer = ProcessExtraAnalyzer::default();
+        assert_eq!(analyzer.name(), "process_extra");
+    }
+
+    #[test]
+    fn test_analyzer_interval() {
+        let analyzer = ProcessExtraAnalyzer::new();
+        assert_eq!(analyzer.interval(), Duration::from_secs(2));
+    }
+
+    #[test]
+    fn test_analyzer_data() {
+        let analyzer = ProcessExtraAnalyzer::new();
+        let data = analyzer.data();
+        assert!(data.processes.is_empty());
+    }
+
+    #[test]
+    fn test_cgroup_short_long_name() {
+        let mut extra = ProcessExtra::default();
+        // Create a cgroup name longer than 30 chars
+        extra.cgroup = "/very/long/path/to/a/very_very_very_very_very_long_cgroup_name".to_string();
+        let short = extra.cgroup_short();
+        assert!(short.contains("..."));
+        assert!(short.len() <= 30);
+    }
+
+    #[test]
+    fn test_cgroup_short_trailing_slash() {
+        let mut extra = ProcessExtra::default();
+        extra.cgroup = "/user.slice/session-1.scope/".to_string();
+        assert_eq!(extra.cgroup_short(), "session-1.scope");
+    }
+
+    #[test]
+    fn test_affinity_display_three_cpus() {
+        let mut extra = ProcessExtra::default();
+        extra.cpu_affinity = vec![true, true, true, false, false];
+        assert_eq!(extra.affinity_display(), "0,1,2");
+    }
+
+    #[test]
+    fn test_affinity_display_four_cpus() {
+        let mut extra = ProcessExtra::default();
+        extra.cpu_affinity = vec![true, true, true, true, false];
+        assert_eq!(extra.affinity_display(), "0,1,2,3");
+    }
+
+    #[test]
+    fn test_parse_cpu_mask_with_comma() {
+        // Large masks often have commas
+        let mask = ProcessExtraAnalyzer::parse_cpu_mask("ff,ff");
+        assert_eq!(mask.len(), 16);
+        assert!(mask.iter().all(|&x| x));
+    }
+
+    #[test]
+    fn test_parse_cpu_mask_invalid_char() {
+        let mask = ProcessExtraAnalyzer::parse_cpu_mask("z");
+        assert!(mask.is_empty());
+    }
+
+    #[test]
+    fn test_parse_cpu_mask_empty() {
+        let mask = ProcessExtraAnalyzer::parse_cpu_mask("");
+        assert!(mask.is_empty());
+    }
+
+    #[test]
+    fn test_process_extra_clone() {
+        let mut extra = ProcessExtra::default();
+        extra.pid = 123;
+        extra.oom_score = 500;
+        extra.cgroup = "/test".to_string();
+        extra.cpu_affinity = vec![true, false, true];
+
+        let cloned = extra.clone();
+        assert_eq!(cloned.pid, 123);
+        assert_eq!(cloned.oom_score, 500);
+        assert_eq!(cloned.cgroup, "/test");
+        assert_eq!(cloned.cpu_affinity, vec![true, false, true]);
+    }
+
+    #[test]
+    fn test_process_extra_data_clone() {
+        let mut data = ProcessExtraData::default();
+        let mut p1 = ProcessExtra::default();
+        p1.pid = 1;
+        data.processes.insert(1, p1);
+
+        let cloned = data.clone();
+        assert_eq!(cloned.processes.len(), 1);
+    }
+
+    #[test]
+    fn test_process_extra_debug() {
+        let extra = ProcessExtra::default();
+        let debug = format!("{extra:?}");
+        assert!(debug.contains("ProcessExtra"));
+    }
+
+    #[test]
+    fn test_io_priority_class_eq() {
+        assert_eq!(IoPriorityClass::RealTime, IoPriorityClass::RealTime);
+        assert_ne!(IoPriorityClass::RealTime, IoPriorityClass::Idle);
+    }
 }

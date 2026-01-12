@@ -384,4 +384,332 @@ mod tests {
         let result = analyzer.collect();
         assert!(result.is_ok());
     }
+
+    // Additional encryption type tests
+    #[test]
+    fn test_encryption_type_veracrypt() {
+        assert!(EncryptionType::VeraCrypt.is_encrypted());
+        assert_eq!(EncryptionType::VeraCrypt.as_str(), "VeraCrypt");
+    }
+
+    #[test]
+    fn test_encryption_type_bitlocker() {
+        assert!(EncryptionType::BitLocker.is_encrypted());
+        assert_eq!(EncryptionType::BitLocker.as_str(), "BitLocker");
+    }
+
+    #[test]
+    fn test_encryption_type_unknown() {
+        assert!(EncryptionType::Unknown.is_encrypted());
+        assert_eq!(EncryptionType::Unknown.as_str(), "encrypted");
+    }
+
+    #[test]
+    fn test_encryption_type_none_str() {
+        assert_eq!(EncryptionType::None.as_str(), "none");
+    }
+
+    #[test]
+    fn test_encryption_type_dm_crypt_str() {
+        assert_eq!(EncryptionType::DmCrypt.as_str(), "dm-crypt");
+    }
+
+    #[test]
+    fn test_encryption_type_default() {
+        let default = EncryptionType::default();
+        assert!(!default.is_encrypted());
+        assert_eq!(default, EncryptionType::None);
+    }
+
+    #[test]
+    fn test_encryption_type_debug() {
+        let enc = EncryptionType::Luks;
+        let debug = format!("{:?}", enc);
+        assert!(debug.contains("Luks"));
+    }
+
+    #[test]
+    fn test_encryption_type_clone() {
+        let enc = EncryptionType::DmCrypt;
+        let cloned = enc.clone();
+        assert_eq!(enc, cloned);
+    }
+
+    #[test]
+    fn test_encryption_type_copy() {
+        let enc = EncryptionType::Luks;
+        let copied: EncryptionType = enc;
+        assert_eq!(copied, EncryptionType::Luks);
+    }
+
+    // DiskEntropyInfo tests
+    #[test]
+    fn test_disk_entropy_info_default() {
+        let info = DiskEntropyInfo::default();
+        assert!(info.device.is_empty());
+        assert!(info.path.is_empty());
+        assert!((info.entropy - 0.0).abs() < f64::EPSILON);
+        assert_eq!(info.encryption_type, EncryptionType::None);
+        assert!(!info.is_dm_target);
+        assert!(info.luks_uuid.is_none());
+        assert!(info.cipher.is_none());
+    }
+
+    #[test]
+    fn test_disk_entropy_info_low_entropy() {
+        let info = DiskEntropyInfo {
+            entropy: 0.5,
+            ..Default::default()
+        };
+        assert!(!info.is_high_entropy());
+        assert!((info.entropy_percent() - 50.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_disk_entropy_info_status_unencrypted() {
+        let info = DiskEntropyInfo {
+            entropy: 0.3,
+            encryption_type: EncryptionType::None,
+            ..Default::default()
+        };
+        assert_eq!(info.status_display(), "🔓");
+    }
+
+    #[test]
+    fn test_disk_entropy_info_status_high_entropy_warning() {
+        let info = DiskEntropyInfo {
+            entropy: 0.98,
+            encryption_type: EncryptionType::None,
+            ..Default::default()
+        };
+        assert_eq!(info.status_display(), "⚠️");
+    }
+
+    #[test]
+    fn test_disk_entropy_info_status_encrypted() {
+        let info = DiskEntropyInfo {
+            entropy: 0.99,
+            encryption_type: EncryptionType::DmCrypt,
+            ..Default::default()
+        };
+        assert_eq!(info.status_display(), "🔒");
+    }
+
+    #[test]
+    fn test_disk_entropy_info_clone() {
+        let info = DiskEntropyInfo {
+            device: "nvme0n1".to_string(),
+            path: "/dev/nvme0n1".to_string(),
+            entropy: 0.95,
+            encryption_type: EncryptionType::Luks,
+            is_dm_target: true,
+            luks_uuid: Some("abc-123".to_string()),
+            cipher: Some("aes-xts-plain64".to_string()),
+        };
+        let cloned = info.clone();
+        assert_eq!(cloned.device, "nvme0n1");
+        assert_eq!(cloned.encryption_type, EncryptionType::Luks);
+    }
+
+    #[test]
+    fn test_disk_entropy_info_debug() {
+        let info = DiskEntropyInfo::default();
+        let debug = format!("{:?}", info);
+        assert!(debug.contains("DiskEntropyInfo"));
+    }
+
+    // DiskEntropyData tests
+    #[test]
+    fn test_disk_entropy_data_default() {
+        let data = DiskEntropyData::default();
+        assert!(data.devices.is_empty());
+        assert_eq!(data.encrypted_count, 0);
+        assert_eq!(data.unencrypted_count, 0);
+    }
+
+    #[test]
+    fn test_disk_entropy_data_encrypted_devices() {
+        let mut devices = HashMap::new();
+        devices.insert(
+            "sda".to_string(),
+            DiskEntropyInfo {
+                device: "sda".to_string(),
+                encryption_type: EncryptionType::Luks,
+                ..Default::default()
+            },
+        );
+        devices.insert(
+            "sdb".to_string(),
+            DiskEntropyInfo {
+                device: "sdb".to_string(),
+                encryption_type: EncryptionType::None,
+                ..Default::default()
+            },
+        );
+
+        let data = DiskEntropyData {
+            devices,
+            encrypted_count: 1,
+            unencrypted_count: 1,
+        };
+
+        let encrypted: Vec<_> = data.encrypted_devices().collect();
+        assert_eq!(encrypted.len(), 1);
+        assert_eq!(encrypted[0].device, "sda");
+    }
+
+    #[test]
+    fn test_disk_entropy_data_unencrypted_devices() {
+        let mut devices = HashMap::new();
+        devices.insert(
+            "sda".to_string(),
+            DiskEntropyInfo {
+                device: "sda".to_string(),
+                encryption_type: EncryptionType::None,
+                ..Default::default()
+            },
+        );
+
+        let data = DiskEntropyData {
+            devices,
+            encrypted_count: 0,
+            unencrypted_count: 1,
+        };
+
+        let unencrypted: Vec<_> = data.unencrypted_devices().collect();
+        assert_eq!(unencrypted.len(), 1);
+    }
+
+    #[test]
+    fn test_disk_entropy_data_clone() {
+        let data = DiskEntropyData {
+            devices: HashMap::new(),
+            encrypted_count: 2,
+            unencrypted_count: 3,
+        };
+        let cloned = data.clone();
+        assert_eq!(cloned.encrypted_count, 2);
+        assert_eq!(cloned.unencrypted_count, 3);
+    }
+
+    #[test]
+    fn test_disk_entropy_data_debug() {
+        let data = DiskEntropyData::default();
+        let debug = format!("{:?}", data);
+        assert!(debug.contains("DiskEntropyData"));
+    }
+
+    // DiskEntropyAnalyzer tests
+    #[test]
+    fn test_analyzer_default() {
+        let analyzer = DiskEntropyAnalyzer::default();
+        assert_eq!(analyzer.name(), "disk_entropy");
+    }
+
+    #[test]
+    fn test_analyzer_data() {
+        let analyzer = DiskEntropyAnalyzer::new();
+        let data = analyzer.data();
+        assert!(data.devices.is_empty());
+    }
+
+    #[test]
+    fn test_analyzer_interval() {
+        let analyzer = DiskEntropyAnalyzer::new();
+        let interval = analyzer.interval();
+        assert_eq!(interval.as_secs(), 60);
+    }
+
+    #[test]
+    fn test_entropy_calculation_empty() {
+        let analyzer = DiskEntropyAnalyzer::new();
+        let entropy = analyzer.calculate_entropy(&[]);
+        assert!((entropy - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_entropy_calculation_single_byte() {
+        let analyzer = DiskEntropyAnalyzer::new();
+        let entropy = analyzer.calculate_entropy(&[42]);
+        assert!(entropy < 0.01); // Single byte = low entropy
+    }
+
+    #[test]
+    fn test_entropy_calculation_two_values() {
+        let analyzer = DiskEntropyAnalyzer::new();
+        // Alternating values
+        let data: Vec<u8> = (0..100).map(|i| if i % 2 == 0 { 0 } else { 255 }).collect();
+        let entropy = analyzer.calculate_entropy(&data);
+        // Two equally likely values = entropy of 1 bit = 1/8 = 0.125
+        assert!(entropy > 0.1 && entropy < 0.2);
+    }
+
+    #[test]
+    fn test_entropy_calculation_all_different() {
+        let analyzer = DiskEntropyAnalyzer::new();
+        // All 256 possible byte values
+        let data: Vec<u8> = (0..=255).collect();
+        let entropy = analyzer.calculate_entropy(&data);
+        // Maximum entropy for uniform distribution
+        assert!(entropy > 0.99);
+    }
+
+    #[test]
+    fn test_list_block_devices() {
+        let analyzer = DiskEntropyAnalyzer::new();
+        let devices = analyzer.list_block_devices();
+        // Should not include loop or ram devices
+        for device in &devices {
+            assert!(!device.starts_with("loop"));
+            assert!(!device.starts_with("ram"));
+        }
+    }
+
+    #[test]
+    fn test_is_dm_crypt_non_dm() {
+        let analyzer = DiskEntropyAnalyzer::new();
+        // sda is typically not a dm-crypt device
+        let result = analyzer.is_dm_crypt("nonexistent_device");
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_detect_luks_nonexistent() {
+        let analyzer = DiskEntropyAnalyzer::new();
+        let result = analyzer.detect_luks("/dev/nonexistent");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_analyze_device_nonexistent() {
+        let analyzer = DiskEntropyAnalyzer::new();
+        let info = analyzer.analyze_device("nonexistent_device_xyz");
+        assert_eq!(info.device, "nonexistent_device_xyz");
+        assert!(!info.is_dm_target);
+    }
+
+    #[test]
+    fn test_sample_device_entropy_nonexistent() {
+        let analyzer = DiskEntropyAnalyzer::new();
+        let result = analyzer.sample_device_entropy("/dev/nonexistent_xyz");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_collect_and_data() {
+        let mut analyzer = DiskEntropyAnalyzer::new();
+        let _ = analyzer.collect();
+        let data = analyzer.data();
+        // On a Linux system, we should have some devices (even if empty)
+        let _ = data.devices.len();
+    }
+
+    #[test]
+    fn test_multiple_collects() {
+        let mut analyzer = DiskEntropyAnalyzer::new();
+        let _ = analyzer.collect();
+        let _ = analyzer.collect();
+        let _ = analyzer.collect();
+        // Should not panic
+    }
 }

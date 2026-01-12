@@ -10,7 +10,7 @@ use sysinfo::{
     System, Users,
 };
 
-use super::config::{DetailLevel, PanelType, PtopConfig};
+use super::config::{DetailLevel, PanelType, PtopConfig, SignalType};
 use super::ui::{read_gpu_info, GpuInfo};
 
 /// Read cached memory from /proc/meminfo (Linux only).
@@ -158,7 +158,10 @@ fn read_core_temperatures(core_count: usize) -> Vec<f32> {
     vec![0.0f32; core_count]
 }
 
-use super::analyzers::{AnalyzerRegistry, PsiData};
+use super::analyzers::{
+    AnalyzerRegistry, ConnectionsData, DiskEntropyData, DiskIoData, FileAnalyzerData, PsiData,
+    SensorHealthData, TreemapData,
+};
 use crate::{AsyncCollector, Snapshot};
 
 /// Metrics snapshot sent from background collector to main thread.
@@ -198,6 +201,12 @@ pub struct MetricsSnapshot {
 
     // Analyzer results
     pub psi_data: Option<PsiData>,
+    pub connections_data: Option<ConnectionsData>,
+    pub treemap_data: Option<TreemapData>,
+    pub sensor_health_data: Option<SensorHealthData>,
+    pub disk_io_data: Option<DiskIoData>,
+    pub disk_entropy_data: Option<DiskEntropyData>,
+    pub file_analyzer_data: Option<FileAnalyzerData>,
 }
 
 /// Lightweight process info for rendering
@@ -254,6 +263,12 @@ impl Snapshot for MetricsSnapshot {
             disk_info: Vec::new(),
             network_info: Vec::new(),
             psi_data: None,
+            connections_data: None,
+            treemap_data: None,
+            sensor_health_data: None,
+            disk_io_data: None,
+            disk_entropy_data: None,
+            file_analyzer_data: None,
         }
     }
 }
@@ -465,6 +480,28 @@ impl AsyncCollector for MetricsCollector {
         // Analyzer data
         self.analyzers.collect_all();
         let psi_data = self.analyzers.psi.as_ref().map(|p| p.data().clone());
+        let connections_data = self
+            .analyzers
+            .connections
+            .as_ref()
+            .map(|c| c.data().clone());
+        let treemap_data = self.analyzers.treemap.as_ref().map(|t| t.data().clone());
+        let sensor_health_data = self
+            .analyzers
+            .sensor_health
+            .as_ref()
+            .map(|s| s.data().clone());
+        let disk_io_data = self.analyzers.disk_io.as_ref().map(|d| d.data().clone());
+        let disk_entropy_data = self
+            .analyzers
+            .disk_entropy
+            .as_ref()
+            .map(|d| d.data().clone());
+        let file_analyzer_data = self
+            .analyzers
+            .file_analyzer
+            .as_ref()
+            .map(|f| f.data().clone());
 
         MetricsSnapshot {
             cpu_avg: cpu_total as f64 / 100.0,
@@ -485,6 +522,12 @@ impl AsyncCollector for MetricsCollector {
             disk_info,
             network_info,
             psi_data,
+            connections_data,
+            treemap_data,
+            sensor_health_data,
+            disk_io_data,
+            disk_entropy_data,
+            file_analyzer_data,
         }
     }
 }
@@ -658,6 +701,8 @@ pub struct App {
     pub mem_history: RingBuffer<f64>,
     pub net_rx_history: RingBuffer<f64>,
     pub net_tx_history: RingBuffer<f64>,
+    /// Per-interface network history (bytes/s per interface)
+    pub net_iface_history: std::collections::HashMap<String, (RingBuffer<f64>, RingBuffer<f64>)>,
     /// GPU utilization history (0-100%)
     pub gpu_history: RingBuffer<f64>,
     /// VRAM usage history (0-100%)
@@ -691,6 +736,12 @@ pub struct App {
     pub show_help: bool,
     pub running: bool,
 
+    // Signal handling (SPEC-024 Appendix G.6 P0 - ttop parity)
+    /// Pending signal confirmation: (pid, process_name, signal_type)
+    pub pending_signal: Option<(u32, String, SignalType)>,
+    /// Last signal result message (displayed briefly after signal sent)
+    pub signal_result: Option<String>,
+
     // Panel navigation and explode (SPEC-024 v5.0 Features D, E)
     /// Currently focused panel (receives keyboard input)
     pub focused_panel: Option<PanelType>,
@@ -722,6 +773,10 @@ pub struct App {
     /// Cached container detection (read once at startup)
     pub in_container: bool,
 
+    // Display rules (SPEC-024 Appendix F)
+    /// System capabilities (detected at startup)
+    pub system_capabilities: crate::widgets::SystemCapabilities,
+
     // Snapshot data from background collector (CB-INPUT-006)
     /// Process list from last snapshot
     pub snapshot_processes: Vec<ProcessInfo>,
@@ -731,6 +786,18 @@ pub struct App {
     pub snapshot_networks: Vec<NetworkInfo>,
     /// PSI data from last snapshot
     pub snapshot_psi: Option<PsiData>,
+    /// Connections data from last snapshot
+    pub snapshot_connections: Option<ConnectionsData>,
+    /// Treemap data from last snapshot
+    pub snapshot_treemap: Option<TreemapData>,
+    /// Sensor health data from last snapshot
+    pub snapshot_sensor_health: Option<SensorHealthData>,
+    /// Disk I/O data from last snapshot
+    pub snapshot_disk_io: Option<DiskIoData>,
+    /// Disk entropy data from last snapshot
+    pub snapshot_disk_entropy: Option<DiskEntropyData>,
+    /// File analyzer data from last snapshot
+    pub snapshot_file_analyzer: Option<FileAnalyzerData>,
 }
 
 impl App {
@@ -798,15 +865,25 @@ impl App {
         let analyzers = AnalyzerRegistry::new();
 
         // Auto-detect panel visibility based on available analyzers
+        // SPEC-024: Match ttop layout - prefer Sensors over PSI on desktop
         let mut panels = PanelVisibility::default();
-        if analyzers.psi.is_some() {
+
+        // Only show sensors panel if there are actual sensor readings
+        // Sensors takes priority over PSI in ttop layout
+        let has_sensors = analyzers
+            .sensor_health
+            .as_ref()
+            .is_some_and(|sh| !sh.data().sensors.is_empty());
+        if has_sensors {
+            panels.sensors = true;
+            // Don't show PSI if sensors available (ttop style)
+        } else if analyzers.psi.is_some() {
+            // Fallback: show PSI only if no sensors
             panels.psi = true;
         }
+
         if analyzers.gpu_procs.is_some() {
             panels.gpu = true;
-        }
-        if analyzers.sensor_health.is_some() {
-            panels.sensors = true;
         }
         if analyzers.connections.is_some() {
             panels.connections = true;
@@ -847,6 +924,7 @@ impl App {
             mem_history: RingBuffer::new(60),
             net_rx_history: RingBuffer::new(60),
             net_tx_history: RingBuffer::new(60),
+            net_iface_history: std::collections::HashMap::new(),
             gpu_history: RingBuffer::new(60),
             vram_history: RingBuffer::new(60),
             gpu_info: None,
@@ -873,6 +951,9 @@ impl App {
             show_filter_input: false,
             show_help: false,
             running: true,
+            // Signal handling (SPEC-024 Appendix G.6 P0)
+            pending_signal: None,
+            signal_result: None,
             // Panel navigation (SPEC-024 v5.0 Feature D)
             focused_panel: Some(PanelType::Cpu), // Start with CPU focused
             exploded_panel: None,
@@ -898,11 +979,19 @@ impl App {
             hostname: read_hostname(),
             kernel_version: read_kernel_version(),
             in_container: detect_container(),
+            // Display rules (SPEC-024 Appendix F)
+            system_capabilities: crate::widgets::SystemCapabilities::detect(),
             // Snapshot data (CB-INPUT-006)
             snapshot_processes: Vec::new(),
             snapshot_disks: Vec::new(),
             snapshot_networks: Vec::new(),
             snapshot_psi: None,
+            snapshot_connections: None,
+            snapshot_treemap: None,
+            snapshot_sensor_health: None,
+            snapshot_disk_io: None,
+            snapshot_disk_entropy: None,
+            snapshot_file_analyzer: None,
         };
 
         // In deterministic mode, populate with fixed data
@@ -941,7 +1030,8 @@ impl App {
 
     /// Get PSI data if available
     pub fn psi_data(&self) -> Option<&PsiData> {
-        self.analyzers.psi_data()
+        // Use snapshot data for CB-INPUT-006 async pattern consistency
+        self.snapshot_psi.as_ref()
     }
 
     /// Collect metrics from all sources
@@ -1149,8 +1239,83 @@ impl App {
         // Store snapshot data for rendering (processes, disks, networks)
         self.snapshot_processes = snapshot.processes;
         self.snapshot_disks = snapshot.disk_info;
+
+        // Update per-interface history before storing snapshot
+        for net in &snapshot.network_info {
+            let entry = self
+                .net_iface_history
+                .entry(net.name.clone())
+                .or_insert_with(|| (RingBuffer::new(60), RingBuffer::new(60)));
+            entry.0.push(net.received as f64);
+            entry.1.push(net.transmitted as f64);
+        }
         self.snapshot_networks = snapshot.network_info;
         self.snapshot_psi = snapshot.psi_data;
+        self.snapshot_connections = snapshot.connections_data;
+        self.snapshot_treemap = snapshot.treemap_data;
+        self.snapshot_sensor_health = snapshot.sensor_health_data;
+        self.snapshot_disk_io = snapshot.disk_io_data;
+        self.snapshot_disk_entropy = snapshot.disk_entropy_data;
+        self.snapshot_file_analyzer = snapshot.file_analyzer_data;
+    }
+
+    /// Build data availability context for display rules evaluation
+    ///
+    /// SPEC-024 Appendix F: Declarative display rules require knowing
+    /// what data is available to determine panel visibility.
+    pub fn data_availability(&self) -> crate::widgets::DataAvailability {
+        crate::widgets::DataAvailability {
+            psi_available: self.snapshot_psi.as_ref().is_some_and(|psi| {
+                psi.available
+                    && (psi.cpu.some.avg10 > 0.01
+                        || psi.io.some.avg10 > 0.01
+                        || psi.memory.some.avg10 > 0.01)
+            }),
+            sensors_available: self.snapshot_sensor_health.is_some(),
+            sensor_count: self
+                .snapshot_sensor_health
+                .as_ref()
+                .map_or(0, |s| s.sensors.len()),
+            gpu_available: self.gpu_info.is_some(),
+            battery_available: false, // TODO: Add battery snapshot
+            treemap_ready: self
+                .snapshot_treemap
+                .as_ref()
+                .is_some_and(|t| !t.top_items.is_empty()),
+            connections_available: self.snapshot_connections.is_some(),
+            connection_count: self
+                .snapshot_connections
+                .as_ref()
+                .map_or(0, |c| c.connections.len()),
+        }
+    }
+
+    /// Evaluate display rules for a panel
+    ///
+    /// SPEC-024 Appendix F: Returns DisplayAction based on system capabilities
+    /// and current data availability.
+    pub fn evaluate_panel_display(&self, panel: PanelType) -> crate::widgets::DisplayAction {
+        use crate::widgets::{
+            BatteryDisplayRules, DisplayContext, DisplayRules, DisplayTerminalSize,
+            GpuDisplayRules, PsiDisplayRules, SensorsDisplayRules,
+        };
+
+        let ctx = DisplayContext {
+            system: &self.system_capabilities,
+            terminal: DisplayTerminalSize {
+                width: 0,
+                height: 0,
+            }, // Terminal size set by UI
+            data: self.data_availability(),
+        };
+
+        match panel {
+            PanelType::Psi => PsiDisplayRules.evaluate(&ctx),
+            PanelType::Sensors => SensorsDisplayRules.evaluate(&ctx),
+            PanelType::Gpu => GpuDisplayRules.evaluate(&ctx),
+            PanelType::Battery => BatteryDisplayRules.evaluate(&ctx),
+            _ => crate::widgets::DisplayAction::Show,
+        }
     }
 
     /// Handle keyboard input. Returns true if app should quit.
@@ -1164,6 +1329,38 @@ impl App {
                 KeyCode::Char('q') => return true,
                 KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => return true,
                 _ => {} // Swallow all other inputs
+            }
+            return false;
+        }
+
+        // Signal confirmation mode - Y/n/Esc (SPEC-024 Appendix G.6 P0)
+        if self.pending_signal.is_some() {
+            match code {
+                KeyCode::Char('Y') | KeyCode::Enter => {
+                    self.confirm_signal();
+                }
+                KeyCode::Char('n' | 'N') | KeyCode::Esc => {
+                    self.cancel_signal();
+                }
+                KeyCode::Char('q') => return true,
+                KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => return true,
+                // In confirmation mode, signal keys change the pending signal type
+                KeyCode::Char('x') => {
+                    self.request_signal(SignalType::Term);
+                }
+                KeyCode::Char('K') => {
+                    self.request_signal(SignalType::Kill);
+                }
+                KeyCode::Char('H') => {
+                    self.request_signal(SignalType::Hup);
+                }
+                KeyCode::Char('i') => {
+                    self.request_signal(SignalType::Int);
+                }
+                KeyCode::Char('p') => {
+                    self.request_signal(SignalType::Stop);
+                }
+                _ => {} // Swallow other inputs
             }
             return false;
         }
@@ -1361,6 +1558,15 @@ impl App {
                 self.panels = PanelVisibility::default();
             }
 
+            // Process signals (SPEC-024 Appendix G.6 P0 - ttop parity)
+            // x = SIGTERM (graceful), X/K = SIGKILL (force kill)
+            KeyCode::Char('x') => {
+                self.request_signal(SignalType::Term);
+            }
+            KeyCode::Char('X') => {
+                self.request_signal(SignalType::Kill);
+            }
+
             // Escape in normal mode quits
             KeyCode::Esc => return true,
 
@@ -1487,6 +1693,77 @@ impl App {
             .count()
     }
 
+    // ========== Signal Handling (SPEC-024 Appendix G.6 P0) ==========
+
+    /// Get the currently selected process (pid, name) if any
+    fn get_selected_process(&self) -> Option<(u32, String)> {
+        let procs = self.sorted_processes();
+        if self.process_selected < procs.len() {
+            let p = procs[self.process_selected];
+            Some((p.pid().as_u32(), p.name().to_string_lossy().to_string()))
+        } else {
+            None
+        }
+    }
+
+    /// Request to send a signal to the selected process
+    /// Opens confirmation dialog
+    pub fn request_signal(&mut self, signal: SignalType) {
+        if let Some((pid, name)) = self.get_selected_process() {
+            self.pending_signal = Some((pid, name, signal));
+        }
+    }
+
+    /// Confirm and send the pending signal
+    pub fn confirm_signal(&mut self) {
+        if let Some((pid, _name, signal)) = self.pending_signal.take() {
+            let result = self.send_signal(pid, signal);
+            self.signal_result = Some(result);
+        }
+    }
+
+    /// Cancel pending signal
+    pub fn cancel_signal(&mut self) {
+        self.pending_signal = None;
+    }
+
+    /// Send a signal to a process using the system `kill` command
+    #[cfg(unix)]
+    fn send_signal(&self, pid: u32, signal: SignalType) -> String {
+        use std::process::Command;
+
+        // Use the system `kill` command for safe signal sending
+        let output = Command::new("kill")
+            .arg(format!("-{}", signal.number()))
+            .arg(pid.to_string())
+            .output();
+
+        match output {
+            Ok(result) if result.status.success() => {
+                format!("Sent SIG{} to PID {}", signal.name(), pid)
+            }
+            Ok(result) => {
+                let stderr = String::from_utf8_lossy(&result.stderr);
+                format!(
+                    "Failed to send SIG{} to {}: {}",
+                    signal.name(),
+                    pid,
+                    stderr.trim()
+                )
+            }
+            Err(e) => format!("Failed to send SIG{} to {}: {}", signal.name(), pid, e),
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn send_signal(&self, pid: u32, signal: SignalType) -> String {
+        format!(
+            "Signal {} not supported on this platform (PID {})",
+            signal.name(),
+            pid
+        )
+    }
+
     /// Get sorted and filtered processes
     pub fn sorted_processes(&self) -> Vec<&sysinfo::Process> {
         // ttop deterministic mode: empty process list
@@ -1538,7 +1815,8 @@ impl App {
 
     /// Get Disk I/O data if available
     pub fn disk_io_data(&self) -> Option<&super::analyzers::DiskIoData> {
-        self.analyzers.disk_io_data()
+        // Use snapshot data for CB-INPUT-006 async pattern consistency
+        self.snapshot_disk_io.as_ref()
     }
 
     /// Get system uptime in seconds
@@ -1581,6 +1859,131 @@ fn detect_container() -> bool {
 mod tests {
     use super::*;
 
+    // RingBuffer tests
+    #[test]
+    fn test_ring_buffer() {
+        let mut buf: RingBuffer<i32> = RingBuffer::new(3);
+        buf.push(1);
+        buf.push(2);
+        buf.push(3);
+        assert_eq!(buf.as_slice(), &[1, 2, 3]);
+
+        buf.push(4);
+        assert_eq!(buf.as_slice(), &[2, 3, 4]);
+
+        assert_eq!(buf.last(), Some(&4));
+    }
+
+    #[test]
+    fn test_ring_buffer_empty() {
+        let buf: RingBuffer<i32> = RingBuffer::new(5);
+        assert!(buf.as_slice().is_empty());
+        assert_eq!(buf.last(), None);
+    }
+
+    #[test]
+    fn test_ring_buffer_single_element() {
+        let mut buf: RingBuffer<i32> = RingBuffer::new(1);
+        buf.push(42);
+        assert_eq!(buf.as_slice(), &[42]);
+
+        buf.push(100);
+        assert_eq!(buf.as_slice(), &[100]);
+    }
+
+    #[test]
+    fn test_ring_buffer_many_pushes() {
+        let mut buf: RingBuffer<i32> = RingBuffer::new(3);
+        for i in 0..100 {
+            buf.push(i);
+        }
+        assert_eq!(buf.as_slice(), &[97, 98, 99]);
+    }
+
+    // ProcessSortColumn tests
+    #[test]
+    fn test_process_sort_column_next() {
+        assert_eq!(ProcessSortColumn::Pid.next(), ProcessSortColumn::User);
+        assert_eq!(ProcessSortColumn::User.next(), ProcessSortColumn::Cpu);
+        assert_eq!(ProcessSortColumn::Cpu.next(), ProcessSortColumn::Mem);
+        assert_eq!(ProcessSortColumn::Mem.next(), ProcessSortColumn::Command);
+        assert_eq!(ProcessSortColumn::Command.next(), ProcessSortColumn::Pid);
+    }
+
+    #[test]
+    fn test_process_sort_column_prev() {
+        assert_eq!(ProcessSortColumn::Pid.prev(), ProcessSortColumn::Command);
+        assert_eq!(ProcessSortColumn::User.prev(), ProcessSortColumn::Pid);
+        assert_eq!(ProcessSortColumn::Cpu.prev(), ProcessSortColumn::User);
+        assert_eq!(ProcessSortColumn::Mem.prev(), ProcessSortColumn::Cpu);
+        assert_eq!(ProcessSortColumn::Command.prev(), ProcessSortColumn::Mem);
+    }
+
+    #[test]
+    fn test_process_sort_column_count() {
+        assert_eq!(ProcessSortColumn::COUNT, 5);
+    }
+
+    #[test]
+    fn test_process_sort_column_next_cycle() {
+        let mut col = ProcessSortColumn::Pid;
+        for _ in 0..5 {
+            col = col.next();
+        }
+        assert_eq!(col, ProcessSortColumn::Pid); // Full cycle
+    }
+
+    #[test]
+    fn test_process_sort_column_prev_cycle() {
+        let mut col = ProcessSortColumn::Pid;
+        for _ in 0..5 {
+            col = col.prev();
+        }
+        assert_eq!(col, ProcessSortColumn::Pid); // Full cycle
+    }
+
+    // PanelVisibility tests
+    #[test]
+    fn test_panel_visibility_default() {
+        let panels = PanelVisibility::default();
+        assert!(panels.cpu);
+        assert!(panels.memory);
+        assert!(panels.disk);
+        assert!(panels.network);
+        assert!(panels.process);
+        assert!(!panels.gpu);
+        assert!(!panels.sensors);
+        assert!(!panels.psi);
+        assert!(!panels.connections);
+        assert!(!panels.battery);
+        assert!(!panels.sensors_compact);
+        assert!(!panels.system);
+        assert!(!panels.treemap);
+        assert!(!panels.files);
+    }
+
+    #[test]
+    fn test_panel_visibility_all_fields() {
+        let panels = PanelVisibility {
+            cpu: true,
+            memory: true,
+            disk: true,
+            network: true,
+            process: true,
+            gpu: true,
+            sensors: true,
+            psi: true,
+            connections: true,
+            battery: true,
+            sensors_compact: true,
+            system: true,
+            treemap: true,
+            files: true,
+        };
+        assert!(panels.cpu && panels.gpu && panels.treemap && panels.files);
+    }
+
+    // App tests
     #[test]
     fn test_app_normal_mode() {
         let app = App::new(false);
@@ -1623,33 +2026,1268 @@ mod tests {
     }
 
     #[test]
-    fn test_ring_buffer() {
-        let mut buf: RingBuffer<i32> = RingBuffer::new(3);
+    fn test_app_process_count_deterministic() {
+        let app = App::new(true);
+        // Deterministic mode returns 0 processes
+        assert_eq!(app.process_count(), 0);
+    }
+
+    #[test]
+    fn test_app_sorted_processes_deterministic() {
+        let app = App::new(true);
+        // Deterministic mode returns empty process list
+        assert!(app.sorted_processes().is_empty());
+    }
+
+    #[test]
+    fn test_app_focus_panel() {
+        let mut app = App::new(true);
+        // Default is CPU focused
+        assert_eq!(app.focused_panel, Some(PanelType::Cpu));
+
+        app.focused_panel = Some(PanelType::Memory);
+        assert_eq!(app.focused_panel, Some(PanelType::Memory));
+
+        app.focused_panel = None;
+        assert!(app.focused_panel.is_none());
+    }
+
+    #[test]
+    fn test_app_is_panel_focused() {
+        let mut app = App::new(true);
+        // Default is CPU focused
+        assert!(app.is_panel_focused(PanelType::Cpu));
+        assert!(!app.is_panel_focused(PanelType::Memory));
+
+        app.focused_panel = Some(PanelType::Memory);
+        assert!(!app.is_panel_focused(PanelType::Cpu));
+        assert!(app.is_panel_focused(PanelType::Memory));
+    }
+
+    #[test]
+    fn test_app_sort_column_toggle() {
+        let mut app = App::new(true);
+        assert_eq!(app.sort_column, ProcessSortColumn::Cpu);
+
+        app.sort_column = app.sort_column.next();
+        assert_eq!(app.sort_column, ProcessSortColumn::Mem);
+    }
+
+    #[test]
+    fn test_app_sort_descending_toggle() {
+        let mut app = App::new(true);
+        // Default is descending (highest first)
+        assert!(app.sort_descending);
+
+        app.sort_descending = false;
+        assert!(!app.sort_descending);
+    }
+
+    #[test]
+    fn test_app_filter_processes() {
+        let mut app = App::new(true);
+        assert!(app.filter.is_empty());
+
+        app.filter = "test".to_string();
+        assert_eq!(app.filter, "test");
+    }
+
+    #[test]
+    fn test_app_update_frame_stats() {
+        let mut app = App::new(true);
+        app.update_frame_stats(&[
+            Duration::from_micros(1000),
+            Duration::from_micros(2000),
+            Duration::from_micros(3000),
+        ]);
+        assert_eq!(app.avg_frame_time_us, 2000);
+    }
+
+    #[test]
+    fn test_app_update_frame_stats_empty() {
+        let mut app = App::new(true);
+        app.avg_frame_time_us = 1234;
+        app.update_frame_stats(&[]);
+        // Should not change when empty
+        assert_eq!(app.avg_frame_time_us, 1234);
+    }
+
+    #[test]
+    fn test_app_request_signal() {
+        let mut app = App::new(true);
+        // Deterministic mode has no processes, so this should be a no-op
+        app.request_signal(SignalType::Term);
+        assert!(app.pending_signal.is_none());
+    }
+
+    #[test]
+    fn test_app_cancel_signal() {
+        let mut app = App::new(true);
+        app.pending_signal = Some((123, "test".to_string(), SignalType::Term));
+        app.cancel_signal();
+        assert!(app.pending_signal.is_none());
+    }
+
+    #[test]
+    fn test_app_data_availability_deterministic() {
+        let app = App::new(true);
+        let avail = app.data_availability();
+        // Deterministic mode has no optional data
+        assert!(!avail.psi_available);
+        assert!(!avail.gpu_available);
+        assert!(!avail.treemap_ready);
+    }
+
+    #[test]
+    fn test_app_apply_snapshot() {
+        let mut app = App::new(true);
+        let initial_frame = app.frame_id;
+
+        let snapshot = MetricsSnapshot {
+            per_core_percent: vec![25.0; 4],
+            per_core_freq: vec![2000; 4],
+            per_core_temp: vec![50.0; 4],
+            cpu_avg: 25.0,
+            load_avg: sysinfo::LoadAvg {
+                one: 1.0,
+                five: 0.5,
+                fifteen: 0.25,
+            },
+            mem_total: 16 * 1024 * 1024 * 1024,
+            mem_used: 8 * 1024 * 1024 * 1024,
+            mem_available: 8 * 1024 * 1024 * 1024,
+            mem_cached: 2 * 1024 * 1024 * 1024,
+            swap_total: 4 * 1024 * 1024 * 1024,
+            swap_used: 0,
+            net_rx: 1000,
+            net_tx: 500,
+            gpu_info: None,
+            processes: vec![],
+            disk_info: vec![],
+            network_info: vec![],
+            psi_data: None,
+            connections_data: None,
+            treemap_data: None,
+            sensor_health_data: None,
+            disk_io_data: None,
+            disk_entropy_data: None,
+            file_analyzer_data: None,
+        };
+
+        app.apply_snapshot(snapshot);
+
+        assert_eq!(app.frame_id, initial_frame + 1);
+        assert_eq!(app.per_core_percent.len(), 4);
+        assert_eq!(app.mem_total, 16 * 1024 * 1024 * 1024);
+    }
+
+    #[test]
+    fn test_detail_level_for_panel() {
+        let app = App::new(true);
+        let level = app.detail_level_for_panel(PanelType::Cpu, 20);
+        // Height 20 should give some detail level
+        assert!(!matches!(level, DetailLevel::Minimal));
+    }
+
+    // =========================================================================
+    // MetricsSnapshot TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_metrics_snapshot_empty() {
+        let snap = MetricsSnapshot::empty();
+        assert!((snap.cpu_avg - 0.0).abs() < f64::EPSILON);
+        assert!(snap.per_core_percent.is_empty());
+        assert!(snap.per_core_freq.is_empty());
+        assert!(snap.per_core_temp.is_empty());
+        assert_eq!(snap.mem_total, 0);
+        assert_eq!(snap.mem_used, 0);
+        assert_eq!(snap.swap_total, 0);
+        assert_eq!(snap.net_rx, 0);
+        assert_eq!(snap.net_tx, 0);
+        assert!(snap.gpu_info.is_none());
+        assert!(snap.processes.is_empty());
+        assert!(snap.disk_info.is_empty());
+        assert!(snap.network_info.is_empty());
+        assert!(snap.psi_data.is_none());
+        assert!(snap.connections_data.is_none());
+        assert!(snap.treemap_data.is_none());
+    }
+
+    #[test]
+    fn test_metrics_snapshot_clone() {
+        let snap = MetricsSnapshot::empty();
+        let snap2 = snap.clone();
+        assert_eq!(snap2.mem_total, 0);
+    }
+
+    #[test]
+    fn test_metrics_snapshot_with_values() {
+        let snap = MetricsSnapshot {
+            cpu_avg: 50.0,
+            per_core_percent: vec![25.0, 50.0, 75.0, 100.0],
+            per_core_freq: vec![3000, 3200, 3400, 3600],
+            per_core_temp: vec![40.0, 45.0, 50.0, 55.0],
+            load_avg: sysinfo::LoadAvg {
+                one: 1.5,
+                five: 1.0,
+                fifteen: 0.5,
+            },
+            mem_total: 16 * 1024 * 1024 * 1024,
+            mem_used: 8 * 1024 * 1024 * 1024,
+            mem_available: 8 * 1024 * 1024 * 1024,
+            mem_cached: 2 * 1024 * 1024 * 1024,
+            swap_total: 4 * 1024 * 1024 * 1024,
+            swap_used: 1024 * 1024 * 1024,
+            net_rx: 1_000_000,
+            net_tx: 500_000,
+            gpu_info: None,
+            processes: vec![],
+            disk_info: vec![],
+            network_info: vec![],
+            psi_data: None,
+            connections_data: None,
+            treemap_data: None,
+            sensor_health_data: None,
+            disk_io_data: None,
+            disk_entropy_data: None,
+            file_analyzer_data: None,
+        };
+        assert!((snap.cpu_avg - 50.0).abs() < f64::EPSILON);
+        assert_eq!(snap.per_core_percent.len(), 4);
+        assert_eq!(snap.per_core_freq[3], 3600);
+        assert!((snap.per_core_temp[0] - 40.0).abs() < f32::EPSILON);
+    }
+
+    // =========================================================================
+    // ProcessInfo TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_process_info_clone() {
+        let info = ProcessInfo {
+            pid: 1234,
+            name: "test".to_string(),
+            cpu_usage: 25.5,
+            memory: 1024 * 1024,
+            user: "root".to_string(),
+            cmd: "/usr/bin/test".to_string(),
+        };
+        let info2 = info.clone();
+        assert_eq!(info2.pid, 1234);
+        assert_eq!(info2.name, "test");
+        assert!((info2.cpu_usage - 25.5).abs() < f32::EPSILON);
+    }
+
+    // =========================================================================
+    // DiskInfo TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_disk_info_clone() {
+        let info = DiskInfo {
+            name: "sda1".to_string(),
+            mount_point: "/".to_string(),
+            total_space: 500 * 1024 * 1024 * 1024,
+            available_space: 200 * 1024 * 1024 * 1024,
+            file_system: "ext4".to_string(),
+        };
+        let info2 = info.clone();
+        assert_eq!(info2.name, "sda1");
+        assert_eq!(info2.mount_point, "/");
+        assert_eq!(info2.file_system, "ext4");
+    }
+
+    // =========================================================================
+    // NetworkInfo TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_network_info_clone() {
+        let info = NetworkInfo {
+            name: "eth0".to_string(),
+            received: 1_000_000,
+            transmitted: 500_000,
+        };
+        let info2 = info.clone();
+        assert_eq!(info2.name, "eth0");
+        assert_eq!(info2.received, 1_000_000);
+        assert_eq!(info2.transmitted, 500_000);
+    }
+
+    // =========================================================================
+    // MetricsCollector TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_metrics_collector_new_deterministic() {
+        let collector = MetricsCollector::new(true);
+        assert!(collector.deterministic);
+        assert_eq!(collector.frame_id, 0);
+    }
+
+    #[test]
+    fn test_metrics_collector_psi_check() {
+        let collector = MetricsCollector::new(true);
+        // Just verify the method exists and doesn't panic
+        let _has_psi = collector.has_psi();
+    }
+
+    #[test]
+    fn test_metrics_collector_gpu_check() {
+        let collector = MetricsCollector::new(true);
+        // Just verify the method exists and doesn't panic
+        let _has_gpu = collector.has_gpu();
+    }
+
+    // =========================================================================
+    // RingBuffer ADDITIONAL TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_ring_buffer_len() {
+        let mut buf: RingBuffer<i32> = RingBuffer::new(5);
+        assert_eq!(buf.as_slice().len(), 0);
         buf.push(1);
+        assert_eq!(buf.as_slice().len(), 1);
         buf.push(2);
         buf.push(3);
-        assert_eq!(buf.as_slice(), &[1, 2, 3]);
-
-        buf.push(4);
-        assert_eq!(buf.as_slice(), &[2, 3, 4]);
-
-        assert_eq!(buf.last(), Some(&4));
+        assert_eq!(buf.as_slice().len(), 3);
     }
 
     #[test]
-    fn test_process_sort_column_next() {
-        assert_eq!(ProcessSortColumn::Pid.next(), ProcessSortColumn::User);
-        assert_eq!(ProcessSortColumn::User.next(), ProcessSortColumn::Cpu);
-        assert_eq!(ProcessSortColumn::Command.next(), ProcessSortColumn::Pid);
+    fn test_ring_buffer_capacity_maintained() {
+        let mut buf: RingBuffer<i32> = RingBuffer::new(3);
+        for i in 0..10 {
+            buf.push(i);
+            assert!(buf.as_slice().len() <= 3);
+        }
     }
 
     #[test]
-    fn test_panel_visibility_default() {
+    fn test_ring_buffer_with_floats() {
+        let mut buf: RingBuffer<f64> = RingBuffer::new(3);
+        buf.push(1.5);
+        buf.push(2.5);
+        buf.push(3.5);
+        assert!((buf.as_slice()[0] - 1.5).abs() < f64::EPSILON);
+        assert!((buf.last().unwrap() - 3.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_ring_buffer_with_strings() {
+        let mut buf: RingBuffer<String> = RingBuffer::new(2);
+        buf.push("hello".to_string());
+        buf.push("world".to_string());
+        assert_eq!(buf.as_slice(), &["hello", "world"]);
+
+        buf.push("rust".to_string());
+        assert_eq!(buf.as_slice(), &["world", "rust"]);
+    }
+
+    // =========================================================================
+    // App ADDITIONAL TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_app_uptime() {
+        let app = App::new(true);
+        // Deterministic mode has fixed uptime (5d 3h 47m)
+        let uptime = app.uptime();
+        assert_eq!(uptime, 5 * 86400 + 3 * 3600 + 47 * 60);
+    }
+
+    #[test]
+    fn test_app_frame_id_starts_at_zero() {
+        let app = App::new(true);
+        assert_eq!(app.frame_id, 0);
+    }
+
+    #[test]
+    fn test_app_show_filter_input() {
+        let mut app = App::new(true);
+        assert!(!app.show_filter_input);
+        app.show_filter_input = true;
+        assert!(app.show_filter_input);
+    }
+
+    #[test]
+    fn test_app_show_help() {
+        let mut app = App::new(true);
+        assert!(!app.show_help);
+        app.show_help = true;
+        assert!(app.show_help);
+    }
+
+    #[test]
+    fn test_app_show_fps() {
+        let mut app = App::new(true);
+        assert!(!app.show_fps);
+        app.show_fps = true;
+        assert!(app.show_fps);
+    }
+
+    #[test]
+    fn test_app_cpu_history_initial() {
+        let app = App::new(true);
+        // Deterministic mode pre-fills with 60 zeros
+        assert_eq!(app.cpu_history.as_slice().len(), 60);
+        for &val in app.cpu_history.as_slice() {
+            assert!((val - 0.0).abs() < f64::EPSILON);
+        }
+    }
+
+    #[test]
+    fn test_app_mem_history_initial() {
+        let app = App::new(true);
+        // Deterministic mode pre-fills with 60 zeros
+        assert_eq!(app.mem_history.as_slice().len(), 60);
+    }
+
+    #[test]
+    fn test_app_panels_visibility() {
+        let app = App::new(true);
+        assert!(app.panels.cpu);
+        assert!(app.panels.memory);
+        assert!(app.panels.disk);
+        assert!(app.panels.network);
+        assert!(app.panels.process);
+    }
+
+    #[test]
+    fn test_app_core_count_deterministic() {
+        let app = App::new(true);
+        // Deterministic mode has 48 cores
+        assert_eq!(app.per_core_percent.len(), 48);
+    }
+
+    #[test]
+    fn test_app_with_config() {
+        let config = PtopConfig::default();
+        let app = App::with_config(true, config);
+        assert!(app.deterministic);
+    }
+
+    #[test]
+    fn test_app_with_config_lightweight() {
+        let config = PtopConfig::default();
+        let app = App::with_config_lightweight(true, config);
+        assert!(app.deterministic);
+    }
+
+    #[test]
+    fn test_app_multiple_collect_metrics() {
+        let mut app = App::new(true);
+        for _ in 0..5 {
+            app.collect_metrics();
+        }
+        assert_eq!(app.frame_id, 5);
+    }
+
+    #[test]
+    fn test_app_data_availability_fields() {
+        let app = App::new(true);
+        let avail = app.data_availability();
+        // Just verify all fields exist
+        let _psi = avail.psi_available;
+        let _gpu = avail.gpu_available;
+        let _treemap = avail.treemap_ready;
+    }
+
+    #[test]
+    fn test_app_process_selected() {
+        let mut app = App::new(true);
+        assert_eq!(app.process_selected, 0);
+        app.process_selected = 5;
+        assert_eq!(app.process_selected, 5);
+    }
+
+    #[test]
+    fn test_app_process_scroll_offset() {
+        let mut app = App::new(true);
+        assert_eq!(app.process_scroll_offset, 0);
+        app.process_scroll_offset = 10;
+        assert_eq!(app.process_scroll_offset, 10);
+    }
+
+    #[test]
+    fn test_panel_visibility_fields() {
         let panels = PanelVisibility::default();
-        assert!(panels.cpu);
-        assert!(panels.memory);
-        assert!(panels.process);
-        assert!(!panels.gpu);
-        assert!(!panels.treemap);
+        // Test field access for all fields
+        let _ = panels.cpu;
+        let _ = panels.memory;
+        let _ = panels.disk;
+        let _ = panels.network;
+        let _ = panels.process;
+        let _ = panels.gpu;
+        let _ = panels.sensors;
+        let _ = panels.psi;
+        let _ = panels.connections;
+        let _ = panels.battery;
+        let _ = panels.sensors_compact;
+        let _ = panels.system;
+        let _ = panels.treemap;
+        let _ = panels.files;
+    }
+
+    #[test]
+    fn test_app_net_history() {
+        let app = App::new(true);
+        // Check network history exists
+        let _ = app.net_rx_history.as_slice().len();
+        let _ = app.net_tx_history.as_slice().len();
+    }
+
+    #[test]
+    fn test_process_sort_column_label() {
+        // Test that the column enum has proper variants
+        let col = ProcessSortColumn::Pid;
+        assert!(matches!(col, ProcessSortColumn::Pid));
+
+        let col = ProcessSortColumn::User;
+        assert!(matches!(col, ProcessSortColumn::User));
+
+        let col = ProcessSortColumn::Cpu;
+        assert!(matches!(col, ProcessSortColumn::Cpu));
+
+        let col = ProcessSortColumn::Mem;
+        assert!(matches!(col, ProcessSortColumn::Mem));
+
+        let col = ProcessSortColumn::Command;
+        assert!(matches!(col, ProcessSortColumn::Command));
+    }
+
+    #[test]
+    fn test_app_load_avg_deterministic() {
+        let app = App::new(true);
+        // Deterministic mode has zero load average
+        assert!((app.load_avg.one - 0.0).abs() < f64::EPSILON);
+        assert!((app.load_avg.five - 0.0).abs() < f64::EPSILON);
+        assert!((app.load_avg.fifteen - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_app_snapshot_disks() {
+        let app = App::new(true);
+        // Check snapshot_disks field exists
+        let _ = app.snapshot_disks.len();
+    }
+
+    #[test]
+    fn test_app_snapshot_networks() {
+        let app = App::new(true);
+        // Check snapshot_networks field exists
+        let _ = app.snapshot_networks.len();
+    }
+
+    #[test]
+    fn test_app_snapshot_processes() {
+        let app = App::new(true);
+        // Check snapshot_processes field exists
+        let _ = app.snapshot_processes.len();
+    }
+
+    #[test]
+    fn test_app_hostname() {
+        let app = App::new(true);
+        // Hostname field should exist
+        let _ = app.hostname.len();
+    }
+
+    #[test]
+    fn test_app_kernel_version() {
+        let app = App::new(true);
+        // Kernel version field should exist
+        let _ = app.kernel_version.len();
+    }
+
+    #[test]
+    fn test_app_in_container() {
+        let app = App::new(true);
+        // Just verify field exists
+        let _ = app.in_container;
+    }
+
+    #[test]
+    fn test_app_running_state() {
+        let mut app = App::new(true);
+        assert!(app.running);
+        app.running = false;
+        assert!(!app.running);
+    }
+
+    #[test]
+    fn test_app_exploded_panel() {
+        let mut app = App::new(true);
+        assert!(app.exploded_panel.is_none());
+        app.exploded_panel = Some(PanelType::Cpu);
+        assert!(app.exploded_panel.is_some());
+    }
+
+    #[test]
+    fn test_app_selected_column() {
+        let mut app = App::new(true);
+        assert_eq!(app.selected_column, 0);
+        app.selected_column = 3;
+        assert_eq!(app.selected_column, 3);
+    }
+
+    // =========================================================================
+    // ProcessSortColumn ADDITIONAL TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_process_sort_column_from_index() {
+        assert_eq!(ProcessSortColumn::from_index(0), ProcessSortColumn::Pid);
+        assert_eq!(ProcessSortColumn::from_index(1), ProcessSortColumn::User);
+        assert_eq!(ProcessSortColumn::from_index(2), ProcessSortColumn::Cpu);
+        assert_eq!(ProcessSortColumn::from_index(3), ProcessSortColumn::Mem);
+        assert_eq!(ProcessSortColumn::from_index(4), ProcessSortColumn::Command);
+        // Wrap around
+        assert_eq!(ProcessSortColumn::from_index(5), ProcessSortColumn::Pid);
+        assert_eq!(ProcessSortColumn::from_index(10), ProcessSortColumn::Pid);
+    }
+
+    #[test]
+    fn test_process_sort_column_to_index() {
+        assert_eq!(ProcessSortColumn::Pid.to_index(), 0);
+        assert_eq!(ProcessSortColumn::User.to_index(), 1);
+        assert_eq!(ProcessSortColumn::Cpu.to_index(), 2);
+        assert_eq!(ProcessSortColumn::Mem.to_index(), 3);
+        assert_eq!(ProcessSortColumn::Command.to_index(), 4);
+    }
+
+    #[test]
+    fn test_process_sort_column_header_not_sorted() {
+        assert_eq!(ProcessSortColumn::Pid.header(false, true), "PID");
+        assert_eq!(ProcessSortColumn::User.header(false, true), "USER");
+        assert_eq!(ProcessSortColumn::Cpu.header(false, true), "CPU%");
+        assert_eq!(ProcessSortColumn::Mem.header(false, true), "MEM%");
+        assert_eq!(ProcessSortColumn::Command.header(false, true), "COMMAND");
+    }
+
+    #[test]
+    fn test_process_sort_column_header_sorted_desc() {
+        assert_eq!(ProcessSortColumn::Pid.header(true, true), "PID▼");
+        assert_eq!(ProcessSortColumn::Cpu.header(true, true), "CPU%▼");
+    }
+
+    #[test]
+    fn test_process_sort_column_header_sorted_asc() {
+        assert_eq!(ProcessSortColumn::Pid.header(true, false), "PID▲");
+        assert_eq!(ProcessSortColumn::Command.header(true, false), "COMMAND▲");
+    }
+
+    // =========================================================================
+    // handle_key() TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_handle_key_quit_q() {
+        let mut app = App::new(true);
+        assert!(app.handle_key(KeyCode::Char('q'), KeyModifiers::empty()));
+    }
+
+    #[test]
+    fn test_handle_key_quit_ctrl_c() {
+        let mut app = App::new(true);
+        assert!(app.handle_key(KeyCode::Char('c'), KeyModifiers::CONTROL));
+    }
+
+    #[test]
+    fn test_handle_key_escape_quits() {
+        let mut app = App::new(true);
+        assert!(app.handle_key(KeyCode::Esc, KeyModifiers::empty()));
+    }
+
+    #[test]
+    fn test_handle_key_help_toggle() {
+        let mut app = App::new(true);
+        assert!(!app.show_help);
+
+        // '?' toggles help
+        app.handle_key(KeyCode::Char('?'), KeyModifiers::empty());
+        assert!(app.show_help);
+
+        // '?' again toggles off
+        app.handle_key(KeyCode::Char('?'), KeyModifiers::empty());
+        assert!(!app.show_help);
+    }
+
+    #[test]
+    fn test_handle_key_help_f1() {
+        let mut app = App::new(true);
+        app.handle_key(KeyCode::F(1), KeyModifiers::empty());
+        assert!(app.show_help);
+    }
+
+    #[test]
+    fn test_handle_key_h_toggles_help() {
+        let mut app = App::new(true);
+        app.handle_key(KeyCode::Char('h'), KeyModifiers::empty());
+        assert!(app.show_help);
+    }
+
+    #[test]
+    fn test_handle_key_in_help_mode_esc_closes() {
+        let mut app = App::new(true);
+        app.show_help = true;
+
+        app.handle_key(KeyCode::Esc, KeyModifiers::empty());
+        assert!(!app.show_help);
+    }
+
+    #[test]
+    fn test_handle_key_in_help_mode_q_quits() {
+        let mut app = App::new(true);
+        app.show_help = true;
+
+        assert!(app.handle_key(KeyCode::Char('q'), KeyModifiers::empty()));
+    }
+
+    #[test]
+    fn test_handle_key_in_help_mode_swallows_other() {
+        let mut app = App::new(true);
+        app.show_help = true;
+
+        // Random key should be swallowed, not quit
+        assert!(!app.handle_key(KeyCode::Char('x'), KeyModifiers::empty()));
+        assert!(app.show_help); // Still in help
+    }
+
+    #[test]
+    fn test_handle_key_panel_toggles() {
+        let mut app = App::new(true);
+
+        // In deterministic mode: CPU, Memory, Disk, Network, Process, GPU, Sensors, Connections, Files are on
+        // PSI is off
+
+        // Toggle CPU off
+        assert!(app.panels.cpu);
+        app.handle_key(KeyCode::Char('1'), KeyModifiers::empty());
+        assert!(!app.panels.cpu);
+
+        // Toggle memory off
+        assert!(app.panels.memory);
+        app.handle_key(KeyCode::Char('2'), KeyModifiers::empty());
+        assert!(!app.panels.memory);
+
+        // Toggle disk off
+        assert!(app.panels.disk);
+        app.handle_key(KeyCode::Char('3'), KeyModifiers::empty());
+        assert!(!app.panels.disk);
+
+        // Toggle network off
+        assert!(app.panels.network);
+        app.handle_key(KeyCode::Char('4'), KeyModifiers::empty());
+        assert!(!app.panels.network);
+
+        // Toggle process off
+        assert!(app.panels.process);
+        app.handle_key(KeyCode::Char('5'), KeyModifiers::empty());
+        assert!(!app.panels.process);
+
+        // Toggle GPU off (it's on in deterministic mode)
+        assert!(app.panels.gpu);
+        app.handle_key(KeyCode::Char('6'), KeyModifiers::empty());
+        assert!(!app.panels.gpu);
+
+        // Toggle sensors off (it's on in deterministic mode)
+        assert!(app.panels.sensors);
+        app.handle_key(KeyCode::Char('7'), KeyModifiers::empty());
+        assert!(!app.panels.sensors);
+
+        // Toggle connections off (it's on in deterministic mode)
+        assert!(app.panels.connections);
+        app.handle_key(KeyCode::Char('8'), KeyModifiers::empty());
+        assert!(!app.panels.connections);
+
+        // Toggle PSI on (it's off in deterministic mode)
+        assert!(!app.panels.psi);
+        app.handle_key(KeyCode::Char('9'), KeyModifiers::empty());
+        assert!(app.panels.psi);
+    }
+
+    #[test]
+    fn test_handle_key_reset_panels() {
+        let mut app = App::new(true);
+        app.panels.cpu = false;
+        app.panels.gpu = true;
+
+        // '0' resets to defaults
+        app.handle_key(KeyCode::Char('0'), KeyModifiers::empty());
+
+        assert!(app.panels.cpu);
+        assert!(!app.panels.gpu);
+    }
+
+    #[test]
+    fn test_handle_key_sort_keys() {
+        let mut app = App::new(true);
+
+        // 'c' sorts by CPU
+        app.handle_key(KeyCode::Char('c'), KeyModifiers::empty());
+        assert_eq!(app.sort_column, ProcessSortColumn::Cpu);
+        assert!(app.sort_descending);
+
+        // 'm' sorts by Memory
+        app.handle_key(KeyCode::Char('m'), KeyModifiers::empty());
+        assert_eq!(app.sort_column, ProcessSortColumn::Mem);
+        assert!(app.sort_descending);
+
+        // 'p' sorts by PID
+        app.handle_key(KeyCode::Char('p'), KeyModifiers::empty());
+        assert_eq!(app.sort_column, ProcessSortColumn::Pid);
+        assert!(!app.sort_descending);
+
+        // 'r' reverses sort
+        app.handle_key(KeyCode::Char('r'), KeyModifiers::empty());
+        assert!(app.sort_descending);
+
+        // 's' cycles to next column
+        app.sort_column = ProcessSortColumn::Cpu;
+        app.handle_key(KeyCode::Char('s'), KeyModifiers::empty());
+        assert_eq!(app.sort_column, ProcessSortColumn::Mem);
+    }
+
+    #[test]
+    fn test_handle_key_filter_mode() {
+        let mut app = App::new(true);
+
+        // '/' enters filter mode
+        app.handle_key(KeyCode::Char('/'), KeyModifiers::empty());
+        assert!(app.show_filter_input);
+
+        // Type some characters
+        app.handle_key(KeyCode::Char('t'), KeyModifiers::empty());
+        app.handle_key(KeyCode::Char('e'), KeyModifiers::empty());
+        app.handle_key(KeyCode::Char('s'), KeyModifiers::empty());
+        app.handle_key(KeyCode::Char('t'), KeyModifiers::empty());
+        assert_eq!(app.filter, "test");
+
+        // Backspace removes character
+        app.handle_key(KeyCode::Backspace, KeyModifiers::empty());
+        assert_eq!(app.filter, "tes");
+
+        // Enter exits filter mode
+        app.handle_key(KeyCode::Enter, KeyModifiers::empty());
+        assert!(!app.show_filter_input);
+        assert_eq!(app.filter, "tes"); // Filter remains
+    }
+
+    #[test]
+    fn test_handle_key_filter_escape() {
+        let mut app = App::new(true);
+        app.show_filter_input = true;
+        app.filter = "test".to_string();
+
+        // Esc clears filter and exits
+        app.handle_key(KeyCode::Esc, KeyModifiers::empty());
+        assert!(!app.show_filter_input);
+        assert!(app.filter.is_empty());
+    }
+
+    #[test]
+    fn test_handle_key_delete_clears_filter() {
+        let mut app = App::new(true);
+        app.filter = "test".to_string();
+
+        app.handle_key(KeyCode::Delete, KeyModifiers::empty());
+        assert!(app.filter.is_empty());
+    }
+
+    #[test]
+    fn test_handle_key_explode_panel() {
+        let mut app = App::new(true);
+        app.focused_panel = Some(PanelType::Cpu);
+
+        // Enter explodes focused panel
+        app.handle_key(KeyCode::Enter, KeyModifiers::empty());
+        assert_eq!(app.exploded_panel, Some(PanelType::Cpu));
+
+        // Esc collapses
+        app.handle_key(KeyCode::Esc, KeyModifiers::empty());
+        assert!(app.exploded_panel.is_none());
+    }
+
+    #[test]
+    fn test_handle_key_explode_z() {
+        let mut app = App::new(true);
+        app.focused_panel = Some(PanelType::Memory);
+
+        // 'z' explodes focused panel
+        app.handle_key(KeyCode::Char('z'), KeyModifiers::empty());
+        assert_eq!(app.exploded_panel, Some(PanelType::Memory));
+
+        // 'z' again collapses
+        app.handle_key(KeyCode::Char('z'), KeyModifiers::empty());
+        assert!(app.exploded_panel.is_none());
+    }
+
+    #[test]
+    fn test_handle_key_tab_navigation() {
+        let mut app = App::new(true);
+        app.focused_panel = Some(PanelType::Cpu);
+
+        // Tab navigates forward
+        app.handle_key(KeyCode::Tab, KeyModifiers::empty());
+        assert_eq!(app.focused_panel, Some(PanelType::Memory));
+
+        // BackTab navigates backward
+        app.handle_key(KeyCode::BackTab, KeyModifiers::empty());
+        assert_eq!(app.focused_panel, Some(PanelType::Cpu));
+    }
+
+    #[test]
+    fn test_handle_key_process_navigation() {
+        let mut app = App::new(true);
+
+        // In deterministic mode, no processes, so navigation is noop
+        app.handle_key(KeyCode::Down, KeyModifiers::empty());
+        assert_eq!(app.process_selected, 0);
+
+        app.handle_key(KeyCode::Up, KeyModifiers::empty());
+        assert_eq!(app.process_selected, 0);
+    }
+
+    #[test]
+    fn test_handle_key_signal_request() {
+        let mut app = App::new(true);
+
+        // In deterministic mode, no selected process, so request does nothing
+        app.handle_key(KeyCode::Char('x'), KeyModifiers::empty());
+        assert!(app.pending_signal.is_none());
+    }
+
+    #[test]
+    fn test_handle_key_in_signal_confirmation() {
+        let mut app = App::new(true);
+        app.pending_signal = Some((1234, "test".to_string(), SignalType::Term));
+
+        // 'n' cancels
+        app.handle_key(KeyCode::Char('n'), KeyModifiers::empty());
+        assert!(app.pending_signal.is_none());
+    }
+
+    #[test]
+    fn test_handle_key_in_signal_confirmation_esc() {
+        let mut app = App::new(true);
+        app.pending_signal = Some((1234, "test".to_string(), SignalType::Term));
+
+        // Esc cancels
+        app.handle_key(KeyCode::Esc, KeyModifiers::empty());
+        assert!(app.pending_signal.is_none());
+    }
+
+    #[test]
+    fn test_handle_key_in_signal_confirmation_q_quits() {
+        let mut app = App::new(true);
+        app.pending_signal = Some((1234, "test".to_string(), SignalType::Term));
+
+        assert!(app.handle_key(KeyCode::Char('q'), KeyModifiers::empty()));
+    }
+
+    #[test]
+    fn test_handle_key_in_exploded_column_navigation() {
+        let mut app = App::new(true);
+        app.exploded_panel = Some(PanelType::Process);
+        app.selected_column = 2;
+
+        // Left moves column left
+        app.handle_key(KeyCode::Left, KeyModifiers::empty());
+        assert_eq!(app.selected_column, 1);
+
+        // Right moves column right
+        app.handle_key(KeyCode::Right, KeyModifiers::empty());
+        assert_eq!(app.selected_column, 2);
+
+        // At 0, left wraps to last
+        app.selected_column = 0;
+        app.handle_key(KeyCode::Left, KeyModifiers::empty());
+        assert_eq!(app.selected_column, ProcessSortColumn::COUNT - 1);
+    }
+
+    #[test]
+    fn test_handle_key_in_exploded_sort_toggle() {
+        let mut app = App::new(true);
+        app.exploded_panel = Some(PanelType::Process);
+        app.sort_column = ProcessSortColumn::Cpu;
+        app.selected_column = 2; // CPU column
+        app.sort_descending = true;
+
+        // Enter on same column toggles direction
+        app.handle_key(KeyCode::Enter, KeyModifiers::empty());
+        assert!(!app.sort_descending);
+
+        // Enter again toggles back
+        app.handle_key(KeyCode::Enter, KeyModifiers::empty());
+        assert!(app.sort_descending);
+    }
+
+    #[test]
+    fn test_handle_key_in_exploded_sort_new_column() {
+        let mut app = App::new(true);
+        app.exploded_panel = Some(PanelType::Process);
+        app.sort_column = ProcessSortColumn::Cpu;
+        app.selected_column = 0; // PID column
+        app.sort_descending = true;
+
+        // Enter on different column changes sort
+        app.handle_key(KeyCode::Enter, KeyModifiers::empty());
+        assert_eq!(app.sort_column, ProcessSortColumn::Pid);
+        // PID is not numeric for descending default
+        assert!(!app.sort_descending);
+    }
+
+    #[test]
+    fn test_handle_key_in_exploded_quit() {
+        let mut app = App::new(true);
+        app.exploded_panel = Some(PanelType::Process);
+
+        assert!(app.handle_key(KeyCode::Char('q'), KeyModifiers::empty()));
+    }
+
+    // =========================================================================
+    // visible_panels() TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_visible_panels_default() {
+        let app = App::new(true);
+        let visible = app.visible_panels();
+
+        // In deterministic mode: CPU, Memory, Disk, Network, Process, GPU, Sensors, Connections, Files
+        assert_eq!(visible.len(), 9);
+        assert!(visible.contains(&PanelType::Cpu));
+        assert!(visible.contains(&PanelType::Memory));
+        assert!(visible.contains(&PanelType::Disk));
+        assert!(visible.contains(&PanelType::Network));
+        assert!(visible.contains(&PanelType::Process));
+        assert!(visible.contains(&PanelType::Gpu));
+        assert!(visible.contains(&PanelType::Sensors));
+        assert!(visible.contains(&PanelType::Connections));
+        assert!(visible.contains(&PanelType::Files));
+    }
+
+    #[test]
+    fn test_visible_panels_with_psi() {
+        let mut app = App::new(true);
+        app.panels.psi = true;
+
+        let visible = app.visible_panels();
+        assert_eq!(visible.len(), 10);
+        assert!(visible.contains(&PanelType::Psi));
+    }
+
+    #[test]
+    fn test_visible_panels_order() {
+        let app = App::new(true);
+        let visible = app.visible_panels();
+
+        // Order should be: CPU, Memory, Disk, Network, Process, GPU, Sensors, Connections, Files
+        assert_eq!(visible[0], PanelType::Cpu);
+        assert_eq!(visible[1], PanelType::Memory);
+        assert_eq!(visible[2], PanelType::Disk);
+        assert_eq!(visible[3], PanelType::Network);
+        assert_eq!(visible[4], PanelType::Process);
+        assert_eq!(visible[5], PanelType::Gpu);
+        assert_eq!(visible[6], PanelType::Sensors);
+        assert_eq!(visible[7], PanelType::Connections);
+        assert_eq!(visible[8], PanelType::Files);
+    }
+
+    #[test]
+    fn test_visible_panels_empty() {
+        let mut app = App::new(true);
+        // Turn off all panels
+        app.panels.cpu = false;
+        app.panels.memory = false;
+        app.panels.disk = false;
+        app.panels.network = false;
+        app.panels.process = false;
+        app.panels.gpu = false;
+        app.panels.sensors = false;
+        app.panels.connections = false;
+        app.panels.files = false;
+
+        let visible = app.visible_panels();
+        assert!(visible.is_empty());
+    }
+
+    // =========================================================================
+    // navigate_panel_*() TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_navigate_panel_forward() {
+        let mut app = App::new(true);
+        app.focused_panel = Some(PanelType::Cpu);
+
+        app.navigate_panel_forward();
+        assert_eq!(app.focused_panel, Some(PanelType::Memory));
+
+        app.navigate_panel_forward();
+        assert_eq!(app.focused_panel, Some(PanelType::Disk));
+    }
+
+    #[test]
+    fn test_navigate_panel_forward_wraps() {
+        let mut app = App::new(true);
+        // In deterministic mode, Files is the last visible panel
+        app.focused_panel = Some(PanelType::Files);
+
+        // After Files (last), wraps to CPU
+        app.navigate_panel_forward();
+        assert_eq!(app.focused_panel, Some(PanelType::Cpu));
+    }
+
+    #[test]
+    fn test_navigate_panel_backward() {
+        let mut app = App::new(true);
+        app.focused_panel = Some(PanelType::Memory);
+
+        app.navigate_panel_backward();
+        assert_eq!(app.focused_panel, Some(PanelType::Cpu));
+    }
+
+    #[test]
+    fn test_navigate_panel_backward_wraps() {
+        let mut app = App::new(true);
+        app.focused_panel = Some(PanelType::Cpu);
+
+        // Before CPU (first), wraps to Files (last in deterministic mode)
+        app.navigate_panel_backward();
+        assert_eq!(app.focused_panel, Some(PanelType::Files));
+    }
+
+    #[test]
+    fn test_navigate_panel_empty_is_noop() {
+        let mut app = App::new(true);
+        // Turn off all panels
+        app.panels.cpu = false;
+        app.panels.memory = false;
+        app.panels.disk = false;
+        app.panels.network = false;
+        app.panels.process = false;
+        app.panels.gpu = false;
+        app.panels.sensors = false;
+        app.panels.connections = false;
+        app.panels.files = false;
+        app.focused_panel = None;
+
+        app.navigate_panel_forward();
+        assert!(app.focused_panel.is_none());
+
+        app.navigate_panel_backward();
+        assert!(app.focused_panel.is_none());
+    }
+
+    // =========================================================================
+    // navigate_process() TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_navigate_process_down() {
+        let mut app = App::new(true);
+        // Deterministic mode has 0 processes, so navigation is bounded
+        app.navigate_process(1);
+        assert_eq!(app.process_selected, 0);
+    }
+
+    #[test]
+    fn test_navigate_process_up() {
+        let mut app = App::new(true);
+        app.process_selected = 5;
+        // With 0 processes, navigate is a no-op (early return)
+        app.navigate_process(-1);
+        // process_selected unchanged since count is 0
+        assert_eq!(app.process_selected, 5);
+    }
+
+    // =========================================================================
+    // evaluate_panel_display() TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_evaluate_panel_display_cpu() {
+        let app = App::new(true);
+        let action = app.evaluate_panel_display(PanelType::Cpu);
+        // CPU should always show
+        assert!(matches!(action, crate::widgets::DisplayAction::Show));
+    }
+
+    #[test]
+    fn test_evaluate_panel_display_psi() {
+        let app = App::new(true);
+        let action = app.evaluate_panel_display(PanelType::Psi);
+        // PSI not available in deterministic mode
+        // Should be HideNoData or similar
+        let _ = action; // Just verify it doesn't panic
+    }
+
+    #[test]
+    fn test_data_availability_with_connections() {
+        let mut app = App::new(true);
+        app.snapshot_connections = Some(ConnectionsData {
+            connections: vec![],
+            state_counts: std::collections::HashMap::new(),
+            count_history: vec![],
+        });
+
+        let avail = app.data_availability();
+        assert!(avail.connections_available);
+        assert_eq!(avail.connection_count, 0);
+    }
+
+    #[test]
+    fn test_data_availability_with_treemap() {
+        let mut app = App::new(true);
+        app.snapshot_treemap = Some(TreemapData {
+            root_path: std::path::PathBuf::from("/"),
+            root: None,
+            top_items: vec![],
+            total_size: 0,
+            total_files: 0,
+            total_dirs: 0,
+            depth: 0,
+            last_scan: None,
+            scan_duration: std::time::Duration::from_secs(0),
+        });
+
+        let avail = app.data_availability();
+        // Empty top_items means not ready
+        assert!(!avail.treemap_ready);
+    }
+
+    // =========================================================================
+    // Signal handling ADDITIONAL TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_confirm_signal_with_no_pending() {
+        let mut app = App::new(true);
+        assert!(app.pending_signal.is_none());
+
+        app.confirm_signal();
+        // Should be no-op with no pending signal
+        assert!(app.signal_result.is_none());
+    }
+
+    #[test]
+    fn test_signal_type_name_and_number() {
+        assert_eq!(SignalType::Term.name(), "TERM");
+        assert_eq!(SignalType::Term.number(), 15);
+
+        assert_eq!(SignalType::Kill.name(), "KILL");
+        assert_eq!(SignalType::Kill.number(), 9);
+
+        assert_eq!(SignalType::Hup.name(), "HUP");
+        assert_eq!(SignalType::Hup.number(), 1);
+
+        assert_eq!(SignalType::Int.name(), "INT");
+        assert_eq!(SignalType::Int.number(), 2);
+
+        assert_eq!(SignalType::Stop.name(), "STOP");
+        assert_eq!(SignalType::Stop.number(), 19);
     }
 }

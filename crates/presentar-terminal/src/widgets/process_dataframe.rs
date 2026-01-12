@@ -18,6 +18,9 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::time::Duration;
 
+use super::micro_heat_bar::HeatScheme;
+use super::selection::RowHighlight;
+
 /// Process state for display.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum ProcessDisplayState {
@@ -589,28 +592,14 @@ impl Widget for ProcessDataFrame {
             let abs_idx = self.scroll_offset + rel_idx;
             let is_selected = self.selected_row == Some(abs_idx);
 
-            let row_color = if is_selected {
-                Color::new(0.2, 0.3, 0.4, 1.0)
-            } else {
-                Color::new(0.0, 0.0, 0.0, 0.0)
-            };
+            // === TUFTE SELECTION HIGHLIGHTING (Framework Widget) ===
+            // Strong row background + gutter indicator for selected row
+            let row_bounds = Rect::new(x_start, y, self.bounds.width, 1.0);
+            let row_highlight = RowHighlight::new(row_bounds, is_selected);
+            row_highlight.paint(canvas);
 
-            // Background for selected row
-            if is_selected {
-                let bg_rect = Rect::new(x_start, y, self.bounds.width, 1.0);
-                canvas.fill_rect(bg_rect, row_color);
-            }
-
-            let text_color = if is_selected {
-                Color::WHITE
-            } else {
-                Color::new(0.9, 0.9, 0.9, 1.0)
-            };
-
-            let text_style = TextStyle {
-                color: text_color,
-                ..Default::default()
-            };
+            // Get text style from row highlight (white on blue when selected)
+            let text_style = row_highlight.text_style();
 
             // PID
             let pid_str = format!("{:>width$}", row.pid, width = w.pid);
@@ -632,16 +621,9 @@ impl Widget for ProcessDataFrame {
                 &text_style,
             );
 
-            // CPU% with color gradient
-            let cpu_color = if row.cpu_percent > 80.0 {
-                Color::new(0.9, 0.2, 0.2, 1.0)
-            } else if row.cpu_percent > 50.0 {
-                Color::new(0.9, 0.7, 0.1, 1.0)
-            } else if row.cpu_percent > 10.0 {
-                Color::new(0.2, 0.8, 0.2, 1.0)
-            } else {
-                text_color
-            };
+            // CPU% with thermal heat color encoding (Grammar of Graphics)
+            // High CPU = warmer (red), low CPU = cooler (green)
+            let cpu_color = HeatScheme::Thermal.color_for_percent(row.cpu_percent as f64);
             let cpu_str = format!("{:>5.1}", row.cpu_percent);
             canvas.draw_text(
                 &cpu_str,
@@ -767,7 +749,110 @@ impl Widget for ProcessDataFrame {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::direct::{CellBuffer, DirectTerminalCanvas};
 
+    // ProcessDisplayState tests
+    #[test]
+    fn test_display_state_running() {
+        let (ch, color) = ProcessDisplayState::Running.render();
+        assert_eq!(ch, 'R');
+        assert!(color.g > 0.8, "Running should be green");
+    }
+
+    #[test]
+    fn test_display_state_sleeping() {
+        let (ch, color) = ProcessDisplayState::Sleeping.render();
+        assert_eq!(ch, 'S');
+        assert!(color.r > 0.5 && color.g > 0.5, "Sleeping should be gray");
+    }
+
+    #[test]
+    fn test_display_state_idle() {
+        let (ch, color) = ProcessDisplayState::Idle.render();
+        assert_eq!(ch, 'I');
+        assert!(color.r > 0.4, "Idle should be grayish");
+    }
+
+    #[test]
+    fn test_display_state_zombie() {
+        let (ch, color) = ProcessDisplayState::Zombie.render();
+        assert_eq!(ch, 'Z');
+        assert!(color.r > 0.8 && color.g < 0.3, "Zombie should be red");
+    }
+
+    #[test]
+    fn test_display_state_stopped() {
+        let (ch, color) = ProcessDisplayState::Stopped.render();
+        assert_eq!(ch, 'T');
+        assert!(
+            color.r > 0.8 && color.g > 0.6,
+            "Stopped should be yellow/orange"
+        );
+    }
+
+    #[test]
+    fn test_display_state_unknown() {
+        let (ch, color) = ProcessDisplayState::Unknown.render();
+        assert_eq!(ch, '?');
+        assert!(color.r < 0.5, "Unknown should be dim");
+    }
+
+    #[test]
+    fn test_display_state_default() {
+        assert_eq!(ProcessDisplayState::default(), ProcessDisplayState::Running);
+    }
+
+    // ProcessSortColumn tests
+    #[test]
+    fn test_sort_column_headers() {
+        assert_eq!(ProcessSortColumn::Pid.header(), "PID");
+        assert_eq!(ProcessSortColumn::Name.header(), "COMMAND");
+        assert_eq!(ProcessSortColumn::Cpu.header(), "CPU%");
+        assert_eq!(ProcessSortColumn::Mem.header(), "MEM%");
+        assert_eq!(ProcessSortColumn::Threads.header(), "THR");
+        assert_eq!(ProcessSortColumn::Priority.header(), "PRI");
+        assert_eq!(ProcessSortColumn::User.header(), "USER");
+        assert_eq!(ProcessSortColumn::Time.header(), "TIME+");
+    }
+
+    #[test]
+    fn test_sort_column_default() {
+        assert_eq!(ProcessSortColumn::default(), ProcessSortColumn::Cpu);
+    }
+
+    // ProcessRow tests
+    #[test]
+    fn test_process_row_default() {
+        let row = ProcessRow::default();
+        assert_eq!(row.pid, 0);
+        assert!(row.name.is_empty());
+        assert_eq!(row.cpu_percent, 0.0);
+        assert!(row.cpu_history.is_empty());
+        assert_eq!(row.mem_percent, 0.0);
+        assert_eq!(row.state, ProcessDisplayState::Running);
+        assert_eq!(row.threads, 1);
+        assert_eq!(row.priority, 0);
+        assert!(row.user.is_empty());
+        assert_eq!(row.cpu_time_secs, 0);
+    }
+
+    // ProcessColumnWidths tests
+    #[test]
+    fn test_column_widths_default() {
+        let w = ProcessColumnWidths::default();
+        assert_eq!(w.pid, 7);
+        assert_eq!(w.name, 20);
+        assert_eq!(w.cpu, 6);
+        assert_eq!(w.sparkline, 12);
+        assert_eq!(w.mem, 6);
+        assert_eq!(w.state, 3);
+        assert_eq!(w.threads, 4);
+        assert_eq!(w.priority, 4);
+        assert_eq!(w.user, 10);
+        assert_eq!(w.time, 10);
+    }
+
+    // ProcessDataFrame creation tests
     #[test]
     fn test_process_dataframe_creation() {
         let df = ProcessDataFrame::new()
@@ -779,6 +864,34 @@ mod tests {
         assert_eq!(df.history_len, 30);
     }
 
+    #[test]
+    fn test_process_dataframe_default() {
+        let df = ProcessDataFrame::default();
+        assert_eq!(df.sort_column, ProcessSortColumn::Cpu);
+        assert!(df.sort_desc);
+        assert_eq!(df.history_len, 60);
+    }
+
+    #[test]
+    fn test_with_accent_color() {
+        let color = Color::new(1.0, 0.0, 0.0, 1.0);
+        let df = ProcessDataFrame::new().with_accent_color(color);
+        assert_eq!(df.accent_color.r, 1.0);
+    }
+
+    #[test]
+    fn test_with_column_widths() {
+        let widths = ProcessColumnWidths {
+            pid: 10,
+            name: 30,
+            ..Default::default()
+        };
+        let df = ProcessDataFrame::new().with_column_widths(widths);
+        assert_eq!(df.col_widths.pid, 10);
+        assert_eq!(df.col_widths.name, 30);
+    }
+
+    // Update and sort tests
     #[test]
     fn test_process_row_update() {
         let mut df = ProcessDataFrame::new();
@@ -818,10 +931,359 @@ mod tests {
     }
 
     #[test]
+    fn test_update_clears_dead_processes() {
+        let mut df = ProcessDataFrame::new();
+
+        // First update with two processes
+        df.update_processes(vec![
+            ProcessRow {
+                pid: 1,
+                cpu_percent: 10.0,
+                ..Default::default()
+            },
+            ProcessRow {
+                pid: 2,
+                cpu_percent: 20.0,
+                ..Default::default()
+            },
+        ]);
+        assert_eq!(df.cpu_histories.len(), 2);
+
+        // Second update with only one process
+        df.update_processes(vec![ProcessRow {
+            pid: 1,
+            cpu_percent: 15.0,
+            ..Default::default()
+        }]);
+        assert_eq!(df.cpu_histories.len(), 1);
+        assert!(df.cpu_histories.contains_key(&1));
+        assert!(!df.cpu_histories.contains_key(&2));
+    }
+
+    #[test]
+    fn test_history_length_limit() {
+        let mut df = ProcessDataFrame::new().with_history_len(3);
+
+        for i in 0..5 {
+            df.update_processes(vec![ProcessRow {
+                pid: 1,
+                cpu_percent: i as f32,
+                ..Default::default()
+            }]);
+        }
+
+        let history = df.cpu_histories.get(&1).unwrap();
+        assert_eq!(history.len(), 3);
+        assert_eq!(history, &vec![2.0, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn test_selected_pid() {
+        let mut df = ProcessDataFrame::new();
+        assert!(df.selected_pid().is_none());
+
+        df.update_processes(vec![ProcessRow {
+            pid: 42,
+            cpu_percent: 10.0,
+            ..Default::default()
+        }]);
+        df.selected_row = Some(0);
+        assert_eq!(df.selected_pid(), Some(42));
+    }
+
+    #[test]
+    fn test_selected_pid_out_of_range() {
+        let mut df = ProcessDataFrame::new();
+        df.selected_row = Some(999);
+        assert!(df.selected_pid().is_none());
+    }
+
+    // Sort tests for all columns
+    #[test]
+    fn test_sort_by_pid() {
+        let mut df = ProcessDataFrame::new().with_sort(ProcessSortColumn::Pid, false);
+        df.update_processes(vec![
+            ProcessRow {
+                pid: 100,
+                ..Default::default()
+            },
+            ProcessRow {
+                pid: 1,
+                ..Default::default()
+            },
+            ProcessRow {
+                pid: 50,
+                ..Default::default()
+            },
+        ]);
+        assert_eq!(df.rows[0].pid, 1);
+        assert_eq!(df.rows[1].pid, 50);
+        assert_eq!(df.rows[2].pid, 100);
+    }
+
+    #[test]
+    fn test_sort_by_pid_desc() {
+        let mut df = ProcessDataFrame::new().with_sort(ProcessSortColumn::Pid, true);
+        df.update_processes(vec![
+            ProcessRow {
+                pid: 100,
+                ..Default::default()
+            },
+            ProcessRow {
+                pid: 1,
+                ..Default::default()
+            },
+            ProcessRow {
+                pid: 50,
+                ..Default::default()
+            },
+        ]);
+        assert_eq!(df.rows[0].pid, 100);
+        assert_eq!(df.rows[1].pid, 50);
+        assert_eq!(df.rows[2].pid, 1);
+    }
+
+    #[test]
+    fn test_sort_by_name() {
+        let mut df = ProcessDataFrame::new().with_sort(ProcessSortColumn::Name, false);
+        df.update_processes(vec![
+            ProcessRow {
+                pid: 1,
+                name: "zsh".into(),
+                ..Default::default()
+            },
+            ProcessRow {
+                pid: 2,
+                name: "bash".into(),
+                ..Default::default()
+            },
+            ProcessRow {
+                pid: 3,
+                name: "fish".into(),
+                ..Default::default()
+            },
+        ]);
+        assert_eq!(df.rows[0].name.as_str(), "bash");
+        assert_eq!(df.rows[1].name.as_str(), "fish");
+        assert_eq!(df.rows[2].name.as_str(), "zsh");
+    }
+
+    #[test]
+    fn test_sort_by_mem() {
+        let mut df = ProcessDataFrame::new().with_sort(ProcessSortColumn::Mem, true);
+        df.update_processes(vec![
+            ProcessRow {
+                pid: 1,
+                mem_percent: 10.0,
+                ..Default::default()
+            },
+            ProcessRow {
+                pid: 2,
+                mem_percent: 50.0,
+                ..Default::default()
+            },
+            ProcessRow {
+                pid: 3,
+                mem_percent: 25.0,
+                ..Default::default()
+            },
+        ]);
+        assert_eq!(df.rows[0].pid, 2);
+        assert_eq!(df.rows[1].pid, 3);
+        assert_eq!(df.rows[2].pid, 1);
+    }
+
+    #[test]
+    fn test_sort_by_threads() {
+        let mut df = ProcessDataFrame::new().with_sort(ProcessSortColumn::Threads, true);
+        df.update_processes(vec![
+            ProcessRow {
+                pid: 1,
+                threads: 1,
+                ..Default::default()
+            },
+            ProcessRow {
+                pid: 2,
+                threads: 100,
+                ..Default::default()
+            },
+            ProcessRow {
+                pid: 3,
+                threads: 10,
+                ..Default::default()
+            },
+        ]);
+        assert_eq!(df.rows[0].pid, 2);
+        assert_eq!(df.rows[1].pid, 3);
+        assert_eq!(df.rows[2].pid, 1);
+    }
+
+    #[test]
+    fn test_sort_by_priority() {
+        let mut df = ProcessDataFrame::new().with_sort(ProcessSortColumn::Priority, false);
+        df.update_processes(vec![
+            ProcessRow {
+                pid: 1,
+                priority: 20,
+                ..Default::default()
+            },
+            ProcessRow {
+                pid: 2,
+                priority: -10,
+                ..Default::default()
+            },
+            ProcessRow {
+                pid: 3,
+                priority: 0,
+                ..Default::default()
+            },
+        ]);
+        assert_eq!(df.rows[0].pid, 2);
+        assert_eq!(df.rows[1].pid, 3);
+        assert_eq!(df.rows[2].pid, 1);
+    }
+
+    #[test]
+    fn test_sort_by_user() {
+        let mut df = ProcessDataFrame::new().with_sort(ProcessSortColumn::User, false);
+        df.update_processes(vec![
+            ProcessRow {
+                pid: 1,
+                user: "root".into(),
+                ..Default::default()
+            },
+            ProcessRow {
+                pid: 2,
+                user: "alice".into(),
+                ..Default::default()
+            },
+            ProcessRow {
+                pid: 3,
+                user: "bob".into(),
+                ..Default::default()
+            },
+        ]);
+        assert_eq!(df.rows[0].user.as_str(), "alice");
+        assert_eq!(df.rows[1].user.as_str(), "bob");
+        assert_eq!(df.rows[2].user.as_str(), "root");
+    }
+
+    #[test]
+    fn test_sort_by_time() {
+        let mut df = ProcessDataFrame::new().with_sort(ProcessSortColumn::Time, true);
+        df.update_processes(vec![
+            ProcessRow {
+                pid: 1,
+                cpu_time_secs: 100,
+                ..Default::default()
+            },
+            ProcessRow {
+                pid: 2,
+                cpu_time_secs: 10000,
+                ..Default::default()
+            },
+            ProcessRow {
+                pid: 3,
+                cpu_time_secs: 1000,
+                ..Default::default()
+            },
+        ]);
+        assert_eq!(df.rows[0].pid, 2);
+        assert_eq!(df.rows[1].pid, 3);
+        assert_eq!(df.rows[2].pid, 1);
+    }
+
+    #[test]
+    fn test_cycle_sort() {
+        let mut df = ProcessDataFrame::new();
+        assert_eq!(df.sort_column, ProcessSortColumn::Cpu);
+
+        df.cycle_sort();
+        assert_eq!(df.sort_column, ProcessSortColumn::Mem);
+
+        df.cycle_sort();
+        assert_eq!(df.sort_column, ProcessSortColumn::Pid);
+
+        df.cycle_sort();
+        assert_eq!(df.sort_column, ProcessSortColumn::Name);
+
+        df.cycle_sort();
+        assert_eq!(df.sort_column, ProcessSortColumn::Threads);
+
+        df.cycle_sort();
+        assert_eq!(df.sort_column, ProcessSortColumn::Time);
+
+        df.cycle_sort();
+        assert_eq!(df.sort_column, ProcessSortColumn::Cpu);
+    }
+
+    #[test]
+    fn test_cycle_sort_from_priority() {
+        let mut df = ProcessDataFrame::new().with_sort(ProcessSortColumn::Priority, true);
+        df.cycle_sort();
+        assert_eq!(df.sort_column, ProcessSortColumn::Cpu);
+    }
+
+    #[test]
+    fn test_toggle_sort_direction() {
+        let mut df = ProcessDataFrame::new();
+        assert!(df.sort_desc);
+
+        df.toggle_sort_direction();
+        assert!(!df.sort_desc);
+
+        df.toggle_sort_direction();
+        assert!(df.sort_desc);
+    }
+
+    // Rendering tests
+    #[test]
     fn test_sparkline_rendering() {
         let values = vec![10.0, 20.0, 50.0, 80.0, 100.0];
         let sparkline = ProcessDataFrame::render_sparkline(&values, 5);
         assert_eq!(sparkline.chars().count(), 5);
+    }
+
+    #[test]
+    fn test_sparkline_empty() {
+        let sparkline = ProcessDataFrame::render_sparkline(&[], 5);
+        assert_eq!(sparkline, "─────");
+    }
+
+    #[test]
+    fn test_sparkline_single_value() {
+        // With 1 value and width 3, sample_width = min(3, 1) = 1
+        let sparkline = ProcessDataFrame::render_sparkline(&[50.0], 3);
+        assert_eq!(sparkline.chars().count(), 1);
+    }
+
+    #[test]
+    fn test_microbar_rendering() {
+        let bar = ProcessDataFrame::render_microbar(50.0, 10);
+        assert_eq!(bar.chars().count(), 10);
+        assert!(bar.contains('█'));
+        assert!(bar.contains('░'));
+    }
+
+    #[test]
+    fn test_microbar_zero() {
+        let bar = ProcessDataFrame::render_microbar(0.0, 5);
+        assert_eq!(bar, "░░░░░");
+    }
+
+    #[test]
+    fn test_microbar_full() {
+        let bar = ProcessDataFrame::render_microbar(100.0, 5);
+        assert_eq!(bar, "█████");
+    }
+
+    #[test]
+    fn test_microbar_clamped() {
+        let bar_over = ProcessDataFrame::render_microbar(150.0, 5);
+        assert_eq!(bar_over, "█████");
+
+        let bar_under = ProcessDataFrame::render_microbar(-10.0, 5);
+        assert_eq!(bar_under, "░░░░░");
     }
 
     #[test]
@@ -831,6 +1293,22 @@ mod tests {
         assert_eq!(ProcessDataFrame::format_time(360000), "100h");
     }
 
+    #[test]
+    fn test_format_time_zero() {
+        assert_eq!(ProcessDataFrame::format_time(0), "0:00");
+    }
+
+    #[test]
+    fn test_format_time_exact_hour() {
+        assert_eq!(ProcessDataFrame::format_time(3600), "1:00:00");
+    }
+
+    #[test]
+    fn test_format_time_99_hours() {
+        assert_eq!(ProcessDataFrame::format_time(99 * 3600), "99:00:00");
+    }
+
+    // Scroll tests
     #[test]
     fn test_scroll() {
         let mut df = ProcessDataFrame::new();
@@ -855,5 +1333,365 @@ mod tests {
 
         df.scroll_up();
         assert_eq!(df.selected_row, Some(0));
+    }
+
+    #[test]
+    fn test_scroll_up_at_top() {
+        let mut df = ProcessDataFrame::new();
+        df.update_processes(vec![ProcessRow {
+            pid: 1,
+            ..Default::default()
+        }]);
+        df.selected_row = Some(0);
+
+        df.scroll_up();
+        assert_eq!(df.selected_row, Some(0));
+    }
+
+    #[test]
+    fn test_scroll_down_at_bottom() {
+        let mut df = ProcessDataFrame::new();
+        df.bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
+        df.update_processes(vec![ProcessRow {
+            pid: 1,
+            ..Default::default()
+        }]);
+        df.selected_row = Some(0);
+
+        df.scroll_down();
+        assert_eq!(df.selected_row, Some(0));
+    }
+
+    #[test]
+    fn test_scroll_empty() {
+        let mut df = ProcessDataFrame::new();
+        df.scroll_up();
+        assert!(df.selected_row.is_none());
+
+        df.scroll_down();
+        assert!(df.selected_row.is_none());
+    }
+
+    #[test]
+    fn test_scroll_triggers_offset_adjustment() {
+        let mut df = ProcessDataFrame::new();
+        df.bounds = Rect::new(0.0, 0.0, 100.0, 5.0); // Small height
+        df.show_header = false;
+
+        let rows: Vec<ProcessRow> = (0..20)
+            .map(|i| ProcessRow {
+                pid: i,
+                cpu_percent: (20 - i) as f32,
+                ..Default::default()
+            })
+            .collect();
+        df.update_processes(rows);
+
+        // Scroll down past visible area
+        for _ in 0..10 {
+            df.scroll_down();
+        }
+        assert!(df.scroll_offset > 0);
+    }
+
+    // Visible rows test
+    #[test]
+    fn test_visible_rows_with_header() {
+        let mut df = ProcessDataFrame::new();
+        df.bounds = Rect::new(0.0, 0.0, 100.0, 10.0);
+        df.show_header = true;
+        assert_eq!(df.visible_rows(), 8); // 10 - 2 for header
+    }
+
+    #[test]
+    fn test_visible_rows_without_header() {
+        let mut df = ProcessDataFrame::new();
+        df.bounds = Rect::new(0.0, 0.0, 100.0, 10.0);
+        df.show_header = false;
+        assert_eq!(df.visible_rows(), 10);
+    }
+
+    // Brick trait tests
+    #[test]
+    fn test_brick_name() {
+        let df = ProcessDataFrame::new();
+        assert_eq!(df.brick_name(), "process_dataframe");
+    }
+
+    #[test]
+    fn test_brick_assertions() {
+        let df = ProcessDataFrame::new();
+        let assertions = df.assertions();
+        assert!(!assertions.is_empty());
+    }
+
+    #[test]
+    fn test_brick_budget() {
+        let df = ProcessDataFrame::new();
+        let budget = df.budget();
+        assert!(budget.total_ms > 0);
+    }
+
+    #[test]
+    fn test_brick_verify() {
+        let df = ProcessDataFrame::new();
+        let verification = df.verify();
+        assert!(verification.failed.is_empty());
+    }
+
+    #[test]
+    fn test_to_html() {
+        let df = ProcessDataFrame::new();
+        let html = df.to_html();
+        assert!(html.contains("process-dataframe"));
+        assert!(html.contains("PID"));
+        assert!(html.contains("COMMAND"));
+    }
+
+    #[test]
+    fn test_to_css() {
+        let df = ProcessDataFrame::new();
+        let css = df.to_css();
+        assert!(css.contains("process-dataframe"));
+        assert!(css.contains("sort"));
+    }
+
+    // Widget trait tests
+    #[test]
+    fn test_type_id() {
+        let df = ProcessDataFrame::new();
+        let id = Widget::type_id(&df);
+        assert_eq!(id, TypeId::of::<ProcessDataFrame>());
+    }
+
+    #[test]
+    fn test_measure() {
+        let df = ProcessDataFrame::new();
+        let constraints = Constraints::tight(Size::new(100.0, 50.0));
+        let size = df.measure(constraints);
+        assert!(size.width <= 100.0);
+        assert!(size.height <= 50.0);
+    }
+
+    #[test]
+    fn test_measure_with_rows() {
+        let mut df = ProcessDataFrame::new();
+        df.update_processes(vec![
+            ProcessRow {
+                pid: 1,
+                ..Default::default()
+            },
+            ProcessRow {
+                pid: 2,
+                ..Default::default()
+            },
+        ]);
+        let constraints = Constraints::tight(Size::new(100.0, 50.0));
+        let size = df.measure(constraints);
+        assert!(size.height >= 3.0); // header + 2 rows
+    }
+
+    #[test]
+    fn test_layout() {
+        let mut df = ProcessDataFrame::new();
+        let bounds = Rect::new(10.0, 20.0, 200.0, 100.0);
+        let result = df.layout(bounds);
+        assert_eq!(result.size.width, 200.0);
+        assert_eq!(result.size.height, 100.0);
+        assert_eq!(df.bounds, bounds);
+    }
+
+    #[test]
+    fn test_paint_too_small() {
+        let mut df = ProcessDataFrame::new();
+        df.bounds = Rect::new(0.0, 0.0, 30.0, 2.0); // Too small
+
+        let mut buffer = CellBuffer::new(30, 2);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        df.paint(&mut canvas);
+        // Should not crash, just skip painting
+    }
+
+    #[test]
+    fn test_paint_with_data() {
+        let mut df = ProcessDataFrame::new();
+        df.bounds = Rect::new(0.0, 0.0, 100.0, 20.0);
+        df.update_processes(vec![ProcessRow {
+            pid: 1,
+            name: "test".into(),
+            cpu_percent: 50.0,
+            mem_percent: 25.0,
+            state: ProcessDisplayState::Running,
+            threads: 4,
+            user: "root".into(),
+            cpu_time_secs: 3600,
+            ..Default::default()
+        }]);
+
+        let mut buffer = CellBuffer::new(100, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        df.paint(&mut canvas);
+        // Should render without errors
+    }
+
+    #[test]
+    fn test_paint_with_scroll_indicator() {
+        let mut df = ProcessDataFrame::new();
+        df.bounds = Rect::new(0.0, 0.0, 100.0, 5.0);
+        df.show_header = false;
+
+        let rows: Vec<ProcessRow> = (0..20)
+            .map(|i| ProcessRow {
+                pid: i,
+                cpu_percent: i as f32,
+                ..Default::default()
+            })
+            .collect();
+        df.update_processes(rows);
+
+        let mut buffer = CellBuffer::new(100, 5);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        df.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_paint_with_selection() {
+        let mut df = ProcessDataFrame::new();
+        df.bounds = Rect::new(0.0, 0.0, 100.0, 10.0);
+        df.update_processes(vec![
+            ProcessRow {
+                pid: 1,
+                cpu_percent: 50.0,
+                ..Default::default()
+            },
+            ProcessRow {
+                pid: 2,
+                cpu_percent: 25.0,
+                ..Default::default()
+            },
+        ]);
+        df.selected_row = Some(0);
+
+        let mut buffer = CellBuffer::new(100, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        df.paint(&mut canvas);
+    }
+
+    // Event tests
+    #[test]
+    fn test_event_key_up() {
+        let mut df = ProcessDataFrame::new();
+        df.update_processes(vec![
+            ProcessRow {
+                pid: 1,
+                ..Default::default()
+            },
+            ProcessRow {
+                pid: 2,
+                ..Default::default()
+            },
+        ]);
+        df.selected_row = Some(1);
+
+        let result = df.event(&Event::KeyDown { key: Key::Up });
+        assert!(result.is_none());
+        assert_eq!(df.selected_row, Some(0));
+    }
+
+    #[test]
+    fn test_event_key_k() {
+        let mut df = ProcessDataFrame::new();
+        df.update_processes(vec![
+            ProcessRow {
+                pid: 1,
+                ..Default::default()
+            },
+            ProcessRow {
+                pid: 2,
+                ..Default::default()
+            },
+        ]);
+        df.selected_row = Some(1);
+
+        let result = df.event(&Event::KeyDown { key: Key::K });
+        assert!(result.is_none());
+        assert_eq!(df.selected_row, Some(0));
+    }
+
+    #[test]
+    fn test_event_key_down() {
+        let mut df = ProcessDataFrame::new();
+        df.bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
+        df.update_processes(vec![
+            ProcessRow {
+                pid: 1,
+                ..Default::default()
+            },
+            ProcessRow {
+                pid: 2,
+                ..Default::default()
+            },
+        ]);
+
+        let result = df.event(&Event::KeyDown { key: Key::Down });
+        assert!(result.is_none());
+        assert_eq!(df.selected_row, Some(0));
+    }
+
+    #[test]
+    fn test_event_key_j() {
+        let mut df = ProcessDataFrame::new();
+        df.bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
+        df.update_processes(vec![
+            ProcessRow {
+                pid: 1,
+                ..Default::default()
+            },
+            ProcessRow {
+                pid: 2,
+                ..Default::default()
+            },
+        ]);
+
+        let result = df.event(&Event::KeyDown { key: Key::J });
+        assert!(result.is_none());
+        assert_eq!(df.selected_row, Some(0));
+    }
+
+    #[test]
+    fn test_event_key_s_cycles_sort() {
+        let mut df = ProcessDataFrame::new();
+        assert_eq!(df.sort_column, ProcessSortColumn::Cpu);
+
+        df.event(&Event::KeyDown { key: Key::S });
+        assert_eq!(df.sort_column, ProcessSortColumn::Mem);
+    }
+
+    #[test]
+    fn test_event_key_r_toggles_direction() {
+        let mut df = ProcessDataFrame::new();
+        assert!(df.sort_desc);
+
+        df.event(&Event::KeyDown { key: Key::R });
+        assert!(!df.sort_desc);
+    }
+
+    #[test]
+    fn test_event_unhandled() {
+        let mut df = ProcessDataFrame::new();
+        let result = df.event(&Event::KeyDown { key: Key::Escape });
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_children_empty() {
+        let df = ProcessDataFrame::new();
+        assert!(df.children().is_empty());
+    }
+
+    #[test]
+    fn test_children_mut_empty() {
+        let mut df = ProcessDataFrame::new();
+        assert!(df.children_mut().is_empty());
     }
 }

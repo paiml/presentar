@@ -964,4 +964,197 @@ mod tests {
         assert_eq!(xmin, 0.0);
         assert_eq!(xmax, 10.0);
     }
+
+    #[test]
+    fn test_line_chart_explicit_y_range() {
+        let chart = LineChart::new()
+            .add_series("test", vec![(0.0, 0.0), (1.0, 1.0)], Color::RED)
+            .with_y_axis(Axis {
+                min: Some(-10.0),
+                max: Some(10.0),
+                ..Default::default()
+            });
+        let (ymin, ymax) = chart.y_range();
+        assert_eq!(ymin, -10.0);
+        assert_eq!(ymax, 10.0);
+    }
+
+    #[test]
+    fn test_line_chart_nan_values() {
+        let mut chart = LineChart::new().add_series(
+            "test",
+            vec![(0.0, 0.0), (f64::NAN, f64::NAN), (2.0, 2.0)],
+            Color::RED,
+        );
+        let bounds = Rect::new(0.0, 0.0, 80.0, 24.0);
+        chart.layout(bounds);
+        let mut buffer = CellBuffer::new(80, 24);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        // Should not panic with NaN values
+        chart.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_line_chart_infinite_values() {
+        let mut chart = LineChart::new().add_series(
+            "test",
+            vec![
+                (0.0, 0.0),
+                (f64::INFINITY, f64::NEG_INFINITY),
+                (2.0, 2.0),
+            ],
+            Color::RED,
+        );
+        let bounds = Rect::new(0.0, 0.0, 80.0, 24.0);
+        chart.layout(bounds);
+        let mut buffer = CellBuffer::new(80, 24);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        // Should not panic with infinite values
+        chart.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_line_chart_too_small() {
+        let mut chart = LineChart::new().add_series(
+            "test",
+            vec![(0.0, 0.0), (1.0, 1.0)],
+            Color::RED,
+        );
+        // Too small - should early return from paint
+        let bounds = Rect::new(0.0, 0.0, 5.0, 2.0);
+        chart.layout(bounds);
+        let mut buffer = CellBuffer::new(5, 2);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        chart.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_line_chart_children_mut() {
+        let mut chart = LineChart::default();
+        assert!(chart.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_line_chart_to_html() {
+        let chart = LineChart::default();
+        assert!(chart.to_html().is_empty());
+    }
+
+    #[test]
+    fn test_line_chart_to_css() {
+        let chart = LineChart::default();
+        assert!(chart.to_css().is_empty());
+    }
+
+    #[test]
+    fn test_line_chart_verify_small_width() {
+        let mut chart = LineChart::default();
+        chart.bounds = Rect::new(0.0, 0.0, 5.0, 20.0); // Width < 10
+        let verification = chart.verify();
+        assert!(!verification.is_valid());
+    }
+
+    #[test]
+    fn test_line_chart_budget() {
+        let chart = LineChart::default();
+        let budget = chart.budget();
+        // Just verify budget returns something
+        let _ = budget;
+    }
+
+    #[test]
+    fn test_line_chart_measure() {
+        let chart = LineChart::default();
+        let size = chart.measure(Constraints {
+            min_width: 0.0,
+            min_height: 0.0,
+            max_width: 100.0,
+            max_height: 50.0,
+        });
+        assert_eq!(size.width, 80.0);
+        assert_eq!(size.height, 20.0);
+    }
+
+    #[test]
+    fn test_line_chart_type_id() {
+        let chart = LineChart::default();
+        // Use Widget trait explicitly
+        let tid = Widget::type_id(&chart);
+        assert_eq!(tid, TypeId::of::<LineChart>());
+    }
+
+    #[test]
+    fn test_draw_line_horizontal() {
+        let mut grid = vec![vec![false; 10]; 20];
+        draw_line(&mut grid, 0, 5, 19, 5);
+        // Check some points on the line
+        assert!(grid[0][5]);
+        assert!(grid[10][5]);
+        assert!(grid[19][5]);
+    }
+
+    #[test]
+    fn test_draw_line_vertical() {
+        let mut grid = vec![vec![false; 10]; 20];
+        draw_line(&mut grid, 5, 0, 5, 9);
+        assert!(grid[5][0]);
+        assert!(grid[5][5]);
+        assert!(grid[5][9]);
+    }
+
+    #[test]
+    fn test_draw_line_diagonal() {
+        let mut grid = vec![vec![false; 10]; 10];
+        draw_line(&mut grid, 0, 0, 9, 9);
+        assert!(grid[0][0]);
+        assert!(grid[9][9]);
+    }
+
+    #[test]
+    fn test_draw_line_reverse() {
+        let mut grid = vec![vec![false; 10]; 10];
+        draw_line(&mut grid, 9, 9, 0, 0);
+        assert!(grid[0][0]);
+        assert!(grid[9][9]);
+    }
+
+    #[test]
+    fn test_perpendicular_distance_coincident_points() {
+        // When start and end are the same point
+        let dist = perpendicular_distance((1.0, 1.0), (0.0, 0.0), (0.0, 0.0));
+        assert!((dist - std::f64::consts::SQRT_2).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_series_struct() {
+        let series = Series {
+            name: "test".to_string(),
+            data: vec![(0.0, 0.0), (1.0, 1.0)],
+            color: Color::RED,
+            style: LineStyle::Dashed,
+        };
+        assert_eq!(series.name, "test");
+        assert_eq!(series.data.len(), 2);
+        assert!(matches!(series.style, LineStyle::Dashed));
+    }
+
+    #[test]
+    fn test_line_chart_single_point_x_range() {
+        // When all points have same X value
+        let chart = LineChart::new().add_series("test", vec![(5.0, 0.0), (5.0, 1.0)], Color::RED);
+        let (xmin, xmax) = chart.x_range();
+        // x_max == x_min, so should use default fallback
+        assert_eq!(xmin, 5.0);
+        assert_eq!(xmax, 5.0);
+    }
+
+    #[test]
+    fn test_line_chart_single_point_y_range() {
+        // When all points have same Y value
+        let chart = LineChart::new().add_series("test", vec![(0.0, 5.0), (1.0, 5.0)], Color::RED);
+        let (ymin, ymax) = chart.y_range();
+        // When y_min == y_max, padding is 0, so both are 5.0
+        assert_eq!(ymin, 5.0);
+        assert_eq!(ymax, 5.0);
+    }
 }

@@ -15,6 +15,9 @@ use presentar_core::{
 use std::any::Any;
 use std::time::Duration;
 
+use super::micro_heat_bar::HeatScheme;
+use super::selection::RowHighlight;
+
 /// Sort column for core stats table.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum CoreStatsSortColumn {
@@ -313,6 +316,13 @@ impl CoreStatsDataFrame {
             .collect()
     }
 
+    /// Render stacked breakdown bar using thermal heat color encoding.
+    ///
+    /// Grammar of Graphics: Maps CPU category percentages to:
+    /// - Width proportional to percentage (area encoding)
+    /// - Color intensity from thermal scheme (value encoding)
+    ///
+    /// Tufte principle: Double-encoding maximizes data-ink ratio.
     fn render_stacked_bar(&self, row: &CoreStatsRow, width: usize) -> Vec<(String, Color)> {
         let total = 100.0f32;
         let user_chars = ((row.user_pct / total) * width as f32).round() as usize;
@@ -320,12 +330,37 @@ impl CoreStatsDataFrame {
         let io_chars = ((row.iowait_pct / total) * width as f32).round() as usize;
         let idle_chars = width.saturating_sub(user_chars + sys_chars + io_chars);
 
+        // Thermal heat scheme: color intensity encodes the percentage value
+        // High percentages = warmer colors (red), low = cooler (green)
+        let scheme = HeatScheme::Thermal;
+
+        // Use 8-level gradient blocks for elegant visual encoding
+        let user_block = Self::gradient_block(row.user_pct);
+        let sys_block = Self::gradient_block(row.system_pct);
+        let io_block = Self::gradient_block(row.iowait_pct);
+
         vec![
-            ("█".repeat(user_chars), self.user_color),
-            ("█".repeat(sys_chars), self.system_color),
-            ("█".repeat(io_chars), self.iowait_color),
-            ("░".repeat(idle_chars), Color::new(0.3, 0.3, 0.3, 1.0)),
+            (
+                user_block.to_string().repeat(user_chars),
+                scheme.color_for_percent(row.user_pct as f64),
+            ),
+            (
+                sys_block.to_string().repeat(sys_chars),
+                scheme.color_for_percent(row.system_pct as f64),
+            ),
+            (
+                io_block.to_string().repeat(io_chars),
+                scheme.color_for_percent(row.iowait_pct as f64),
+            ),
+            ("░".repeat(idle_chars), Color::new(0.2, 0.2, 0.25, 1.0)),
         ]
+    }
+
+    /// Map percentage to gradient block character (8-level encoding).
+    fn gradient_block(pct: f32) -> char {
+        const BLOCKS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+        let level = ((pct / 100.0) * 7.0).round() as usize;
+        BLOCKS[level.min(7)]
     }
 
     fn format_freq(mhz: u32) -> String {
@@ -492,16 +527,15 @@ impl Widget for CoreStatsDataFrame {
             let abs_idx = self.scroll_offset + rel_idx;
             let is_selected = self.selected_row == Some(abs_idx);
 
-            let text_color = if is_selected {
-                Color::WHITE
-            } else {
-                Color::new(0.9, 0.9, 0.9, 1.0)
-            };
+            // === TUFTE SELECTION HIGHLIGHTING (Framework Widget) ===
+            // Paint strong row background for selected row (immediately visible)
+            let row_bounds = Rect::new(x_start, y, self.bounds.width, 1.0);
+            let row_highlight = RowHighlight::new(row_bounds, is_selected);
+            row_highlight.paint(canvas);
 
-            let text_style = TextStyle {
-                color: text_color,
-                ..Default::default()
-            };
+            // Get text style from row highlight (white on blue when selected)
+            let text_style = row_highlight.text_style();
+            let text_color = text_style.color;
 
             let mut x = x_start;
 
@@ -659,6 +693,45 @@ impl Widget for CoreStatsDataFrame {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+    fn make_test_cores() -> Vec<CoreStatsRow> {
+        vec![
+            CoreStatsRow {
+                core_id: 0,
+                freq_mhz: 2400,
+                temp_c: Some(45.0),
+                user_pct: 10.0,
+                system_pct: 5.0,
+                iowait_pct: 2.0,
+                idle_pct: 83.0,
+                util_history: vec![10.0, 15.0, 12.0],
+                ..Default::default()
+            },
+            CoreStatsRow {
+                core_id: 1,
+                freq_mhz: 3600,
+                temp_c: Some(65.0),
+                user_pct: 50.0,
+                system_pct: 20.0,
+                iowait_pct: 5.0,
+                idle_pct: 25.0,
+                util_history: vec![60.0, 70.0, 75.0],
+                ..Default::default()
+            },
+            CoreStatsRow {
+                core_id: 2,
+                freq_mhz: 1800,
+                temp_c: Some(85.0),
+                user_pct: 30.0,
+                system_pct: 10.0,
+                iowait_pct: 3.0,
+                idle_pct: 57.0,
+                util_history: vec![35.0, 40.0, 43.0],
+                ..Default::default()
+            },
+        ]
+    }
 
     #[test]
     fn test_core_stats_creation() {
@@ -669,6 +742,13 @@ mod tests {
         assert_eq!(df.sort_column, CoreStatsSortColumn::Total);
         assert!(df.sort_desc);
         assert!(df.show_breakdown_bars);
+    }
+
+    #[test]
+    fn test_core_stats_default() {
+        let df = CoreStatsDataFrame::default();
+        assert_eq!(df.sort_column, CoreStatsSortColumn::CoreId);
+        assert!(!df.sort_desc);
     }
 
     #[test]
@@ -685,42 +765,304 @@ mod tests {
     }
 
     #[test]
+    fn test_core_row_default() {
+        let row = CoreStatsRow::default();
+        assert_eq!(row.core_id, 0);
+        assert_eq!(row.idle_pct, 100.0);
+        assert_eq!(row.total_pct(), 0.0);
+    }
+
+    #[test]
     fn test_format_freq() {
         assert_eq!(CoreStatsDataFrame::format_freq(2400), "2.4G");
         assert_eq!(CoreStatsDataFrame::format_freq(800), "800M");
         assert_eq!(CoreStatsDataFrame::format_freq(3600), "3.6G");
+        assert_eq!(CoreStatsDataFrame::format_freq(999), "999M");
+        assert_eq!(CoreStatsDataFrame::format_freq(1000), "1.0G");
+    }
+
+    #[test]
+    fn test_format_temp() {
+        assert_eq!(CoreStatsDataFrame::format_temp(Some(45.0)), "45°");
+        assert_eq!(CoreStatsDataFrame::format_temp(Some(85.5)), "86°");
+        assert_eq!(CoreStatsDataFrame::format_temp(None), "─");
     }
 
     #[test]
     fn test_sort_by_total() {
         let mut df = CoreStatsDataFrame::new().with_sort(CoreStatsSortColumn::Total, true);
-
-        let cores = vec![
-            CoreStatsRow {
-                core_id: 0,
-                user_pct: 10.0,
-                system_pct: 5.0,
-                ..Default::default()
-            },
-            CoreStatsRow {
-                core_id: 1,
-                user_pct: 50.0,
-                system_pct: 20.0,
-                ..Default::default()
-            },
-            CoreStatsRow {
-                core_id: 2,
-                user_pct: 30.0,
-                system_pct: 10.0,
-                ..Default::default()
-            },
-        ];
-
-        df.update_cores(cores);
+        df.update_cores(make_test_cores());
 
         // Should be sorted descending by total
-        assert_eq!(df.rows[0].core_id, 1); // 70% total
-        assert_eq!(df.rows[1].core_id, 2); // 40% total
-        assert_eq!(df.rows[2].core_id, 0); // 15% total
+        assert_eq!(df.rows[0].core_id, 1); // 75% total
+        assert_eq!(df.rows[1].core_id, 2); // 43% total
+        assert_eq!(df.rows[2].core_id, 0); // 17% total
+    }
+
+    #[test]
+    fn test_sort_by_frequency() {
+        let mut df = CoreStatsDataFrame::new().with_sort(CoreStatsSortColumn::Frequency, true);
+        df.update_cores(make_test_cores());
+
+        assert_eq!(df.rows[0].core_id, 1); // 3600 MHz
+        assert_eq!(df.rows[1].core_id, 0); // 2400 MHz
+        assert_eq!(df.rows[2].core_id, 2); // 1800 MHz
+    }
+
+    #[test]
+    fn test_sort_by_temperature() {
+        let mut df = CoreStatsDataFrame::new().with_sort(CoreStatsSortColumn::Temperature, true);
+        df.update_cores(make_test_cores());
+
+        assert_eq!(df.rows[0].core_id, 2); // 85°C
+        assert_eq!(df.rows[1].core_id, 1); // 65°C
+        assert_eq!(df.rows[2].core_id, 0); // 45°C
+    }
+
+    #[test]
+    fn test_sort_by_user() {
+        let mut df = CoreStatsDataFrame::new().with_sort(CoreStatsSortColumn::User, true);
+        df.update_cores(make_test_cores());
+
+        assert_eq!(df.rows[0].core_id, 1); // 50%
+        assert_eq!(df.rows[1].core_id, 2); // 30%
+        assert_eq!(df.rows[2].core_id, 0); // 10%
+    }
+
+    #[test]
+    fn test_sort_by_system() {
+        let mut df = CoreStatsDataFrame::new().with_sort(CoreStatsSortColumn::System, true);
+        df.update_cores(make_test_cores());
+
+        assert_eq!(df.rows[0].core_id, 1); // 20%
+        assert_eq!(df.rows[1].core_id, 2); // 10%
+        assert_eq!(df.rows[2].core_id, 0); // 5%
+    }
+
+    #[test]
+    fn test_sort_by_idle() {
+        let mut df = CoreStatsDataFrame::new().with_sort(CoreStatsSortColumn::Idle, true);
+        df.update_cores(make_test_cores());
+
+        assert_eq!(df.rows[0].core_id, 0); // 83%
+        assert_eq!(df.rows[1].core_id, 2); // 57%
+        assert_eq!(df.rows[2].core_id, 1); // 25%
+    }
+
+    #[test]
+    fn test_sort_ascending() {
+        let mut df = CoreStatsDataFrame::new().with_sort(CoreStatsSortColumn::Frequency, false);
+        df.update_cores(make_test_cores());
+
+        assert_eq!(df.rows[0].core_id, 2); // 1800 MHz
+        assert_eq!(df.rows[1].core_id, 0); // 2400 MHz
+        assert_eq!(df.rows[2].core_id, 1); // 3600 MHz
+    }
+
+    #[test]
+    fn test_cycle_sort() {
+        let mut df = CoreStatsDataFrame::new();
+        df.update_cores(make_test_cores());
+
+        assert_eq!(df.sort_column, CoreStatsSortColumn::CoreId);
+        df.cycle_sort();
+        assert_eq!(df.sort_column, CoreStatsSortColumn::Total);
+        df.cycle_sort();
+        assert_eq!(df.sort_column, CoreStatsSortColumn::User);
+        df.cycle_sort();
+        assert_eq!(df.sort_column, CoreStatsSortColumn::System);
+        df.cycle_sort();
+        assert_eq!(df.sort_column, CoreStatsSortColumn::Frequency);
+        df.cycle_sort();
+        assert_eq!(df.sort_column, CoreStatsSortColumn::Temperature);
+        df.cycle_sort();
+        assert_eq!(df.sort_column, CoreStatsSortColumn::Idle);
+        df.cycle_sort();
+        assert_eq!(df.sort_column, CoreStatsSortColumn::CoreId);
+    }
+
+    #[test]
+    fn test_toggle_sort_direction() {
+        let mut df = CoreStatsDataFrame::new();
+        assert!(!df.sort_desc);
+        df.toggle_sort_direction();
+        assert!(df.sort_desc);
+        df.toggle_sort_direction();
+        assert!(!df.sort_desc);
+    }
+
+    #[test]
+    fn test_scroll_offset_default() {
+        let df = CoreStatsDataFrame::new();
+        assert_eq!(df.scroll_offset, 0);
+    }
+
+    #[test]
+    fn test_paint() {
+        let mut df = CoreStatsDataFrame::new();
+        df.update_cores(make_test_cores());
+
+        let mut buffer = CellBuffer::new(120, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+
+        df.layout(Rect::new(0.0, 0.0, 120.0, 20.0));
+        df.paint(&mut canvas);
+
+        // Check that header was drawn
+        let cell = buffer.get(0, 0).unwrap();
+        assert!(!cell.symbol.is_empty());
+    }
+
+    #[test]
+    fn test_paint_small_bounds() {
+        let mut df = CoreStatsDataFrame::new();
+        df.update_cores(make_test_cores());
+
+        let mut buffer = CellBuffer::new(10, 2);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+
+        df.layout(Rect::new(0.0, 0.0, 10.0, 2.0));
+        df.paint(&mut canvas); // Should return early due to small bounds
+    }
+
+    #[test]
+    fn test_paint_no_header() {
+        let mut df = CoreStatsDataFrame::new();
+        df.show_header = false;
+        df.update_cores(make_test_cores());
+
+        let mut buffer = CellBuffer::new(120, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+
+        df.layout(Rect::new(0.0, 0.0, 120.0, 20.0));
+        df.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_paint_no_breakdown_bars() {
+        let mut df = CoreStatsDataFrame::new().with_breakdown_bars(false);
+        df.update_cores(make_test_cores());
+
+        let mut buffer = CellBuffer::new(120, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+
+        df.layout(Rect::new(0.0, 0.0, 120.0, 20.0));
+        df.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_paint_selected_row() {
+        let mut df = CoreStatsDataFrame::new();
+        df.update_cores(make_test_cores());
+        df.selected_row = Some(1);
+
+        let mut buffer = CellBuffer::new(120, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+
+        df.layout(Rect::new(0.0, 0.0, 120.0, 20.0));
+        df.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_event_key_down() {
+        let mut df = CoreStatsDataFrame::new();
+        df.update_cores(make_test_cores());
+        df.layout(Rect::new(0.0, 0.0, 100.0, 10.0));
+
+        let event = Event::KeyDown { key: Key::Down };
+        let _ = df.event(&event);
+    }
+
+    #[test]
+    fn test_event_key_up() {
+        let mut df = CoreStatsDataFrame::new();
+        df.update_cores(make_test_cores());
+        df.layout(Rect::new(0.0, 0.0, 100.0, 10.0));
+
+        let event = Event::KeyDown { key: Key::Up };
+        let _ = df.event(&event);
+    }
+
+    #[test]
+    fn test_event_key_s() {
+        let mut df = CoreStatsDataFrame::new();
+        df.update_cores(make_test_cores());
+
+        let event = Event::KeyDown { key: Key::S };
+        let _ = df.event(&event);
+        // Sort should have cycled
+        assert_eq!(df.sort_column, CoreStatsSortColumn::Total);
+    }
+
+    #[test]
+    fn test_event_key_r() {
+        let mut df = CoreStatsDataFrame::new();
+        df.update_cores(make_test_cores());
+
+        let event = Event::KeyDown { key: Key::R };
+        let _ = df.event(&event);
+        // Sort direction should have toggled
+        assert!(df.sort_desc);
+    }
+
+    #[test]
+    fn test_measure() {
+        let df = CoreStatsDataFrame::new();
+        let constraints = Constraints {
+            min_width: 0.0,
+            max_width: 100.0,
+            min_height: 0.0,
+            max_height: 50.0,
+        };
+        let size = df.measure(constraints);
+        assert!(size.width > 0.0);
+        assert!(size.height > 0.0);
+    }
+
+    #[test]
+    fn test_brick_name() {
+        let df = CoreStatsDataFrame::new();
+        assert_eq!(df.brick_name(), "core_stats_dataframe");
+    }
+
+    #[test]
+    fn test_brick_verify() {
+        let mut df = CoreStatsDataFrame::new();
+        df.update_cores(make_test_cores());
+        let v = df.verify();
+        assert!(v.failed.is_empty());
+    }
+
+    #[test]
+    fn test_brick_html() {
+        let df = CoreStatsDataFrame::new();
+        let html = df.to_html();
+        assert!(html.contains("core-stats-dataframe"));
+        assert!(html.contains("CORE"));
+    }
+
+    #[test]
+    fn test_brick_css() {
+        let df = CoreStatsDataFrame::new();
+        let css = df.to_css();
+        assert!(css.contains("core_id"));
+    }
+
+    #[test]
+    fn test_column_headers() {
+        assert_eq!(CoreStatsSortColumn::CoreId.header(), "CORE");
+        assert_eq!(CoreStatsSortColumn::Frequency.header(), "FREQ");
+        assert_eq!(CoreStatsSortColumn::Temperature.header(), "TEMP");
+        assert_eq!(CoreStatsSortColumn::User.header(), "USR%");
+        assert_eq!(CoreStatsSortColumn::System.header(), "SYS%");
+        assert_eq!(CoreStatsSortColumn::Total.header(), "TOT%");
+        assert_eq!(CoreStatsSortColumn::Idle.header(), "IDL%");
+    }
+
+    #[test]
+    fn test_accent_color() {
+        let color = Color::new(0.8, 0.2, 0.5, 1.0);
+        let df = CoreStatsDataFrame::new().with_accent_color(color);
+        assert!((df.accent_color.r - 0.8).abs() < 0.001);
     }
 }

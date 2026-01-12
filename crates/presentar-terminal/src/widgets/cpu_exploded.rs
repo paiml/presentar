@@ -967,12 +967,186 @@ impl Widget for LoadAverageTimeline {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+    // ==================== PerCoreSparklineGrid Tests ====================
 
     #[test]
     fn test_per_core_sparkline_grid_new() {
         let grid = PerCoreSparklineGrid::new(vec![vec![10.0, 20.0, 30.0]; 4]);
         assert_eq!(grid.core_histories.len(), 4);
     }
+
+    #[test]
+    fn test_per_core_sparkline_grid_default() {
+        let grid = PerCoreSparklineGrid::default();
+        assert!(grid.core_histories.is_empty());
+    }
+
+    #[test]
+    fn test_per_core_sparkline_grid_with_columns() {
+        let grid = PerCoreSparklineGrid::new(vec![vec![10.0]; 8]).with_columns(4);
+        assert_eq!(grid.columns, Some(4));
+    }
+
+    #[test]
+    fn test_per_core_sparkline_grid_with_gradient() {
+        let custom_gradient = Gradient::from_hex(&["#ff0000", "#00ff00"]);
+        let grid = PerCoreSparklineGrid::new(vec![vec![10.0]; 4])
+            .with_gradient(custom_gradient);
+        // Gradient is set (can't easily test internal value, but no panic)
+        assert!(!grid.core_histories.is_empty());
+    }
+
+    #[test]
+    fn test_per_core_sparkline_grid_without_labels() {
+        let grid = PerCoreSparklineGrid::new(vec![vec![10.0]; 4]).without_labels();
+        assert!(!grid.show_labels);
+    }
+
+    #[test]
+    fn test_per_core_sparkline_grid_set_histories() {
+        let mut grid = PerCoreSparklineGrid::new(vec![]);
+        assert!(grid.core_histories.is_empty());
+        grid.set_histories(vec![vec![10.0, 20.0], vec![30.0, 40.0]]);
+        assert_eq!(grid.core_histories.len(), 2);
+    }
+
+    #[test]
+    fn test_per_core_sparkline_grid_optimal_grid_empty() {
+        let grid = PerCoreSparklineGrid::new(vec![]);
+        let (cols, rows) = grid.optimal_grid(80, 20);
+        assert_eq!((cols, rows), (0, 0));
+    }
+
+    #[test]
+    fn test_per_core_sparkline_grid_optimal_grid_with_explicit_cols() {
+        let grid = PerCoreSparklineGrid::new(vec![vec![10.0]; 8]).with_columns(2);
+        let (cols, rows) = grid.optimal_grid(80, 20);
+        assert_eq!(cols, 2);
+        assert_eq!(rows, 4);
+    }
+
+    #[test]
+    fn test_per_core_sparkline_grid_paint() {
+        let mut grid = PerCoreSparklineGrid::new(vec![
+            vec![10.0, 20.0, 30.0, 40.0, 50.0],
+            vec![60.0, 70.0, 80.0, 90.0, 100.0],
+            vec![50.0, 50.0, 50.0, 50.0, 50.0],
+            vec![5.0, 10.0, 15.0, 20.0, 25.0],
+        ]);
+        let mut buffer = CellBuffer::new(80, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        grid.layout(Rect::new(0.0, 0.0, 80.0, 20.0));
+        grid.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_per_core_sparkline_grid_paint_empty() {
+        let mut grid = PerCoreSparklineGrid::new(vec![]);
+        let mut buffer = CellBuffer::new(80, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        grid.layout(Rect::new(0.0, 0.0, 80.0, 20.0));
+        grid.paint(&mut canvas); // Should not panic
+    }
+
+    #[test]
+    fn test_per_core_sparkline_grid_paint_without_labels() {
+        let mut grid = PerCoreSparklineGrid::new(vec![vec![50.0; 10]; 4]).without_labels();
+        let mut buffer = CellBuffer::new(80, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        grid.layout(Rect::new(0.0, 0.0, 80.0, 20.0));
+        grid.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_per_core_sparkline_grid_paint_with_empty_history() {
+        let mut grid = PerCoreSparklineGrid::new(vec![vec![], vec![]]);
+        let mut buffer = CellBuffer::new(80, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        grid.layout(Rect::new(0.0, 0.0, 80.0, 20.0));
+        grid.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_per_core_sparkline_grid_measure() {
+        let grid = PerCoreSparklineGrid::new(vec![vec![10.0]; 4]);
+        let size = grid.measure(Constraints {
+            min_width: 0.0,
+            max_width: 80.0,
+            min_height: 0.0,
+            max_height: 40.0,
+        });
+        assert!(size.width > 0.0);
+    }
+
+    #[test]
+    fn test_per_core_sparkline_grid_measure_empty() {
+        let grid = PerCoreSparklineGrid::new(vec![]);
+        let size = grid.measure(Constraints {
+            min_width: 0.0,
+            max_width: 80.0,
+            min_height: 0.0,
+            max_height: 40.0,
+        });
+        assert!((size.width - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_per_core_sparkline_grid_event() {
+        let mut grid = PerCoreSparklineGrid::default();
+        let event = Event::FocusIn;
+        assert!(grid.event(&event).is_none());
+    }
+
+    #[test]
+    fn test_per_core_sparkline_grid_children() {
+        let grid = PerCoreSparklineGrid::default();
+        assert!(grid.children().is_empty());
+    }
+
+    #[test]
+    fn test_per_core_sparkline_grid_children_mut() {
+        let mut grid = PerCoreSparklineGrid::default();
+        assert!(grid.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_per_core_sparkline_grid_to_html_css() {
+        let grid = PerCoreSparklineGrid::default();
+        assert!(grid.to_html().is_empty());
+        assert!(grid.to_css().is_empty());
+    }
+
+    #[test]
+    fn test_per_core_sparkline_grid_budget() {
+        let grid = PerCoreSparklineGrid::default();
+        let budget = grid.budget();
+        assert!(budget.measure_ms > 0);
+    }
+
+    #[test]
+    fn test_per_core_sparkline_grid_type_id() {
+        let grid = PerCoreSparklineGrid::default();
+        let type_id = Widget::type_id(&grid);
+        assert_eq!(type_id, TypeId::of::<PerCoreSparklineGrid>());
+    }
+
+    #[test]
+    fn test_per_core_sparkline_grid_clone() {
+        let grid = PerCoreSparklineGrid::new(vec![vec![10.0, 20.0]]);
+        let cloned = grid.clone();
+        assert_eq!(cloned.core_histories.len(), 1);
+    }
+
+    #[test]
+    fn test_per_core_sparkline_grid_debug() {
+        let grid = PerCoreSparklineGrid::new(vec![vec![10.0]]);
+        let debug = format!("{:?}", grid);
+        assert!(debug.contains("PerCoreSparklineGrid"));
+    }
+
+    // ==================== CpuStateBreakdown Tests ====================
 
     #[test]
     fn test_cpu_state_breakdown_new() {
@@ -982,10 +1156,311 @@ mod tests {
     }
 
     #[test]
+    fn test_cpu_state_breakdown_default() {
+        let breakdown = CpuStateBreakdown::default();
+        assert!(breakdown.core_states.is_empty());
+    }
+
+    #[test]
+    fn test_cpu_state_breakdown_set_states() {
+        let mut breakdown = CpuStateBreakdown::default();
+        breakdown.set_states(vec![
+            CpuCoreState::new(50.0, 10.0, 35.0, 5.0, 0.0, 0.0),
+            CpuCoreState::new(30.0, 20.0, 45.0, 5.0, 0.0, 0.0),
+        ]);
+        assert_eq!(breakdown.core_states.len(), 2);
+    }
+
+    #[test]
+    fn test_cpu_state_breakdown_paint() {
+        let mut breakdown = CpuStateBreakdown::new(vec![
+            CpuCoreState::new(50.0, 10.0, 35.0, 5.0, 0.0, 0.0),
+            CpuCoreState::new(70.0, 15.0, 10.0, 5.0, 0.0, 0.0),
+            CpuCoreState::new(30.0, 5.0, 60.0, 5.0, 0.0, 0.0),
+        ]);
+        let mut buffer = CellBuffer::new(80, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        breakdown.layout(Rect::new(0.0, 0.0, 80.0, 20.0));
+        breakdown.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_cpu_state_breakdown_paint_empty() {
+        let mut breakdown = CpuStateBreakdown::default();
+        let mut buffer = CellBuffer::new(80, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        breakdown.layout(Rect::new(0.0, 0.0, 80.0, 20.0));
+        breakdown.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_cpu_state_breakdown_paint_zero_total() {
+        let mut breakdown = CpuStateBreakdown::new(vec![
+            CpuCoreState::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+        ]);
+        let mut buffer = CellBuffer::new(80, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        breakdown.layout(Rect::new(0.0, 0.0, 80.0, 20.0));
+        breakdown.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_cpu_state_breakdown_paint_with_irq() {
+        let mut breakdown = CpuStateBreakdown::new(vec![
+            CpuCoreState::new(30.0, 10.0, 40.0, 5.0, 10.0, 5.0),
+        ]);
+        let mut buffer = CellBuffer::new(80, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        breakdown.layout(Rect::new(0.0, 0.0, 80.0, 20.0));
+        breakdown.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_cpu_state_breakdown_measure() {
+        let breakdown = CpuStateBreakdown::new(vec![
+            CpuCoreState::default(),
+            CpuCoreState::default(),
+        ]);
+        let size = breakdown.measure(Constraints {
+            min_width: 0.0,
+            max_width: 80.0,
+            min_height: 0.0,
+            max_height: 40.0,
+        });
+        assert!(size.height >= 2.0);
+    }
+
+    #[test]
+    fn test_cpu_state_breakdown_event() {
+        let mut breakdown = CpuStateBreakdown::default();
+        assert!(breakdown.event(&Event::FocusIn).is_none());
+    }
+
+    #[test]
+    fn test_cpu_state_breakdown_children() {
+        let breakdown = CpuStateBreakdown::default();
+        assert!(breakdown.children().is_empty());
+    }
+
+    #[test]
+    fn test_cpu_state_breakdown_to_html_css() {
+        let breakdown = CpuStateBreakdown::default();
+        assert!(breakdown.to_html().is_empty());
+        assert!(breakdown.to_css().is_empty());
+    }
+
+    #[test]
+    fn test_cpu_state_breakdown_type_id() {
+        let breakdown = CpuStateBreakdown::default();
+        assert_eq!(Widget::type_id(&breakdown), TypeId::of::<CpuStateBreakdown>());
+    }
+
+    #[test]
+    fn test_cpu_state_breakdown_clone() {
+        let breakdown = CpuStateBreakdown::new(vec![CpuCoreState::default()]);
+        let cloned = breakdown.clone();
+        assert_eq!(cloned.core_states.len(), 1);
+    }
+
+    #[test]
+    fn test_cpu_state_breakdown_debug() {
+        let breakdown = CpuStateBreakdown::default();
+        let debug = format!("{:?}", breakdown);
+        assert!(debug.contains("CpuStateBreakdown"));
+    }
+
+    // ==================== CpuCoreState Tests ====================
+
+    #[test]
+    fn test_cpu_core_state_fields() {
+        let state = CpuCoreState::new(50.0, 10.0, 35.0, 5.0, 0.0, 0.0);
+        assert!((state.user - 50.0).abs() < 0.001);
+        assert!((state.system - 10.0).abs() < 0.001);
+        assert!((state.idle - 35.0).abs() < 0.001);
+        assert!((state.iowait - 5.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_cpu_core_state_default() {
+        let state = CpuCoreState::default();
+        assert!((state.user - 0.0).abs() < 0.001);
+        assert!((state.system - 0.0).abs() < 0.001);
+        assert!((state.idle - 0.0).abs() < 0.001);
+        assert!((state.iowait - 0.0).abs() < 0.001);
+        assert!((state.irq - 0.0).abs() < 0.001);
+        assert!((state.softirq - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_cpu_core_state_clone() {
+        let state = CpuCoreState::new(50.0, 10.0, 35.0, 5.0, 0.0, 0.0);
+        let cloned = state.clone();
+        assert!((cloned.user - 50.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_cpu_core_state_debug() {
+        let state = CpuCoreState::new(50.0, 10.0, 35.0, 5.0, 0.0, 0.0);
+        let debug = format!("{:?}", state);
+        assert!(debug.contains("CpuCoreState"));
+        assert!(debug.contains("50"));
+    }
+
+    // ==================== TopProcessesMini Tests ====================
+
+    #[test]
     fn test_top_processes_mini_new() {
         let top = TopProcessesMini::new(vec![TopProcess::new(1234, 45.2, "firefox")]);
         assert_eq!(top.processes.len(), 1);
     }
+
+    #[test]
+    fn test_top_processes_mini_default() {
+        let top = TopProcessesMini::default();
+        assert!(top.processes.is_empty());
+    }
+
+    #[test]
+    fn test_top_processes_mini_set_processes() {
+        let mut top = TopProcessesMini::default();
+        top.set_processes(vec![
+            TopProcess::new(1234, 45.2, "firefox"),
+            TopProcess::new(5678, 30.0, "chrome"),
+        ]);
+        assert_eq!(top.processes.len(), 2);
+    }
+
+    #[test]
+    fn test_top_processes_mini_paint() {
+        let mut top = TopProcessesMini::new(vec![
+            TopProcess::new(1234, 45.2, "firefox"),
+            TopProcess::new(5678, 30.0, "chrome"),
+            TopProcess::new(9012, 15.5, "vscode"),
+        ]);
+        let mut buffer = CellBuffer::new(40, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        top.layout(Rect::new(0.0, 0.0, 40.0, 10.0));
+        top.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_top_processes_mini_paint_empty() {
+        let mut top = TopProcessesMini::default();
+        let mut buffer = CellBuffer::new(40, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        top.layout(Rect::new(0.0, 0.0, 40.0, 10.0));
+        top.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_top_processes_mini_paint_long_name_truncation() {
+        let mut top = TopProcessesMini::new(vec![
+            TopProcess::new(1234, 45.2, "this_is_a_very_long_process_name_that_should_be_truncated"),
+        ]);
+        let mut buffer = CellBuffer::new(30, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        top.layout(Rect::new(0.0, 0.0, 30.0, 10.0));
+        top.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_top_processes_mini_paint_more_than_five() {
+        let mut top = TopProcessesMini::new(vec![
+            TopProcess::new(1, 90.0, "proc1"),
+            TopProcess::new(2, 80.0, "proc2"),
+            TopProcess::new(3, 70.0, "proc3"),
+            TopProcess::new(4, 60.0, "proc4"),
+            TopProcess::new(5, 50.0, "proc5"),
+            TopProcess::new(6, 40.0, "proc6"),
+            TopProcess::new(7, 30.0, "proc7"),
+        ]);
+        let mut buffer = CellBuffer::new(40, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        top.layout(Rect::new(0.0, 0.0, 40.0, 10.0));
+        top.paint(&mut canvas); // Should only show first 5
+    }
+
+    #[test]
+    fn test_top_processes_mini_measure() {
+        let top = TopProcessesMini::new(vec![
+            TopProcess::new(1234, 45.2, "firefox"),
+            TopProcess::new(5678, 30.0, "chrome"),
+        ]);
+        let size = top.measure(Constraints {
+            min_width: 0.0,
+            max_width: 40.0,
+            min_height: 0.0,
+            max_height: 20.0,
+        });
+        assert_eq!(size.height, 3.0); // header + 2 processes
+    }
+
+    #[test]
+    fn test_top_processes_mini_event() {
+        let mut top = TopProcessesMini::default();
+        assert!(top.event(&Event::FocusIn).is_none());
+    }
+
+    #[test]
+    fn test_top_processes_mini_children() {
+        let top = TopProcessesMini::default();
+        assert!(top.children().is_empty());
+    }
+
+    #[test]
+    fn test_top_processes_mini_to_html_css() {
+        let top = TopProcessesMini::default();
+        assert!(top.to_html().is_empty());
+        assert!(top.to_css().is_empty());
+    }
+
+    #[test]
+    fn test_top_processes_mini_type_id() {
+        let top = TopProcessesMini::default();
+        assert_eq!(Widget::type_id(&top), TypeId::of::<TopProcessesMini>());
+    }
+
+    #[test]
+    fn test_top_processes_mini_clone() {
+        let top = TopProcessesMini::new(vec![TopProcess::new(1234, 45.2, "firefox")]);
+        let cloned = top.clone();
+        assert_eq!(cloned.processes.len(), 1);
+    }
+
+    #[test]
+    fn test_top_processes_mini_debug() {
+        let top = TopProcessesMini::default();
+        let debug = format!("{:?}", top);
+        assert!(debug.contains("TopProcessesMini"));
+    }
+
+    // ==================== TopProcess Tests ====================
+
+    #[test]
+    fn test_top_process_creation() {
+        let proc = TopProcess::new(1234, 45.2, "firefox");
+        assert_eq!(proc.pid, 1234);
+        assert!((proc.cpu_percent - 45.2).abs() < 0.001);
+        assert_eq!(proc.name, "firefox");
+    }
+
+    #[test]
+    fn test_top_process_clone() {
+        let proc = TopProcess::new(1234, 45.2, "firefox");
+        let cloned = proc.clone();
+        assert_eq!(cloned.pid, 1234);
+        assert_eq!(cloned.name, "firefox");
+    }
+
+    #[test]
+    fn test_top_process_debug() {
+        let proc = TopProcess::new(1234, 45.2, "firefox");
+        let debug = format!("{:?}", proc);
+        assert!(debug.contains("TopProcess"));
+        assert!(debug.contains("1234"));
+    }
+
+    // ==================== FreqTempHeatmap Tests ====================
 
     #[test]
     fn test_freq_temp_heatmap_new() {
@@ -994,12 +1469,295 @@ mod tests {
     }
 
     #[test]
+    fn test_freq_temp_heatmap_default() {
+        let heatmap = FreqTempHeatmap::default();
+        assert!(heatmap.frequencies.is_empty());
+    }
+
+    #[test]
+    fn test_freq_temp_heatmap_with_temperatures() {
+        let heatmap = FreqTempHeatmap::new(vec![3600, 3200], vec![4000, 4000])
+            .with_temperatures(vec![65.0, 70.0]);
+        assert_eq!(heatmap.temperatures.as_ref().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_freq_temp_heatmap_set_data() {
+        let mut heatmap = FreqTempHeatmap::default();
+        heatmap.set_data(
+            vec![3600, 3200],
+            vec![4000, 4000],
+            Some(vec![65.0, 70.0]),
+        );
+        assert_eq!(heatmap.frequencies.len(), 2);
+        assert!(heatmap.temperatures.is_some());
+    }
+
+    #[test]
+    fn test_freq_temp_heatmap_set_data_no_temps() {
+        let mut heatmap = FreqTempHeatmap::default();
+        heatmap.set_data(vec![3600], vec![4000], None);
+        assert!(heatmap.temperatures.is_none());
+    }
+
+    #[test]
+    fn test_freq_temp_heatmap_paint() {
+        let mut heatmap =
+            FreqTempHeatmap::new(vec![3600, 3200, 3000, 2800], vec![4000, 4000, 4000, 4000])
+                .with_temperatures(vec![65.0, 70.0, 75.0, 80.0]);
+        let mut buffer = CellBuffer::new(60, 15);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        heatmap.layout(Rect::new(0.0, 0.0, 60.0, 15.0));
+        heatmap.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_freq_temp_heatmap_paint_empty() {
+        let mut heatmap = FreqTempHeatmap::default();
+        let mut buffer = CellBuffer::new(60, 15);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        heatmap.layout(Rect::new(0.0, 0.0, 60.0, 15.0));
+        heatmap.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_freq_temp_heatmap_paint_no_temps() {
+        let mut heatmap = FreqTempHeatmap::new(vec![3600, 3200], vec![4000, 4000]);
+        let mut buffer = CellBuffer::new(60, 15);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        heatmap.layout(Rect::new(0.0, 0.0, 60.0, 15.0));
+        heatmap.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_freq_temp_heatmap_paint_zero_max_freq() {
+        let mut heatmap = FreqTempHeatmap::new(vec![3600], vec![0]);
+        let mut buffer = CellBuffer::new(60, 15);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        heatmap.layout(Rect::new(0.0, 0.0, 60.0, 15.0));
+        heatmap.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_freq_temp_heatmap_paint_extreme_temps() {
+        let mut heatmap = FreqTempHeatmap::new(vec![3600], vec![4000])
+            .with_temperatures(vec![20.0]); // Below normal range
+        let mut buffer = CellBuffer::new(60, 15);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        heatmap.layout(Rect::new(0.0, 0.0, 60.0, 15.0));
+        heatmap.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_freq_temp_heatmap_measure_no_temps() {
+        let heatmap = FreqTempHeatmap::new(vec![3600], vec![4000]);
+        let size = heatmap.measure(Constraints {
+            min_width: 0.0,
+            max_width: 60.0,
+            min_height: 0.0,
+            max_height: 20.0,
+        });
+        assert_eq!(size.height, 2.0);
+    }
+
+    #[test]
+    fn test_freq_temp_heatmap_measure_with_temps() {
+        let heatmap = FreqTempHeatmap::new(vec![3600], vec![4000])
+            .with_temperatures(vec![65.0]);
+        let size = heatmap.measure(Constraints {
+            min_width: 0.0,
+            max_width: 60.0,
+            min_height: 0.0,
+            max_height: 20.0,
+        });
+        assert_eq!(size.height, 4.0);
+    }
+
+    #[test]
+    fn test_freq_temp_heatmap_event() {
+        let mut heatmap = FreqTempHeatmap::default();
+        assert!(heatmap.event(&Event::FocusIn).is_none());
+    }
+
+    #[test]
+    fn test_freq_temp_heatmap_children() {
+        let heatmap = FreqTempHeatmap::default();
+        assert!(heatmap.children().is_empty());
+    }
+
+    #[test]
+    fn test_freq_temp_heatmap_to_html_css() {
+        let heatmap = FreqTempHeatmap::default();
+        assert!(heatmap.to_html().is_empty());
+        assert!(heatmap.to_css().is_empty());
+    }
+
+    #[test]
+    fn test_freq_temp_heatmap_type_id() {
+        let heatmap = FreqTempHeatmap::default();
+        assert_eq!(Widget::type_id(&heatmap), TypeId::of::<FreqTempHeatmap>());
+    }
+
+    #[test]
+    fn test_freq_temp_heatmap_clone() {
+        let heatmap = FreqTempHeatmap::new(vec![3600], vec![4000]);
+        let cloned = heatmap.clone();
+        assert_eq!(cloned.frequencies.len(), 1);
+    }
+
+    #[test]
+    fn test_freq_temp_heatmap_debug() {
+        let heatmap = FreqTempHeatmap::default();
+        let debug = format!("{:?}", heatmap);
+        assert!(debug.contains("FreqTempHeatmap"));
+    }
+
+    // ==================== LoadAverageTimeline Tests ====================
+
+    #[test]
+    fn test_load_average_timeline_new() {
+        let timeline = LoadAverageTimeline::new(8);
+        assert_eq!(timeline.core_count, 8);
+        assert!(timeline.load_1m.is_empty());
+    }
+
+    #[test]
+    fn test_load_average_timeline_new_zero_cores() {
+        let timeline = LoadAverageTimeline::new(0);
+        assert_eq!(timeline.core_count, 1); // Clamped to 1
+    }
+
+    #[test]
+    fn test_load_average_timeline_default() {
+        let timeline = LoadAverageTimeline::default();
+        assert_eq!(timeline.core_count, 1);
+    }
+
+    #[test]
     fn test_load_average_timeline_push() {
         let mut timeline = LoadAverageTimeline::new(8);
         timeline.push(1.5, 1.2, 1.0);
         timeline.push(2.0, 1.5, 1.1);
         assert_eq!(timeline.load_1m.len(), 2);
+        assert_eq!(timeline.load_5m.len(), 2);
+        assert_eq!(timeline.load_15m.len(), 2);
     }
+
+    #[test]
+    fn test_load_average_timeline_push_exceeds_max_history() {
+        let mut timeline = LoadAverageTimeline::new(8);
+        // Push 65 values (exceeds MAX_HISTORY of 60)
+        for i in 0..65 {
+            timeline.push(i as f64, i as f64, i as f64);
+        }
+        assert_eq!(timeline.load_1m.len(), 60);
+        assert_eq!(timeline.load_5m.len(), 60);
+        assert_eq!(timeline.load_15m.len(), 60);
+        // First values should be trimmed
+        assert!((timeline.load_1m[0] - 5.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_load_average_timeline_set_core_count() {
+        let mut timeline = LoadAverageTimeline::new(8);
+        timeline.set_core_count(16);
+        assert_eq!(timeline.core_count, 16);
+    }
+
+    #[test]
+    fn test_load_average_timeline_set_core_count_zero() {
+        let mut timeline = LoadAverageTimeline::new(8);
+        timeline.set_core_count(0);
+        assert_eq!(timeline.core_count, 1); // Clamped to 1
+    }
+
+    #[test]
+    fn test_load_average_timeline_paint() {
+        let mut timeline = LoadAverageTimeline::new(8);
+        for i in 0..30 {
+            timeline.push(1.0 + i as f64 * 0.1, 1.0, 0.8);
+        }
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        timeline.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+        timeline.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_load_average_timeline_paint_empty() {
+        let mut timeline = LoadAverageTimeline::new(8);
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        timeline.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+        timeline.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_load_average_timeline_paint_high_load() {
+        let mut timeline = LoadAverageTimeline::new(4);
+        // Push high load values (above core count)
+        for i in 0..30 {
+            timeline.push(8.0 + i as f64, 7.0, 6.0);
+        }
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        timeline.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+        timeline.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_load_average_timeline_measure() {
+        let timeline = LoadAverageTimeline::new(8);
+        let size = timeline.measure(Constraints {
+            min_width: 0.0,
+            max_width: 60.0,
+            min_height: 0.0,
+            max_height: 20.0,
+        });
+        assert_eq!(size.height, 3.0);
+    }
+
+    #[test]
+    fn test_load_average_timeline_event() {
+        let mut timeline = LoadAverageTimeline::default();
+        assert!(timeline.event(&Event::FocusIn).is_none());
+    }
+
+    #[test]
+    fn test_load_average_timeline_children() {
+        let timeline = LoadAverageTimeline::default();
+        assert!(timeline.children().is_empty());
+    }
+
+    #[test]
+    fn test_load_average_timeline_to_html_css() {
+        let timeline = LoadAverageTimeline::default();
+        assert!(timeline.to_html().is_empty());
+        assert!(timeline.to_css().is_empty());
+    }
+
+    #[test]
+    fn test_load_average_timeline_type_id() {
+        let timeline = LoadAverageTimeline::default();
+        assert_eq!(Widget::type_id(&timeline), TypeId::of::<LoadAverageTimeline>());
+    }
+
+    #[test]
+    fn test_load_average_timeline_clone() {
+        let mut timeline = LoadAverageTimeline::new(8);
+        timeline.push(1.0, 2.0, 3.0);
+        let cloned = timeline.clone();
+        assert_eq!(cloned.load_1m.len(), 1);
+    }
+
+    #[test]
+    fn test_load_average_timeline_debug() {
+        let timeline = LoadAverageTimeline::default();
+        let debug = format!("{:?}", timeline);
+        assert!(debug.contains("LoadAverageTimeline"));
+    }
+
+    // ==================== General Brick/Widget Tests ====================
 
     #[test]
     fn test_all_widgets_verify() {
@@ -1008,5 +1766,56 @@ mod tests {
         assert!(TopProcessesMini::default().verify().is_valid());
         assert!(FreqTempHeatmap::default().verify().is_valid());
         assert!(LoadAverageTimeline::default().verify().is_valid());
+    }
+
+    #[test]
+    fn test_all_widgets_brick_names() {
+        assert_eq!(
+            PerCoreSparklineGrid::default().brick_name(),
+            "per_core_sparkline_grid"
+        );
+        assert_eq!(
+            CpuStateBreakdown::default().brick_name(),
+            "cpu_state_breakdown"
+        );
+        assert_eq!(
+            TopProcessesMini::default().brick_name(),
+            "top_processes_mini"
+        );
+        assert_eq!(FreqTempHeatmap::default().brick_name(), "freq_temp_heatmap");
+        assert_eq!(
+            LoadAverageTimeline::default().brick_name(),
+            "load_average_timeline"
+        );
+    }
+
+    #[test]
+    fn test_all_widgets_assertions() {
+        assert!(!PerCoreSparklineGrid::default().assertions().is_empty());
+        assert!(!CpuStateBreakdown::default().assertions().is_empty());
+        assert!(!TopProcessesMini::default().assertions().is_empty());
+        assert!(!FreqTempHeatmap::default().assertions().is_empty());
+        assert!(!LoadAverageTimeline::default().assertions().is_empty());
+    }
+
+    #[test]
+    fn test_all_widgets_budget() {
+        assert!(PerCoreSparklineGrid::default().budget().measure_ms > 0);
+        assert!(CpuStateBreakdown::default().budget().measure_ms > 0);
+        assert!(TopProcessesMini::default().budget().measure_ms > 0);
+        assert!(FreqTempHeatmap::default().budget().measure_ms > 0);
+        assert!(LoadAverageTimeline::default().budget().measure_ms > 0);
+    }
+
+    // ==================== state_colors() Test ====================
+
+    #[test]
+    fn test_state_colors() {
+        let colors = state_colors();
+        assert_eq!(colors.len(), 6);
+        // Verify USER color is blue-ish
+        assert!(colors[0].r > 0.4 && colors[0].r < 0.6);
+        // Verify IDLE color is gray-ish
+        assert!(colors[5].r < 0.4);
     }
 }

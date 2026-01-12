@@ -493,7 +493,7 @@ pub struct FrameAssertion<'a> {
     region: Option<(u16, u16, u16, u16)>,
 }
 
-impl<'a> FrameAssertion<'a> {
+impl FrameAssertion<'_> {
     /// Set tolerance for differences (0 = exact match).
     pub fn with_tolerance(mut self, tolerance: usize) -> Self {
         self.tolerance = tolerance;
