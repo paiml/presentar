@@ -2,13 +2,14 @@
 
 **Status**: **IN PROGRESS** - 100% analyzer parity (13/13), **19/19 defects resolved**, **95% COVERAGE TARGET**
 **Author**: Claude Code
-**Date**: 2026-01-12
-**Version**: 9.0.0
+**Date**: 2026-01-13
+**Version**: 9.1.0
 **Score**: **A+ (95.1%)** - Rust Project Score 127.5/134, Popper 73.5/100 (Grade B, +16.5 from baseline)
-**Tests**: 4506 tests (257 falsification), 0 failures, clippy clean, 87.6% → **95% target**
-**UI Modules**: 15 files → **30+ target** (trueno-viz parity: 106 source files)
+**Tests**: 4654 tests (277 falsification + 20 pixel), 0 failures, clippy clean, 87.67% coverage
+**UI Modules**: 19 files (6 ui/, 9 ui/panels/, 4 ui/core/) with 696 TDD tests
 **Coverage Target**: **95%** via file explosion strategy + pixel testing
 **trueno-viz Parity**: Layered architecture, ~200-700 LOC per file, falsification tests
+**pmat Quality**: 121 violations (50 complexity, 6 dead code, 20 SATD, 43 entropy)
 **Merged From**: `compute-block-tui-cbtop.md`, `ptop-panel-falsification-checklist.md`
 **Statistical Rigor**: Sample size n=1000, 95% CI, power>0.95, Cohen's d for comparisons
 
@@ -1912,6 +1913,7 @@ refresh:
 | **8.1.0** | 2026-01-12 | Claude Code | **QA HARDENING**: Additional quality improvements. |
 | **8.2.0** | 2026-01-12 | Claude Code | **MODULAR UI ARCHITECTURE**: Exploded ui.rs (7900 lines) into 15 TDD-tested modules with 601 tests. Structure: `ui/` (colors.rs, helpers.rs, overlays.rs, core.rs) + `ui/panels/` (battery.rs, connections.rs, cpu.rs, disk.rs, memory.rs, network.rs, process.rs, psi.rs, sensors.rs). Total test count: 4506 (up from 2466). Coverage: 87.6%. Each panel module contains: title builders, color functions, state enums, formatting utilities, and comprehensive unit tests. |
 | **9.0.0** | 2026-01-12 | Claude Code | **95% COVERAGE TARGET & TRUENO-VIZ PARITY**: Added Part X (Section 28) with comprehensive file explosion strategy. Goals: 95% coverage (up from 87.6%), 100+ source files (trueno-viz parity), max 700 LOC per file. Targets: ui/core.rs (7872→12 modules), ptop/app.rs (3293→6 modules), compute_block.rs (2215→4 modules). Added pixel testing framework (F-PIXEL-001 to F-PIXEL-020), screenshot comparison protocol, implementation checklist with 6 phases. |
+| **9.1.0** | 2026-01-13 | Claude Code | **PHASE 1 IMPLEMENTATION**: Created core/ module directory with 4 modules (constants.rs: 20 tests, format.rs: 50 tests, border.rs: 25 tests, mod.rs). Added pixel_comparison.rs with 20 F-PIXEL tests. Captured deterministic baseline at `__pixel_baselines__/ptop_120x40_deterministic.txt`. Tests: 4654 total. Coverage: 87.67%. pmat quality-gate: 121 violations (50 complexity, 6 dead code, 20 SATD, 43 entropy). Top complexity hotspots: draw_memory_panel (32), draw_cpu_panel (31), draw_gpu_panel (27) - targeted for Phase 2 refactoring. |
 
 ---
 
