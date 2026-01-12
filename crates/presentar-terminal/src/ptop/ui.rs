@@ -107,6 +107,41 @@ const NET_TX_COLOR: Color = Color {
     a: 1.0,
 }; // Red (upload)
 
+// =============================================================================
+// PATTERN 5 HYBRID: Focus/Navigation Colors (WCAG AAA Compliant)
+// =============================================================================
+/// Bright cyan for focus indicators (cursor, selected row, focused border)
+const FOCUS_ACCENT_COLOR: Color = Color {
+    r: 0.0,
+    g: 1.0,
+    b: 1.0,
+    a: 1.0,
+}; // #00FFFF - High visibility cyan
+
+/// Row selection background (blue tint, visible but not overwhelming)
+const ROW_SELECT_BG: Color = Color {
+    r: 0.15,
+    g: 0.25,
+    b: 0.4,
+    a: 1.0,
+}; // Dark blue background
+
+/// Column header selection background
+const COL_SELECT_BG: Color = Color {
+    r: 0.2,
+    g: 0.35,
+    b: 0.55,
+    a: 1.0,
+}; // Brighter blue for headers
+
+/// Status bar background
+const STATUS_BAR_BG: Color = Color {
+    r: 0.1,
+    g: 0.1,
+    b: 0.15,
+    a: 1.0,
+}; // Dark gray
+
 /// btop-style color gradient for percentage values (0-100)
 /// Uses smooth transition: cyan -> green -> yellow -> orange -> red
 fn percent_color(percent: f64) -> Color {
@@ -211,33 +246,34 @@ fn format_uptime(secs: u64) -> String {
     }
 }
 
-/// Create a border with STRONG focus indication (SPEC-024 v5.0 Feature D)
-/// Focus indicators:
-/// 1. Double-line border (vs rounded for unfocused)
-/// 2. Significantly brighter color (1.5x, not 1.2x)
+/// Create a border with PATTERN 5 HYBRID focus indication
+/// Focus indicators (WCAG AAA compliant):
+/// 1. Double-line border (vs rounded for unfocused) - works in monochrome
+/// 2. Bright cyan accent color for focused - high visibility
 /// 3. Focus indicator arrow `►` prepended to title
-/// 4. Bold title text for focused panels
+/// 4. Unfocused panels are dimmed for contrast
 fn create_panel_border(title: &str, color: Color, is_focused: bool) -> Border {
     let style = if is_focused {
-        BorderStyle::Double // Double border for focused panel
+        BorderStyle::Double // Double border for focused panel (Pattern 1)
     } else {
         BorderStyle::Rounded // Normal rounded border
     };
 
-    // Make focused panels MUCH brighter (1.5x instead of 1.2x)
+    // PATTERN 5: Use accent color for focused, dim for unfocused
     let border_color = if is_focused {
+        // Blend panel color with cyan accent for focused state
         Color {
-            r: (color.r * 1.5).min(1.0),
-            g: (color.g * 1.5).min(1.0),
-            b: (color.b * 1.5).min(1.0),
+            r: (color.r * 0.5 + FOCUS_ACCENT_COLOR.r * 0.5).min(1.0),
+            g: (color.g * 0.5 + FOCUS_ACCENT_COLOR.g * 0.5).min(1.0),
+            b: (color.b * 0.5 + FOCUS_ACCENT_COLOR.b * 0.5).min(1.0),
             a: color.a,
         }
     } else {
-        // Dim unfocused panels slightly for contrast
+        // Dim unfocused panels significantly for contrast
         Color {
-            r: color.r * 0.7,
-            g: color.g * 0.7,
-            b: color.b * 0.7,
+            r: color.r * 0.5,
+            g: color.g * 0.5,
+            b: color.b * 0.5,
             a: color.a,
         }
     };
@@ -534,33 +570,36 @@ fn draw_status_bar(app: &App, canvas: &mut DirectTerminalCanvas<'_>, w: f32, h: 
     let y = h - 1.0;
     let bar_width = w as usize;
 
-    // Key hint colors
-    let key_style = TextStyle {
-        color: Color::new(0.3, 0.3, 0.3, 1.0), // Dim for background
+    // PATTERN 5 HYBRID: Status bar colors
+    let bg_style = TextStyle {
+        color: Color::new(0.25, 0.25, 0.25, 1.0), // Dim line background
         ..Default::default()
     };
     let bracket_style = TextStyle {
-        color: Color::new(0.6, 0.6, 0.6, 1.0), // Brackets
+        color: Color::new(0.5, 0.5, 0.5, 1.0), // Brackets
+        ..Default::default()
+    };
+    let key_style = TextStyle {
+        color: FOCUS_ACCENT_COLOR, // Bright cyan for keys
         ..Default::default()
     };
     let action_style = TextStyle {
-        color: Color::new(0.8, 0.8, 0.8, 1.0), // Action text
+        color: Color::new(0.7, 0.7, 0.7, 1.0), // Action text
         ..Default::default()
     };
-    let focus_style = TextStyle {
-        color: Color::new(0.4, 0.8, 1.0, 1.0), // Cyan for focused panel
+    let focus_indicator_style = TextStyle {
+        color: FOCUS_ACCENT_COLOR, // Bright cyan for focus indicator
         ..Default::default()
     };
 
     // Draw background bar
-    let bg = "─".repeat(bar_width);
-    canvas.draw_text(&bg, Point::new(0.0, y), &key_style);
+    canvas.fill_rect(Rect::new(0.0, y, w, 1.0), STATUS_BAR_BG);
 
-    // Navigation hints on left
+    // Navigation hints - different for exploded vs normal view
     let hints = if app.exploded_panel.is_some() {
-        " [Esc] Collapse  [?] Help  [q] Quit "
+        " [Esc]Exit  [↑↓]Row  [←→]Col  [?]Help  [q]Quit "
     } else {
-        " [Tab] Navigate  [Enter] Explode  [/] Filter  [?] Help  [q] Quit "
+        " [Tab]Panel  [Enter]Explode  [↑↓]Row  [/]Filter  [?]Help  [q]Quit "
     };
 
     // Draw hints with bracket highlighting
@@ -574,7 +613,7 @@ fn draw_status_bar(app: &App, canvas: &mut DirectTerminalCanvas<'_>, w: f32, h: 
             in_bracket = false;
             &bracket_style
         } else if in_bracket {
-            &focus_style // Key inside brackets
+            &key_style // Key inside brackets - bright cyan
         } else {
             &action_style
         };
@@ -582,7 +621,7 @@ fn draw_status_bar(app: &App, canvas: &mut DirectTerminalCanvas<'_>, w: f32, h: 
         x += 1.0;
     }
 
-    // Focused panel indicator on right
+    // PATTERN 5: Prominent focused panel indicator on right with ► cursor
     if let Some(panel) = app.focused_panel {
         let panel_name = match panel {
             super::config::PanelType::Cpu => "CPU",
@@ -598,14 +637,11 @@ fn draw_status_bar(app: &App, canvas: &mut DirectTerminalCanvas<'_>, w: f32, h: 
             super::config::PanelType::Psi => "PSI",
             super::config::PanelType::Containers => "Containers",
         };
-        // Draw full right-aligned string "│ CPU " all at once
-        // Use chars().count() since "│" is multi-byte UTF-8
-        let focus_text = format!("│ {panel_name} ");
-        let focus_x = w - focus_text.chars().count() as f32;
+        // Prominent focus indicator: "► CPU"
+        let focus_text = format!("► {panel_name} ");
+        let focus_x = w - focus_text.chars().count() as f32 - 1.0;
         if focus_x > x {
-            canvas.draw_text(&focus_text, Point::new(focus_x, y), &focus_style);
-            // Draw the separator with different color
-            canvas.draw_text("│", Point::new(focus_x, y), &bracket_style);
+            canvas.draw_text(&focus_text, Point::new(focus_x, y), &focus_indicator_style);
         }
     }
 }
@@ -4448,11 +4484,11 @@ fn draw_process_dataframe(app: &App, canvas: &mut DirectTerminalCanvas, area: Re
     let col_widths = [7usize, 10, 8, 8];
     let cmd_width = (area.width as usize).saturating_sub(col_widths.iter().sum::<usize>() + 5);
 
-    // Colors - STRONGER highlighting for better visibility
-    let header_bg = Color::new(0.15, 0.2, 0.3, 1.0);
-    let selected_col_bg = Color::new(0.3, 0.45, 0.65, 1.0); // Much brighter column highlight
-    let selected_row_bg = Color::new(0.25, 0.35, 0.5, 1.0); // Brighter row highlight (blue tint)
-    let sort_color = Color::new(0.5, 0.85, 1.0, 1.0); // Bright cyan for sorted column
+    // PATTERN 5 HYBRID: Consistent focus/selection colors
+    let header_bg = Color::new(0.12, 0.15, 0.22, 1.0);
+    let selected_col_bg = COL_SELECT_BG; // From constants
+    let selected_row_bg = ROW_SELECT_BG; // From constants
+    let sort_color = FOCUS_ACCENT_COLOR; // Bright cyan for sorted column
     let dim_color = Color::new(0.5, 0.5, 0.5, 1.0);
     let text_color = Color::new(0.9, 0.9, 0.9, 1.0);
 
@@ -4623,15 +4659,15 @@ fn draw_process_dataframe(app: &App, canvas: &mut DirectTerminalCanvas, area: Re
         let abs_idx = scroll_offset + rel_idx;
         let is_selected = abs_idx == app.process_selected;
 
-        // Row selection highlight with cursor indicator
+        // PATTERN 5 HYBRID: Row selection highlight with gutter cursor
         if is_selected {
             canvas.fill_rect(Rect::new(x, y, area.width, 1.0), selected_row_bg);
-            // Draw cursor indicator at start of row
+            // Draw cursor indicator at start of row (▶ in gutter)
             canvas.draw_text(
                 "▶",
                 Point::new(x - 1.5, y),
                 &TextStyle {
-                    color: Color::new(0.5, 0.85, 1.0, 1.0), // Bright cyan cursor
+                    color: FOCUS_ACCENT_COLOR, // Bright cyan cursor
                     ..Default::default()
                 },
             );
