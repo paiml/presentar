@@ -312,39 +312,54 @@ fn truncate_path(path: &str, width: usize) -> Cow<'_, str> {
     }
 }
 
-/// Command-aware truncation: "opt 9i94wsqoafn" → "opt …afn"
-/// Preserves command name and shows suffix hint
+/// Command-aware truncation with middle ellipsis
+///
+/// Preserves the front (executable + start of args) and end (identifiers/flags),
+/// truncating the middle. This is optimal for commands where the beginning shows
+/// what's running and the end shows important identifiers like PIDs, ports, paths.
+///
+/// # Examples
+/// - `firefox -contentproc -parentBuildID 20240101 -childID 5 -isForBrowser`
+///   → `firefox -contentproc…-childID 5 -isForBrowser` (width=40)
+/// - `python /home/user/scripts/very_long_path/script.py --arg=value`
+///   → `python /home/…--arg=value` (width=25)
 fn truncate_command(cmd: &str, width: usize) -> Cow<'_, str> {
-    if cmd.chars().count() <= width {
+    let char_count = cmd.chars().count();
+
+    if char_count <= width {
         return Cow::Borrowed(cmd);
     }
 
-    // Split on first space to get command vs args
-    if let Some(space_idx) = cmd.find(' ') {
-        let cmd_name = &cmd[..space_idx];
-        let args = &cmd[space_idx + 1..];
-
-        let cmd_width = cmd_name.chars().count();
-        let remaining = width.saturating_sub(cmd_width + 2); // " …"
-
-        if remaining >= 3 {
-            // Show last few chars of args
-            let args_chars: Vec<char> = args.chars().collect();
-            let suffix: String = args_chars
-                .iter()
-                .rev()
-                .take(remaining)
-                .collect::<Vec<_>>()
-                .into_iter()
-                .rev()
-                .collect();
-            Cow::Owned(format!("{cmd_name} …{suffix}"))
-        } else {
-            truncate(cmd, width, TruncateStrategy::End)
-        }
-    } else {
-        truncate(cmd, width, TruncateStrategy::End)
+    if width <= 3 {
+        return Cow::Owned("…".repeat(width.min(1)));
     }
+
+    // For very short widths, just do end truncation
+    if width < 10 {
+        let take = width - 1;
+        let truncated: String = cmd.chars().take(take).collect();
+        return Cow::Owned(format!("{truncated}…"));
+    }
+
+    // Middle truncation: split width between front and back
+    // Give slightly more to the front (executable name is important)
+    // and ensure the back preserves identifiers/flags
+    let ellipsis_len = 1; // "…"
+    let available = width - ellipsis_len;
+
+    // 60% front, 40% back - front has executable, back has identifiers
+    let front_chars = (available * 3) / 5;
+    let back_chars = available - front_chars;
+
+    let chars: Vec<char> = cmd.chars().collect();
+
+    // Take front portion
+    let front: String = chars.iter().take(front_chars).collect();
+
+    // Take back portion
+    let back: String = chars.iter().skip(char_count - back_chars).collect();
+
+    Cow::Owned(format!("{front}…{back}"))
 }
 
 // =============================================================================
@@ -706,9 +721,27 @@ mod tests {
 
     #[test]
     fn test_truncate_command() {
+        // Middle truncation: 60% front, 40% back
+        // width=12, available=11, front=6, back=5
+        // "opt 9i94wsqoafn" (15 chars) → front 6 + "…" + back 5 = "opt 9i…qoafn"
         assert_eq!(
             truncate("opt 9i94wsqoafn", 12, TruncateStrategy::Command),
-            "opt …wsqoafn"
+            "opt 9i…qoafn"
+        );
+
+        // Longer command with middle truncation
+        // width=40, available=39, front=23, back=16
+        let long_cmd = "firefox -contentproc -parentBuildID 20240101 -childID 5 -isForBrowser";
+        let result = truncate(long_cmd, 40, TruncateStrategy::Command);
+        assert_eq!(result.chars().count(), 40);
+        assert!(result.starts_with("firefox -contentproc"));
+        assert!(result.ends_with("isForBrowser"));
+        assert!(result.contains('…'));
+
+        // Short width falls back to end truncation
+        assert_eq!(
+            truncate("command arg1 arg2", 8, TruncateStrategy::Command),
+            "command…"
         );
     }
 
