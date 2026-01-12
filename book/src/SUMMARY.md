@@ -126,6 +126,7 @@
 
 - [Direct Backend](./terminal/direct-backend.md)
 - [Monitoring Examples](./terminal/monitoring-examples.md)
+- [ptop - System Monitor](./terminal/ptop.md)
 
 # Advanced Topics
 

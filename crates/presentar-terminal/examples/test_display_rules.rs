@@ -3,8 +3,8 @@
 //! Run with: cargo run -p presentar-terminal --features ptop --example test_display_rules
 
 use presentar_terminal::widgets::{
-    BatteryDisplayRules, DataAvailability, DisplayAction, DisplayContext, DisplayRules,
-    DisplayTerminalSize, GpuDisplayRules, PsiDisplayRules, SensorsDisplayRules, SystemCapabilities,
+    BatteryDisplayRules, DataAvailability, DisplayContext, DisplayRules, DisplayTerminalSize,
+    GpuDisplayRules, PsiDisplayRules, SensorsDisplayRules, SystemCapabilities,
 };
 
 fn main() {

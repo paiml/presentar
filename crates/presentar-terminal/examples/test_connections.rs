@@ -1,9 +1,7 @@
 //! Test connections analyzer
-use presentar_terminal::ptop::analyzers::Analyzer;
-use presentar_terminal::ptop::{ConnectionsAnalyzer, TcpState};
+use presentar_terminal::ptop::analyzers::{Analyzer, ConnectionsAnalyzer, TcpState};
 
 fn main() {
-    use std::time::Duration;
 
     println!("Testing ConnectionsAnalyzer...");
 
