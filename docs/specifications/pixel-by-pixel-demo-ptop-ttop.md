@@ -1,12 +1,14 @@
 # SPEC-024: ptop - Pixel-Perfect TUI Visualization with Grammar of Graphics
 
-**Status**: **COMPLETE** - 100% analyzer parity (13/13), **19/19 defects resolved**, **UNIFIED SPEC**
+**Status**: **IN PROGRESS** - 100% analyzer parity (13/13), **19/19 defects resolved**, **95% COVERAGE TARGET**
 **Author**: Claude Code
 **Date**: 2026-01-12
-**Version**: 8.2.0
+**Version**: 9.0.0
 **Score**: **A+ (95.1%)** - Rust Project Score 127.5/134, Popper 73.5/100 (Grade B, +16.5 from baseline)
-**Tests**: 4506 tests (257 falsification), 0 failures, clippy clean, 87.6% coverage
-**UI Modules**: 15 files (6 ui/, 9 ui/panels/) with 601 TDD tests
+**Tests**: 4506 tests (257 falsification), 0 failures, clippy clean, 87.6% → **95% target**
+**UI Modules**: 15 files → **30+ target** (trueno-viz parity: 106 source files)
+**Coverage Target**: **95%** via file explosion strategy + pixel testing
+**trueno-viz Parity**: Layered architecture, ~200-700 LOC per file, falsification tests
 **Merged From**: `compute-block-tui-cbtop.md`, `ptop-panel-falsification-checklist.md`
 **Statistical Rigor**: Sample size n=1000, 95% CI, power>0.95, Cohen's d for comparisons
 
@@ -116,6 +118,14 @@
   - [27.6 Recommendations](#276-recommendations)
   - [27.7 Conclusion](#277-conclusion)
   - [27.8 QA Protocol Requirements](#278-qa-protocol-requirements)
+
+### Part X: 95% Coverage & trueno-viz Parity
+- [28. File Explosion Strategy](#28-file-explosion-strategy)
+  - [28.1 Current State Analysis](#281-current-state-analysis)
+  - [28.2 trueno-viz Architecture Reference](#282-trueno-viz-architecture-reference)
+  - [28.3 Explosion Targets](#283-explosion-targets)
+  - [28.4 Pixel Testing Framework](#284-pixel-testing-framework)
+  - [28.5 Implementation Checklist](#285-implementation-checklist)
 
 ### Appendices
 - [Appendix A: Aesthetic Channel Reference](#appendix-a-complete-aesthetic-channel-reference)
@@ -1901,6 +1911,7 @@ refresh:
 | **8.0.0** | 2026-01-12 | Claude Code | **VERSION ALIGNMENT**: Aligned spec version with crate version 0.2.0. |
 | **8.1.0** | 2026-01-12 | Claude Code | **QA HARDENING**: Additional quality improvements. |
 | **8.2.0** | 2026-01-12 | Claude Code | **MODULAR UI ARCHITECTURE**: Exploded ui.rs (7900 lines) into 15 TDD-tested modules with 601 tests. Structure: `ui/` (colors.rs, helpers.rs, overlays.rs, core.rs) + `ui/panels/` (battery.rs, connections.rs, cpu.rs, disk.rs, memory.rs, network.rs, process.rs, psi.rs, sensors.rs). Total test count: 4506 (up from 2466). Coverage: 87.6%. Each panel module contains: title builders, color functions, state enums, formatting utilities, and comprehensive unit tests. |
+| **9.0.0** | 2026-01-12 | Claude Code | **95% COVERAGE TARGET & TRUENO-VIZ PARITY**: Added Part X (Section 28) with comprehensive file explosion strategy. Goals: 95% coverage (up from 87.6%), 100+ source files (trueno-viz parity), max 700 LOC per file. Targets: ui/core.rs (7872→12 modules), ptop/app.rs (3293→6 modules), compute_block.rs (2215→4 modules). Added pixel testing framework (F-PIXEL-001 to F-PIXEL-020), screenshot comparison protocol, implementation checklist with 6 phases. |
 
 ---
 
@@ -5854,6 +5865,234 @@ Auditor: Claude Code (claude-opus-4-5-20251101)
 Timestamp: 2026-01-11
 Reproducibility: All commands verified on target system
 ```
+
+---
+
+# Part X: 95% Coverage & trueno-viz Parity
+
+## 28. File Explosion Strategy
+
+**Goal**: Achieve **95% test coverage** through systematic file explosion, achieving architectural parity with trueno-viz (106 source files, 40.8K LOC, layered architecture).
+
+### 28.1 Current State Analysis
+
+| Metric | Current | Target | Gap |
+|--------|---------|--------|-----|
+| Coverage | 87.6% | 95% | +7.4% |
+| Source files | ~50 | 100+ | +50 |
+| Max file size | 7872 LOC | 700 LOC | -7172 |
+| Test count | 4506 | 6000+ | +1500 |
+
+**Files Requiring Explosion** (>1000 LOC):
+
+| File | Lines | Target Modules | Priority |
+|------|-------|----------------|----------|
+| `ptop/ui/core.rs` | 7872 | 12-15 modules | P0 |
+| `ptop/app.rs` | 3293 | 5-6 modules | P0 |
+| `compute_block.rs` | 2215 | 4 modules | P1 |
+| `app.rs` | 2150 | 4 modules | P1 |
+| `widgets/process_table.rs` | 2136 | 3 modules | P1 |
+| `widgets/display_rules.rs` | 1953 | 3 modules | P1 |
+| `widgets/info_dense.rs` | 1870 | 3 modules | P2 |
+| `widgets/cpu_exploded.rs` | 1821 | 3 modules | P2 |
+
+### 28.2 trueno-viz Architecture Reference
+
+**Layer Hierarchy** (adopted from trueno-viz):
+
+```
+Layer 1: Core (Foundation)
+├── color.rs (~200 lines)      - Color types, HSL↔RGB
+├── error.rs (~80 lines)       - thiserror types
+├── geometry.rs (~300 lines)   - Point, Rect primitives
+└── scale.rs (~500 lines)      - Data mapping
+
+Layer 2: Rendering
+├── render/primitives.rs       - Drawing algorithms
+└── output/                    - Terminal, PNG, SVG
+
+Layer 3: Visualization
+├── plots/ (8 types)           - Scatter, Line, Heatmap...
+├── grammar/ (8 modules)       - GoG implementation
+└── widgets/ (5 files)         - Sparkline, Table, Bar
+
+Layer 4: Monitoring
+├── collectors/ (20+ files)    - CPU, Memory, Disk, Network...
+├── panels/ (5 files)          - TUI panels
+├── types.rs                   - Collector trait, MetricValue
+├── ring_buffer.rs             - Time series storage
+└── app.rs                     - Event loop
+
+Layer 5: Applications
+├── bin/                       - Executables
+└── examples/                  - Usage examples
+```
+
+**Key Patterns**:
+1. **~200-700 LOC per file** - Maximum cognitive load
+2. **Builder pattern** - Fluent API for all constructors
+3. **Trait-based abstraction** - Drawable, Scale, Collector
+4. **Feature flags** - Optional compilation
+5. **No unwrap()** - thiserror for all errors
+
+### 28.3 Explosion Targets
+
+#### 28.3.1 ui/core.rs (7872 lines) → 12 modules
+
+```
+ptop/ui/
+├── core/
+│   ├── mod.rs           - Re-exports
+│   ├── frame.rs         - Frame rendering entry point
+│   ├── layout.rs        - Grid layout calculation
+│   ├── title_bar.rs     - Top status bar
+│   ├── status_bar.rs    - Bottom status bar
+│   ├── panel_cpu.rs     - CPU panel rendering
+│   ├── panel_memory.rs  - Memory panel rendering
+│   ├── panel_disk.rs    - Disk panel rendering
+│   ├── panel_network.rs - Network panel rendering
+│   ├── panel_gpu.rs     - GPU panel rendering
+│   ├── panel_process.rs - Process table rendering
+│   └── panel_misc.rs    - PSI, Battery, Sensors, Connections
+```
+
+#### 28.3.2 ptop/app.rs (3293 lines) → 6 modules
+
+```
+ptop/
+├── app/
+│   ├── mod.rs           - Re-exports, App struct
+│   ├── state.rs         - AppState, FocusState
+│   ├── input.rs         - Input handling thread
+│   ├── collectors.rs    - Data collection orchestration
+│   ├── navigation.rs    - Tab, Enter, Esc handling
+│   └── render.rs        - Render coordination
+```
+
+#### 28.3.3 compute_block.rs (2215 lines) → 4 modules
+
+```
+compute_block/
+├── mod.rs               - Re-exports, ComputeBlock trait
+├── simd.rs              - SIMD detection and dispatch
+├── metrics_cache.rs     - O(1) metric access
+└── tracing.rs           - PerfTracer integration
+```
+
+### 28.4 Pixel Testing Framework
+
+**Pixel-perfect validation** using screenshot comparison:
+
+```rust
+// tests/pixel_tests.rs
+use presentar_test::TuiSnapshot;
+
+#[test]
+fn test_cpu_panel_pixel_perfect() {
+    let mut app = PtopApp::new_deterministic(42);
+    app.tick();
+
+    let snapshot = TuiSnapshot::capture(&app, 120, 40);
+    snapshot.assert_match("__pixel_baselines__/cpu_panel.txt");
+}
+
+#[test]
+fn test_full_frame_pixel_perfect() {
+    let mut app = PtopApp::new_deterministic(42);
+    app.tick();
+
+    let snapshot = TuiSnapshot::capture(&app, 120, 40);
+
+    // Compare against trueno-viz ttop baseline
+    let ttop_baseline = include_str!("__pixel_baselines__/ttop_reference.txt");
+    let diff = snapshot.pixel_diff(ttop_baseline);
+
+    assert!(diff.different_cells < 100,
+        "PIXEL FAIL: {} cells differ from ttop baseline",
+        diff.different_cells);
+}
+```
+
+**Screenshot Capture Protocol**:
+
+```bash
+# 1. Capture ttop reference (trueno-viz)
+cd ../trueno-viz
+cargo run --release --features monitor --bin trueno_monitor -- --render-once > __pixel_baselines__/ttop_reference.txt
+
+# 2. Capture ptop current
+cd ../presentar
+cargo run -p presentar-terminal --features ptop --bin ptop -- --render-once > __pixel_baselines__/ptop_current.txt
+
+# 3. Compare
+diff -u __pixel_baselines__/ttop_reference.txt __pixel_baselines__/ptop_current.txt | head -50
+```
+
+**Falsification Tests (F-PIXEL-001 to F-PIXEL-020)**:
+
+| Test ID | Description | Falsification Criterion |
+|---------|-------------|------------------------|
+| F-PIXEL-001 | CPU panel layout | Column positions match ttop ±1 char |
+| F-PIXEL-002 | Memory bar alignment | Bar segments pixel-aligned |
+| F-PIXEL-003 | Process table columns | Width matches ttop exactly |
+| F-PIXEL-004 | Graph rendering | Braille patterns match |
+| F-PIXEL-005 | Color gradients | ANSI codes identical |
+| F-PIXEL-006 | Border characters | Rounded corners match |
+| F-PIXEL-007 | Focus indicator | Double-line visible |
+| F-PIXEL-008 | Title truncation | Ellipsis at same position |
+| F-PIXEL-009 | Sparkline height | 8 rows exactly |
+| F-PIXEL-010 | Network rates | Format matches (KB/s, MB/s) |
+
+### 28.5 Implementation Checklist
+
+#### Phase 1: ui/core.rs Explosion (P0)
+- [ ] Create `ptop/ui/core/` directory
+- [ ] Extract `frame.rs` - main render entry
+- [ ] Extract `layout.rs` - grid calculation
+- [ ] Extract `title_bar.rs` - top bar
+- [ ] Extract `status_bar.rs` - bottom bar
+- [ ] Extract `panel_cpu.rs` - CPU rendering
+- [ ] Extract `panel_memory.rs` - Memory rendering
+- [ ] Extract `panel_disk.rs` - Disk rendering
+- [ ] Extract `panel_network.rs` - Network rendering
+- [ ] Extract `panel_gpu.rs` - GPU rendering
+- [ ] Extract `panel_process.rs` - Process table
+- [ ] Extract `panel_misc.rs` - PSI, Battery, etc.
+- [ ] Add 200+ tests for extracted modules
+- [ ] Verify pixel parity after extraction
+
+#### Phase 2: ptop/app.rs Explosion (P0)
+- [ ] Create `ptop/app/` directory
+- [ ] Extract `state.rs` - AppState
+- [ ] Extract `input.rs` - Input thread
+- [ ] Extract `collectors.rs` - Data collection
+- [ ] Extract `navigation.rs` - Key handling
+- [ ] Extract `render.rs` - Render coordination
+- [ ] Add 100+ tests for extracted modules
+
+#### Phase 3: Pixel Testing (P0)
+- [ ] Create `__pixel_baselines__/` directory
+- [ ] Capture ttop reference screenshot
+- [ ] Implement `TuiSnapshot::pixel_diff()`
+- [ ] Add 20 pixel falsification tests
+- [ ] CI integration for pixel regression
+
+#### Phase 4: Remaining Explosions (P1-P2)
+- [ ] Explode `compute_block.rs`
+- [ ] Explode `widgets/process_table.rs`
+- [ ] Explode `widgets/display_rules.rs`
+- [ ] Add tests for each extraction
+
+#### Phase 5: Coverage Target (95%)
+- [ ] Run `cargo llvm-cov --features ptop`
+- [ ] Identify uncovered lines
+- [ ] Add targeted tests
+- [ ] Verify 95% threshold
+
+#### Phase 6: pmat Validation
+- [ ] Run `pmat check presentar-terminal`
+- [ ] Fix any quality issues
+- [ ] Document final score
 
 ---
 
