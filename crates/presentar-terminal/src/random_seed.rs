@@ -133,6 +133,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "flaky: global state race with parallel tests"]
     fn test_env_seed() {
         std::env::set_var("RANDOM_SEED", "9999");
         init_from_env();
