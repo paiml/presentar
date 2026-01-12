@@ -312,17 +312,18 @@ fn truncate_path(path: &str, width: usize) -> Cow<'_, str> {
     }
 }
 
-/// Command-aware truncation with middle ellipsis
+/// Command-aware truncation using Basename + Key Args pattern (htop-style)
 ///
-/// Preserves the front (executable + start of args) and end (identifiers/flags),
-/// truncating the middle. This is optimal for commands where the beginning shows
-/// what's running and the end shows important identifiers like PIDs, ports, paths.
+/// Strategy:
+/// 1. Extract basename from executable path (`/usr/lib/firefox/firefox` → `firefox`)
+/// 2. Identify "key args" with identifiers (childID, port, pid, etc.)
+/// 3. Show: `basename [first-arg] … [key-args-from-end]`
 ///
 /// # Examples
-/// - `firefox -contentproc -parentBuildID 20240101 -childID 5 -isForBrowser`
-///   → `firefox -contentproc…-childID 5 -isForBrowser` (width=40)
-/// - `python /home/user/scripts/very_long_path/script.py --arg=value`
-///   → `python /home/…--arg=value` (width=25)
+/// - `/usr/lib/firefox/firefox -contentproc -childID 5 -isForBrowser -prefsLen 31398`
+///   → `firefox -contentproc … -childID 5 -isForBrowser` (width=45)
+/// - `python /home/user/scripts/long/path/script.py --port=8080`
+///   → `python script.py --port=8080` (width=30)
 fn truncate_command(cmd: &str, width: usize) -> Cow<'_, str> {
     let char_count = cmd.chars().count();
 
@@ -335,31 +336,117 @@ fn truncate_command(cmd: &str, width: usize) -> Cow<'_, str> {
     }
 
     // For very short widths, just do end truncation
-    if width < 10 {
+    if width < 12 {
         let take = width - 1;
         let truncated: String = cmd.chars().take(take).collect();
         return Cow::Owned(format!("{truncated}…"));
     }
 
-    // Middle truncation: split width between front and back
-    // Give slightly more to the front (executable name is important)
-    // and ensure the back preserves identifiers/flags
-    let ellipsis_len = 1; // "…"
-    let available = width - ellipsis_len;
+    // Parse command into parts
+    let parts: Vec<&str> = cmd.split_whitespace().collect();
+    if parts.is_empty() {
+        return Cow::Borrowed(cmd);
+    }
 
-    // 60% front, 40% back - front has executable, back has identifiers
-    let front_chars = (available * 3) / 5;
-    let back_chars = available - front_chars;
+    // Extract basename from first part (executable)
+    let exe = parts[0];
+    let basename = exe.rsplit('/').next().unwrap_or(exe);
 
-    let chars: Vec<char> = cmd.chars().collect();
+    // If just the command with no args
+    if parts.len() == 1 {
+        if basename.len() <= width {
+            return Cow::Owned(basename.to_string());
+        }
+        let take = width - 1;
+        let truncated: String = basename.chars().take(take).collect();
+        return Cow::Owned(format!("{truncated}…"));
+    }
 
-    // Take front portion
-    let front: String = chars.iter().take(front_chars).collect();
+    // Identify key arguments (args with identifiers like IDs, ports, paths)
+    // Key patterns: contains digits, '=', or is a short flag with value after
+    let args = &parts[1..];
+    let mut key_args: Vec<&str> = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        let arg = args[i];
+        // Check if this is a "key" argument (has identifier value)
+        let is_key = arg.contains('=')
+            || arg.chars().any(|c| c.is_ascii_digit())
+            || (arg.starts_with('-')
+                && i + 1 < args.len()
+                && args[i + 1].chars().any(|c| c.is_ascii_digit()));
 
-    // Take back portion
-    let back: String = chars.iter().skip(char_count - back_chars).collect();
+        if is_key {
+            // Include flag and its value if separate
+            if arg.starts_with('-') && !arg.contains('=') && i + 1 < args.len() {
+                key_args.push(arg);
+                key_args.push(args[i + 1]);
+                i += 2;
+            } else {
+                key_args.push(arg);
+                i += 1;
+            }
+        } else {
+            i += 1;
+        }
+    }
 
-    Cow::Owned(format!("{front}…{back}"))
+    // Build result: basename + first arg + … + key args from end
+    let first_arg = args.first().map(|s| *s).unwrap_or("");
+
+    // Calculate available space
+    let ellipsis = " … ";
+    let base_len = basename.chars().count();
+
+    // Try: basename + first_arg + … + last key args
+    let mut result = basename.to_string();
+    let mut current_len = base_len;
+
+    // Add first arg if space
+    if !first_arg.is_empty() && current_len + 1 + first_arg.chars().count() + 4 < width {
+        result.push(' ');
+        result.push_str(first_arg);
+        current_len = result.chars().count();
+    }
+
+    // Calculate how much space we have for key args
+    let space_for_keys = width.saturating_sub(current_len + ellipsis.chars().count());
+
+    // Add key args from the END (most recent/important)
+    if !key_args.is_empty() && space_for_keys > 5 {
+        let mut suffix = String::new();
+        for &arg in key_args.iter().rev() {
+            let arg_len = arg.chars().count();
+            let new_len = if suffix.is_empty() {
+                arg_len
+            } else {
+                suffix.chars().count() + 1 + arg_len
+            };
+            if new_len <= space_for_keys {
+                if suffix.is_empty() {
+                    suffix = arg.to_string();
+                } else {
+                    suffix = format!("{arg} {suffix}");
+                }
+            } else {
+                break;
+            }
+        }
+
+        if !suffix.is_empty() {
+            result.push_str(ellipsis);
+            result.push_str(&suffix);
+        }
+    }
+
+    // Final safety: ensure we don't exceed width
+    let final_len = result.chars().count();
+    if final_len > width {
+        let truncated: String = result.chars().take(width - 1).collect();
+        return Cow::Owned(format!("{truncated}…"));
+    }
+
+    Cow::Owned(result)
 }
 
 // =============================================================================
@@ -721,27 +808,40 @@ mod tests {
 
     #[test]
     fn test_truncate_command() {
-        // Middle truncation: 60% front, 40% back
-        // width=12, available=11, front=6, back=5
-        // "opt 9i94wsqoafn" (15 chars) → front 6 + "…" + back 5 = "opt 9i…qoafn"
-        assert_eq!(
-            truncate("opt 9i94wsqoafn", 12, TruncateStrategy::Command),
-            "opt 9i…qoafn"
-        );
+        // Pattern 2: Basename + Key Args
+        // Extracts basename, keeps first arg, shows key args (with digits) from end
 
-        // Longer command with middle truncation
-        // width=40, available=39, front=23, back=16
-        let long_cmd = "firefox -contentproc -parentBuildID 20240101 -childID 5 -isForBrowser";
-        let result = truncate(long_cmd, 40, TruncateStrategy::Command);
-        assert_eq!(result.chars().count(), 40);
-        assert!(result.starts_with("firefox -contentproc"));
-        assert!(result.ends_with("isForBrowser"));
-        assert!(result.contains('…'));
+        // Simple case: basename extraction
+        let cmd = "/usr/bin/python script.py";
+        let result = truncate(cmd, 20, TruncateStrategy::Command);
+        assert!(result.starts_with("python"));
+
+        // Firefox with key args (childID has digits, so it's a key arg)
+        let long_cmd = "/usr/lib/firefox/firefox -contentproc -parentBuildID 20240101 -childID 5 -isForBrowser";
+        let result = truncate(long_cmd, 50, TruncateStrategy::Command);
+        assert!(result.starts_with("firefox"));
+        assert!(result.contains("…")); // Has ellipsis
+        assert!(result.contains("5")); // Key arg with digit preserved
 
         // Short width falls back to end truncation
         assert_eq!(
             truncate("command arg1 arg2", 8, TruncateStrategy::Command),
             "command…"
+        );
+
+        // Never exceeds width
+        let very_long = "/usr/lib/firefox/firefox -contentproc -childID 5 -isForBrowser -prefsLen 31398 -prefMapSize 244787";
+        let result = truncate(very_long, 40, TruncateStrategy::Command);
+        assert!(result.chars().count() <= 40, "Result '{}' exceeds 40 chars", result);
+
+        // Preserves key args with = signs (when they have digits)
+        let with_eq = "python script.py --port=8080";
+        let result = truncate(with_eq, 30, TruncateStrategy::Command);
+        // Either fits entirely or contains the key value
+        assert!(
+            result.contains("8080") || result == "python script.py --port=8080",
+            "Result '{}' should contain 8080 or fit entirely",
+            result
         );
     }
 

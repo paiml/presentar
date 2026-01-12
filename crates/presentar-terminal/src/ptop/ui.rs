@@ -211,8 +211,12 @@ fn format_uptime(secs: u64) -> String {
     }
 }
 
-/// Create a border with focus indication (SPEC-024 v5.0 Feature D)
-/// Reference: ttop uses double-line border for focused panels
+/// Create a border with STRONG focus indication (SPEC-024 v5.0 Feature D)
+/// Focus indicators:
+/// 1. Double-line border (vs rounded for unfocused)
+/// 2. Significantly brighter color (1.5x, not 1.2x)
+/// 3. Focus indicator arrow `►` prepended to title
+/// 4. Bold title text for focused panels
 fn create_panel_border(title: &str, color: Color, is_focused: bool) -> Border {
     let style = if is_focused {
         BorderStyle::Double // Double border for focused panel
@@ -220,20 +224,33 @@ fn create_panel_border(title: &str, color: Color, is_focused: bool) -> Border {
         BorderStyle::Rounded // Normal rounded border
     };
 
-    // Brighten color slightly for focused panels
+    // Make focused panels MUCH brighter (1.5x instead of 1.2x)
     let border_color = if is_focused {
         Color {
-            r: (color.r * 1.2).min(1.0),
-            g: (color.g * 1.2).min(1.0),
-            b: (color.b * 1.2).min(1.0),
+            r: (color.r * 1.5).min(1.0),
+            g: (color.g * 1.5).min(1.0),
+            b: (color.b * 1.5).min(1.0),
             a: color.a,
         }
     } else {
-        color
+        // Dim unfocused panels slightly for contrast
+        Color {
+            r: color.r * 0.7,
+            g: color.g * 0.7,
+            b: color.b * 0.7,
+            a: color.a,
+        }
+    };
+
+    // Add focus indicator to title
+    let display_title = if is_focused {
+        format!("► {title}")
+    } else {
+        title.to_string()
     };
 
     Border::new()
-        .with_title(title)
+        .with_title(&display_title)
         .with_style(style)
         .with_color(border_color)
         .with_title_left_aligned()
@@ -4431,11 +4448,11 @@ fn draw_process_dataframe(app: &App, canvas: &mut DirectTerminalCanvas, area: Re
     let col_widths = [7usize, 10, 8, 8];
     let cmd_width = (area.width as usize).saturating_sub(col_widths.iter().sum::<usize>() + 5);
 
-    // Colors
+    // Colors - STRONGER highlighting for better visibility
     let header_bg = Color::new(0.15, 0.2, 0.3, 1.0);
-    let selected_col_bg = Color::new(0.25, 0.35, 0.5, 1.0);
-    let selected_row_bg = Color::new(0.2, 0.25, 0.35, 1.0);
-    let sort_color = CPU_COLOR;
+    let selected_col_bg = Color::new(0.3, 0.45, 0.65, 1.0); // Much brighter column highlight
+    let selected_row_bg = Color::new(0.25, 0.35, 0.5, 1.0); // Brighter row highlight (blue tint)
+    let sort_color = Color::new(0.5, 0.85, 1.0, 1.0); // Bright cyan for sorted column
     let dim_color = Color::new(0.5, 0.5, 0.5, 1.0);
     let text_color = Color::new(0.9, 0.9, 0.9, 1.0);
 
@@ -4606,9 +4623,18 @@ fn draw_process_dataframe(app: &App, canvas: &mut DirectTerminalCanvas, area: Re
         let abs_idx = scroll_offset + rel_idx;
         let is_selected = abs_idx == app.process_selected;
 
-        // Row selection highlight
+        // Row selection highlight with cursor indicator
         if is_selected {
             canvas.fill_rect(Rect::new(x, y, area.width, 1.0), selected_row_bg);
+            // Draw cursor indicator at start of row
+            canvas.draw_text(
+                "▶",
+                Point::new(x - 1.5, y),
+                &TextStyle {
+                    color: Color::new(0.5, 0.85, 1.0, 1.0), // Bright cyan cursor
+                    ..Default::default()
+                },
+            );
         }
 
         let row_style = if is_selected {
