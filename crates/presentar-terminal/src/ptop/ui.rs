@@ -4705,15 +4705,25 @@ fn draw_process_dataframe(app: &App, canvas: &mut DirectTerminalCanvas, area: Re
         );
         col_x += col_widths[3] as f32 + 1.0;
 
-        // COMMAND - left-aligned with command-aware truncation (NEVER bleeds)
-        let name = proc.name().to_string_lossy();
-        let name = format_column(
-            &name,
+        // COMMAND - full command line with args, ellipsis truncation (NEVER bleeds)
+        // Use proc.cmd() for full command line, fallback to name() if empty
+        let cmd_parts = proc.cmd();
+        let cmd_full = if cmd_parts.is_empty() {
+            proc.name().to_string_lossy().to_string()
+        } else {
+            cmd_parts
+                .iter()
+                .map(|s| s.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        let cmd_display = format_column(
+            &cmd_full,
             cmd_width,
             ColumnAlign::Left,
             TruncateStrategy::Command,
         );
-        canvas.draw_text(&name, Point::new(col_x, y), &row_style);
+        canvas.draw_text(&cmd_display, Point::new(col_x, y), &row_style);
 
         y += 1.0;
     }

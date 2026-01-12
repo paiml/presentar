@@ -1058,6 +1058,71 @@ ms=$(( (end - start) / 1000000 ))
 
 ---
 
+## 9C. Interactive QA Feedback Cycle
+
+### 9C.1 Purpose
+
+Panel-by-panel human-in-the-loop QA to verify Grammar of Graphics compliance, performance, and quality.
+
+### 9C.2 Protocol
+
+For each of the 14 panels, execute:
+
+| Step | Action | Output |
+|------|--------|--------|
+| **A** | Headless Verification | Inspect code for performance, quality, GoG compliance |
+| **B** | Report | Present GoG mapping table + key metrics |
+| **C** | Feedback | Wait for human review before next panel |
+
+### 9C.3 Grammar of Graphics Report Template
+
+For each panel, report:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ PANEL: [Name]                                               │
+├─────────────────────────────────────────────────────────────┤
+│ GoG MAPPING                                                 │
+│ ┌─────────┬──────────────────┬─────────────────────────┐   │
+│ │ Layer   │ Aesthetic        │ Mapping                 │   │
+│ ├─────────┼──────────────────┼─────────────────────────┤   │
+│ │ Data    │ source           │ [data source]           │   │
+│ │ Geom    │ type             │ [bar/line/point/etc]    │   │
+│ │ Aes     │ x, y, color, ... │ [field mappings]        │   │
+│ │ Scale   │ domain → range   │ [transformations]       │   │
+│ │ Coord   │ system           │ [cartesian/polar/etc]   │   │
+│ └─────────┴──────────────────┴─────────────────────────┘   │
+├─────────────────────────────────────────────────────────────┤
+│ METRICS                                                     │
+│ • Render time: [X]ms (target: <1ms)                        │
+│ • Test coverage: [X]%                                       │
+│ • Falsification tests: [N] passing                         │
+├─────────────────────────────────────────────────────────────┤
+│ STATUS: [PASS/FAIL/NEEDS_REVIEW]                           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 9C.4 Panel Checklist
+
+| # | Panel | GoG Verified | Metrics | Human Review |
+|---|-------|--------------|---------|--------------|
+| 1 | CPU | ☐ | ☐ | ☐ |
+| 2 | Memory | ☐ | ☐ | ☐ |
+| 3 | Disk | ☐ | ☐ | ☐ |
+| 4 | Network | ☐ | ☐ | ☐ |
+| 5 | GPU | ☐ | ☐ | ☐ |
+| 6 | Sensors | ☐ | ☐ | ☐ |
+| 7 | Battery | ☐ | ☐ | ☐ |
+| 8 | PSI | ☐ | ☐ | ☐ |
+| 9 | Process | ☐ | ☐ | ☐ |
+| 10 | Treemap | ☐ | ☐ | ☐ |
+| 11 | Connections | ☐ | ☐ | ☐ |
+| 12 | Files | ☐ | ☐ | ☐ |
+| 13 | Containers | ☐ | ☐ | ☐ |
+| 14 | System | ☐ | ☐ | ☐ |
+
+---
+
 # Part IV: Implementation
 
 ## 10. Implementation Roadmap
