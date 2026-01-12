@@ -568,13 +568,8 @@ fn draw_fps_overlay(app: &App, canvas: &mut DirectTerminalCanvas<'_>, w: f32) {
 /// Shows: [Tab] Navigate [Enter] Explode [?] Help [q] Quit | Focused: CPU
 fn draw_status_bar(app: &App, canvas: &mut DirectTerminalCanvas<'_>, w: f32, h: f32) {
     let y = h - 1.0;
-    let bar_width = w as usize;
 
     // PATTERN 5 HYBRID: Status bar colors
-    let bg_style = TextStyle {
-        color: Color::new(0.25, 0.25, 0.25, 1.0), // Dim line background
-        ..Default::default()
-    };
     let bracket_style = TextStyle {
         color: Color::new(0.5, 0.5, 0.5, 1.0), // Brackets
         ..Default::default()
