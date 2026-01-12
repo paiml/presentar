@@ -456,4 +456,95 @@ mod tests {
         let spec = SizeSpec::default();
         assert!(matches!(spec, SizeSpec::Flex(1.0)));
     }
+
+    #[test]
+    fn test_layout_item_auto() {
+        let item = LayoutItem::new(Border::new()).auto();
+        assert!(matches!(item.size, SizeSpec::Auto));
+    }
+
+    #[test]
+    fn test_layout_calculate_sizes_auto() {
+        let layout = Layout::rows([
+            LayoutItem::new(Border::new()).auto(),
+            LayoutItem::new(Border::new()).expanded(),
+        ]);
+        let sizes = layout.calculate_sizes(100.0);
+        // Auto gets 1.0 (minimum)
+        assert_eq!(sizes[0], 1.0);
+        // Flex gets the remaining
+        assert_eq!(sizes[1], 99.0);
+    }
+
+    #[test]
+    fn test_layout_brick_assertions() {
+        let layout = Layout::rows([]);
+        let assertions = layout.assertions();
+        assert!(!assertions.is_empty());
+    }
+
+    #[test]
+    fn test_layout_brick_budget() {
+        let layout = Layout::rows([]);
+        let budget = layout.budget();
+        assert_eq!(budget.total_ms, 8);
+    }
+
+    #[test]
+    fn test_layout_to_html() {
+        let layout = Layout::rows([]);
+        assert_eq!(layout.to_html(), "");
+    }
+
+    #[test]
+    fn test_layout_to_css() {
+        let layout = Layout::rows([]);
+        assert_eq!(layout.to_css(), "");
+    }
+
+    #[test]
+    fn test_layout_type_id() {
+        let layout = Layout::rows([]);
+        let id = Widget::type_id(&layout);
+        assert_eq!(id, TypeId::of::<Layout>());
+    }
+
+    #[test]
+    fn test_layout_paint() {
+        use crate::tools::HeadlessCanvas;
+        let mut layout = Layout::rows([
+            LayoutItem::new(Border::new()).fixed(10.0),
+            LayoutItem::new(Border::new()).fixed(10.0),
+        ]);
+        layout.layout(Rect::new(0.0, 0.0, 80.0, 24.0));
+        let mut canvas = HeadlessCanvas::new(80, 24);
+        layout.paint(&mut canvas);
+        // Painting should work without panic
+    }
+
+    #[test]
+    fn test_layout_event() {
+        use presentar_core::Event;
+        let mut layout = Layout::rows([LayoutItem::new(Border::new()).fixed(10.0)]);
+        let event = Event::Resize {
+            width: 80.0,
+            height: 24.0,
+        };
+        let result = layout.event(&event);
+        assert!(result.is_none()); // Border doesn't handle events
+    }
+
+    #[test]
+    fn test_layout_children() {
+        let layout = Layout::rows([LayoutItem::new(Border::new()).fixed(10.0)]);
+        // children() returns empty slice (items are wrapped)
+        assert!(layout.children().is_empty());
+    }
+
+    #[test]
+    fn test_layout_children_mut() {
+        let mut layout = Layout::rows([LayoutItem::new(Border::new()).fixed(10.0)]);
+        // children_mut() returns empty slice (items are wrapped)
+        assert!(layout.children_mut().is_empty());
+    }
 }

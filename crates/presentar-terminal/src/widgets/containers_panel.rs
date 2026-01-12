@@ -408,4 +408,211 @@ mod tests {
         assert_eq!(panel.max_containers, 10);
         assert!(!panel.compact);
     }
+
+    #[test]
+    fn test_container_state_all_indicators() {
+        assert_eq!(ContainerState::Restarting.indicator(), '↻');
+        assert_eq!(ContainerState::Dead.indicator(), '✕');
+    }
+
+    #[test]
+    fn test_container_state_all_colors() {
+        // Test all states return valid colors
+        for state in [
+            ContainerState::Running,
+            ContainerState::Paused,
+            ContainerState::Stopped,
+            ContainerState::Restarting,
+            ContainerState::Dead,
+        ] {
+            let color = state.color();
+            assert!(color.r >= 0.0 && color.r <= 1.0);
+            assert!(color.g >= 0.0 && color.g <= 1.0);
+            assert!(color.b >= 0.0 && color.b <= 1.0);
+        }
+    }
+
+    #[test]
+    fn test_container_entry_with_cpu() {
+        let entry = ContainerEntry::new("nginx", "abc123").with_cpu(45.5);
+        assert_eq!(entry.cpu_percent, 45.5);
+    }
+
+    #[test]
+    fn test_container_entry_with_image() {
+        let entry = ContainerEntry::new("nginx", "abc123").with_image("nginx:latest");
+        assert_eq!(entry.image, "nginx:latest");
+    }
+
+    #[test]
+    fn test_container_entry_no_memory_limit() {
+        let entry = ContainerEntry::new("nginx", "abc123").with_memory(256 * 1024 * 1024, 0);
+        assert!(entry.memory_percent().is_none());
+    }
+
+    #[test]
+    fn test_containers_panel_with_containers() {
+        let containers = vec![
+            ContainerEntry::new("nginx", "a").with_state(ContainerState::Running),
+            ContainerEntry::new("redis", "b").with_state(ContainerState::Paused),
+        ];
+        let panel = ContainersPanel::new().with_containers(containers);
+        assert_eq!(panel.total_count(), 2);
+    }
+
+    #[test]
+    fn test_containers_panel_brick_traits() {
+        let panel = ContainersPanel::new();
+        assert_eq!(panel.brick_name(), "containers_panel");
+        assert!(!panel.assertions().is_empty());
+        assert!(panel.budget().paint_ms > 0);
+        assert!(panel.verify().is_valid());
+        assert!(panel.to_html().is_empty());
+        assert!(panel.to_css().is_empty());
+    }
+
+    #[test]
+    fn test_containers_panel_widget_traits() {
+        let mut panel = ContainersPanel::new()
+            .with_containers(vec![
+                ContainerEntry::new("nginx", "a").with_state(ContainerState::Running)
+            ]);
+
+        // Measure
+        let size = panel.measure(Constraints {
+            min_width: 0.0,
+            min_height: 0.0,
+            max_width: 80.0,
+            max_height: 20.0,
+        });
+        assert!(size.width > 0.0);
+        assert!(size.height > 0.0);
+
+        // Layout
+        let result = panel.layout(Rect::new(0.0, 0.0, 80.0, 10.0));
+        assert_eq!(result.size.width, 80.0);
+
+        // Type ID
+        assert_eq!(Widget::type_id(&panel), TypeId::of::<ContainersPanel>());
+
+        // Event
+        assert!(panel
+            .event(&Event::KeyDown {
+                key: presentar_core::Key::Enter
+            })
+            .is_none());
+
+        // Children
+        assert!(panel.children().is_empty());
+        assert!(panel.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_containers_panel_paint() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let containers = vec![
+            ContainerEntry::new("nginx", "abc123")
+                .with_state(ContainerState::Running)
+                .with_cpu(15.5)
+                .with_memory(256 * 1024 * 1024, 512 * 1024 * 1024),
+            ContainerEntry::new("very_long_container_name_here", "def456")
+                .with_state(ContainerState::Paused)
+                .with_cpu(2.0)
+                .with_memory(128 * 1024 * 1024, 256 * 1024 * 1024),
+        ];
+
+        let mut panel = ContainersPanel::new().with_containers(containers);
+        panel.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_containers_panel_paint_empty() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let mut panel = ContainersPanel::new();
+        panel.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_containers_panel_paint_small_bounds() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let containers =
+            vec![ContainerEntry::new("nginx", "abc").with_state(ContainerState::Running)];
+
+        let mut panel = ContainersPanel::new().with_containers(containers);
+        panel.layout(Rect::new(0.0, 0.0, 5.0, 0.5)); // Too small
+
+        let mut buffer = CellBuffer::new(5, 1);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas); // Should early return
+    }
+
+    #[test]
+    fn test_containers_panel_running_only_filter() {
+        let containers = vec![
+            ContainerEntry::new("nginx", "a").with_state(ContainerState::Running),
+            ContainerEntry::new("redis", "b").with_state(ContainerState::Stopped),
+            ContainerEntry::new("postgres", "c").with_state(ContainerState::Running),
+        ];
+
+        let panel = ContainersPanel::new()
+            .with_containers(containers)
+            .running_only(true);
+
+        let visible: Vec<_> = panel.visible_containers().collect();
+        assert_eq!(visible.len(), 2); // Only running containers
+    }
+
+    #[test]
+    fn test_containers_panel_show_all() {
+        let containers = vec![
+            ContainerEntry::new("nginx", "a").with_state(ContainerState::Running),
+            ContainerEntry::new("redis", "b").with_state(ContainerState::Stopped),
+        ];
+
+        let panel = ContainersPanel::new()
+            .with_containers(containers)
+            .running_only(false);
+
+        let visible: Vec<_> = panel.visible_containers().collect();
+        assert_eq!(visible.len(), 2); // All containers
+    }
+
+    #[test]
+    fn test_containers_panel_default() {
+        let panel = ContainersPanel::default();
+        assert!(panel.running_only);
+        assert!(panel.compact);
+        assert_eq!(panel.max_containers, 5);
+    }
+
+    #[test]
+    fn test_container_state_default() {
+        let state = ContainerState::default();
+        assert_eq!(state, ContainerState::Running);
+    }
+
+    #[test]
+    fn test_containers_panel_max_limit() {
+        let containers: Vec<_> = (0..10)
+            .map(|i| ContainerEntry::new(format!("container{}", i), format!("{}", i)))
+            .collect();
+
+        let panel = ContainersPanel::new()
+            .with_containers(containers)
+            .max_containers(3);
+
+        let visible: Vec<_> = panel.visible_containers().collect();
+        assert_eq!(visible.len(), 3);
+    }
 }

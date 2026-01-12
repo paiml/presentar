@@ -265,7 +265,7 @@ fn generate_diff_text(
 
         // Show diff markers
         output.push_str("  DIF: ");
-        let row_diffs = by_row.get(row).unwrap();
+        let row_diffs = by_row.get(row).unwrap_or(&Vec::new());
         for x in 0..reference.width().min(80) {
             if row_diffs.iter().any(|d| d.x == x) {
                 output.push('^');

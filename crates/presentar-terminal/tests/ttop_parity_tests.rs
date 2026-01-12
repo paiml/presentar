@@ -3,10 +3,12 @@
 //! These tests compare ptop output against the reference ttop implementation
 //! from ../trueno-viz/crates/ttop to ensure feature parity.
 //!
-//! Run with: cargo test -p presentar-terminal --test ttop_parity_tests
+//! Run with: cargo test -p presentar-terminal --test ttop_parity_tests --features ptop
 //!
 //! CRITICAL: These tests will FAIL if ptop panels are "coconut radios"
 //! (fake/non-functional implementations).
+
+#![cfg(feature = "ptop")]
 
 use presentar_core::{Rect, Widget};
 use presentar_terminal::ptop::app::App;

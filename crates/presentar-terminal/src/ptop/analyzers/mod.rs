@@ -16,22 +16,34 @@ use std::time::Duration;
 
 mod connections;
 mod containers;
+mod disk_entropy;
+mod disk_io;
+mod file_analyzer;
 mod gpu_procs;
+mod network_stats;
 mod process_extra;
 mod psi;
 mod sensor_health;
+mod storage;
+mod swap;
 mod treemap;
 
 pub use connections::{ConnectionsAnalyzer, ConnectionsData, TcpConnection, TcpState};
 pub use containers::{
     Container, ContainerRuntime, ContainerState, ContainerStats, ContainersAnalyzer, ContainersData,
 };
+pub use disk_entropy::{DiskEntropyAnalyzer, DiskEntropyData, DiskEntropyInfo, EncryptionType};
+pub use disk_io::{DiskIoAnalyzer, DiskIoData, DiskIoRates, DiskIoStats};
+pub use file_analyzer::{FileAnalyzer, FileAnalyzerData, FileCategory, InodeStats, TrackedFile};
 pub use gpu_procs::{GpuInfo, GpuProcess, GpuProcsAnalyzer, GpuProcsData, GpuVendor};
+pub use network_stats::{InterfaceRates, InterfaceStats, NetworkStatsAnalyzer, NetworkStatsData};
 pub use process_extra::{IoPriorityClass, ProcessExtra, ProcessExtraAnalyzer, ProcessExtraData};
 pub use psi::{PsiAnalyzer, PsiAverages, PsiData, PsiResource};
 pub use sensor_health::{
     SensorHealthAnalyzer, SensorHealthData, SensorReading, SensorStatus, SensorType,
 };
+pub use storage::{MountInfo, StorageAnalyzer, StorageData};
+pub use swap::{SwapAnalyzer, SwapData, SwapDevice, SwapType};
 pub use treemap::{TreemapAnalyzer, TreemapConfig, TreemapData, TreemapNode};
 
 /// Error type for analyzer operations
@@ -94,6 +106,18 @@ pub struct AnalyzerRegistry {
     pub gpu_procs: Option<GpuProcsAnalyzer>,
     /// Filesystem treemap
     pub treemap: Option<TreemapAnalyzer>,
+    /// Disk I/O statistics
+    pub disk_io: Option<DiskIoAnalyzer>,
+    /// Network interface statistics
+    pub network_stats: Option<NetworkStatsAnalyzer>,
+    /// Swap statistics
+    pub swap: Option<SwapAnalyzer>,
+    /// Storage/filesystem information
+    pub storage: Option<StorageAnalyzer>,
+    /// Disk entropy/encryption detection
+    pub disk_entropy: Option<DiskEntropyAnalyzer>,
+    /// File activity and inode stats
+    pub file_analyzer: Option<FileAnalyzer>,
 }
 
 impl Default for AnalyzerRegistry {
@@ -168,6 +192,60 @@ impl AnalyzerRegistry {
             }
         };
 
+        let disk_io = {
+            let analyzer = DiskIoAnalyzer::new();
+            if analyzer.available() {
+                Some(analyzer)
+            } else {
+                None
+            }
+        };
+
+        let network_stats = {
+            let analyzer = NetworkStatsAnalyzer::new();
+            if analyzer.available() {
+                Some(analyzer)
+            } else {
+                None
+            }
+        };
+
+        let swap = {
+            let analyzer = SwapAnalyzer::new();
+            if analyzer.available() {
+                Some(analyzer)
+            } else {
+                None
+            }
+        };
+
+        let storage = {
+            let analyzer = StorageAnalyzer::new();
+            if analyzer.available() {
+                Some(analyzer)
+            } else {
+                None
+            }
+        };
+
+        let disk_entropy = {
+            let analyzer = DiskEntropyAnalyzer::new();
+            if analyzer.available() {
+                Some(analyzer)
+            } else {
+                None
+            }
+        };
+
+        let file_analyzer = {
+            let analyzer = FileAnalyzer::new();
+            if analyzer.available() {
+                Some(analyzer)
+            } else {
+                None
+            }
+        };
+
         Self {
             psi,
             connections,
@@ -176,6 +254,12 @@ impl AnalyzerRegistry {
             containers,
             gpu_procs,
             treemap,
+            disk_io,
+            network_stats,
+            swap,
+            storage,
+            disk_entropy,
+            file_analyzer,
         }
     }
 
@@ -201,6 +285,24 @@ impl AnalyzerRegistry {
         }
         if let Some(ref mut treemap) = self.treemap {
             let _ = treemap.collect();
+        }
+        if let Some(ref mut disk_io) = self.disk_io {
+            let _ = disk_io.collect();
+        }
+        if let Some(ref mut network_stats) = self.network_stats {
+            let _ = network_stats.collect();
+        }
+        if let Some(ref mut swap) = self.swap {
+            let _ = swap.collect();
+        }
+        if let Some(ref mut storage) = self.storage {
+            let _ = storage.collect();
+        }
+        if let Some(ref mut disk_entropy) = self.disk_entropy {
+            let _ = disk_entropy.collect();
+        }
+        if let Some(ref mut file_analyzer) = self.file_analyzer {
+            let _ = file_analyzer.collect();
         }
     }
 
@@ -237,6 +339,36 @@ impl AnalyzerRegistry {
     /// Get treemap data if available
     pub fn treemap_data(&self) -> Option<&TreemapData> {
         self.treemap.as_ref().map(|t| t.data())
+    }
+
+    /// Get disk I/O data if available
+    pub fn disk_io_data(&self) -> Option<&DiskIoData> {
+        self.disk_io.as_ref().map(|d| d.data())
+    }
+
+    /// Get network stats data if available
+    pub fn network_stats_data(&self) -> Option<&NetworkStatsData> {
+        self.network_stats.as_ref().map(|n| n.data())
+    }
+
+    /// Get swap data if available
+    pub fn swap_data(&self) -> Option<&SwapData> {
+        self.swap.as_ref().map(|s| s.data())
+    }
+
+    /// Get storage data if available
+    pub fn storage_data(&self) -> Option<&StorageData> {
+        self.storage.as_ref().map(|s| s.data())
+    }
+
+    /// Get disk entropy data if available
+    pub fn disk_entropy_data(&self) -> Option<&DiskEntropyData> {
+        self.disk_entropy.as_ref().map(|d| d.data())
+    }
+
+    /// Get file analyzer data if available
+    pub fn file_analyzer_data(&self) -> Option<&FileAnalyzerData> {
+        self.file_analyzer.as_ref().map(|f| f.data())
     }
 }
 

@@ -2,6 +2,49 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## CRITICAL: ComputeBlock Architecture
+
+**TESTS DEFINE INTERFACE. IMPLEMENTATION FOLLOWS.**
+
+This is not a guideline. It is an architectural constraint enforced at compile-time.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  YOU CANNOT BUILD PRESENTAR WITHOUT TESTS                       │
+├─────────────────────────────────────────────────────────────────┤
+│  1. Write test FIRST (references non-existent interface)        │
+│  2. Build fails → Add interface (struct fields, methods)        │
+│  3. Test fails → Implement logic                                │
+│  4. Test passes → Interface is now guaranteed                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Enforcement Mechanisms (Active)
+
+| Layer | Mechanism | Location |
+|-------|-----------|----------|
+| **build.rs** | `panic!` if test files missing | `crates/presentar-terminal/build.rs` |
+| **include_str!** | Compile error if test missing | `src/ptop/mod.rs` |
+| **Proc macros** | `#[interface_test]`, `#[requires_interface]` | `presentar-test-macros` |
+| **Git hooks** | Block commits without tests | `scripts/install-hooks.sh` |
+| **CI** | Block PRs without test coverage | `.github/workflows/enforce.yml` |
+
+### To Add Any Feature
+
+```bash
+# 1. Write interface test FIRST
+echo '#[test] fn test_new_field() { let _ = &snapshot.new_field; }' > tests/new_feature.rs
+
+# 2. Add enforcement line to src/ptop/mod.rs
+# pub const _ENFORCE_NEW: &str = include_str!("../../tests/new_feature.rs");
+
+# 3. Now implement (impossible without steps 1-2)
+```
+
+See: `docs/specifications/pixel-by-pixel-demo-ptop-ttop.md` Part 0: Epistemological Foundation
+
+---
+
 ## Project Overview
 
 Presentar is a **WASM-first visualization and rapid application framework** built on the Sovereign AI Stack (Trueno, Aprender, Realizar, Pacha). It eliminates Python/CUDA/cloud dependencies for fully self-hosted AI workloads.
@@ -22,31 +65,24 @@ Layer 7: Trueno-Viz         - Paths, fills, strokes, text, charts, WGSL shaders
 Layer 6: Trueno             - SIMD/GPU tensor ops, backend dispatch, memory management
 ```
 
-## Build Commands (when implemented)
+## Build Commands
 
 ```bash
-# Development server with hot reload
-make dev                    # cargo watch + wasm-bindgen + http.server :8080
+# Development
+cargo build -p presentar-terminal --features ptop
+cargo run -p presentar-terminal --features ptop --bin ptop
 
-# Production WASM build
-make build                  # cargo build --target wasm32-unknown-unknown --release + wasm-opt
+# Testing (MANDATORY before any implementation)
+cargo test -p presentar-terminal --features ptop
+cargo test -p presentar-terminal --features ptop --test cpu_exploded_async  # Interface tests
 
-# Testing
-make test                   # Runs unit, integration, and visual regression tests
-make test-unit              # cargo nextest run --lib
-make test-integration       # cargo nextest run --test '*'
-make test-visual            # cargo test --features visual-regression
+# Install git hooks (run once after clone)
+./scripts/install-hooks.sh
 
 # Quality gates
-make lint                   # clippy + yamllint + a11y check
-make fmt                    # cargo fmt + prettier
-make coverage               # cargo llvm-cov
-make score                  # Quality scoring (0-100, F-A grades)
-
-# Three-tier quality pipeline
-make tier1                  # On-save (<1s): cargo check + yamllint
-make tier2                  # Pre-commit (1-5min): fmt + lint + tests + score
-make tier3                  # Nightly: tier2 + visual + coverage + mutation testing
+cargo clippy --all-features -- -D warnings
+cargo fmt --check
+cargo llvm-cov --features ptop
 ```
 
 ## Core File Types
@@ -61,26 +97,32 @@ make tier3                  # Nightly: tier2 + visual + coverage + mutation test
 **Zero external dependencies** - no playwright, selenium, puppeteer, npm, or C bindings. Pure Rust + WASM only.
 
 Key testing patterns:
-- `#[presentar_test]` attribute for test functions
+- `#[presentar_test]` - Standard test attribute
+- `#[interface_test(Name)]` - Defines interface (generates proof type)
+- `#[requires_interface(Name)]` - Requires interface test to exist
 - `Harness::new(include_bytes!("fixtures/app.tar"))` for fixture loading
-- CSS-like selectors: `"Button"`, `"#submit-btn"`, `"[data-testid='login']"`
-- Visual regression via `Snapshot::assert_match()`
-- Built-in WCAG 2.1 AA accessibility checking
+- `TuiTestBackend` + `expect_frame()` for TUI testing
+- Visual regression via `TuiSnapshot::assert_match()`
 
 ## Quality Standards
 
-- **Minimum grade: B+** (80+ score) for production
-- **60fps target** (<16ms frame time)
-- **<500KB bundle size**
-- **WCAG AA compliance** required
-- **Model/data cards** required for ML assets
+- **Test coverage:** ≥85% (enforced by CI)
+- **Interface tests:** MANDATORY for all async data flow
+- **Performance:** <1ms full redraw, <0.1ms diff update
+- **Visual regression:** Zero tolerance pixel-perfect tests
 
 ## Key Dependencies
 
 - `trueno` - SIMD-accelerated tensor operations (always use latest from crates.io)
-- `winit` - Window/event loop (only external for windowing)
-- `fontdue` - Font rasterization (only external for fonts)
-- `wgpu` - WebGPU abstraction
+- `presentar-test` - Testing framework with architectural enforcement
+- `sysinfo` - System metrics (for ptop)
+- `crossterm` - Terminal backend
+
+## Specification Documents
+
+| Spec | Purpose |
+|------|---------|
+| `docs/specifications/pixel-by-pixel-demo-ptop-ttop.md` | **UNIFIED SPEC** - TUI architecture, Popperian falsification, pixel-perfect ttop parity |
 
 ## Expression Language (in YAML)
 

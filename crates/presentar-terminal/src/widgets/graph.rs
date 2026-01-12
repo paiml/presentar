@@ -52,8 +52,7 @@ impl TimeAxisMode {
                     Some(format!("{}h", secs_ago / 3600))
                 }
             }
-            Self::Absolute => None, // Would need actual timestamp
-            Self::Hidden => None,
+            Self::Absolute | Self::Hidden => None, // Would need actual timestamp
         }
     }
 }
@@ -907,5 +906,430 @@ mod tests {
         let mut canvas = MockCanvas::new();
         graph.paint(&mut canvas);
         assert!(!canvas.texts.is_empty());
+    }
+
+    // ========================================================================
+    // Additional tests for axis margins and time axis
+    // ========================================================================
+
+    #[test]
+    fn test_graph_with_margins() {
+        let graph = BrailleGraph::new(vec![1.0, 2.0]).with_margins(AxisMargins::WIDE);
+        assert_eq!(graph.margins.y_axis_width, 10);
+        assert_eq!(graph.margins.x_axis_height, 2);
+    }
+
+    #[test]
+    fn test_graph_with_margins_none() {
+        let graph = BrailleGraph::new(vec![1.0, 2.0]).with_margins(AxisMargins::NONE);
+        assert_eq!(graph.margins.y_axis_width, 0);
+        assert_eq!(graph.margins.x_axis_height, 0);
+    }
+
+    #[test]
+    fn test_graph_with_margins_compact() {
+        let graph = BrailleGraph::new(vec![1.0, 2.0]).with_margins(AxisMargins::COMPACT);
+        assert_eq!(graph.margins.y_axis_width, 4);
+        assert_eq!(graph.margins.x_axis_height, 1);
+    }
+
+    #[test]
+    fn test_graph_with_margins_standard() {
+        let graph = BrailleGraph::new(vec![1.0, 2.0]).with_margins(AxisMargins::STANDARD);
+        assert_eq!(graph.margins.y_axis_width, 6);
+        assert_eq!(graph.margins.x_axis_height, 1);
+    }
+
+    #[test]
+    fn test_axis_margins_default() {
+        let margins = AxisMargins::default();
+        assert_eq!(margins.y_axis_width, 6);
+        assert_eq!(margins.x_axis_height, 1);
+    }
+
+    #[test]
+    fn test_graph_with_time_axis_indices() {
+        let graph = BrailleGraph::new(vec![1.0, 2.0]).with_time_axis(TimeAxisMode::Indices);
+        assert_eq!(graph.time_axis, TimeAxisMode::Indices);
+    }
+
+    #[test]
+    fn test_graph_with_time_axis_relative() {
+        let graph = BrailleGraph::new(vec![1.0, 2.0])
+            .with_time_axis(TimeAxisMode::Relative { interval_secs: 5 });
+        match graph.time_axis {
+            TimeAxisMode::Relative { interval_secs } => assert_eq!(interval_secs, 5),
+            _ => panic!("Expected Relative time axis mode"),
+        }
+    }
+
+    #[test]
+    fn test_graph_with_time_axis_absolute() {
+        let graph = BrailleGraph::new(vec![1.0, 2.0]).with_time_axis(TimeAxisMode::Absolute);
+        assert_eq!(graph.time_axis, TimeAxisMode::Absolute);
+    }
+
+    #[test]
+    fn test_graph_with_time_axis_hidden() {
+        let graph = BrailleGraph::new(vec![1.0, 2.0]).with_time_axis(TimeAxisMode::Hidden);
+        assert_eq!(graph.time_axis, TimeAxisMode::Hidden);
+    }
+
+    #[test]
+    fn test_time_axis_mode_default() {
+        assert_eq!(TimeAxisMode::default(), TimeAxisMode::Indices);
+    }
+
+    #[test]
+    fn test_time_axis_format_label_indices() {
+        let mode = TimeAxisMode::Indices;
+        assert_eq!(mode.format_label(0, 10), Some("0".to_string()));
+        assert_eq!(mode.format_label(5, 10), Some("5".to_string()));
+        assert_eq!(mode.format_label(9, 10), Some("9".to_string()));
+    }
+
+    #[test]
+    fn test_time_axis_format_label_relative_seconds() {
+        let mode = TimeAxisMode::Relative { interval_secs: 1 };
+        // At index 0 with total 60, that's 60 seconds ago
+        assert_eq!(mode.format_label(0, 60), Some("1m".to_string()));
+        // At index 59 with total 60, that's 1 second ago
+        assert_eq!(mode.format_label(59, 60), Some("1s".to_string()));
+        // At index 30 with total 60, that's 30 seconds ago
+        assert_eq!(mode.format_label(30, 60), Some("30s".to_string()));
+    }
+
+    #[test]
+    fn test_time_axis_format_label_relative_minutes() {
+        let mode = TimeAxisMode::Relative { interval_secs: 60 };
+        // At index 0 with total 10, that's 600 seconds (10 minutes) ago
+        assert_eq!(mode.format_label(0, 10), Some("10m".to_string()));
+        // At index 5 with total 10, that's 300 seconds (5 minutes) ago
+        assert_eq!(mode.format_label(5, 10), Some("5m".to_string()));
+    }
+
+    #[test]
+    fn test_time_axis_format_label_relative_hours() {
+        let mode = TimeAxisMode::Relative {
+            interval_secs: 3600,
+        };
+        // At index 0 with total 5, that's 18000 seconds (5 hours) ago
+        assert_eq!(mode.format_label(0, 5), Some("5h".to_string()));
+        // At index 3 with total 5, that's 7200 seconds (2 hours) ago
+        assert_eq!(mode.format_label(3, 5), Some("2h".to_string()));
+    }
+
+    #[test]
+    fn test_time_axis_format_label_absolute() {
+        let mode = TimeAxisMode::Absolute;
+        assert_eq!(mode.format_label(0, 10), None);
+    }
+
+    #[test]
+    fn test_time_axis_format_label_hidden() {
+        let mode = TimeAxisMode::Hidden;
+        assert_eq!(mode.format_label(0, 10), None);
+    }
+
+    #[test]
+    fn test_graph_with_legend() {
+        let graph = BrailleGraph::new(vec![1.0, 2.0]).with_legend(true);
+        assert!(graph.show_legend);
+    }
+
+    #[test]
+    fn test_graph_with_legend_disabled() {
+        let graph = BrailleGraph::new(vec![1.0, 2.0]).with_legend(false);
+        assert!(!graph.show_legend);
+    }
+
+    #[test]
+    fn test_graph_with_gradient() {
+        let gradient = Gradient::two(Color::BLUE, Color::RED);
+        let graph = BrailleGraph::new(vec![1.0, 2.0]).with_gradient(gradient);
+        assert!(graph.gradient.is_some());
+    }
+
+    #[test]
+    fn test_graph_color_for_value_without_gradient() {
+        let graph = BrailleGraph::new(vec![0.0, 100.0]).with_color(Color::GREEN);
+        let color = graph.color_for_value(0.5);
+        assert_eq!(color, Color::GREEN);
+    }
+
+    #[test]
+    fn test_graph_color_for_value_with_gradient() {
+        let gradient = Gradient::two(Color::BLUE, Color::RED);
+        let graph = BrailleGraph::new(vec![0.0, 100.0]).with_gradient(gradient);
+        // Should get different colors at different positions
+        let color_low = graph.color_for_value(0.0);
+        let color_high = graph.color_for_value(1.0);
+        // Colors should differ (one is blue, one is red)
+        assert_ne!(color_low, color_high);
+    }
+
+    #[test]
+    fn test_graph_area_with_margins() {
+        let mut graph = BrailleGraph::new(vec![1.0, 2.0]).with_margins(AxisMargins::STANDARD);
+        graph.bounds = Rect::new(0.0, 0.0, 80.0, 24.0);
+        let area = graph.graph_area();
+        // y_axis_width = 6, so x starts at 6
+        assert_eq!(area.x, 6.0);
+        // x_axis_height = 1, so height reduced by 1
+        assert_eq!(area.height, 23.0);
+        assert_eq!(area.width, 74.0);
+    }
+
+    #[test]
+    fn test_graph_area_with_no_margins() {
+        let mut graph = BrailleGraph::new(vec![1.0, 2.0]).with_margins(AxisMargins::NONE);
+        graph.bounds = Rect::new(0.0, 0.0, 80.0, 24.0);
+        let area = graph.graph_area();
+        assert_eq!(area.x, 0.0);
+        assert_eq!(area.y, 0.0);
+        assert_eq!(area.width, 80.0);
+        assert_eq!(area.height, 24.0);
+    }
+
+    #[test]
+    fn test_graph_paint_with_y_axis() {
+        let mut graph =
+            BrailleGraph::new(vec![0.0, 50.0, 100.0]).with_margins(AxisMargins::STANDARD);
+        graph.bounds = Rect::new(0.0, 0.0, 80.0, 10.0);
+        let mut canvas = MockCanvas::new();
+        graph.paint(&mut canvas);
+        // Should render y-axis labels (min and max values)
+        let has_max_label = canvas.texts.iter().any(|(t, _)| t.contains("100"));
+        let has_min_label = canvas.texts.iter().any(|(t, _)| t.contains("0"));
+        assert!(has_max_label || has_min_label);
+    }
+
+    #[test]
+    fn test_graph_paint_with_x_axis_indices() {
+        let mut graph = BrailleGraph::new(vec![0.0, 50.0, 100.0])
+            .with_margins(AxisMargins::STANDARD)
+            .with_time_axis(TimeAxisMode::Indices);
+        graph.bounds = Rect::new(0.0, 0.0, 80.0, 10.0);
+        let mut canvas = MockCanvas::new();
+        graph.paint(&mut canvas);
+        // Should render x-axis labels with indices
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_graph_paint_with_x_axis_hidden() {
+        let mut graph = BrailleGraph::new(vec![0.0, 50.0, 100.0])
+            .with_margins(AxisMargins::STANDARD)
+            .with_time_axis(TimeAxisMode::Hidden);
+        graph.bounds = Rect::new(0.0, 0.0, 80.0, 10.0);
+        let mut canvas = MockCanvas::new();
+        graph.paint(&mut canvas);
+        // Should still render but without x-axis labels
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_graph_paint_with_legend() {
+        let mut graph = BrailleGraph::new(vec![0.0, 100.0])
+            .with_legend(true)
+            .with_margins(AxisMargins::STANDARD);
+        graph.bounds = Rect::new(0.0, 0.0, 80.0, 10.0);
+        let mut canvas = MockCanvas::new();
+        graph.paint(&mut canvas);
+        // Should render legend with braille characters
+        let has_legend = canvas
+            .texts
+            .iter()
+            .any(|(t, _)| t.contains("⣿") || t.contains("⣀"));
+        assert!(has_legend);
+    }
+
+    #[test]
+    fn test_graph_paint_without_legend() {
+        let mut graph = BrailleGraph::new(vec![0.0, 100.0])
+            .with_legend(false)
+            .with_margins(AxisMargins::NONE);
+        graph.bounds = Rect::new(0.0, 0.0, 80.0, 10.0);
+        let mut canvas = MockCanvas::new();
+        graph.paint(&mut canvas);
+        // Should not render legend
+        let has_legend = canvas
+            .texts
+            .iter()
+            .any(|(t, _)| t.contains("⣿=") || t.contains("⣀="));
+        assert!(!has_legend);
+    }
+
+    #[test]
+    fn test_graph_paint_with_no_y_axis_margin() {
+        let mut graph = BrailleGraph::new(vec![0.0, 100.0]).with_margins(AxisMargins::NONE);
+        graph.bounds = Rect::new(0.0, 0.0, 80.0, 10.0);
+        let mut canvas = MockCanvas::new();
+        graph.paint(&mut canvas);
+        // Should render the graph but not y-axis labels at position 0
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_graph_paint_with_gradient_braille() {
+        let gradient = Gradient::two(Color::BLUE, Color::RED);
+        let mut graph = BrailleGraph::new(vec![0.0, 50.0, 100.0])
+            .with_gradient(gradient)
+            .with_mode(GraphMode::Braille)
+            .with_margins(AxisMargins::NONE);
+        graph.bounds = Rect::new(0.0, 0.0, 10.0, 5.0);
+        let mut canvas = MockCanvas::new();
+        graph.paint(&mut canvas);
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_graph_paint_with_gradient_block() {
+        let gradient = Gradient::two(Color::BLUE, Color::RED);
+        let mut graph = BrailleGraph::new(vec![0.0, 50.0, 100.0])
+            .with_gradient(gradient)
+            .with_mode(GraphMode::Block)
+            .with_margins(AxisMargins::NONE);
+        graph.bounds = Rect::new(0.0, 0.0, 10.0, 5.0);
+        let mut canvas = MockCanvas::new();
+        graph.paint(&mut canvas);
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_graph_paint_with_gradient_tty() {
+        let gradient = Gradient::two(Color::BLUE, Color::RED);
+        let mut graph = BrailleGraph::new(vec![0.0, 50.0, 100.0])
+            .with_gradient(gradient)
+            .with_mode(GraphMode::Tty)
+            .with_margins(AxisMargins::NONE);
+        graph.bounds = Rect::new(0.0, 0.0, 10.0, 5.0);
+        let mut canvas = MockCanvas::new();
+        graph.paint(&mut canvas);
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_graph_block_mode_single_point() {
+        let mut graph = BrailleGraph::new(vec![50.0]).with_mode(GraphMode::Block);
+        graph.bounds = Rect::new(0.0, 0.0, 5.0, 4.0);
+        let mut canvas = MockCanvas::new();
+        graph.paint(&mut canvas);
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_graph_tty_mode_single_point() {
+        let mut graph = BrailleGraph::new(vec![50.0]).with_mode(GraphMode::Tty);
+        graph.bounds = Rect::new(0.0, 0.0, 5.0, 4.0);
+        let mut canvas = MockCanvas::new();
+        graph.paint(&mut canvas);
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_graph_braille_more_data_than_width() {
+        let data: Vec<f64> = (0..100).map(|i| i as f64).collect();
+        let mut graph = BrailleGraph::new(data)
+            .with_mode(GraphMode::Braille)
+            .with_margins(AxisMargins::NONE);
+        graph.bounds = Rect::new(0.0, 0.0, 10.0, 5.0);
+        let mut canvas = MockCanvas::new();
+        graph.paint(&mut canvas);
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_graph_block_more_data_than_width() {
+        let data: Vec<f64> = (0..100).map(|i| i as f64).collect();
+        let mut graph = BrailleGraph::new(data)
+            .with_mode(GraphMode::Block)
+            .with_margins(AxisMargins::NONE);
+        graph.bounds = Rect::new(0.0, 0.0, 10.0, 5.0);
+        let mut canvas = MockCanvas::new();
+        graph.paint(&mut canvas);
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_graph_tty_more_data_than_width() {
+        let data: Vec<f64> = (0..100).map(|i| i as f64).collect();
+        let mut graph = BrailleGraph::new(data)
+            .with_mode(GraphMode::Tty)
+            .with_margins(AxisMargins::NONE);
+        graph.bounds = Rect::new(0.0, 0.0, 10.0, 5.0);
+        let mut canvas = MockCanvas::new();
+        graph.paint(&mut canvas);
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_graph_small_bounds_clipping() {
+        // Test with bounds smaller than margins would require
+        let mut graph = BrailleGraph::new(vec![0.0, 100.0]).with_margins(AxisMargins::WIDE);
+        graph.bounds = Rect::new(0.0, 0.0, 5.0, 2.0);
+        let area = graph.graph_area();
+        // Width should be clamped to 0 since bounds.width (5) - y_axis_width (10) < 0
+        assert!(area.width >= 0.0);
+        assert!(area.height >= 0.0);
+    }
+
+    #[test]
+    fn test_graph_x_axis_single_data_point() {
+        let mut graph = BrailleGraph::new(vec![50.0])
+            .with_margins(AxisMargins::STANDARD)
+            .with_time_axis(TimeAxisMode::Indices);
+        graph.bounds = Rect::new(0.0, 0.0, 80.0, 10.0);
+        let mut canvas = MockCanvas::new();
+        graph.paint(&mut canvas);
+        // Should handle single data point gracefully
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_graph_mode_debug() {
+        // Test Debug impl for GraphMode
+        let mode = GraphMode::Braille;
+        let debug_str = format!("{:?}", mode);
+        assert!(debug_str.contains("Braille"));
+    }
+
+    #[test]
+    fn test_time_axis_mode_debug() {
+        // Test Debug impl for TimeAxisMode
+        let mode = TimeAxisMode::Relative { interval_secs: 60 };
+        let debug_str = format!("{:?}", mode);
+        assert!(debug_str.contains("Relative"));
+        assert!(debug_str.contains("60"));
+    }
+
+    #[test]
+    fn test_axis_margins_debug() {
+        // Test Debug impl for AxisMargins
+        let margins = AxisMargins::WIDE;
+        let debug_str = format!("{:?}", margins);
+        assert!(debug_str.contains("10")); // y_axis_width
+        assert!(debug_str.contains("2")); // x_axis_height
+    }
+
+    #[test]
+    fn test_graph_clone() {
+        let graph = BrailleGraph::new(vec![1.0, 2.0, 3.0])
+            .with_color(Color::RED)
+            .with_label("Test")
+            .with_range(0.0, 100.0);
+        let cloned = graph.clone();
+        assert_eq!(cloned.data, graph.data);
+        assert_eq!(cloned.color, graph.color);
+        assert_eq!(cloned.label, graph.label);
+        assert_eq!(cloned.min, graph.min);
+        assert_eq!(cloned.max, graph.max);
+    }
+
+    #[test]
+    fn test_graph_debug() {
+        let graph = BrailleGraph::new(vec![1.0, 2.0]);
+        let debug_str = format!("{:?}", graph);
+        assert!(debug_str.contains("BrailleGraph"));
     }
 }

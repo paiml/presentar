@@ -147,7 +147,7 @@ The N-gram model implementation is based on:
 1. Chen & Goodman (1999). "An Empirical Study of Smoothing Techniques for Language Modeling"
 2. Stolcke (2002). "SRILM - An Extensible Language Modeling Toolkit"
 
-See the [specification](../../docs/specifications/showcase-demo-aprender-shell-apr.md) for complete references.
+See the [specification](../../../docs/specifications/showcase-demo-aprender-shell-apr.md) for complete references.
 
 ## 10X Competitive Advantage
 

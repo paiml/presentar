@@ -672,6 +672,7 @@ fn triangle_area(p1: (f64, f64), p2: (f64, f64), p3: (f64, f64)) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::direct::{CellBuffer, DirectTerminalCanvas};
 
     #[test]
     fn test_line_chart_creation() {
@@ -685,6 +686,27 @@ mod tests {
         let points = vec![(0.0, 0.0), (1.0, 0.1), (2.0, 0.0), (3.0, 0.0)];
         let simplified = douglas_peucker(&points, 0.5);
         assert!(simplified.len() <= points.len());
+    }
+
+    #[test]
+    fn test_douglas_peucker_few_points() {
+        let points = vec![(0.0, 0.0), (1.0, 1.0)];
+        let simplified = douglas_peucker(&points, 0.5);
+        assert_eq!(simplified.len(), 2);
+    }
+
+    #[test]
+    fn test_visvalingam_whyatt() {
+        let points = vec![(0.0, 0.0), (1.0, 0.1), (2.0, 0.0), (3.0, 0.0)];
+        let simplified = visvalingam_whyatt(&points, 0.5);
+        assert!(simplified.len() <= points.len());
+    }
+
+    #[test]
+    fn test_visvalingam_whyatt_few_points() {
+        let points = vec![(0.0, 0.0), (1.0, 1.0)];
+        let simplified = visvalingam_whyatt(&points, 0.5);
+        assert_eq!(simplified.len(), 2);
     }
 
     #[test]
@@ -721,5 +743,225 @@ mod tests {
     fn test_line_chart_children() {
         let chart = LineChart::default();
         assert!(chart.children().is_empty());
+    }
+
+    #[test]
+    fn test_line_chart_layout() {
+        let mut chart = LineChart::new().add_series(
+            "test",
+            vec![(0.0, 0.0), (1.0, 1.0), (2.0, 0.5)],
+            Color::RED,
+        );
+        let bounds = Rect::new(0.0, 0.0, 80.0, 24.0);
+        let result = chart.layout(bounds);
+        assert!(result.size.width > 0.0);
+        assert!(result.size.height > 0.0);
+    }
+
+    #[test]
+    fn test_line_chart_paint() {
+        let mut chart = LineChart::new().add_series(
+            "test",
+            vec![(0.0, 0.0), (1.0, 1.0), (2.0, 0.5)],
+            Color::RED,
+        );
+        let bounds = Rect::new(0.0, 0.0, 80.0, 24.0);
+        chart.layout(bounds);
+
+        let mut buffer = CellBuffer::new(80, 24);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        chart.paint(&mut canvas);
+        // Just verify it doesn't panic
+    }
+
+    #[test]
+    fn test_line_chart_with_legend_positions() {
+        for pos in [
+            LegendPosition::TopRight,
+            LegendPosition::TopLeft,
+            LegendPosition::BottomRight,
+            LegendPosition::BottomLeft,
+            LegendPosition::None,
+        ] {
+            let mut chart = LineChart::new()
+                .add_series("s1", vec![(0.0, 0.0), (1.0, 1.0)], Color::RED)
+                .with_legend(pos);
+            let bounds = Rect::new(0.0, 0.0, 80.0, 24.0);
+            chart.layout(bounds);
+            let mut buffer = CellBuffer::new(80, 24);
+            let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+            chart.paint(&mut canvas);
+        }
+    }
+
+    #[test]
+    fn test_line_chart_with_axis_config() {
+        let mut chart = LineChart::new()
+            .add_series("test", vec![(0.0, 0.0), (10.0, 100.0)], Color::RED)
+            .with_x_axis(Axis {
+                label: Some("X Label".to_string()),
+                min: Some(0.0),
+                max: Some(10.0),
+                ticks: 5,
+                grid: true,
+            })
+            .with_y_axis(Axis {
+                label: Some("Y Label".to_string()),
+                min: Some(0.0),
+                max: Some(100.0),
+                ticks: 10,
+                grid: true,
+            });
+        let bounds = Rect::new(0.0, 0.0, 80.0, 24.0);
+        chart.layout(bounds);
+        let mut buffer = CellBuffer::new(80, 24);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        chart.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_line_chart_with_simplification() {
+        let data: Vec<(f64, f64)> = (0..100)
+            .map(|i| (i as f64, (i as f64 * 0.1).sin()))
+            .collect();
+
+        // Test Douglas-Peucker
+        let mut chart = LineChart::new()
+            .add_series("dp", data.clone(), Color::RED)
+            .with_simplification(Simplification::DouglasPeucker { epsilon: 0.1 });
+        let bounds = Rect::new(0.0, 0.0, 80.0, 24.0);
+        chart.layout(bounds);
+        let mut buffer = CellBuffer::new(80, 24);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        chart.paint(&mut canvas);
+
+        // Test Visvalingam-Whyatt
+        let mut chart = LineChart::new()
+            .add_series("vw", data, Color::BLUE)
+            .with_simplification(Simplification::VisvalingamWhyatt { threshold: 0.1 });
+        chart.layout(bounds);
+        chart.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_line_chart_line_styles() {
+        for style in [
+            LineStyle::Solid,
+            LineStyle::Dashed,
+            LineStyle::Dotted,
+            LineStyle::Markers,
+        ] {
+            let mut chart = LineChart::new().add_series_styled(
+                "test",
+                vec![(0.0, 0.0), (1.0, 1.0), (2.0, 0.5)],
+                Color::RED,
+                style,
+            );
+            let bounds = Rect::new(0.0, 0.0, 80.0, 24.0);
+            chart.layout(bounds);
+            let mut buffer = CellBuffer::new(80, 24);
+            let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+            chart.paint(&mut canvas);
+        }
+    }
+
+    #[test]
+    fn test_line_chart_y_range() {
+        let chart = LineChart::new().add_series(
+            "test",
+            vec![(0.0, -5.0), (1.0, 10.0), (2.0, 3.0)],
+            Color::RED,
+        );
+        let (y_min, y_max) = chart.y_range();
+        assert!(y_min <= -5.0);
+        assert!(y_max >= 10.0);
+    }
+
+    #[test]
+    fn test_line_chart_x_range_with_data() {
+        let chart = LineChart::new().add_series("test", vec![(5.0, 0.0), (15.0, 1.0)], Color::RED);
+        let (x_min, x_max) = chart.x_range();
+        assert!(x_min <= 5.0);
+        assert!(x_max >= 15.0);
+    }
+
+    #[test]
+    fn test_triangle_area() {
+        let area = triangle_area((0.0, 0.0), (1.0, 0.0), (0.5, 1.0));
+        assert!((area - 0.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_perpendicular_distance() {
+        // Point on the line
+        let dist = perpendicular_distance((0.5, 0.5), (0.0, 0.0), (1.0, 1.0));
+        assert!(dist < 0.001);
+
+        // Point away from line
+        let dist = perpendicular_distance((0.0, 1.0), (0.0, 0.0), (1.0, 0.0));
+        assert!((dist - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_axis_default() {
+        let axis = Axis::default();
+        assert!(axis.label.is_none());
+        assert!(axis.min.is_none());
+        assert!(axis.max.is_none());
+        assert_eq!(axis.ticks, 5);
+        assert!(!axis.grid);
+    }
+
+    #[test]
+    fn test_simplification_default() {
+        let simp = Simplification::default();
+        assert!(matches!(simp, Simplification::None));
+    }
+
+    #[test]
+    fn test_line_style_default() {
+        let style = LineStyle::default();
+        assert!(matches!(style, LineStyle::Solid));
+    }
+
+    #[test]
+    fn test_legend_position_default() {
+        let pos = LegendPosition::default();
+        assert!(matches!(pos, LegendPosition::TopRight));
+    }
+
+    #[test]
+    fn test_line_chart_compact() {
+        let chart = LineChart::new()
+            .add_series("test", vec![(0.0, 0.0), (1.0, 1.0)], Color::RED)
+            .compact();
+        assert_eq!(chart.margin_left, 0.0);
+        assert_eq!(chart.margin_bottom, 0.0);
+        assert_eq!(chart.y_axis.ticks, 0);
+        assert_eq!(chart.x_axis.ticks, 0);
+        assert!(matches!(chart.legend, LegendPosition::None));
+    }
+
+    #[test]
+    fn test_line_chart_with_margins() {
+        let chart = LineChart::new()
+            .add_series("test", vec![(0.0, 0.0), (1.0, 1.0)], Color::RED)
+            .with_margins(10.0, 5.0);
+        assert_eq!(chart.margin_left, 10.0);
+        assert_eq!(chart.margin_bottom, 5.0);
+    }
+
+    #[test]
+    fn test_line_chart_explicit_x_range() {
+        let chart = LineChart::new()
+            .add_series("test", vec![(0.0, 0.0), (1.0, 1.0)], Color::RED)
+            .with_x_axis(Axis {
+                min: Some(0.0),
+                max: Some(10.0),
+                ..Default::default()
+            });
+        let (xmin, xmax) = chart.x_range();
+        assert_eq!(xmin, 0.0);
+        assert_eq!(xmax, 10.0);
     }
 }

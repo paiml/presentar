@@ -93,6 +93,7 @@ pub mod grade;
 mod harness;
 mod selector;
 mod snapshot;
+pub mod tui;
 
 pub use a11y::{
     aria_from_widget, A11yChecker, A11yConfig, A11yReport, A11yViolation, AriaAttributes,
@@ -117,5 +118,32 @@ pub use harness::Harness;
 pub use selector::{Selector, SelectorParser};
 pub use snapshot::{ComparisonResult, Image, Snapshot};
 
+// TUI Testing Framework (SPEC-024 Section 12 & 13)
+// Tests DEFINE interface - implementation follows
+pub use tui::{
+    expect_frame, AsyncUpdateAssertion, BenchmarkHarness, BenchmarkResult, DiffEntry,
+    FrameAssertion, PerformanceTargets, RenderMetrics, SnapshotDiff, SnapshotError, TuiCell,
+    TuiSnapshot, TuiTestBackend,
+};
+
 // Re-export proc macros for convenient access
 pub use presentar_test_macros::{assert_snapshot, describe_suite, fixture, presentar_test};
+
+// =============================================================================
+// COMPUTEBLOCK ARCHITECTURAL ENFORCEMENT (SPEC-024)
+// =============================================================================
+//
+// TESTS DEFINE INTERFACE. IMPLEMENTATION FOLLOWS.
+//
+// These macros make it IMPOSSIBLE to build presentar applications without tests.
+// The test creates a "proof" type that the implementation requires.
+// Without the test -> no proof type -> compile error.
+//
+// Usage:
+//   1. In tests: #[interface_test(MyFeature)] fn test_xxx() { ... }
+//   2. In impl:  #[requires_interface(MyFeature)] impl MyFeature { ... }
+//
+// If you try to use #[requires_interface] without the corresponding
+// #[interface_test], the build FAILS. This is architectural, not advisory.
+
+pub use presentar_test_macros::{computeblock, interface_test, requires_interface};

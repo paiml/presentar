@@ -1,0 +1,63 @@
+# Reproducibility Verification CI
+# Ensures builds are reproducible with fixed seeds
+
+name: Reproducibility
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  PRESENTAR_TEST_SEED: 42
+  PROPTEST_SEED: 0xdeadbeef
+  RUST_BACKTRACE: 1
+
+jobs:
+  reproducibility:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-action@stable
+
+    - name: Verify Cargo.lock
+      run: |
+        cargo generate-lockfile
+        git diff --exit-code Cargo.lock || (echo "Cargo.lock is out of date" && exit 1)
+
+    - name: Check rust-toolchain.toml
+      run: |
+        if [ ! -f rust-toolchain.toml ]; then
+          echo "rust-toolchain.toml is required for reproducibility"
+          exit 1
+        fi
+
+    - name: Verify deterministic tests
+      run: |
+        # Run tests twice with same seed, verify identical output
+        cargo test --workspace -- --test-threads=1 2>&1 | tee run1.txt
+        cargo test --workspace -- --test-threads=1 2>&1 | tee run2.txt
+
+        # Compare test counts (results should be deterministic)
+        grep -E "^test result:" run1.txt > results1.txt
+        grep -E "^test result:" run2.txt > results2.txt
+        diff results1.txt results2.txt || (echo "Non-deterministic test results" && exit 1)
+
+    - name: Check proptest regressions
+      run: |
+        if [ -d proptest-regressions ]; then
+          echo "PropTest regressions found - these must be committed"
+          ls -la proptest-regressions/
+        fi
+
+    - name: Verify DVC configuration
+      run: |
+        if [ -f dvc.yaml ]; then
+          echo "DVC pipeline configured"
+          cat dvc.yaml
+        fi

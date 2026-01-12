@@ -456,4 +456,255 @@ mod tests {
         assert_eq!(SensorStatus::Warning.indicator(), '◐');
         assert_eq!(SensorStatus::Critical.indicator(), '○');
     }
+
+    #[test]
+    fn test_sensor_status_colors() {
+        let normal = SensorStatus::Normal.color();
+        let warning = SensorStatus::Warning.color();
+        let critical = SensorStatus::Critical.color();
+
+        // Normal is green
+        assert!(normal.g > normal.r);
+        // Warning is yellow
+        assert!(warning.r > 0.8 && warning.g > 0.6);
+        // Critical is red
+        assert!(critical.r > critical.g);
+    }
+
+    #[test]
+    fn test_sensor_reading_voltage() {
+        let reading = SensorReading::voltage("Vcore", 1.25);
+        assert_eq!(reading.value_display(), "1.2V"); // 1.25 rounds to 1.2 with .1f format
+        assert_eq!(reading.status, SensorStatus::Normal);
+    }
+
+    #[test]
+    fn test_sensor_reading_with_status() {
+        let reading = SensorReading::fan("Fan", 1000.0).with_status(SensorStatus::Warning);
+        assert_eq!(reading.status, SensorStatus::Warning);
+    }
+
+    #[test]
+    fn test_sensor_reading_with_thresholds_normal() {
+        let reading =
+            SensorReading::temperature("CPU", 50.0).with_thresholds(Some(70.0), Some(90.0));
+        assert_eq!(reading.status, SensorStatus::Normal);
+    }
+
+    #[test]
+    fn test_sensor_reading_with_thresholds_warning() {
+        let reading =
+            SensorReading::temperature("CPU", 75.0).with_thresholds(Some(70.0), Some(90.0));
+        assert_eq!(reading.status, SensorStatus::Warning);
+    }
+
+    #[test]
+    fn test_sensor_reading_with_thresholds_critical() {
+        let reading =
+            SensorReading::temperature("CPU", 95.0).with_thresholds(Some(70.0), Some(90.0));
+        assert_eq!(reading.status, SensorStatus::Critical);
+    }
+
+    #[test]
+    fn test_panel_with_temperatures() {
+        let readings = vec![
+            SensorReading::temperature("CPU", 45.0),
+            SensorReading::temperature("GPU", 60.0),
+        ];
+        let panel = SensorsPanel::new().with_temperatures(readings);
+        assert_eq!(panel.temperatures.len(), 2);
+    }
+
+    #[test]
+    fn test_panel_with_fans() {
+        let readings = vec![
+            SensorReading::fan("Fan1", 1200.0),
+            SensorReading::fan("Fan2", 800.0),
+        ];
+        let panel = SensorsPanel::new().with_fans(readings);
+        assert_eq!(panel.fans.len(), 2);
+    }
+
+    #[test]
+    fn test_panel_add_voltage() {
+        let mut panel = SensorsPanel::new();
+        panel.add_voltage(SensorReading::voltage("Vcore", 1.2));
+        assert_eq!(panel.voltages.len(), 1);
+    }
+
+    #[test]
+    fn test_panel_show_bars() {
+        let panel = SensorsPanel::new().show_bars(false);
+        assert!(!panel.show_bars);
+    }
+
+    #[test]
+    fn test_panel_max_per_category() {
+        let panel = SensorsPanel::new().max_per_category(2);
+        assert_eq!(panel.max_per_category, 2);
+    }
+
+    #[test]
+    fn test_sensors_panel_brick_traits() {
+        let panel = SensorsPanel::new();
+        assert_eq!(panel.brick_name(), "sensors_panel");
+        assert!(!panel.assertions().is_empty());
+        assert!(panel.budget().paint_ms > 0);
+        assert!(panel.verify().is_valid());
+        assert!(panel.to_html().is_empty());
+        assert!(panel.to_css().is_empty());
+    }
+
+    #[test]
+    fn test_sensors_panel_widget_traits() {
+        let mut panel = SensorsPanel::new()
+            .with_temperatures(vec![SensorReading::temperature("CPU", 50.0)])
+            .with_fans(vec![SensorReading::fan("Fan1", 1000.0)]);
+
+        // Measure
+        let size = panel.measure(Constraints {
+            min_width: 0.0,
+            min_height: 0.0,
+            max_width: 80.0,
+            max_height: 20.0,
+        });
+        assert!(size.width > 0.0);
+        assert!(size.height > 0.0);
+
+        // Layout
+        let result = panel.layout(Rect::new(0.0, 0.0, 80.0, 10.0));
+        assert_eq!(result.size.width, 80.0);
+
+        // Type ID
+        assert_eq!(Widget::type_id(&panel), TypeId::of::<SensorsPanel>());
+
+        // Event
+        assert!(panel
+            .event(&Event::KeyDown {
+                key: presentar_core::Key::Enter
+            })
+            .is_none());
+
+        // Children
+        assert!(panel.children().is_empty());
+        assert!(panel.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_sensors_panel_paint_with_bars() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let mut panel = SensorsPanel::new()
+            .with_temperatures(vec![
+                SensorReading::temperature("CPU", 55.0),
+                SensorReading::temperature("GPU", 72.0),
+                SensorReading::temperature("VeryLongSensorName", 80.0),
+            ])
+            .with_fans(vec![SensorReading::fan("Fan1", 1200.0)])
+            .show_bars(true);
+
+        panel.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_sensors_panel_paint_without_bars() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let mut panel = SensorsPanel::new()
+            .with_temperatures(vec![SensorReading::temperature("CPU", 55.0)])
+            .show_bars(false);
+
+        panel.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_sensors_panel_paint_small_bounds() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let mut panel =
+            SensorsPanel::new().with_temperatures(vec![SensorReading::temperature("CPU", 55.0)]);
+
+        panel.layout(Rect::new(0.0, 0.0, 5.0, 0.5)); // Too small
+
+        let mut buffer = CellBuffer::new(5, 1);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas); // Should early return
+    }
+
+    #[test]
+    fn test_sensors_panel_default() {
+        let panel = SensorsPanel::default();
+        assert!(panel.temperatures.is_empty());
+        assert!(panel.fans.is_empty());
+        assert!(panel.voltages.is_empty());
+        assert!(panel.show_bars);
+        assert_eq!(panel.max_per_category, 4);
+    }
+
+    #[test]
+    fn test_sensor_status_default() {
+        let status = SensorStatus::default();
+        assert_eq!(status, SensorStatus::Normal);
+    }
+
+    #[test]
+    fn test_panel_max_temperature_empty() {
+        let panel = SensorsPanel::new();
+        assert!(panel.max_temperature().is_none());
+    }
+
+    #[test]
+    fn test_panel_has_critical_empty() {
+        let panel = SensorsPanel::new();
+        assert!(!panel.has_critical());
+    }
+
+    #[test]
+    fn test_sensors_panel_exceeds_max_per_category() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let readings: Vec<SensorReading> = (0..10)
+            .map(|i| SensorReading::temperature(format!("Sensor{}", i), 40.0 + i as f64))
+            .collect();
+
+        let mut panel = SensorsPanel::new()
+            .with_temperatures(readings)
+            .max_per_category(3);
+
+        panel.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_sensor_reading_with_thresholds_no_thresholds() {
+        // Test with None thresholds
+        let reading = SensorReading::temperature("CPU", 100.0).with_thresholds(None, None);
+        assert_eq!(reading.status, SensorStatus::Normal);
+    }
+
+    #[test]
+    fn test_sensor_reading_temperature_edge_cases() {
+        // Exactly at 75 (warning threshold)
+        let at_75 = SensorReading::temperature("CPU", 75.0);
+        assert_eq!(at_75.status, SensorStatus::Warning);
+
+        // Exactly at 90 (critical threshold)
+        let at_90 = SensorReading::temperature("CPU", 90.0);
+        assert_eq!(at_90.status, SensorStatus::Critical);
+
+        // Just below warning
+        let below_75 = SensorReading::temperature("CPU", 74.9);
+        assert_eq!(below_75.status, SensorStatus::Normal);
+    }
 }

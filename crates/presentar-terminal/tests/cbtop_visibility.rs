@@ -24,6 +24,11 @@ fn test_process_table_renders_visible_text() {
         oom_score: None,
         cgroup: None,
         nice: None,
+        threads: None,
+        parent_pid: None,
+        tree_depth: 0,
+        is_last_child: false,
+        tree_prefix: String::new(),
     });
 
     // Create a canvas to render to

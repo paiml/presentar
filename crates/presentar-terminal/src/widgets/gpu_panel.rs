@@ -265,6 +265,7 @@ impl GpuPanel {
 
     /// Draw the utilization bar.
     fn draw_util_bar(&self, canvas: &mut dyn Canvas, y: f32, width: f32) {
+        use std::fmt::Write;
         let util = self.device.utilization;
         let bar_width = (width - 6.0) as usize; // Leave room for percentage
         let filled = ((util / 100.0) * bar_width as f32) as usize;
@@ -277,7 +278,7 @@ impl GpuPanel {
                 bar.push('░');
             }
         }
-        bar.push_str(&format!(" {util:3.0}%"));
+        write!(bar, " {util:3.0}%").ok();
 
         canvas.draw_text(
             &bar,
@@ -291,19 +292,20 @@ impl GpuPanel {
 
     /// Draw GPU info lines.
     fn draw_info(&self, canvas: &mut dyn Canvas, start_y: f32) -> f32 {
+        use std::fmt::Write as _;
         let mut y = start_y;
         let x = self.bounds.x;
 
         // Temperature and Power on one line
         let mut info_line = String::new();
         if let Some(temp) = self.device.temperature {
-            info_line.push_str(&format!("Temp: {temp:3.0}°C"));
+            write!(info_line, "Temp: {temp:3.0}°C").ok();
         }
         if let Some(power) = self.device.power_draw {
             if !info_line.is_empty() {
                 info_line.push_str("  ");
             }
-            info_line.push_str(&format!("Power: {power:3.0}W"));
+            write!(info_line, "Power: {power:3.0}W").ok();
         }
         if !info_line.is_empty() {
             canvas.draw_text(
@@ -513,5 +515,230 @@ mod tests {
 
         assert_eq!(panel.max_processes, 5);
         assert_eq!(panel.device.name, "RTX 3080");
+    }
+
+    #[test]
+    fn test_gpu_vendor_as_str() {
+        assert_eq!(GpuVendor::Nvidia.as_str(), "NVIDIA");
+        assert_eq!(GpuVendor::Amd.as_str(), "AMD");
+        assert_eq!(GpuVendor::Intel.as_str(), "Intel");
+        assert_eq!(GpuVendor::Unknown.as_str(), "GPU");
+    }
+
+    #[test]
+    fn test_gpu_device_default() {
+        let device = GpuDevice::default();
+        assert_eq!(device.index, 0);
+        assert_eq!(device.vendor, GpuVendor::Unknown);
+        assert_eq!(device.utilization, 0.0);
+        assert!(device.temperature.is_none());
+    }
+
+    #[test]
+    fn test_gpu_device_zero_vram() {
+        let device = GpuDevice::default();
+        assert_eq!(device.vram_percent(), 0.0);
+    }
+
+    #[test]
+    fn test_gpu_panel_with_bar_color() {
+        let panel = GpuPanel::new().with_bar_color(Color::RED);
+        assert_eq!(
+            format!("{:?}", panel.bar_color),
+            format!("{:?}", Color::RED)
+        );
+    }
+
+    #[test]
+    fn test_gpu_panel_show_processes() {
+        let panel = GpuPanel::new().show_processes(false);
+        assert!(!panel.show_processes);
+    }
+
+    #[test]
+    fn test_gpu_panel_with_processes() {
+        let processes = vec![
+            GpuProcess::new("python", 1234, 1024 * 1024 * 1024),
+            GpuProcess::new("chrome", 5678, 512 * 1024 * 1024),
+        ];
+        let panel = GpuPanel::new().with_processes(processes);
+        assert_eq!(panel.processes.len(), 2);
+    }
+
+    #[test]
+    fn test_gpu_panel_add_process() {
+        let mut panel = GpuPanel::new();
+        panel.add_process(GpuProcess::new("test", 100, 256 * 1024 * 1024));
+        assert_eq!(panel.processes.len(), 1);
+    }
+
+    #[test]
+    fn test_gpu_panel_brick_traits() {
+        let panel = GpuPanel::new();
+        assert_eq!(panel.brick_name(), "gpu_panel");
+        assert!(!panel.assertions().is_empty());
+        assert!(panel.budget().paint_ms > 0);
+        assert!(panel.verify().is_valid());
+        assert!(panel.to_html().is_empty());
+        assert!(panel.to_css().is_empty());
+    }
+
+    #[test]
+    fn test_gpu_panel_widget_traits() {
+        let mut panel = GpuPanel::new();
+
+        // Measure
+        let size = panel.measure(Constraints {
+            min_width: 0.0,
+            min_height: 0.0,
+            max_width: 80.0,
+            max_height: 20.0,
+        });
+        assert!(size.width > 0.0);
+        assert!(size.height > 0.0);
+
+        // Layout
+        let result = panel.layout(Rect::new(0.0, 0.0, 80.0, 10.0));
+        assert_eq!(result.size.width, 80.0);
+
+        // Type ID
+        assert_eq!(Widget::type_id(&panel), TypeId::of::<GpuPanel>());
+
+        // Event
+        assert!(panel
+            .event(&Event::KeyDown {
+                key: presentar_core::Key::Enter
+            })
+            .is_none());
+
+        // Children
+        assert!(panel.children().is_empty());
+        assert!(panel.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_gpu_panel_paint_full() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let device = GpuDevice::new("RTX 3080")
+            .with_vendor(GpuVendor::Nvidia)
+            .with_utilization(75.0)
+            .with_temperature(68.0)
+            .with_vram(6 * 1024 * 1024 * 1024, 10 * 1024 * 1024 * 1024)
+            .with_power(180.0, Some(320.0))
+            .with_fan(55);
+
+        let processes = vec![
+            GpuProcess::new("python3", 1234, 2 * 1024 * 1024 * 1024),
+            GpuProcess::new("verylongprocessname", 5678, 1 * 1024 * 1024 * 1024),
+            GpuProcess::new("chrome", 9012, 512 * 1024 * 1024),
+        ];
+
+        let mut panel = GpuPanel::new()
+            .with_device(device)
+            .with_processes(processes);
+
+        panel.layout(Rect::new(0.0, 0.0, 60.0, 12.0));
+
+        let mut buffer = CellBuffer::new(60, 12);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_gpu_panel_paint_without_processes() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let device = GpuDevice::new("RTX 3080")
+            .with_utilization(50.0)
+            .with_temperature(60.0)
+            .with_vram(4 * 1024 * 1024 * 1024, 8 * 1024 * 1024 * 1024);
+
+        let mut panel = GpuPanel::new().with_device(device).show_processes(false);
+
+        panel.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_gpu_panel_paint_minimal_info() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        // Device with no temperature, power, fan - just utilization
+        let device = GpuDevice::new("Generic GPU").with_utilization(30.0);
+
+        let mut panel = GpuPanel::new().with_device(device);
+        panel.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_gpu_panel_paint_small_bounds() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let mut panel = GpuPanel::new();
+        panel.layout(Rect::new(0.0, 0.0, 5.0, 2.0)); // Too small
+
+        let mut buffer = CellBuffer::new(5, 2);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas); // Should early return
+    }
+
+    #[test]
+    fn test_gpu_panel_paint_only_power() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        // Device with power but no temperature
+        let device = GpuDevice::new("GPU")
+            .with_utilization(40.0)
+            .with_power(150.0, None);
+
+        let mut panel = GpuPanel::new().with_device(device);
+        panel.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_gpu_panel_default_trait() {
+        let panel = GpuPanel::default();
+        assert!(panel.show_processes);
+        assert_eq!(panel.max_processes, 3);
+    }
+
+    #[test]
+    fn test_gpu_process_new() {
+        let proc = GpuProcess::new("test_process", 12345, 100 * 1024 * 1024);
+        assert_eq!(proc.name, "test_process");
+        assert_eq!(proc.pid, 12345);
+        assert_eq!(proc.vram_used, 100 * 1024 * 1024);
+    }
+
+    #[test]
+    fn test_gpu_device_all_builders() {
+        let device = GpuDevice::new("Test GPU")
+            .with_vendor(GpuVendor::Amd)
+            .with_utilization(95.0)
+            .with_temperature(85.0)
+            .with_vram(8 * 1024 * 1024 * 1024, 16 * 1024 * 1024 * 1024)
+            .with_power(250.0, Some(350.0))
+            .with_fan(80);
+
+        assert_eq!(device.vendor, GpuVendor::Amd);
+        assert_eq!(device.utilization, 95.0);
+        assert_eq!(device.temperature, Some(85.0));
+        assert_eq!(device.vram_used, 8 * 1024 * 1024 * 1024);
+        assert_eq!(device.vram_total, 16 * 1024 * 1024 * 1024);
+        assert_eq!(device.power_draw, Some(250.0));
+        assert_eq!(device.power_limit, Some(350.0));
+        assert_eq!(device.fan_speed, Some(80));
     }
 }

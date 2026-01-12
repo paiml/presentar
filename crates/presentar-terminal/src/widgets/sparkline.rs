@@ -130,6 +130,7 @@ impl Sparkline {
 
     /// Get the Y-axis label width needed for layout.
     #[must_use]
+    #[allow(clippy::literal_string_with_formatting_args)]
     pub fn y_axis_width(&self) -> u16 {
         if !self.show_y_axis {
             return 0;
@@ -574,5 +575,51 @@ mod tests {
         let mut canvas = MockCanvas::new();
         spark.paint(&mut canvas);
         // Should not panic
+    }
+
+    #[test]
+    fn test_sparkline_with_y_axis() {
+        let spark = Sparkline::new(vec![1.0, 2.0]).with_y_axis(true);
+        assert!(spark.show_y_axis);
+    }
+
+    #[test]
+    fn test_sparkline_with_y_axis_false() {
+        let spark = Sparkline::new(vec![1.0, 2.0]).with_y_axis(false);
+        assert!(!spark.show_y_axis);
+    }
+
+    #[test]
+    fn test_sparkline_with_y_format() {
+        let spark = Sparkline::new(vec![1.0, 2.0]).with_y_format("{:.0}%");
+        assert!(spark.show_y_axis);
+        assert_eq!(spark.y_format, Some("{:.0}%".to_string()));
+    }
+
+    #[test]
+    fn test_sparkline_y_axis_width_no_axis() {
+        let spark = Sparkline::new(vec![1.0, 2.0]);
+        assert_eq!(spark.y_axis_width(), 0);
+    }
+
+    #[test]
+    fn test_sparkline_y_axis_width_with_axis() {
+        let spark = Sparkline::new(vec![1.0, 100.0]).with_y_axis(true);
+        let width = spark.y_axis_width();
+        assert!(width > 0);
+    }
+
+    #[test]
+    fn test_sparkline_y_axis_width_with_format() {
+        let spark = Sparkline::new(vec![1.0, 100.0]).with_y_format("{:.0}%");
+        let width = spark.y_axis_width();
+        assert!(width > 0);
+    }
+
+    #[test]
+    fn test_sparkline_y_axis_width_with_format_decimal() {
+        let spark = Sparkline::new(vec![1.0, 100.0]).with_y_format("{:.1}ms");
+        let width = spark.y_axis_width();
+        assert!(width > 0);
     }
 }

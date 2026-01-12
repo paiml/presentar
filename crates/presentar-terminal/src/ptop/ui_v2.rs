@@ -455,7 +455,11 @@ impl PtopView {
     }
 
     fn process_panel(app: &App) -> Border {
-        let mut table = ProcessTable::new().compact().with_oom().with_nice_column();
+        let mut table = ProcessTable::new()
+            .compact()
+            .with_oom()
+            .with_nice_column()
+            .with_threads_column();
 
         // Get process extra data (OOM scores, cgroups, nice values)
         let extra_data = app.analyzers.process_extra_data();

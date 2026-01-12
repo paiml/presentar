@@ -81,13 +81,15 @@ pub enum DetailLevel {
 
 impl DetailLevel {
     /// Get detail level appropriate for given height
+    /// Reference: SPEC-024 v5.2.0 - Exploded mode for height >= 40
     pub fn for_height(height: u16) -> Self {
         match height {
             0..=5 => Self::Minimal,
             6..=8 => Self::Minimal,
             9..=14 => Self::Compact,
             15..=19 => Self::Normal,
-            _ => Self::Expanded,
+            20..=39 => Self::Expanded,
+            _ => Self::Exploded, // height >= 40: fullscreen with history graphs
         }
     }
 }
@@ -286,6 +288,8 @@ pub struct PtopConfig {
     pub theme: ThemeConfig,
     /// Keybinding settings
     pub keybindings: KeybindingConfig,
+    /// Last modification time for hot reload (SPEC-024 v5.2.0)
+    pub last_modified: std::time::SystemTime,
 }
 
 impl Default for PtopConfig {
@@ -375,6 +379,7 @@ impl Default for PtopConfig {
             panels,
             theme: ThemeConfig::default(),
             keybindings: KeybindingConfig::default(),
+            last_modified: std::time::SystemTime::UNIX_EPOCH,
         }
     }
 }
@@ -414,42 +419,215 @@ impl PtopConfig {
         Self::default()
     }
 
+    /// Load configuration from a specific file path
+    pub fn load_from_file(path: &std::path::Path) -> Option<Self> {
+        if path.exists() {
+            if let Ok(contents) = fs::read_to_string(path) {
+                return Self::parse_yaml(&contents);
+            }
+        }
+        None
+    }
+
+    /// Generate default configuration as YAML string
+    pub fn default_yaml() -> String {
+        r#"# ptop configuration file
+# Location: ~/.config/ptop/config.yaml
+# Documentation: https://github.com/anthropics/presentar/blob/main/docs/ptop-config.md
+
+# Refresh interval in milliseconds
+refresh_ms: 1000
+
+# Layout configuration
+layout:
+  snap_to_grid: true
+  grid_size: 4
+  min_panel_width: 30
+  min_panel_height: 6
+
+# Panel configuration
+panels:
+  cpu:
+    enabled: true
+    histogram: braille    # braille | block | ascii
+    show_temperature: true
+    show_frequency: true
+    sparkline_history: 60  # seconds
+
+  memory:
+    enabled: true
+    histogram: braille
+
+  disk:
+    enabled: true
+
+  network:
+    enabled: true
+    sparkline_history: 60
+
+  process:
+    enabled: true
+    max_processes: 20
+    columns:
+      - pid
+      - user
+      - cpu
+      - mem
+      - cmd
+
+  gpu:
+    enabled: auto         # auto-detect availability
+    show_temperature: true
+    show_frequency: true
+
+  sensors:
+    enabled: auto
+
+  battery:
+    enabled: auto
+
+  connections:
+    enabled: true
+
+  files:
+    enabled: true
+
+  psi:
+    enabled: auto         # Pressure Stall Information
+
+  containers:
+    enabled: auto         # Docker/Podman
+
+# Keybindings (default values shown)
+keybindings:
+  quit: q
+  help: "?"
+  toggle_fps: f
+  filter: "/"
+  sort_cpu: c
+  sort_mem: m
+  sort_pid: p
+  kill_process: k
+  explode: Enter
+  collapse: Escape
+
+# Theme (future - not yet implemented)
+# theme:
+#   cpu_color: "64C8FF"
+#   memory_color: "B478FF"
+"#
+        .to_string()
+    }
+
     /// Parse YAML config string (simplified parser without full serde)
+    /// SPEC-024 v5.2.0: Complete parser for all `LayoutConfig` fields
     /// For full YAML support, add `serde_yaml` dependency
     fn parse_yaml(contents: &str) -> Option<Self> {
         let mut config = Self::default();
+        let mut warnings: Vec<String> = Vec::new();
 
         // Simple line-by-line parser for key config options
         for line in contents.lines() {
             let line = line.trim();
 
-            // Parse refresh_ms
-            if line.starts_with("refresh_ms:") {
-                if let Some(value) = line.strip_prefix("refresh_ms:") {
-                    if let Ok(ms) = value.trim().parse::<u64>() {
-                        config.refresh_ms = ms;
+            // Skip comments and empty lines
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+
+            // Parse key: value pairs
+            if let Some((key, value)) = line.split_once(':') {
+                let key = key.trim();
+                let value = value.trim();
+
+                match key {
+                    // Global settings
+                    "refresh_ms" => {
+                        if let Ok(ms) = value.parse::<u64>() {
+                            config.refresh_ms = ms;
+                        } else {
+                            warnings.push(format!("Invalid refresh_ms: {value}"));
+                        }
                     }
-                }
-            }
 
-            // Parse snap_to_grid
-            if line.starts_with("snap_to_grid:") {
-                if let Some(value) = line.strip_prefix("snap_to_grid:") {
-                    config.layout.snap_to_grid = value.trim() == "true";
-                }
-            }
+                    // Layout settings (SPEC-024 v5.2.0: all fields now parsed)
+                    "snap_to_grid" => {
+                        config.layout.snap_to_grid = value == "true";
+                    }
+                    "grid_size" => {
+                        if let Ok(size) = value.parse::<u16>() {
+                            config.layout.grid_size = size;
+                        } else {
+                            warnings.push(format!("Invalid grid_size: {value}"));
+                        }
+                    }
+                    "min_panel_width" => {
+                        if let Ok(width) = value.parse::<u16>() {
+                            config.layout.min_panel_width = width;
+                        } else {
+                            warnings.push(format!("Invalid min_panel_width: {value}"));
+                        }
+                    }
+                    "min_panel_height" => {
+                        if let Ok(height) = value.parse::<u16>() {
+                            config.layout.min_panel_height = height;
+                        } else {
+                            warnings.push(format!("Invalid min_panel_height: {value}"));
+                        }
+                    }
 
-            // Parse grid_size
-            if line.starts_with("grid_size:") {
-                if let Some(value) = line.strip_prefix("grid_size:") {
-                    if let Ok(size) = value.trim().parse::<u16>() {
-                        config.layout.grid_size = size;
+                    // Nested sections (skip silently, not yet implemented)
+                    "layout" | "panels" | "keybindings" | "theme" | "version" => {}
+
+                    // Unknown field warning
+                    _ => {
+                        if !value.is_empty() {
+                            warnings.push(format!("Unknown config field: {key}"));
+                        }
                     }
                 }
             }
         }
 
+        // Log warnings to stderr (SPEC-024 F1007: warn on invalid fields)
+        for warning in warnings {
+            eprintln!("[ptop config] warning: {warning}");
+        }
+
         Some(config)
+    }
+
+    /// Check if config file has been modified since last load
+    /// Returns (modified, `new_config`) if changed
+    pub fn check_reload(&self) -> Option<Self> {
+        for path in Self::config_paths() {
+            if path.exists() {
+                if let Ok(metadata) = fs::metadata(&path) {
+                    if let Ok(modified) = metadata.modified() {
+                        // Compare with stored modification time
+                        if modified > self.last_modified {
+                            return Self::load_from_path(&path);
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Load config from specific path
+    fn load_from_path(path: &std::path::Path) -> Option<Self> {
+        if let Ok(contents) = fs::read_to_string(path) {
+            let mut config = Self::parse_yaml(&contents)?;
+            if let Ok(metadata) = fs::metadata(path) {
+                if let Ok(modified) = metadata.modified() {
+                    config.last_modified = modified;
+                }
+            }
+            Some(config)
+        } else {
+            None
+        }
     }
 
     /// Get panel config, returning default if not configured
@@ -624,6 +802,10 @@ mod tests {
         assert_eq!(DetailLevel::for_height(10), DetailLevel::Compact);
         assert_eq!(DetailLevel::for_height(16), DetailLevel::Normal);
         assert_eq!(DetailLevel::for_height(25), DetailLevel::Expanded);
+        assert_eq!(DetailLevel::for_height(39), DetailLevel::Expanded);
+        // SPEC-024 v5.2.0: Exploded mode for height >= 40
+        assert_eq!(DetailLevel::for_height(40), DetailLevel::Exploded);
+        assert_eq!(DetailLevel::for_height(80), DetailLevel::Exploded);
     }
 
     #[test]
@@ -632,5 +814,69 @@ mod tests {
         assert_eq!(config.refresh_ms, 1000);
         assert!(config.layout.snap_to_grid);
         assert!(config.panels.get(&PanelType::Cpu).unwrap().enabled);
+    }
+
+    #[test]
+    fn test_parse_yaml_all_layout_fields() {
+        // SPEC-024 v5.2.0: Test all LayoutConfig fields are parsed
+        let yaml = r#"
+refresh_ms: 2000
+snap_to_grid: false
+grid_size: 4
+min_panel_width: 100
+min_panel_height: 12
+"#;
+        let config = PtopConfig::parse_yaml(yaml).unwrap();
+        assert_eq!(config.refresh_ms, 2000);
+        assert!(!config.layout.snap_to_grid);
+        assert_eq!(config.layout.grid_size, 4);
+        assert_eq!(config.layout.min_panel_width, 100);
+        assert_eq!(config.layout.min_panel_height, 12);
+    }
+
+    #[test]
+    fn test_parse_yaml_partial_config() {
+        // SPEC-024 F1003: Partial config merges with defaults
+        let yaml = "min_panel_width: 50";
+        let config = PtopConfig::parse_yaml(yaml).unwrap();
+        // Custom value applied
+        assert_eq!(config.layout.min_panel_width, 50);
+        // Default values preserved
+        assert_eq!(config.refresh_ms, 1000);
+        assert!(config.layout.snap_to_grid);
+    }
+
+    #[test]
+    fn test_parse_yaml_invalid_values() {
+        // SPEC-024 F1007: Invalid values should warn but not crash
+        let yaml = r#"
+refresh_ms: not_a_number
+min_panel_width: 100
+"#;
+        let config = PtopConfig::parse_yaml(yaml).unwrap();
+        // Invalid value uses default
+        assert_eq!(config.refresh_ms, 1000);
+        // Valid value still applied
+        assert_eq!(config.layout.min_panel_width, 100);
+    }
+
+    #[test]
+    fn test_parse_yaml_comments_ignored() {
+        let yaml = r#"
+# This is a comment
+refresh_ms: 500
+# Another comment
+min_panel_width: 30
+"#;
+        let config = PtopConfig::parse_yaml(yaml).unwrap();
+        assert_eq!(config.refresh_ms, 500);
+        assert_eq!(config.layout.min_panel_width, 30);
+    }
+
+    #[test]
+    fn test_config_check_reload_returns_none_when_unchanged() {
+        let config = PtopConfig::default();
+        // No config files exist, should return None
+        assert!(config.check_reload().is_none());
     }
 }

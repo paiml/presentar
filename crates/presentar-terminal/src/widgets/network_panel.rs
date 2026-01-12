@@ -30,6 +30,21 @@ pub struct NetworkInterface {
     pub rx_total: u64,
     /// Total bytes transmitted.
     pub tx_total: u64,
+    /// Receive errors (cumulative).
+    pub rx_errors: u64,
+    /// Transmit errors (cumulative).
+    pub tx_errors: u64,
+    /// Receive dropped packets (cumulative).
+    pub rx_dropped: u64,
+    /// Transmit dropped packets (cumulative).
+    pub tx_dropped: u64,
+    /// Error rate (errors per second).
+    pub errors_per_sec: f64,
+    /// Drop rate (drops per second).
+    pub drops_per_sec: f64,
+    /// Bandwidth utilization percentage (CB-NET-006).
+    /// None if link speed unknown.
+    pub utilization_percent: Option<f64>,
 }
 
 impl NetworkInterface {
@@ -44,7 +59,45 @@ impl NetworkInterface {
             tx_bps: 0.0,
             rx_total: 0,
             tx_total: 0,
+            rx_errors: 0,
+            tx_errors: 0,
+            rx_dropped: 0,
+            tx_dropped: 0,
+            errors_per_sec: 0.0,
+            drops_per_sec: 0.0,
+            utilization_percent: None,
         }
+    }
+
+    /// Set error and drop stats.
+    pub fn set_stats(&mut self, rx_errors: u64, tx_errors: u64, rx_dropped: u64, tx_dropped: u64) {
+        self.rx_errors = rx_errors;
+        self.tx_errors = tx_errors;
+        self.rx_dropped = rx_dropped;
+        self.tx_dropped = tx_dropped;
+    }
+
+    /// Set error and drop rates.
+    pub fn set_rates(&mut self, errors_per_sec: f64, drops_per_sec: f64) {
+        self.errors_per_sec = errors_per_sec;
+        self.drops_per_sec = drops_per_sec;
+    }
+
+    /// Set bandwidth utilization percentage (CB-NET-006).
+    pub fn set_utilization(&mut self, utilization_percent: Option<f64>) {
+        self.utilization_percent = utilization_percent;
+    }
+
+    /// Total errors (RX + TX).
+    #[must_use]
+    pub fn total_errors(&self) -> u64 {
+        self.rx_errors + self.tx_errors
+    }
+
+    /// Total dropped packets (RX + TX).
+    #[must_use]
+    pub fn total_dropped(&self) -> u64 {
+        self.rx_dropped + self.tx_dropped
     }
 
     /// Update with current bandwidth readings.
@@ -328,7 +381,7 @@ impl Widget for NetworkPanel {
                 // Compact: single line per interface
                 // eth0: ▁▂▃▄▅ 125K/s ↓ ▅▄▃▂▁ 50K/s ↑
                 let name_w = 8;
-                let spark_w = self.spark_width.min((width - 30) / 2);
+                let spark_w = self.spark_width.min(width.saturating_sub(30) / 2);
 
                 let mut x = self.bounds.x;
 
@@ -412,6 +465,104 @@ impl Widget for NetworkPanel {
                         ..Default::default()
                     },
                 );
+                x += 2.0;
+
+                // Error/Drop rate highlighting (CB-NET-003/004)
+                // Show warning indicators if error or drop rates are non-zero
+                if iface.errors_per_sec > 0.0 || iface.drops_per_sec > 0.0 {
+                    // Choose color based on severity
+                    let (indicator, color) =
+                        if iface.errors_per_sec > 10.0 || iface.drops_per_sec > 10.0 {
+                            (
+                                "●",
+                                Color {
+                                    r: 1.0,
+                                    g: 0.3,
+                                    b: 0.3,
+                                    a: 1.0,
+                                },
+                            ) // Red - critical
+                        } else if iface.errors_per_sec > 1.0 || iface.drops_per_sec > 1.0 {
+                            (
+                                "◐",
+                                Color {
+                                    r: 1.0,
+                                    g: 0.8,
+                                    b: 0.2,
+                                    a: 1.0,
+                                },
+                            ) // Yellow - warning
+                        } else {
+                            (
+                                "○",
+                                Color {
+                                    r: 0.8,
+                                    g: 0.8,
+                                    b: 0.3,
+                                    a: 1.0,
+                                },
+                            ) // Dim yellow - minor
+                        };
+
+                    // Format: ●E:5/D:2
+                    let err_drop_text = format!(
+                        "{indicator}E:{:.0}/D:{:.0}",
+                        iface.errors_per_sec, iface.drops_per_sec
+                    );
+                    canvas.draw_text(
+                        &err_drop_text,
+                        Point::new(x, y),
+                        &TextStyle {
+                            color,
+                            ..Default::default()
+                        },
+                    );
+                    x += err_drop_text.len() as f32 + 1.0;
+                }
+
+                // Bandwidth utilization display (CB-NET-006)
+                if let Some(util_pct) = iface.utilization_percent {
+                    let capped = util_pct.min(100.0);
+                    let (util_text, util_color) = if util_pct > 80.0 {
+                        (
+                            format!("●{capped:.0}%"),
+                            Color {
+                                r: 1.0,
+                                g: 0.3,
+                                b: 0.3,
+                                a: 1.0,
+                            }, // Red - saturated
+                        )
+                    } else if util_pct > 50.0 {
+                        (
+                            format!("◐{util_pct:.0}%"),
+                            Color {
+                                r: 1.0,
+                                g: 0.8,
+                                b: 0.2,
+                                a: 1.0,
+                            }, // Yellow - high
+                        )
+                    } else {
+                        (
+                            format!("{util_pct:.0}%"),
+                            Color {
+                                r: 0.5,
+                                g: 0.8,
+                                b: 0.5,
+                                a: 1.0,
+                            }, // Green - normal
+                        )
+                    };
+                    canvas.draw_text(
+                        &util_text,
+                        Point::new(x, y),
+                        &TextStyle {
+                            color: util_color,
+                            ..Default::default()
+                        },
+                    );
+                }
             } else {
                 // Full: two lines per interface
                 // eth0
@@ -758,5 +909,175 @@ mod tests {
         iface.set_totals(1000, 500);
         assert_eq!(iface.rx_total, 1000);
         assert_eq!(iface.tx_total, 500);
+    }
+
+    #[test]
+    fn test_network_panel_paint_with_data() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let mut panel = NetworkPanel::new();
+        let mut iface = NetworkInterface::new("eth0");
+        for i in 0..30 {
+            iface.update(i as f64 * 1000.0, i as f64 * 500.0);
+        }
+        iface.set_totals(1024 * 1024 * 1024, 512 * 1024 * 1024);
+        panel.add_interface(iface);
+
+        panel.layout(Rect::new(0.0, 0.0, 80.0, 10.0));
+
+        let mut buffer = CellBuffer::new(80, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_network_panel_paint_empty() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let mut panel = NetworkPanel::new();
+        panel.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_network_panel_paint_small_bounds() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let mut panel = NetworkPanel::new();
+        panel.add_interface(NetworkInterface::new("eth0"));
+        panel.layout(Rect::new(0.0, 0.0, 5.0, 0.5)); // Too small
+
+        let mut buffer = CellBuffer::new(5, 1);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas); // Should early return
+    }
+
+    #[test]
+    fn test_network_panel_paint_compact() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let mut panel = NetworkPanel::new().compact();
+        let mut iface = NetworkInterface::new("wlan0");
+        iface.update(5000.0, 2500.0);
+        panel.add_interface(iface);
+
+        panel.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_network_panel_paint_with_totals() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let mut panel = NetworkPanel::new(); // show_totals is true by default
+        let mut iface = NetworkInterface::new("eth0");
+        iface.update(1024.0 * 1024.0, 512.0 * 1024.0);
+        iface.set_totals(10 * 1024 * 1024 * 1024, 5 * 1024 * 1024 * 1024);
+        panel.add_interface(iface);
+
+        panel.layout(Rect::new(0.0, 0.0, 80.0, 10.0));
+
+        let mut buffer = CellBuffer::new(80, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_network_panel_paint_without_totals() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let mut panel = NetworkPanel::new().without_totals();
+        let mut iface = NetworkInterface::new("eth0");
+        iface.update(1024.0, 512.0);
+        panel.add_interface(iface);
+
+        panel.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_network_panel_multiple_interfaces() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let mut panel = NetworkPanel::new();
+
+        let mut eth0 = NetworkInterface::new("eth0");
+        eth0.update(10000.0, 5000.0);
+        panel.add_interface(eth0);
+
+        let mut wlan0 = NetworkInterface::new("wlan0");
+        wlan0.update(2000.0, 1000.0);
+        panel.add_interface(wlan0);
+
+        let mut lo = NetworkInterface::new("lo");
+        lo.update(100.0, 100.0);
+        panel.add_interface(lo);
+
+        panel.layout(Rect::new(0.0, 0.0, 80.0, 10.0));
+
+        let mut buffer = CellBuffer::new(80, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_network_panel_event() {
+        let mut panel = NetworkPanel::new();
+        let result = panel.event(&Event::KeyDown {
+            key: presentar_core::Key::Enter,
+        });
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_network_panel_assertions() {
+        let panel = NetworkPanel::new();
+        assert!(!panel.assertions().is_empty());
+    }
+
+    #[test]
+    fn test_network_panel_budget() {
+        let panel = NetworkPanel::new();
+        assert!(panel.budget().paint_ms > 0);
+    }
+
+    #[test]
+    fn test_network_interface_long_name() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let mut panel = NetworkPanel::new();
+        let mut iface = NetworkInterface::new("verylonginterfacename0");
+        iface.update(1024.0, 512.0);
+        panel.add_interface(iface);
+
+        panel.layout(Rect::new(0.0, 0.0, 80.0, 10.0));
+
+        let mut buffer = CellBuffer::new(80, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_format_bps_edge_cases() {
+        // Test very large values (displayed as G/s since no T/s support)
+        assert!(NetworkPanel::format_bps(1024.0 * 1024.0 * 1024.0 * 1024.0).contains("G/s"));
+        // Test very small values
+        assert_eq!(NetworkPanel::format_bps(0.5), "0B/s");
+    }
+
+    #[test]
+    fn test_render_sparkline_single_value() {
+        let data = vec![0.5];
+        let spark = NetworkPanel::render_sparkline(&data, 3);
+        assert_eq!(spark.chars().count(), 3);
     }
 }

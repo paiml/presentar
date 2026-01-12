@@ -225,6 +225,7 @@ impl Widget for Border {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn paint(&self, canvas: &mut dyn Canvas) {
         let width = self.bounds.width as usize;
         let height = self.bounds.height as usize;
@@ -261,11 +262,54 @@ impl Widget for Border {
             let ttop_available = width.saturating_sub(3);
 
             // Truncate title if too long (don't hide it entirely)
+            // Smart truncation (D005): prefer truncating at │ boundaries to avoid mid-word cuts
+            // Goal: "CPU 21% │ 48 cores │ ..." → "CPU 21%…" not "CPU 21% │ 48 cor…"
             let display_title: std::borrow::Cow<'_, str> = if title_len > ttop_available {
-                // Truncate with ellipsis, leaving room for "…"
-                let truncate_to = ttop_available.saturating_sub(1);
-                let truncated: String = title.chars().take(truncate_to).collect();
-                std::borrow::Cow::Owned(format!("{truncated}…"))
+                let truncate_to = ttop_available.saturating_sub(1); // Reserve 1 for "…"
+                let chars_vec: Vec<char> = title.chars().collect();
+
+                // Strategy: Find the last COMPLETE section that fits
+                // Sections are separated by │
+                let mut section_ends: Vec<usize> = vec![0]; // Start of first section
+                for (i, &ch) in chars_vec.iter().enumerate() {
+                    if ch == '│' {
+                        // End of previous section is at i-1 (before the │)
+                        // But we want the position AFTER the section text, before │
+                        // Look back for the last non-space char
+                        let mut end = i;
+                        while end > 0 && chars_vec[end - 1] == ' ' {
+                            end -= 1;
+                        }
+                        if end > 0 {
+                            section_ends.push(end);
+                        }
+                    }
+                }
+
+                // Find the last section end that fits
+                let mut best_split = truncate_to;
+                for &end in section_ends.iter().rev() {
+                    if end <= truncate_to && end > 0 {
+                        best_split = end;
+                        break;
+                    }
+                }
+
+                // If no section boundary found within range, fall back to word boundary
+                if best_split == truncate_to || best_split == 0 {
+                    // Look for space to truncate at word boundary
+                    let search_start = truncate_to.saturating_sub(truncate_to / 3);
+                    for i in (search_start..truncate_to).rev() {
+                        if i < chars_vec.len() && chars_vec[i] == ' ' {
+                            best_split = i;
+                            break;
+                        }
+                    }
+                }
+
+                let truncated: String = chars_vec.iter().take(best_split).collect();
+                let trimmed = truncated.trim_end();
+                std::borrow::Cow::Owned(format!("{trimmed}…"))
             } else {
                 std::borrow::Cow::Borrowed(title)
             };
@@ -681,5 +725,168 @@ mod tests {
     fn test_border_with_background() {
         let border = Border::new().with_background(Color::BLUE);
         assert_eq!(border.background, Color::BLUE);
+    }
+
+    #[test]
+    fn test_border_rounded_helper() {
+        let border = Border::rounded("CPU Panel");
+        assert_eq!(border.style, BorderStyle::Rounded);
+        assert_eq!(border.title, Some("CPU Panel".to_string()));
+        assert!(border.title_left_aligned);
+    }
+
+    #[test]
+    fn test_border_style_none() {
+        let (tl, top, tr, left, right, bl, bottom, br) = BorderStyle::None.chars();
+        assert_eq!(tl, ' ');
+        assert_eq!(top, ' ');
+        assert_eq!(tr, ' ');
+        assert_eq!(left, ' ');
+        assert_eq!(right, ' ');
+        assert_eq!(bl, ' ');
+        assert_eq!(bottom, ' ');
+        assert_eq!(br, ' ');
+    }
+
+    #[test]
+    fn test_border_style_default() {
+        let style = BorderStyle::default();
+        assert_eq!(style, BorderStyle::Single);
+    }
+
+    #[test]
+    fn test_border_paint_with_left_aligned_title() {
+        let mut border = Border::new().with_title("CPU").with_title_left_aligned();
+        border.bounds = Rect::new(0.0, 0.0, 40.0, 5.0);
+        let mut canvas = MockCanvas::new();
+        border.paint(&mut canvas);
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains("CPU")));
+    }
+
+    #[test]
+    fn test_border_paint_centered_title() {
+        let mut border = Border::new().with_title("Memory");
+        // Not left aligned (default)
+        assert!(!border.title_left_aligned);
+        border.bounds = Rect::new(0.0, 0.0, 50.0, 5.0);
+        let mut canvas = MockCanvas::new();
+        border.paint(&mut canvas);
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains("Memory")));
+    }
+
+    #[test]
+    fn test_border_paint_all_styles() {
+        for style in [
+            BorderStyle::Single,
+            BorderStyle::Double,
+            BorderStyle::Rounded,
+            BorderStyle::Heavy,
+            BorderStyle::Ascii,
+        ] {
+            let mut border = Border::new().with_style(style);
+            border.bounds = Rect::new(0.0, 0.0, 20.0, 5.0);
+            let mut canvas = MockCanvas::new();
+            border.paint(&mut canvas);
+            assert!(!canvas.texts.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_border_paint_with_fill_and_title() {
+        let mut border = Border::new()
+            .with_title("Test")
+            .with_fill(true)
+            .with_background(Color::new(0.1, 0.1, 0.1, 1.0));
+        border.bounds = Rect::new(0.0, 0.0, 30.0, 10.0);
+        let mut canvas = MockCanvas::new();
+        border.paint(&mut canvas);
+        assert!(!canvas.texts.is_empty());
+        assert!(!canvas.rects.is_empty());
+    }
+
+    #[test]
+    fn test_border_title_truncation() {
+        // Very long title that needs truncation
+        let mut border = Border::new().with_title(
+            "This is a very long title that will need to be truncated | section2 | section3",
+        );
+        border.bounds = Rect::new(0.0, 0.0, 30.0, 5.0);
+        let mut canvas = MockCanvas::new();
+        border.paint(&mut canvas);
+        // Should handle truncation gracefully
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_border_title_with_sections() {
+        // Title with section separators
+        let mut border = Border::new().with_title("CPU 45% │ 8 cores │ 3.6GHz");
+        border.bounds = Rect::new(0.0, 0.0, 40.0, 5.0);
+        let mut canvas = MockCanvas::new();
+        border.paint(&mut canvas);
+        assert!(!canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_border_inner_rect_minimum_size() {
+        let mut border = Border::new();
+        border.bounds = Rect::new(0.0, 0.0, 2.0, 2.0);
+        let inner = border.inner_rect();
+        // With 2x2 bounds and 1 pixel border, inner should be 0x0
+        assert_eq!(inner.width, 0.0);
+        assert_eq!(inner.height, 0.0);
+    }
+
+    #[test]
+    fn test_border_paint_narrow_width() {
+        let mut border = Border::new().with_title("Test");
+        border.bounds = Rect::new(0.0, 0.0, 5.0, 5.0);
+        let mut canvas = MockCanvas::new();
+        border.paint(&mut canvas);
+        // Should draw something even with narrow width
+    }
+
+    #[test]
+    fn test_border_all_chars_heavy() {
+        let (tl, top, tr, left, right, bl, bottom, br) = BorderStyle::Heavy.chars();
+        assert_eq!(tl, '┏');
+        assert_eq!(top, '━');
+        assert_eq!(tr, '┓');
+        assert_eq!(left, '┃');
+        assert_eq!(right, '┃');
+        assert_eq!(bl, '┗');
+        assert_eq!(bottom, '━');
+        assert_eq!(br, '┛');
+    }
+
+    #[test]
+    fn test_border_all_chars_double() {
+        let (tl, top, tr, left, right, bl, bottom, br) = BorderStyle::Double.chars();
+        assert_eq!(tl, '╔');
+        assert_eq!(top, '═');
+        assert_eq!(tr, '╗');
+        assert_eq!(left, '║');
+        assert_eq!(right, '║');
+        assert_eq!(bl, '╚');
+        assert_eq!(bottom, '═');
+        assert_eq!(br, '╝');
+    }
+
+    #[test]
+    fn test_border_with_child() {
+        use crate::widgets::Text;
+        let border = Border::new().child(Text::new("Hello"));
+        assert!(border.child.is_some());
+    }
+
+    #[test]
+    fn test_border_child_paint() {
+        use crate::widgets::Text;
+        let mut border = Border::new().child(Text::new("Hello"));
+        border.bounds = Rect::new(0.0, 0.0, 20.0, 10.0);
+        border.layout(border.bounds);
+        let mut canvas = MockCanvas::new();
+        border.paint(&mut canvas);
+        // Child should be painted inside border
     }
 }

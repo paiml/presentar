@@ -454,6 +454,7 @@ impl Brick for ScatterPlot {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::direct::{CellBuffer, DirectTerminalCanvas};
 
     #[test]
     fn test_scatter_creation() {
@@ -502,8 +503,206 @@ mod tests {
     }
 
     #[test]
+    fn test_scatter_verify_small_bounds() {
+        let mut scatter = ScatterPlot::default();
+        scatter.bounds = Rect::new(0.0, 0.0, 5.0, 3.0);
+        let result = scatter.verify();
+        assert!(!result.is_valid());
+    }
+
+    #[test]
     fn test_scatter_children() {
         let scatter = ScatterPlot::default();
         assert!(scatter.children().is_empty());
+    }
+
+    #[test]
+    fn test_scatter_layout() {
+        let mut scatter = ScatterPlot::new(vec![(0.0, 0.0), (1.0, 1.0), (2.0, 4.0)]);
+        let bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+        let result = scatter.layout(bounds);
+        assert!(result.size.width > 0.0);
+        assert!(result.size.height > 0.0);
+    }
+
+    #[test]
+    fn test_scatter_paint() {
+        let mut scatter = ScatterPlot::new(vec![(0.0, 0.0), (1.0, 1.0), (2.0, 4.0)]);
+        let bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+        scatter.layout(bounds);
+
+        let mut buffer = CellBuffer::new(60, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        scatter.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_scatter_with_all_markers() {
+        for marker in [
+            MarkerStyle::Dot,
+            MarkerStyle::Cross,
+            MarkerStyle::Circle,
+            MarkerStyle::Square,
+            MarkerStyle::Diamond,
+        ] {
+            let mut scatter = ScatterPlot::new(vec![(0.0, 0.0), (1.0, 1.0)]).with_marker(marker);
+            let bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+            scatter.layout(bounds);
+            let mut buffer = CellBuffer::new(60, 20);
+            let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+            scatter.paint(&mut canvas);
+        }
+    }
+
+    #[test]
+    fn test_scatter_with_color() {
+        let mut scatter = ScatterPlot::new(vec![(0.0, 0.0), (1.0, 1.0)]).with_color(Color::RED);
+        let bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+        scatter.layout(bounds);
+        let mut buffer = CellBuffer::new(60, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        scatter.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_scatter_with_color_gradient() {
+        let mut scatter = ScatterPlot::new(vec![(0.0, 0.0), (1.0, 1.0), (2.0, 4.0)])
+            .with_color_by(vec![0.0, 0.5, 1.0], Gradient::two(Color::BLUE, Color::RED));
+        let bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
+        scatter.layout(bounds);
+        let mut buffer = CellBuffer::new(60, 20);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        scatter.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_scatter_with_axes() {
+        let mut scatter = ScatterPlot::new(vec![(0.0, 0.0), (10.0, 10.0)])
+            .with_axes(true)
+            .with_x_axis(ScatterAxis {
+                label: Some("X Axis".to_string()),
+                min: Some(0.0),
+                max: Some(10.0),
+                ticks: 5,
+            })
+            .with_y_axis(ScatterAxis {
+                label: Some("Y Axis".to_string()),
+                min: Some(0.0),
+                max: Some(10.0),
+                ticks: 5,
+            });
+        let bounds = Rect::new(0.0, 0.0, 80.0, 24.0);
+        scatter.layout(bounds);
+        let mut buffer = CellBuffer::new(80, 24);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        scatter.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_scatter_y_range() {
+        let scatter = ScatterPlot::new(vec![(0.0, -5.0), (1.0, 10.0), (2.0, 3.0)]);
+        let (y_min, y_max) = scatter.y_range();
+        assert!(y_min <= -5.0);
+        assert!(y_max >= 10.0);
+    }
+
+    #[test]
+    fn test_scatter_y_range_empty() {
+        let scatter = ScatterPlot::new(vec![]);
+        let (y_min, y_max) = scatter.y_range();
+        assert_eq!(y_min, 0.0);
+        assert_eq!(y_max, 1.0);
+    }
+
+    #[test]
+    fn test_scatter_with_many_points() {
+        let points: Vec<(f64, f64)> = (0..100)
+            .map(|i| (i as f64, (i as f64 * 0.1).sin() * 10.0))
+            .collect();
+        let mut scatter = ScatterPlot::new(points);
+        let bounds = Rect::new(0.0, 0.0, 80.0, 24.0);
+        scatter.layout(bounds);
+        let mut buffer = CellBuffer::new(80, 24);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        scatter.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_scatter_axis_default() {
+        let axis = ScatterAxis::default();
+        assert!(axis.label.is_none());
+        assert!(axis.min.is_none());
+        assert!(axis.max.is_none());
+    }
+
+    #[test]
+    fn test_marker_style_default() {
+        let marker = MarkerStyle::default();
+        assert!(matches!(marker, MarkerStyle::Dot));
+    }
+
+    #[test]
+    fn test_gradient_interpolate() {
+        let gradient = Gradient::two(Color::BLACK, Color::WHITE);
+        let mid = gradient.sample(0.5);
+        // Color values are f32 in range 0-1 or 0-255 depending on implementation
+        // Just verify it's between start and end colors
+        assert!(mid.r > 0.0);
+        assert!(mid.g > 0.0);
+        assert!(mid.b > 0.0);
+    }
+
+    #[test]
+    fn test_scatter_brick_name() {
+        let scatter = ScatterPlot::default();
+        assert_eq!(scatter.brick_name(), "ScatterPlot");
+    }
+
+    #[test]
+    fn test_scatter_budget() {
+        let scatter = ScatterPlot::default();
+        let budget = scatter.budget();
+        assert!(budget.layout_ms > 0);
+    }
+
+    #[test]
+    fn test_scatter_to_html_css() {
+        let scatter = ScatterPlot::default();
+        assert!(scatter.to_html().is_empty());
+        assert!(scatter.to_css().is_empty());
+    }
+
+    #[test]
+    fn test_marker_style_triangle() {
+        let marker = MarkerStyle::Triangle;
+        assert_eq!(marker.char(), '△');
+    }
+
+    #[test]
+    fn test_marker_style_star() {
+        let marker = MarkerStyle::Star;
+        assert_eq!(marker.char(), '★');
+    }
+
+    #[test]
+    fn test_scatter_plot_with_axis_labels() {
+        let scatter = ScatterPlot::new(vec![(1.0, 2.0), (3.0, 4.0)])
+            .with_x_axis(ScatterAxis {
+                label: Some("X-Axis".to_string()),
+                ..Default::default()
+            })
+            .with_y_axis(ScatterAxis {
+                label: Some("Y-Axis".to_string()),
+                ..Default::default()
+            });
+        assert!(scatter.x_axis.label.is_some());
+        assert!(scatter.y_axis.label.is_some());
+    }
+
+    #[test]
+    fn test_scatter_plot_with_diamond_marker() {
+        let scatter =
+            ScatterPlot::new(vec![(1.0, 2.0), (3.0, 4.0)]).with_marker(MarkerStyle::Diamond);
+        assert!(matches!(scatter.marker, MarkerStyle::Diamond));
     }
 }

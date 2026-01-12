@@ -30,9 +30,13 @@
 
 mod app;
 mod color;
+pub mod compute_block;
 pub mod direct;
 mod error;
 mod input;
+pub mod perf_trace;
+pub mod random_seed;
+pub mod seed;
 pub mod theme;
 pub mod tools;
 pub mod widgets;
@@ -41,7 +45,7 @@ pub mod widgets;
 pub mod ptop;
 
 // Re-export main types
-pub use app::{TuiApp, TuiConfig};
+pub use app::{AsyncCollector, QaTimings, Snapshot, SnapshotReceiver, TuiApp, TuiConfig};
 pub use color::ColorMode;
 pub use direct::{Cell, CellBuffer, DiffRenderer, DirectTerminalCanvas, Modifiers};
 pub use error::TuiError;
@@ -83,6 +87,7 @@ pub use widgets::{
     HistogramOrientation,
     HorizonGraph,
     HorizonScheme,
+    HugePages,
     LegendPosition,
     LineChart,
     LineStyle,
@@ -113,6 +118,9 @@ pub use widgets::{
     Simplification,
     Sparkline,
     Table,
+    TitleBar,
+    TitleBarPosition,
+    TitleBarStyle,
     Tree,
     TreeNode,
     Treemap,
@@ -129,4 +137,17 @@ pub use widgets::{
 pub use presentar_core::{
     Brick, BrickAssertion, BrickBudget, BrickVerification, Canvas, Color, Constraints, Point, Rect,
     Size, TextStyle, Widget,
+};
+
+// Re-export random seed types (F1: Popper falsifiability)
+pub use random_seed::{
+    get_seed, init_from_env, set_global_seed, with_seed, SeededRng, DEFAULT_SEED,
+};
+
+// Re-export ComputeBlock types (SPEC-024 Section 15, 20)
+pub use compute_block::{
+    ComputeBlock, ComputeBlockId, CpuFrequencyBlock, CpuGovernor, CpuGovernorBlock,
+    FrequencyScalingState, GpuThermalBlock, GpuThermalState, GpuVramBlock, HugePagesBlock,
+    LoadTrendBlock, MemPressureBlock, MemoryPressureLevel, SimdInstructionSet, SparklineBlock,
+    TrendDirection as ComputeTrendDirection,
 };

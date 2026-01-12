@@ -1,0 +1,211 @@
+name: Test-First Enforcement
+
+# SPEC-024 Section 0: ENFORCEMENT ARCHITECTURE
+#
+# This workflow BLOCKS any PR that violates test-first development.
+# It is NOT advisory. It is MANDATORY.
+#
+# TESTS DEFINE INTERFACE. IMPLEMENTATION FOLLOWS.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Job 1: Verify test files exist for implementation files
+  test-first-check:
+    name: Test-First Verification
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for diff
+
+      - name: Check new implementation files have tests
+        run: |
+          echo "╔══════════════════════════════════════════════════════════════════════════════╗"
+          echo "║  SPEC-024: TEST-FIRST ENFORCEMENT                                            ║"
+          echo "╠══════════════════════════════════════════════════════════════════════════════╣"
+          echo "║  TESTS DEFINE INTERFACE. IMPLEMENTATION FOLLOWS.                             ║"
+          echo "╚══════════════════════════════════════════════════════════════════════════════╝"
+          echo ""
+
+          # Get changed files
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CHANGED=$(git diff --name-only ${{ github.event.pull_request.base.sha }} HEAD)
+          else
+            CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git ls-files)
+          fi
+
+          FAILED=0
+
+          # Check ptop implementation files
+          for f in $(echo "$CHANGED" | grep 'crates/presentar-terminal/src/ptop/.*\.rs$' | grep -v 'mod.rs'); do
+            MODULE=$(basename "$f" .rs)
+
+            # Check for corresponding test
+            if ! grep -r "mod ${MODULE}" crates/presentar-terminal/tests/ >/dev/null 2>&1 && \
+               ! grep -r "fn test_.*${MODULE}" crates/presentar-terminal/tests/ >/dev/null 2>&1 && \
+               ! grep -l "#\[cfg(test)\]" "$f" >/dev/null 2>&1; then
+              echo "ERROR: $f has no tests!"
+              echo "       Add tests to crates/presentar-terminal/tests/ or inline #[cfg(test)] module"
+              FAILED=1
+            fi
+          done
+
+          # Check widget implementation files
+          for f in $(echo "$CHANGED" | grep 'crates/presentar-terminal/src/widgets/.*\.rs$' | grep -v 'mod.rs'); do
+            WIDGET=$(basename "$f" .rs)
+
+            # Widgets MUST have inline tests or external test file
+            if ! grep -l "#\[cfg(test)\]" "$f" >/dev/null 2>&1 && \
+               ! ls crates/presentar-terminal/tests/*${WIDGET}* >/dev/null 2>&1; then
+              echo "WARNING: Widget $WIDGET may lack tests (check manually)"
+            fi
+          done
+
+          if [ $FAILED -eq 1 ]; then
+            echo ""
+            echo "╔══════════════════════════════════════════════════════════════════════════════╗"
+            echo "║  ENFORCEMENT FAILED: Implementation files without tests                      ║"
+            echo "╠══════════════════════════════════════════════════════════════════════════════╣"
+            echo "║  1. Write the test FIRST that defines the interface                          ║"
+            echo "║  2. The test should FAIL TO COMPILE initially                                ║"
+            echo "║  3. Add the interface (struct fields, function signatures)                   ║"
+            echo "║  4. Implement until tests pass                                               ║"
+            echo "╚══════════════════════════════════════════════════════════════════════════════╝"
+            exit 1
+          fi
+
+          echo "All implementation files have corresponding tests."
+
+  # Job 2: Run interface-defining tests
+  interface-tests:
+    name: Interface-Defining Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-enforce-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run async interface tests
+        run: |
+          echo "Running SPEC-024 async data flow interface tests..."
+          cargo test -p presentar-terminal --features ptop --test cpu_exploded_async
+
+      - name: Run visibility tests
+        run: |
+          echo "Running SPEC-024 panel visibility tests..."
+          cargo test -p presentar-terminal --features ptop --test cbtop_visibility
+
+      - name: Run widget tests
+        run: |
+          echo "Running widget interface tests..."
+          cargo test -p presentar-terminal --features ptop --test 'f*'
+
+  # Job 3: Verify build.rs enforcement runs
+  build-enforcement:
+    name: Build-Time Enforcement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-enforce-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build with ptop (triggers build.rs enforcement)
+        run: |
+          echo "Building with ptop feature - this triggers SPEC-024 build.rs enforcement..."
+          cargo build -p presentar-terminal --features ptop
+
+      - name: Verify build.rs ran
+        run: |
+          # The build succeeding means build.rs enforcement passed
+          echo "Build-time enforcement passed."
+
+  # Job 4: Coverage gate
+  coverage-gate:
+    name: Test Coverage Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-cov-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Generate coverage for ptop
+        run: |
+          cargo llvm-cov test -p presentar-terminal --features ptop --json --output-path coverage.json
+
+      - name: Check coverage threshold
+        run: |
+          # Extract line coverage percentage
+          COVERAGE=$(cat coverage.json | jq -r '.data[0].totals.lines.percent // 0')
+          echo "Coverage: ${COVERAGE}%"
+
+          # Minimum 80% coverage required (SPEC-024)
+          THRESHOLD=80
+          if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
+            echo "ERROR: Coverage ${COVERAGE}% is below ${THRESHOLD}% threshold"
+            exit 1
+          fi
+
+          echo "Coverage gate passed: ${COVERAGE}% >= ${THRESHOLD}%"
+
+  # Final gate: All enforcement must pass
+  enforcement-gate:
+    name: Enforcement Gate
+    needs: [test-first-check, interface-tests, build-enforcement, coverage-gate]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All enforcement passed
+        run: |
+          echo "╔══════════════════════════════════════════════════════════════════════════════╗"
+          echo "║  SPEC-024 ENFORCEMENT: ALL CHECKS PASSED                                     ║"
+          echo "╠══════════════════════════════════════════════════════════════════════════════╣"
+          echo "║                                                                              ║"
+          echo "║  - Test-first verification: PASSED                                           ║"
+          echo "║  - Interface-defining tests: PASSED                                          ║"
+          echo "║  - Build-time enforcement: PASSED                                            ║"
+          echo "║  - Coverage gate: PASSED                                                     ║"
+          echo "║                                                                              ║"
+          echo "║  TESTS DEFINE INTERFACE. IMPLEMENTATION FOLLOWS.                             ║"
+          echo "║                                                                              ║"
+          echo "╚══════════════════════════════════════════════════════════════════════════════╝"

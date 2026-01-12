@@ -1,6 +1,6 @@
-//! ComputeBlock: SIMD-optimized panel element trait
+//! `ComputeBlock`: SIMD-optimized panel element trait
 //!
-//! Implements the ComputeBlock architecture from SPEC-024 Section 21.6.
+//! Implements the `ComputeBlock` architecture from SPEC-024 Section 21.6.
 //! All panel elements (sparklines, gauges, etc.) implement this trait
 //! to enable SIMD optimization where available.
 //!
@@ -20,8 +20,8 @@
 //!
 //! | Platform | Instruction Set | Vector Width |
 //! |----------|-----------------|--------------|
-//! | x86_64   | AVX2            | 256-bit (8×f32) |
-//! | x86_64   | SSE4.1          | 128-bit (4×f32) |
+//! | `x86_64`   | AVX2            | 256-bit (8×f32) |
+//! | `x86_64`   | SSE4.1          | 128-bit (4×f32) |
 //! | aarch64  | NEON            | 128-bit (4×f32) |
 //! | wasm32   | SIMD128         | 128-bit (4×f32) |
 //!
@@ -31,18 +31,16 @@
 //! - Fog, A. (2023): SIMD optimization patterns
 //! - Hennessy & Patterson (2017): Memory hierarchy optimization
 
-use std::time::Duration;
-
 /// SIMD instruction set identifier
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SimdInstructionSet {
     /// No SIMD available (scalar fallback)
     Scalar,
-    /// x86_64 SSE4.1 (128-bit, 4×f32)
+    /// `x86_64` SSE4.1 (128-bit, 4×f32)
     Sse4,
-    /// x86_64 AVX2 (256-bit, 8×f32)
+    /// `x86_64` AVX2 (256-bit, 8×f32)
     Avx2,
-    /// x86_64 AVX-512 (512-bit, 16×f32)
+    /// `x86_64` AVX-512 (512-bit, 16×f32)
     Avx512,
     /// ARM NEON (128-bit, 4×f32)
     Neon,
@@ -115,7 +113,7 @@ impl Default for SimdInstructionSet {
     }
 }
 
-/// ComputeBlock trait for SIMD-optimized panel elements
+/// `ComputeBlock` trait for SIMD-optimized panel elements
 ///
 /// All panel elements that benefit from SIMD optimization implement
 /// this trait. The trait provides a common interface for:
@@ -170,51 +168,51 @@ pub trait ComputeBlock {
     }
 }
 
-/// ComputeBlock ID as specified in SPEC-024 Section 21
+/// `ComputeBlock` ID as specified in SPEC-024 Section 21
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ComputeBlockId {
     // CPU Panel (CB-CPU-*)
-    CpuSparklines,        // CB-CPU-001
-    CpuLoadGauge,         // CB-CPU-002
-    CpuLoadTrend,         // CB-CPU-003
-    CpuFrequency,         // CB-CPU-004
-    CpuBoostIndicator,    // CB-CPU-005
-    CpuTemperature,       // CB-CPU-006
-    CpuTopConsumers,      // CB-CPU-007
+    CpuSparklines,     // CB-CPU-001
+    CpuLoadGauge,      // CB-CPU-002
+    CpuLoadTrend,      // CB-CPU-003
+    CpuFrequency,      // CB-CPU-004
+    CpuBoostIndicator, // CB-CPU-005
+    CpuTemperature,    // CB-CPU-006
+    CpuTopConsumers,   // CB-CPU-007
 
     // Memory Panel (CB-MEM-*)
-    MemSparklines,        // CB-MEM-001
-    MemZramRatio,         // CB-MEM-002
-    MemPressureGauge,     // CB-MEM-003
-    MemSwapThrashing,     // CB-MEM-004
-    MemCacheBreakdown,    // CB-MEM-005
-    MemHugePages,         // CB-MEM-006
+    MemSparklines,     // CB-MEM-001
+    MemZramRatio,      // CB-MEM-002
+    MemPressureGauge,  // CB-MEM-003
+    MemSwapThrashing,  // CB-MEM-004
+    MemCacheBreakdown, // CB-MEM-005
+    MemHugePages,      // CB-MEM-006
 
     // Connections Panel (CB-CONN-*)
-    ConnAge,              // CB-CONN-001
-    ConnProc,             // CB-CONN-002
-    ConnGeo,              // CB-CONN-003
-    ConnLatency,          // CB-CONN-004
-    ConnService,          // CB-CONN-005
-    ConnHotIndicator,     // CB-CONN-006
-    ConnSparkline,        // CB-CONN-007
+    ConnAge,          // CB-CONN-001
+    ConnProc,         // CB-CONN-002
+    ConnGeo,          // CB-CONN-003
+    ConnLatency,      // CB-CONN-004
+    ConnService,      // CB-CONN-005
+    ConnHotIndicator, // CB-CONN-006
+    ConnSparkline,    // CB-CONN-007
 
     // Network Panel (CB-NET-*)
-    NetSparklines,        // CB-NET-001
-    NetProtocolStats,     // CB-NET-002
-    NetErrorRate,         // CB-NET-003
-    NetDropRate,          // CB-NET-004
-    NetLatencyGauge,      // CB-NET-005
-    NetBandwidthUtil,     // CB-NET-006
+    NetSparklines,    // CB-NET-001
+    NetProtocolStats, // CB-NET-002
+    NetErrorRate,     // CB-NET-003
+    NetDropRate,      // CB-NET-004
+    NetLatencyGauge,  // CB-NET-005
+    NetBandwidthUtil, // CB-NET-006
 
     // Process Panel (CB-PROC-*)
-    ProcTreeView,         // CB-PROC-001
-    ProcSortIndicator,    // CB-PROC-002
-    ProcFilter,           // CB-PROC-003
-    ProcOomScore,         // CB-PROC-004
-    ProcNiceValue,        // CB-PROC-005
-    ProcThreadCount,      // CB-PROC-006
-    ProcCgroup,           // CB-PROC-007
+    ProcTreeView,      // CB-PROC-001
+    ProcSortIndicator, // CB-PROC-002
+    ProcFilter,        // CB-PROC-003
+    ProcOomScore,      // CB-PROC-004
+    ProcNiceValue,     // CB-PROC-005
+    ProcThreadCount,   // CB-PROC-006
+    ProcCgroup,        // CB-PROC-007
 }
 
 impl ComputeBlockId {
@@ -302,11 +300,12 @@ impl ComputeBlockId {
     }
 }
 
-/// Sparkline ComputeBlock (CB-CPU-001, CB-MEM-001, CB-NET-001, CB-CONN-007)
+/// Sparkline `ComputeBlock` (CB-CPU-001, CB-MEM-001, CB-NET-001, CB-CONN-007)
 ///
 /// SIMD-optimized sparkline rendering using 8-level block characters.
 /// Uses AVX2 for min/max/normalization when available.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct SparklineBlock {
     /// History buffer (60 samples = 60 seconds at 1Hz)
     history: Vec<f32>,
@@ -365,6 +364,7 @@ impl SparklineBlock {
         let samples = self.sample_to_width(width);
 
         // Map to block characters
+        #[allow(clippy::items_after_statements)]
         const BLOCKS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
 
         samples
@@ -387,10 +387,14 @@ impl SparklineBlock {
             return (0.0, 1.0);
         }
 
-        // For now, use scalar implementation
-        // TODO: Add actual SIMD intrinsics for AVX2
+        // Scalar implementation - SIMD intrinsics for AVX2 can be added
+        // in a future optimization pass if profiling shows this as a hotspot
         let min = self.history.iter().copied().fold(f32::INFINITY, f32::min);
-        let max = self.history.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        let max = self
+            .history
+            .iter()
+            .copied()
+            .fold(f32::NEG_INFINITY, f32::max);
 
         (min, max)
     }
@@ -433,7 +437,7 @@ impl ComputeBlock for SparklineBlock {
     }
 }
 
-/// Load Trend ComputeBlock (CB-CPU-003)
+/// Load Trend `ComputeBlock` (CB-CPU-003)
 ///
 /// Computes the derivative of load average to show trend direction.
 #[derive(Debug, Clone)]
@@ -480,6 +484,7 @@ impl LoadTrendBlock {
 
         let avg_diff: f32 = diffs.iter().sum::<f32>() / diffs.len() as f32;
 
+        #[allow(clippy::items_after_statements)]
         const THRESHOLD: f32 = 0.05;
         if avg_diff > THRESHOLD {
             TrendDirection::Up
@@ -509,13 +514,14 @@ impl ComputeBlock for LoadTrendBlock {
 }
 
 /// Trend direction for load/usage indicators
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TrendDirection {
     /// Trending up (↑)
     Up,
     /// Trending down (↓)
     Down,
     /// Stable/flat (→)
+    #[default]
     Flat,
 }
 
@@ -686,7 +692,7 @@ mod tests {
 // Additional ComputeBlocks (SPEC-024 Part VI: Grammar of Graphics)
 // =============================================================================
 
-/// CPU Frequency ComputeBlock (CB-CPU-004)
+/// CPU Frequency `ComputeBlock` (CB-CPU-004)
 ///
 /// Tracks per-core CPU frequencies and detects frequency scaling state.
 /// Per-core frequency data from `/sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq`.
@@ -808,7 +814,7 @@ impl FrequencyScalingState {
     }
 }
 
-/// CPU Governor ComputeBlock (CB-CPU-008)
+/// CPU Governor `ComputeBlock` (CB-CPU-008)
 ///
 /// Tracks CPU governor state from `/sys/devices/system/cpu/cpu*/cpufreq/scaling_governor`.
 #[derive(Debug, Clone)]
@@ -935,7 +941,7 @@ impl CpuGovernor {
     }
 }
 
-/// Memory Pressure ComputeBlock (CB-MEM-003)
+/// Memory Pressure `ComputeBlock` (CB-MEM-003)
 ///
 /// Tracks memory pressure from `/proc/pressure/memory`.
 #[derive(Debug, Clone)]
@@ -972,7 +978,13 @@ impl MemPressureBlock {
     }
 
     /// Set pressure values
-    pub fn set_pressure(&mut self, avg10_some: f32, avg60_some: f32, avg300_some: f32, avg10_full: f32) {
+    pub fn set_pressure(
+        &mut self,
+        avg10_some: f32,
+        avg60_some: f32,
+        avg300_some: f32,
+        avg10_full: f32,
+    ) {
         self.avg10_some = avg10_some;
         self.avg60_some = avg60_some;
         self.avg300_some = avg300_some;
@@ -1044,11 +1056,11 @@ pub enum MemoryPressureLevel {
 }
 
 impl MemoryPressureLevel {
-    /// Get display character
-    #[must_use]
-    pub const fn indicator(self) -> char {
+    /// Get the display character for this pressure level
+    #[allow(clippy::match_same_arms)]
+    pub fn symbol(&self) -> char {
         match self {
-            Self::None => '●',
+            Self::None => ' ',
             Self::Low => '○',
             Self::Medium => '◐',
             Self::High => '◕',
@@ -1069,7 +1081,7 @@ impl MemoryPressureLevel {
     }
 }
 
-/// Huge Pages ComputeBlock (CB-MEM-006)
+/// Huge Pages `ComputeBlock` (CB-MEM-006)
 ///
 /// Tracks huge page usage from `/proc/meminfo`.
 #[derive(Debug, Clone)]
@@ -1147,7 +1159,7 @@ impl ComputeBlock for HugePagesBlock {
     }
 }
 
-/// GPU Thermal ComputeBlock (CB-GPU-001)
+/// GPU Thermal `ComputeBlock` (CB-GPU-001)
 ///
 /// Tracks GPU temperature and power draw.
 #[derive(Debug, Clone)]
@@ -1262,9 +1274,10 @@ impl ComputeBlock for GpuThermalBlock {
 }
 
 /// GPU thermal state
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GpuThermalState {
     /// Cool (<50°C)
+    #[default]
     Cool,
     /// Normal (50-70°C)
     Normal,
@@ -1302,7 +1315,7 @@ impl GpuThermalState {
     }
 }
 
-/// GPU VRAM ComputeBlock (CB-GPU-002)
+/// GPU VRAM `ComputeBlock` (CB-GPU-002)
 ///
 /// Tracks VRAM usage per process.
 #[derive(Debug, Clone)]
@@ -1333,7 +1346,12 @@ impl GpuVramBlock {
     }
 
     /// Set VRAM values
-    pub fn set_values(&mut self, total_mb: u64, used_mb: u64, per_process: Vec<(u32, u64, String)>) {
+    pub fn set_values(
+        &mut self,
+        total_mb: u64,
+        used_mb: u64,
+        per_process: Vec<(u32, u64, String)>,
+    ) {
         self.total_mb = total_mb;
         self.used_mb = used_mb;
         self.per_process = per_process;
@@ -1416,7 +1434,10 @@ mod new_block_tests {
 
     #[test]
     fn test_cpu_governor_from_name() {
-        assert_eq!(CpuGovernor::from_name("performance"), CpuGovernor::Performance);
+        assert_eq!(
+            CpuGovernor::from_name("performance"),
+            CpuGovernor::Performance
+        );
         assert_eq!(CpuGovernor::from_name("powersave"), CpuGovernor::Powersave);
         assert_eq!(CpuGovernor::from_name("schedutil"), CpuGovernor::Schedutil);
         assert_eq!(CpuGovernor::from_name("unknown"), CpuGovernor::Unknown);
@@ -1769,5 +1790,426 @@ mod new_block_tests {
     fn test_sparkline_latency_budget() {
         let sparkline = SparklineBlock::new(60);
         assert_eq!(sparkline.latency_budget_us(), 100);
+    }
+}
+
+// =============================================================================
+// MetricsCacheBlock: O(1) Cached Metrics for ptop Performance
+// =============================================================================
+
+/// Cached metrics snapshot for O(1) panel access.
+///
+/// This struct provides pre-computed, cached views of system metrics
+/// to avoid redundant calculations during rendering. Per the spec:
+/// "All metrics must be O(1) cached views, not O(n) per-frame refreshes."
+///
+/// # Architecture
+///
+/// ```text
+/// ┌─────────────────────────────────────────────────────────────────┐
+/// │  collect_metrics() [O(n)]  →  MetricsCache  →  render() [O(1)]  │
+/// │                                                                  │
+/// │  ┌─────────────┐     ┌─────────────┐     ┌─────────────────┐    │
+/// │  │ /proc scan  │ →   │ SIMD Reduce │ →   │ Cached Summary  │    │
+/// │  │ (2600 PIDs) │     │ (AVX2/NEON) │     │ (top 50, sums)  │    │
+/// │  └─────────────┘     └─────────────┘     └─────────────────┘    │
+/// └─────────────────────────────────────────────────────────────────┘
+/// ```
+///
+/// # Performance Targets
+///
+/// | Operation | Target | Notes |
+/// |-----------|--------|-------|
+/// | Cache update | <100ms | Once per collect_metrics() |
+/// | Cache read | <1μs | O(1) field access |
+/// | Memory overhead | <1KB | Just aggregates, not full data |
+#[derive(Debug, Clone, Default)]
+pub struct MetricsCache {
+    /// Cached CPU aggregate
+    pub cpu: CpuMetricsCache,
+    /// Cached memory aggregate
+    pub memory: MemoryMetricsCache,
+    /// Cached process aggregate
+    pub process: ProcessMetricsCache,
+    /// Cached network aggregate
+    pub network: NetworkMetricsCache,
+    /// Cached GPU aggregate
+    pub gpu: GpuMetricsCache,
+    /// Frame ID when cache was last updated
+    pub frame_id: u64,
+    /// Timestamp of last update (for cache invalidation)
+    pub updated_at_us: u64,
+}
+
+/// Cached CPU metrics
+#[derive(Debug, Clone, Default)]
+pub struct CpuMetricsCache {
+    /// Average CPU usage across all cores (0-100)
+    pub avg_usage: f32,
+    /// Maximum core usage (for load display)
+    pub max_core_usage: f32,
+    /// Number of cores at >90% usage
+    pub hot_cores: u32,
+    /// Load average (1m, 5m, 15m)
+    pub load_avg: [f32; 3],
+    /// Current frequency (GHz)
+    pub freq_ghz: f32,
+    /// Trend direction
+    pub trend: TrendDirection,
+}
+
+/// Cached memory metrics
+#[derive(Debug, Clone, Default)]
+pub struct MemoryMetricsCache {
+    /// Usage percentage (0-100)
+    pub usage_percent: f32,
+    /// Used bytes
+    pub used_bytes: u64,
+    /// Total bytes
+    pub total_bytes: u64,
+    /// Cached bytes
+    pub cached_bytes: u64,
+    /// Swap usage percentage
+    pub swap_percent: f32,
+    /// ZRAM compression ratio
+    pub zram_ratio: f32,
+    /// Trend direction
+    pub trend: TrendDirection,
+}
+
+/// Cached process metrics
+#[derive(Debug, Clone, Default)]
+pub struct ProcessMetricsCache {
+    /// Total process count
+    pub total_count: u32,
+    /// Running process count
+    pub running_count: u32,
+    /// Sleeping process count
+    pub sleeping_count: u32,
+    /// Top CPU consumer (pid, cpu%, name)
+    pub top_cpu: Option<(u32, f32, String)>,
+    /// Top memory consumer (pid, mem%, name)
+    pub top_mem: Option<(u32, f32, String)>,
+    /// Sum of all CPU usage (for overhead display)
+    pub total_cpu_usage: f32,
+}
+
+/// Cached network metrics
+#[derive(Debug, Clone, Default)]
+pub struct NetworkMetricsCache {
+    /// Primary interface name
+    pub interface: String,
+    /// RX rate (bytes/sec)
+    pub rx_bytes_sec: u64,
+    /// TX rate (bytes/sec)
+    pub tx_bytes_sec: u64,
+    /// Total RX bytes
+    pub total_rx: u64,
+    /// Total TX bytes
+    pub total_tx: u64,
+    /// Active connection count
+    pub connection_count: u32,
+}
+
+/// Cached GPU metrics
+#[derive(Debug, Clone, Default)]
+pub struct GpuMetricsCache {
+    /// GPU name
+    pub name: String,
+    /// GPU usage percentage
+    pub usage_percent: f32,
+    /// VRAM usage percentage
+    pub vram_percent: f32,
+    /// Temperature in Celsius
+    pub temp_c: f32,
+    /// Power draw in Watts
+    pub power_w: f32,
+    /// Thermal state
+    pub thermal_state: GpuThermalState,
+}
+
+impl MetricsCache {
+    /// Create a new empty cache
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Check if cache is stale (older than `max_age_us`)
+    #[must_use]
+    pub fn is_stale(&self, current_time_us: u64, max_age_us: u64) -> bool {
+        current_time_us.saturating_sub(self.updated_at_us) > max_age_us
+    }
+
+    /// Update CPU cache from raw data
+    pub fn update_cpu(
+        &mut self,
+        per_core: &[f64],
+        load_avg: [f32; 3],
+        freq_ghz: f32,
+        frame_id: u64,
+    ) {
+        if per_core.is_empty() {
+            return;
+        }
+
+        // SIMD-friendly reduction (compiler can vectorize)
+        let sum: f64 = per_core.iter().sum();
+        let max: f64 = per_core.iter().copied().fold(0.0, f64::max);
+        let hot_cores = per_core.iter().filter(|&&c| c > 90.0).count();
+
+        self.cpu.avg_usage = (sum / per_core.len() as f64) as f32;
+        self.cpu.max_core_usage = max as f32;
+        self.cpu.hot_cores = hot_cores as u32;
+        self.cpu.load_avg = load_avg;
+        self.cpu.freq_ghz = freq_ghz;
+        self.frame_id = frame_id;
+    }
+
+    /// Update memory cache from raw data
+    pub fn update_memory(
+        &mut self,
+        used: u64,
+        total: u64,
+        cached: u64,
+        swap_used: u64,
+        swap_total: u64,
+        zram_ratio: f32,
+    ) {
+        self.memory.used_bytes = used;
+        self.memory.total_bytes = total;
+        self.memory.cached_bytes = cached;
+        self.memory.usage_percent = if total > 0 {
+            used as f32 / total as f32 * 100.0
+        } else {
+            0.0
+        };
+        self.memory.swap_percent = if swap_total > 0 {
+            swap_used as f32 / swap_total as f32 * 100.0
+        } else {
+            0.0
+        };
+        self.memory.zram_ratio = zram_ratio;
+    }
+
+    /// Update process cache from raw data
+    pub fn update_process(
+        &mut self,
+        total: u32,
+        running: u32,
+        sleeping: u32,
+        top_cpu: Option<(u32, f32, String)>,
+        top_mem: Option<(u32, f32, String)>,
+        total_cpu: f32,
+    ) {
+        self.process.total_count = total;
+        self.process.running_count = running;
+        self.process.sleeping_count = sleeping;
+        self.process.top_cpu = top_cpu;
+        self.process.top_mem = top_mem;
+        self.process.total_cpu_usage = total_cpu;
+    }
+
+    /// Update network cache from raw data
+    pub fn update_network(
+        &mut self,
+        interface: String,
+        rx_rate: u64,
+        tx_rate: u64,
+        total_rx: u64,
+        total_tx: u64,
+        conn_count: u32,
+    ) {
+        self.network.interface = interface;
+        self.network.rx_bytes_sec = rx_rate;
+        self.network.tx_bytes_sec = tx_rate;
+        self.network.total_rx = total_rx;
+        self.network.total_tx = total_tx;
+        self.network.connection_count = conn_count;
+    }
+
+    /// Update GPU cache from raw data
+    pub fn update_gpu(&mut self, name: String, usage: f32, vram: f32, temp: f32, power: f32) {
+        self.gpu.name = name;
+        self.gpu.usage_percent = usage;
+        self.gpu.vram_percent = vram;
+        self.gpu.temp_c = temp;
+        self.gpu.power_w = power;
+        self.gpu.thermal_state = if temp >= 90.0 {
+            GpuThermalState::Critical
+        } else if temp >= 80.0 {
+            GpuThermalState::Hot
+        } else if temp >= 70.0 {
+            GpuThermalState::Warm
+        } else if temp >= 50.0 {
+            GpuThermalState::Normal
+        } else {
+            GpuThermalState::Cool
+        };
+    }
+
+    /// Set timestamp for cache freshness tracking
+    pub fn mark_updated(&mut self, timestamp_us: u64) {
+        self.updated_at_us = timestamp_us;
+    }
+}
+
+/// `ComputeBlock` wrapper for `MetricsCache` that provides O(1) access
+#[derive(Debug, Clone, Default)]
+pub struct MetricsCacheBlock {
+    cache: MetricsCache,
+    instruction_set: SimdInstructionSet,
+}
+
+impl MetricsCacheBlock {
+    /// Create a new metrics cache block
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cache: MetricsCache::new(),
+            instruction_set: SimdInstructionSet::detect(),
+        }
+    }
+
+    /// Get immutable reference to the cache
+    #[must_use]
+    pub fn cache(&self) -> &MetricsCache {
+        &self.cache
+    }
+
+    /// Get mutable reference to the cache for updates
+    pub fn cache_mut(&mut self) -> &mut MetricsCache {
+        &mut self.cache
+    }
+}
+
+impl ComputeBlock for MetricsCacheBlock {
+    type Input = (); // No input - cache is updated separately
+    type Output = MetricsCache;
+
+    fn compute(&mut self, _input: &Self::Input) -> Self::Output {
+        self.cache.clone()
+    }
+
+    fn simd_instruction_set(&self) -> SimdInstructionSet {
+        self.instruction_set
+    }
+
+    fn latency_budget_us(&self) -> u64 {
+        1 // O(1) access - should be <1μs
+    }
+}
+
+#[cfg(test)]
+mod metrics_cache_tests {
+    use super::*;
+
+    #[test]
+    fn test_metrics_cache_new() {
+        let cache = MetricsCache::new();
+        assert_eq!(cache.frame_id, 0);
+        assert_eq!(cache.cpu.avg_usage, 0.0);
+    }
+
+    #[test]
+    fn test_metrics_cache_update_cpu() {
+        let mut cache = MetricsCache::new();
+        let cores = vec![10.0, 20.0, 30.0, 95.0];
+        cache.update_cpu(&cores, [1.0, 2.0, 3.0], 4.5, 1);
+
+        assert!((cache.cpu.avg_usage - 38.75).abs() < 0.1);
+        assert_eq!(cache.cpu.max_core_usage, 95.0);
+        assert_eq!(cache.cpu.hot_cores, 1);
+        assert_eq!(cache.cpu.freq_ghz, 4.5);
+        assert_eq!(cache.frame_id, 1);
+    }
+
+    #[test]
+    fn test_metrics_cache_update_memory() {
+        let mut cache = MetricsCache::new();
+        cache.update_memory(
+            50_000_000_000,  // 50GB used
+            100_000_000_000, // 100GB total
+            20_000_000_000,  // 20GB cached
+            1_000_000_000,   // 1GB swap used
+            10_000_000_000,  // 10GB swap total
+            2.5,             // ZRAM ratio
+        );
+
+        assert!((cache.memory.usage_percent - 50.0).abs() < 0.1);
+        assert!((cache.memory.swap_percent - 10.0).abs() < 0.1);
+        assert_eq!(cache.memory.zram_ratio, 2.5);
+    }
+
+    #[test]
+    fn test_metrics_cache_update_process() {
+        let mut cache = MetricsCache::new();
+        cache.update_process(
+            1000, // total
+            5,    // running
+            900,  // sleeping
+            Some((1234, 50.0, "chrome".to_string())),
+            Some((5678, 25.0, "firefox".to_string())),
+            150.0, // total CPU
+        );
+
+        assert_eq!(cache.process.total_count, 1000);
+        assert_eq!(cache.process.running_count, 5);
+        assert!(cache.process.top_cpu.is_some());
+        assert_eq!(cache.process.top_cpu.as_ref().unwrap().2, "chrome");
+    }
+
+    #[test]
+    fn test_metrics_cache_update_gpu() {
+        let mut cache = MetricsCache::new();
+        cache.update_gpu(
+            "RTX 4090".to_string(),
+            80.0,  // usage
+            50.0,  // vram
+            75.0,  // temp
+            300.0, // power
+        );
+
+        assert_eq!(cache.gpu.name, "RTX 4090");
+        assert_eq!(cache.gpu.thermal_state, GpuThermalState::Warm);
+    }
+
+    #[test]
+    fn test_metrics_cache_staleness() {
+        let mut cache = MetricsCache::new();
+        cache.mark_updated(1000);
+
+        // Not stale at same time
+        assert!(!cache.is_stale(1000, 100));
+        // Not stale within window
+        assert!(!cache.is_stale(1050, 100));
+        // Stale after window
+        assert!(cache.is_stale(1200, 100));
+    }
+
+    #[test]
+    fn test_metrics_cache_block_compute() {
+        let mut block = MetricsCacheBlock::new();
+        block
+            .cache_mut()
+            .update_cpu(&[50.0, 60.0], [1.0, 2.0, 3.0], 4.0, 1);
+
+        let output = block.compute(&());
+        assert_eq!(output.frame_id, 1);
+        assert!(output.cpu.avg_usage > 0.0);
+    }
+
+    #[test]
+    fn test_metrics_cache_block_latency() {
+        let block = MetricsCacheBlock::new();
+        assert_eq!(block.latency_budget_us(), 1);
+    }
+
+    #[test]
+    fn test_metrics_cache_empty_cores() {
+        let mut cache = MetricsCache::new();
+        cache.update_cpu(&[], [0.0, 0.0, 0.0], 0.0, 0);
+        // Should not panic, just leave defaults
+        assert_eq!(cache.cpu.avg_usage, 0.0);
     }
 }

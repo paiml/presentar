@@ -256,32 +256,6 @@ impl TreemapAnalyzer {
         node.children = children;
         Some(node)
     }
-
-    /// Get quick size of directory without full recursion
-    fn get_dir_size_quick(&self, path: &Path, max_files: usize) -> u64 {
-        let mut size = 0u64;
-        let mut count = 0;
-
-        if let Ok(entries) = fs::read_dir(path) {
-            for entry in entries.take(max_files) {
-                if let Ok(entry) = entry {
-                    if let Ok(metadata) = entry.metadata() {
-                        if metadata.is_file() {
-                            size += metadata.len();
-                        } else if metadata.is_dir() {
-                            size += self.get_dir_size_quick(&entry.path(), max_files / 10 + 1);
-                        }
-                    }
-                }
-                count += 1;
-                if count >= max_files {
-                    break;
-                }
-            }
-        }
-
-        size
-    }
 }
 
 impl Analyzer for TreemapAnalyzer {

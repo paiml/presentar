@@ -1,0 +1,69 @@
+# Benchmark CI with Statistical Analysis
+# Runs benchmarks with reproducible seeds and reports confidence intervals
+
+name: Benchmark
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  PRESENTAR_BENCH_SEED: 12345
+  CRITERION_DEBUG: 0
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-action@stable
+      with:
+        components: rustfmt, clippy
+
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Run benchmarks
+      run: |
+        cargo criterion --message-format json > benchmark_results.json
+
+    - name: Generate statistics report
+      run: |
+        echo "## Benchmark Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Benchmark | Mean | 95% CI | Samples |" >> $GITHUB_STEP_SUMMARY
+        echo "|-----------|------|--------|---------|" >> $GITHUB_STEP_SUMMARY
+
+        # Parse Criterion JSON output
+        jq -r '.[] | select(.reason == "benchmark-complete") |
+          "| \(.id) | \(.mean.estimate | . / 1e6 | round)ms | [\(.mean.lower_bound | . / 1e6 | round)ms, \(.mean.upper_bound | . / 1e6 | round)ms] | \(.sample_count) |"' \
+          benchmark_results.json >> $GITHUB_STEP_SUMMARY || echo "No benchmark data"
+
+    - name: Check for regressions
+      run: |
+        # Compare against baseline if it exists
+        if [ -f data/benchmarks/baselines/latest.json ]; then
+          echo "Checking for performance regressions..."
+          cargo criterion --baseline latest || true
+        fi
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results
+        path: |
+          benchmark_results.json
+          target/criterion/

@@ -530,4 +530,309 @@ mod tests {
         assert_eq!(panel.max_connections, 5);
         assert!(!panel.show_headers);
     }
+
+    #[test]
+    fn test_tcp_state_all_short() {
+        assert_eq!(TcpState::CloseWait.short(), "CW");
+        assert_eq!(TcpState::SynSent.short(), "SS");
+        assert_eq!(TcpState::SynRecv.short(), "SR");
+        assert_eq!(TcpState::FinWait1.short(), "FW1");
+        assert_eq!(TcpState::FinWait2.short(), "FW2");
+        assert_eq!(TcpState::LastAck.short(), "LA");
+        assert_eq!(TcpState::Closing.short(), "CLG");
+        assert_eq!(TcpState::Closed.short(), "CLD");
+    }
+
+    #[test]
+    fn test_tcp_state_colors() {
+        // Test all states return valid colors
+        for state in [
+            TcpState::Established,
+            TcpState::Listen,
+            TcpState::TimeWait,
+            TcpState::CloseWait,
+            TcpState::SynSent,
+            TcpState::SynRecv,
+            TcpState::FinWait1,
+            TcpState::FinWait2,
+            TcpState::LastAck,
+            TcpState::Closing,
+            TcpState::Closed,
+        ] {
+            let color = state.color();
+            assert!(color.r >= 0.0 && color.r <= 1.0);
+        }
+    }
+
+    #[test]
+    fn test_connection_entry_service_names() {
+        assert_eq!(ConnectionEntry::listen(22).service_name(), "ssh");
+        assert_eq!(ConnectionEntry::listen(80).service_name(), "http");
+        assert_eq!(ConnectionEntry::listen(443).service_name(), "https");
+        assert_eq!(ConnectionEntry::listen(3306).service_name(), "mysql");
+        assert_eq!(ConnectionEntry::listen(5432).service_name(), "pgsql");
+        assert_eq!(ConnectionEntry::listen(6379).service_name(), "redis");
+        assert_eq!(ConnectionEntry::listen(27017).service_name(), "mongodb");
+        assert_eq!(ConnectionEntry::listen(9999).service_name(), "");
+    }
+
+    #[test]
+    fn test_connection_entry_with_local_addr() {
+        let conn = ConnectionEntry::listen(80).with_local_addr("127.0.0.1");
+        assert_eq!(conn.local_addr, "127.0.0.1");
+    }
+
+    #[test]
+    fn test_connection_entry_with_state() {
+        let conn = ConnectionEntry::tcp(443, "1.2.3.4", 12345).with_state(TcpState::TimeWait);
+        assert_eq!(conn.state, TcpState::TimeWait);
+    }
+
+    #[test]
+    fn test_connection_entry_local_display() {
+        let conn = ConnectionEntry::listen(8080);
+        assert_eq!(conn.local_display(), ":8080");
+    }
+
+    #[test]
+    fn test_connection_entry_remote_display_zero() {
+        let conn = ConnectionEntry::tcp(80, "0.0.0.0", 0);
+        assert_eq!(conn.remote_display(), "*");
+    }
+
+    #[test]
+    fn test_connection_entry_remote_display_normal() {
+        let conn = ConnectionEntry::tcp(443, "192.168.1.1", 54321);
+        assert_eq!(conn.remote_display(), "192.168.1.1:54321");
+    }
+
+    #[test]
+    fn test_connections_panel_with_connections() {
+        let connections = vec![
+            ConnectionEntry::listen(80),
+            ConnectionEntry::tcp(443, "1.2.3.4", 12345),
+        ];
+        let panel = ConnectionsPanel::new().with_connections(connections);
+        assert_eq!(panel.listening_count() + panel.established_count(), 2);
+    }
+
+    #[test]
+    fn test_connections_panel_brick_traits() {
+        let panel = ConnectionsPanel::new();
+        assert_eq!(panel.brick_name(), "connections_panel");
+        assert!(!panel.assertions().is_empty());
+        assert!(panel.budget().paint_ms > 0);
+        assert!(panel.verify().is_valid());
+        assert!(panel.to_html().is_empty());
+        assert!(panel.to_css().is_empty());
+    }
+
+    #[test]
+    fn test_connections_panel_widget_traits() {
+        let mut panel = ConnectionsPanel::new().with_connections(vec![ConnectionEntry::listen(80)]);
+
+        // Measure
+        let size = panel.measure(Constraints {
+            min_width: 0.0,
+            min_height: 0.0,
+            max_width: 80.0,
+            max_height: 20.0,
+        });
+        assert!(size.width > 0.0);
+        assert!(size.height > 0.0);
+
+        // Layout
+        let result = panel.layout(Rect::new(0.0, 0.0, 80.0, 10.0));
+        assert_eq!(result.size.width, 80.0);
+
+        // Type ID
+        assert_eq!(Widget::type_id(&panel), TypeId::of::<ConnectionsPanel>());
+
+        // Event
+        assert!(panel
+            .event(&Event::KeyDown {
+                key: presentar_core::Key::Enter
+            })
+            .is_none());
+
+        // Children
+        assert!(panel.children().is_empty());
+        assert!(panel.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_connections_panel_paint_with_header() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let connections = vec![
+            ConnectionEntry::listen(80).with_process("nginx", 1234),
+            ConnectionEntry::tcp(443, "192.168.1.100", 54321).with_process("curl", 5678),
+            ConnectionEntry::tcp(3306, "10.0.0.1", 12345).with_state(TcpState::CloseWait),
+        ];
+
+        let mut panel = ConnectionsPanel::new()
+            .with_connections(connections)
+            .show_headers(true);
+
+        panel.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_connections_panel_paint_without_header() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let connections = vec![ConnectionEntry::listen(443)];
+
+        let mut panel = ConnectionsPanel::new()
+            .with_connections(connections)
+            .show_headers(false);
+
+        panel.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_connections_panel_paint_empty() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let mut panel = ConnectionsPanel::new();
+        panel.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_connections_panel_paint_small_bounds() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let connections = vec![ConnectionEntry::listen(80)];
+        let mut panel = ConnectionsPanel::new().with_connections(connections);
+        panel.layout(Rect::new(0.0, 0.0, 10.0, 0.5)); // Too small
+
+        let mut buffer = CellBuffer::new(10, 1);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas); // Should early return
+    }
+
+    #[test]
+    fn test_connections_panel_long_process_name() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let connections = vec![ConnectionEntry::tcp(443, "1.2.3.4", 12345)
+            .with_process("very_long_process_name_here", 1234)];
+
+        let mut panel = ConnectionsPanel::new().with_connections(connections);
+        panel.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_connections_panel_long_remote_address() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let connections = vec![ConnectionEntry::tcp(
+            443,
+            "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
+            12345,
+        )];
+
+        let mut panel = ConnectionsPanel::new().with_connections(connections);
+        panel.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_connections_panel_filter_listening() {
+        let connections = vec![
+            ConnectionEntry::listen(80),
+            ConnectionEntry::tcp(443, "1.2.3.4", 12345),
+            ConnectionEntry::listen(8080),
+        ];
+
+        let panel = ConnectionsPanel::new()
+            .with_connections(connections)
+            .show_listening(false)
+            .show_established(true);
+
+        let visible: Vec<_> = panel.visible_connections().collect();
+        assert_eq!(visible.len(), 1); // Only established
+    }
+
+    #[test]
+    fn test_connections_panel_filter_established() {
+        let connections = vec![
+            ConnectionEntry::listen(80),
+            ConnectionEntry::tcp(443, "1.2.3.4", 12345),
+        ];
+
+        let panel = ConnectionsPanel::new()
+            .with_connections(connections)
+            .show_listening(true)
+            .show_established(false);
+
+        let visible: Vec<_> = panel.visible_connections().collect();
+        assert_eq!(visible.len(), 1); // Only listening
+    }
+
+    #[test]
+    fn test_connections_panel_default() {
+        let panel = ConnectionsPanel::default();
+        assert!(panel.show_listening);
+        assert!(panel.show_established);
+        assert!(panel.show_headers);
+        assert_eq!(panel.max_connections, 10);
+    }
+
+    #[test]
+    fn test_tcp_state_default() {
+        let state = TcpState::default();
+        assert_eq!(state, TcpState::Established);
+    }
+
+    #[test]
+    fn test_connections_panel_other_states_visible() {
+        let connections = vec![
+            ConnectionEntry::tcp(443, "1.2.3.4", 12345).with_state(TcpState::TimeWait),
+            ConnectionEntry::tcp(443, "1.2.3.5", 12346).with_state(TcpState::CloseWait),
+        ];
+
+        // These are neither listening nor established, but should be visible
+        let panel = ConnectionsPanel::new()
+            .with_connections(connections)
+            .show_listening(false)
+            .show_established(false);
+
+        let visible: Vec<_> = panel.visible_connections().collect();
+        assert_eq!(visible.len(), 2); // Both TIME_WAIT and CLOSE_WAIT visible
+    }
+
+    #[test]
+    fn test_connections_panel_unknown_port() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        // Port with no service name
+        let connections = vec![ConnectionEntry::listen(12345)];
+
+        let mut panel = ConnectionsPanel::new().with_connections(connections);
+        panel.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
 }

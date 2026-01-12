@@ -408,4 +408,224 @@ mod tests {
         assert_eq!(sorted[1].name, "medium");
         assert_eq!(sorted[2].name, "small");
     }
+
+    #[test]
+    fn test_file_entry_with_color() {
+        let entry = FileEntry::file("test", 100).with_color(Color::RED);
+        assert_eq!(format!("{:?}", entry.color), format!("{:?}", Color::RED));
+    }
+
+    #[test]
+    fn test_file_entry_color_for_all_names() {
+        // Test all color categories
+        let names = vec![
+            "home", "users", "var", "log", "usr", "bin", "lib", "tmp", "cache", "etc", "config",
+            "opt", "local", "random",
+        ];
+        for name in names {
+            let entry = FileEntry::directory(name, 100);
+            assert!(entry.color.r >= 0.0 && entry.color.r <= 1.0);
+        }
+    }
+
+    #[test]
+    fn test_panel_show_sizes_builder() {
+        let panel = FilesPanel::new().show_sizes(false);
+        assert!(!panel.show_sizes);
+    }
+
+    #[test]
+    fn test_panel_show_bars_builder() {
+        let panel = FilesPanel::new().show_bars(false);
+        assert!(!panel.show_bars);
+    }
+
+    #[test]
+    fn test_panel_max_entries_builder() {
+        let panel = FilesPanel::new().max_entries(5);
+        assert_eq!(panel.max_entries, 5);
+    }
+
+    #[test]
+    fn test_panel_with_total_size() {
+        let panel = FilesPanel::new().with_total_size(10000);
+        assert_eq!(panel.total_size, 10000);
+    }
+
+    #[test]
+    fn test_files_panel_brick_traits() {
+        let panel = FilesPanel::new();
+        assert_eq!(panel.brick_name(), "files_panel");
+        assert!(!panel.assertions().is_empty());
+        assert!(panel.budget().paint_ms > 0);
+        assert!(panel.verify().is_valid());
+        assert!(panel.to_html().is_empty());
+        assert!(panel.to_css().is_empty());
+    }
+
+    #[test]
+    fn test_files_panel_widget_traits() {
+        let mut panel = FilesPanel::new().with_entries(vec![
+            FileEntry::directory("home", 1000),
+            FileEntry::directory("var", 500),
+        ]);
+
+        // Measure
+        let size = panel.measure(Constraints {
+            min_width: 0.0,
+            min_height: 0.0,
+            max_width: 80.0,
+            max_height: 20.0,
+        });
+        assert!(size.width > 0.0);
+        assert!(size.height > 0.0);
+
+        // Layout
+        let result = panel.layout(Rect::new(0.0, 0.0, 80.0, 10.0));
+        assert_eq!(result.size.width, 80.0);
+
+        // Type ID
+        assert_eq!(Widget::type_id(&panel), TypeId::of::<FilesPanel>());
+
+        // Event
+        assert!(panel
+            .event(&Event::KeyDown {
+                key: presentar_core::Key::Enter
+            })
+            .is_none());
+
+        // Children
+        assert!(panel.children().is_empty());
+        assert!(panel.children_mut().is_empty());
+    }
+
+    #[test]
+    fn test_files_panel_paint_with_bars() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let mut panel = FilesPanel::new()
+            .with_entries(vec![
+                FileEntry::directory("home", 1000),
+                FileEntry::directory("var", 500),
+                FileEntry::directory("verylongdirectoryname", 300),
+            ])
+            .show_bars(true);
+
+        panel.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+        // Verify it doesn't panic
+    }
+
+    #[test]
+    fn test_files_panel_paint_without_bars() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let mut panel = FilesPanel::new()
+            .with_entries(vec![
+                FileEntry::directory("home", 1000),
+                FileEntry::directory("verylongdirectoryname", 500),
+            ])
+            .show_bars(false)
+            .show_sizes(true);
+
+        panel.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_files_panel_paint_empty() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let mut panel = FilesPanel::new();
+        panel.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_files_panel_paint_small_bounds() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let mut panel = FilesPanel::new().with_entries(vec![FileEntry::directory("home", 1000)]);
+
+        panel.layout(Rect::new(0.0, 0.0, 5.0, 0.5));
+
+        let mut buffer = CellBuffer::new(5, 1);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas); // Should early return
+    }
+
+    #[test]
+    fn test_files_panel_measure_empty() {
+        let panel = FilesPanel::new();
+        let size = panel.measure(Constraints {
+            min_width: 0.0,
+            min_height: 0.0,
+            max_width: 80.0,
+            max_height: 20.0,
+        });
+        assert!(size.height >= 1.0);
+    }
+
+    #[test]
+    fn test_file_entry_directory_constructor() {
+        let entry = FileEntry::directory("test", 100);
+        assert!(entry.is_dir);
+    }
+
+    #[test]
+    fn test_file_entry_file_constructor() {
+        let entry = FileEntry::file("test", 100);
+        assert!(!entry.is_dir);
+    }
+
+    #[test]
+    fn test_files_panel_default() {
+        let panel = FilesPanel::default();
+        assert!(panel.entries.is_empty());
+        assert!(panel.show_sizes);
+        assert!(panel.show_bars);
+        assert_eq!(panel.max_entries, 8);
+    }
+
+    #[test]
+    fn test_files_panel_paint_without_sizes() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let mut panel = FilesPanel::new()
+            .with_entries(vec![FileEntry::directory("home", 1000)])
+            .show_bars(false)
+            .show_sizes(false);
+
+        panel.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_files_panel_exceeds_max_entries() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let entries: Vec<FileEntry> = (0..20)
+            .map(|i| FileEntry::directory(format!("dir{}", i), (20 - i) as u64 * 100))
+            .collect();
+
+        let mut panel = FilesPanel::new().with_entries(entries).max_entries(5);
+
+        panel.layout(Rect::new(0.0, 0.0, 60.0, 10.0));
+
+        let mut buffer = CellBuffer::new(60, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        panel.paint(&mut canvas);
+    }
 }

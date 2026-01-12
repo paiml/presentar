@@ -348,4 +348,146 @@ mod tests {
         let (_, offset) = empty.render_lines(20);
         assert_eq!(offset, 1);
     }
+
+    #[test]
+    fn test_truncate_unicode() {
+        // Test with multi-byte Unicode characters
+        assert_eq!(truncate("你好世界", 3), "你好…");
+        assert_eq!(truncate("日本語", 5), "日本語");
+    }
+
+    #[test]
+    fn test_truncate_middle_short() {
+        // Short string - no truncation needed
+        assert_eq!(truncate_middle("abc", 10), "abc");
+        // Very short max - falls back to truncate
+        assert_eq!(truncate_middle("abcdefgh", 3), "ab…");
+        assert_eq!(truncate_middle("abcdefgh", 2), "a…");
+    }
+
+    #[test]
+    fn test_truncate_with_custom_ellipsis() {
+        assert_eq!(truncate_with("Hello World", 10, "..."), "Hello W...");
+        assert_eq!(truncate_with("Hello", 10, "..."), "Hello");
+        // Ellipsis longer than max
+        assert_eq!(truncate_with("Hello World", 2, "..."), "..");
+    }
+
+    #[test]
+    fn test_truncate_with_empty_ellipsis() {
+        assert_eq!(truncate_with("Hello World", 5, ""), "Hello");
+    }
+
+    #[test]
+    fn test_health_status_label() {
+        assert_eq!(HealthStatus::Healthy.label(), "Healthy");
+        assert_eq!(HealthStatus::Warning.label(), "Warning");
+        assert_eq!(HealthStatus::Critical.label(), "Critical");
+        assert_eq!(HealthStatus::Unknown.label(), "Unknown");
+    }
+
+    #[test]
+    fn test_health_status_colored_symbol() {
+        // Just test that colored symbols contain ANSI codes
+        let healthy = HealthStatus::Healthy.colored_symbol();
+        assert!(healthy.contains("\x1b[32m")); // Green
+        assert!(healthy.contains("✓"));
+
+        let warning = HealthStatus::Warning.colored_symbol();
+        assert!(warning.contains("\x1b[33m")); // Yellow
+        assert!(warning.contains("⚠"));
+
+        let critical = HealthStatus::Critical.colored_symbol();
+        assert!(critical.contains("\x1b[31m")); // Red
+        assert!(critical.contains("✗"));
+
+        let unknown = HealthStatus::Unknown.colored_symbol();
+        assert!(unknown.contains("\x1b[90m")); // Gray
+        assert!(unknown.contains("?"));
+    }
+
+    #[test]
+    fn test_health_status_display() {
+        assert_eq!(format!("{}", HealthStatus::Healthy), "✓");
+        assert_eq!(format!("{}", HealthStatus::Warning), "⚠");
+        assert_eq!(format!("{}", HealthStatus::Critical), "✗");
+        assert_eq!(format!("{}", HealthStatus::Unknown), "?");
+    }
+
+    #[test]
+    fn test_empty_state_default() {
+        let empty = EmptyState::default();
+        assert_eq!(empty.title, "No data available");
+        assert!(empty.icon.is_none());
+        assert!(empty.hint.is_none());
+        assert!(empty.center_vertical);
+    }
+
+    #[test]
+    fn test_empty_state_no_icon_no_hint() {
+        let empty = EmptyState::new("Test message");
+        let (lines, _) = empty.render_lines(10);
+        assert_eq!(lines.len(), 1); // Only title
+        assert_eq!(lines[0], "Test message");
+    }
+
+    #[test]
+    fn test_empty_state_with_icon_only() {
+        let empty = EmptyState::new("Test message").icon("🔍");
+        let (lines, _) = empty.render_lines(10);
+        assert_eq!(lines.len(), 3); // icon, spacer, title
+        assert_eq!(lines[0], "🔍");
+        assert_eq!(lines[1], "");
+        assert_eq!(lines[2], "Test message");
+    }
+
+    #[test]
+    fn test_empty_state_with_hint_only() {
+        let empty = EmptyState::new("Test message").hint("Try again");
+        let (lines, _) = empty.render_lines(10);
+        assert_eq!(lines.len(), 3); // title, spacer, hint
+        assert_eq!(lines[0], "Test message");
+        assert_eq!(lines[1], "");
+        assert_eq!(lines[2], "Try again");
+    }
+
+    #[test]
+    fn test_empty_state_render_small_height() {
+        let empty = EmptyState::new("Title").icon("📊").hint("Hint");
+        let (lines, offset) = empty.render_lines(3); // Height smaller than content
+        assert_eq!(lines.len(), 5);
+        assert_eq!(offset, 0); // Can't center, content is bigger
+    }
+
+    #[test]
+    fn test_truncate_middle_exact_boundary() {
+        // Test exactly 4 chars which is the boundary (max <= 3 falls back)
+        let result = truncate_middle("abcdefghij", 4);
+        assert!(result.len() <= 4 || result.chars().count() <= 4);
+    }
+
+    #[test]
+    fn test_health_from_percentage_edge_cases() {
+        // Test exact boundaries
+        assert_eq!(HealthStatus::from_percentage(80.0), HealthStatus::Healthy);
+        assert_eq!(HealthStatus::from_percentage(79.999), HealthStatus::Warning);
+        assert_eq!(HealthStatus::from_percentage(50.0), HealthStatus::Warning);
+        assert_eq!(
+            HealthStatus::from_percentage(49.999),
+            HealthStatus::Critical
+        );
+    }
+
+    #[test]
+    fn test_empty_state_builder_chain() {
+        let empty = EmptyState::new("Test")
+            .icon("🔧")
+            .hint("Fix it")
+            .top_aligned();
+
+        assert_eq!(empty.title, "Test");
+        assert_eq!(empty.icon, Some("🔧".to_string()));
+        assert_eq!(empty.hint, Some("Fix it".to_string()));
+        assert!(!empty.center_vertical);
+    }
 }

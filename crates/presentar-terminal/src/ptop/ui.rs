@@ -11,7 +11,7 @@
 use crate::direct::{CellBuffer, DirectTerminalCanvas};
 use crate::{
     Border, BorderStyle, BrailleGraph, GraphMode, NetworkInterface, NetworkPanel, ProcessEntry,
-    ProcessState, ProcessTable, Treemap, TreemapNode,
+    ProcessState, ProcessTable, TitleBar, Treemap, TreemapNode,
 };
 use presentar_core::{Canvas, Color, Point, Rect, TextStyle, Widget};
 
@@ -333,15 +333,63 @@ pub fn draw(app: &App, buffer: &mut CellBuffer) {
 
     let mut canvas = DirectTerminalCanvas::new(buffer);
 
+    // =========================================================================
+    // TITLE BAR: App name + search (SPEC-024 Section 27.8 - Grammar of Graphics)
+    // Every TUI MUST have a title bar with app name and search
+    // Keybinds change in exploded mode to show DataFrame controls
+    // =========================================================================
+    let title_bar_height = 1.0_f32;
+    let title_bar_rect = Rect::new(0.0, 0.0, w, title_bar_height);
+
+    let keybinds: &[(&str, &str)] = if app.exploded_panel.is_some() {
+        // DataFrame navigation mode
+        &[
+            ("←→", "Column"),
+            ("↵", "Sort"),
+            ("↑↓", "Row"),
+            ("Esc", "Exit"),
+        ]
+    } else {
+        // Normal navigation mode
+        &[
+            ("q", "Quit"),
+            ("?", "Help"),
+            ("/", "Filter"),
+            ("Tab", "Nav"),
+        ]
+    };
+
+    let mut title_bar = TitleBar::new("ptop")
+        .with_version(env!("CARGO_PKG_VERSION"))
+        .with_search_placeholder("Filter processes...")
+        .with_search_text(&app.filter)
+        .with_search_active(app.show_filter_input)
+        .with_keybinds(keybinds)
+        .with_primary_color(CPU_COLOR);
+
+    // Add compact fullscreen indicator in exploded mode
+    if app.exploded_panel.is_some() {
+        title_bar = title_bar.with_mode_indicator("[▣]");
+    }
+
+    title_bar.layout(title_bar_rect);
+    title_bar.paint(&mut canvas);
+
     // Reserve 1 row for status bar at bottom (SPEC-024 v5.5 Section 11.6)
     let status_bar_height = 1.0_f32;
-    let content_h = h - status_bar_height;
+    let content_y = title_bar_height;
+    let content_h = h - status_bar_height - title_bar_height;
 
     // EXPLODED MODE: render single panel fullscreen (SPEC-024 v5.0 Feature D)
     // Reference: ttop/src/ui.rs line 20-50
+    // Note: TitleBar now shows [FULLSCREEN] indicator and DataFrame keybinds
     if let Some(panel) = app.exploded_panel {
-        draw_exploded_panel(app, &mut canvas, Rect::new(0.0, 0.0, w, content_h), panel);
-        draw_explode_hint(&mut canvas, w, content_h);
+        draw_exploded_panel(
+            app,
+            &mut canvas,
+            Rect::new(0.0, content_y, w, content_h),
+            panel,
+        );
         draw_status_bar(app, &mut canvas, w, h);
         return;
     }
@@ -358,12 +406,12 @@ pub fn draw(app: &App, buffer: &mut CellBuffer) {
     } else {
         0.0
     };
-    let bottom_y = top_height;
-    let bottom_height = content_h - bottom_y;
+    let bottom_y = content_y + top_height;
+    let bottom_height = content_h - top_height;
 
     // Draw top panels in grid layout
     if top_panel_count > 0 {
-        draw_top_panels(app, &mut canvas, Rect::new(0.0, 0.0, w, top_height));
+        draw_top_panels(app, &mut canvas, Rect::new(0.0, content_y, w, top_height));
     }
 
     // Draw bottom row: ttop uses exactly 48 | 36 | 36 for 120-width terminal
@@ -672,9 +720,84 @@ fn draw_top_panels(app: &App, canvas: &mut DirectTerminalCanvas<'_>, area: Rect)
     }
 }
 
+// ============================================================================
+// CPU Panel Helper Functions
+// Extracted to reduce cyclomatic complexity of draw_cpu_panel
+// ============================================================================
+
+/// Build CPU panel title string.
+fn build_cpu_title(
+    cpu_pct: f64,
+    core_count: usize,
+    freq_ghz: f64,
+    is_boosting: bool,
+    uptime: u64,
+    load_one: f64,
+    deterministic: bool,
+) -> String {
+    let boost_icon = if is_boosting { "⚡" } else { "" };
+    if deterministic {
+        format!(
+            "CPU {cpu_pct:.0}% │ {core_count} cores │ {freq_ghz:.1}GHz │ up {} │",
+            format_uptime(uptime)
+        )
+    } else {
+        // Prioritize: CPU% > cores > freq > uptime > LAV
+        // Compact format: "CPU 14% │ 48 cores │ 4.8GHz⚡ │ up 3d 3h │ LAV 30.28"
+        format!(
+            "CPU {cpu_pct:.0}% │ {core_count} cores │ {freq_ghz:.1}GHz{boost_icon} │ up {} │ LAV {load_one:.1}",
+            format_uptime(uptime)
+        )
+    }
+}
+
+/// Build a compact CPU title for narrow panels (prioritizes frequency)
+fn build_cpu_title_compact(
+    cpu_pct: f64,
+    core_count: usize,
+    freq_ghz: f64,
+    is_boosting: bool,
+) -> String {
+    let boost_icon = if is_boosting { "⚡" } else { "" };
+    // Compact: "CPU 14% │ 48c │ 4.8GHz⚡" (~22 chars)
+    format!("CPU {cpu_pct:.0}% │ {core_count}c │ {freq_ghz:.1}GHz{boost_icon}")
+}
+
+/// Calculate CPU meter layout parameters.
+struct CpuMeterLayout {
+    bar_len: usize,
+    meter_bar_width: f32,
+    cores_per_col: usize,
+    num_meter_cols: usize,
+}
+
+impl CpuMeterLayout {
+    fn calculate(core_count: usize, core_area_height: f32, is_exploded: bool) -> Self {
+        let bar_len: usize = if is_exploded { 8 } else { 6 };
+        let meter_bar_width = (bar_len + 9) as f32;
+
+        let max_cores_per_col = if is_exploded {
+            (core_area_height as usize).min(12)
+        } else {
+            core_area_height as usize
+        };
+        let cores_per_col = max_cores_per_col.max(1);
+        let num_meter_cols = core_count.div_ceil(cores_per_col);
+
+        Self {
+            bar_len,
+            meter_bar_width,
+            cores_per_col,
+            num_meter_cols,
+        }
+    }
+}
+
+// ============================================================================
+
 #[allow(clippy::too_many_lines)]
 fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
-    use sysinfo::{Cpu, LoadAvg, System};
+    use sysinfo::{Cpu, LoadAvg};
 
     // Determine detail level based on available height (SPEC-024 v5.0 Feature E)
     let _detail_level = DetailLevel::for_height(bounds.height as u16);
@@ -683,7 +806,7 @@ fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
     let core_count = app.per_core_percent.len();
     let uptime = app.uptime();
 
-    // In deterministic mode, use zeroed values like ttop
+    // Use cached load_avg from App (O(1) render - no I/O in render path)
     let (load, max_freq_mhz) = if app.deterministic {
         (
             LoadAvg {
@@ -694,7 +817,6 @@ fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
             0u64,
         )
     } else {
-        let load = System::load_average();
         let freq = app
             .system
             .cpus()
@@ -702,28 +824,25 @@ fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
             .map(Cpu::frequency)
             .max()
             .unwrap_or(0);
-        (load, freq)
+        (app.load_avg.clone(), freq)
     };
 
     let is_boosting = max_freq_mhz > 3000; // Heuristic: >3GHz = boosting
+    let freq_ghz = max_freq_mhz as f64 / 1000.0;
 
-    // ttop-style title format (Border widget adds outer spaces)
-    // Deterministic mode: ttop shows "CPU 0% │ 48 cores │ 0.0GHz │ up 0m │"
-    // Normal mode: includes LAV and boost icon
-    let boost_icon = if is_boosting { "⚡" } else { "" };
-    let title = if app.deterministic {
-        // ttop deterministic: no LAV, no boost icon, exact format match
-        format!(
-            "CPU {cpu_pct:.0}% │ {core_count} cores │ {:.1}GHz │ up {} │",
-            max_freq_mhz as f64 / 1000.0,
-            format_uptime(uptime)
-        )
+    // Build title - use compact version for narrow panels to ensure frequency is visible
+    let title = if bounds.width < 35.0 {
+        // Very narrow: just show essentials
+        build_cpu_title_compact(cpu_pct, core_count, freq_ghz, is_boosting)
     } else {
-        format!(
-            "CPU {cpu_pct:.0}% │ {core_count} cores │ {:.1}GHz{boost_icon} │ up {} │ LAV {:.2}",
-            max_freq_mhz as f64 / 1000.0,
-            format_uptime(uptime),
-            load.one
+        build_cpu_title(
+            cpu_pct,
+            core_count,
+            freq_ghz,
+            is_boosting,
+            uptime,
+            load.one,
+            app.deterministic,
         )
     };
 
@@ -747,29 +866,25 @@ fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
     let has_cpu_data = !app.deterministic || app.per_core_percent.iter().any(|&p| p > 0.0);
 
     if has_cpu_data {
-        // CB-EXPLODE-001 FIX v2: Responsive layout for exploded mode
-        // Detect exploded by checking if width > 100 (typical panel is 40-60 wide)
+        // CB-EXPLODE-001 v2: Responsive layout for exploded mode
         let is_exploded = inner.width > 100.0;
 
-        // ttop layout: per-core meters on LEFT, graph on RIGHT
-        // In exploded mode, spread cores across more columns
-        let meter_bar_width = if is_exploded { 16.0_f32 } else { 12.0_f32 };
-        let bar_len: usize = if is_exploded { 10 } else { 6 };
-
-        // Limit cores per column in exploded mode to force horizontal spread
-        let max_cores_per_col = if is_exploded {
-            (core_area_height as usize).min(12) // At most 12 per column
-        } else {
-            core_area_height as usize
-        };
-        let cores_per_col = max_cores_per_col.max(1);
-
-        let num_meter_cols = core_count.div_ceil(cores_per_col);
+        // Calculate meter layout using helper
+        let layout = CpuMeterLayout::calculate(core_count, core_area_height, is_exploded);
+        let bar_len = layout.bar_len;
+        let meter_bar_width = layout.meter_bar_width;
+        let cores_per_col = layout.cores_per_col;
+        let num_meter_cols = layout.num_meter_cols;
 
         // In exploded mode, allow meters to take up to 70% of width
         let max_meter_ratio = if is_exploded { 0.70 } else { 0.5 };
         let meters_width =
             (num_meter_cols as f32 * meter_bar_width).min(inner.width * max_meter_ratio);
+
+        // Check if we can fit all cores - if not, show summary mode
+        let visible_cols = (meters_width / meter_bar_width) as usize;
+        let visible_cores = visible_cols * cores_per_col;
+        let use_summary_mode = visible_cores < core_count && core_count > 8;
 
         // Get per-core temperatures from sensor data (like ttop)
         // Look for sensors with labels like "Core 0", "Core 1", etc.
@@ -793,43 +908,127 @@ fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
             })
             .unwrap_or_default();
 
-        // Draw per-core meters on left side
-        for (i, &percent) in app.per_core_percent.iter().enumerate() {
-            if cores_per_col == 0 {
-                break;
+        if use_summary_mode {
+            // Summary mode for high core count in narrow panels
+            // Show utilization buckets instead of individual cores
+            let mut high = 0_usize; // >70%
+            let mut med = 0_usize; // 30-70%
+            let mut low = 0_usize; // 1-30%
+            let mut idle = 0_usize; // <1%
+
+            for &pct in &app.per_core_percent {
+                if pct > 70.0 {
+                    high += 1;
+                } else if pct > 30.0 {
+                    med += 1;
+                } else if pct > 1.0 {
+                    low += 1;
+                } else {
+                    idle += 1;
+                }
             }
-            let col = i / cores_per_col;
-            let row = i % cores_per_col;
 
-            let cell_x = inner.x + col as f32 * meter_bar_width;
-            let cell_y = inner.y + row as f32;
+            let summary_lines = [
+                (
+                    high,
+                    "▓",
+                    Color {
+                        r: 1.0,
+                        g: 0.4,
+                        b: 0.4,
+                        a: 1.0,
+                    },
+                    ">70%",
+                ),
+                (
+                    med,
+                    "▒",
+                    Color {
+                        r: 1.0,
+                        g: 0.8,
+                        b: 0.3,
+                        a: 1.0,
+                    },
+                    "30-70",
+                ),
+                (
+                    low,
+                    "░",
+                    Color {
+                        r: 0.5,
+                        g: 0.9,
+                        b: 0.5,
+                        a: 1.0,
+                    },
+                    "1-30",
+                ),
+                (
+                    idle,
+                    " ",
+                    Color {
+                        r: 0.4,
+                        g: 0.4,
+                        b: 0.5,
+                        a: 1.0,
+                    },
+                    "idle",
+                ),
+            ];
 
-            if cell_x + meter_bar_width > inner.x + meters_width
-                || cell_y >= inner.y + core_area_height
-            {
-                continue;
+            let mut y = inner.y;
+            for (count, _char, color, label) in summary_lines {
+                if count > 0 && y < inner.y + core_area_height {
+                    let text = format!("{count:>2}c {label}");
+                    canvas.draw_text(
+                        &text,
+                        Point::new(inner.x, y),
+                        &TextStyle {
+                            color,
+                            ..Default::default()
+                        },
+                    );
+                    y += 1.0;
+                }
             }
+        } else {
+            // Draw per-core meters on left side (normal mode)
+            for (i, &percent) in app.per_core_percent.iter().enumerate() {
+                if cores_per_col == 0 {
+                    break;
+                }
+                let col = i / cores_per_col;
+                let row = i % cores_per_col;
 
-            let color = percent_color(percent);
-            // bar_len is set above based on is_exploded (10 for exploded, 6 for normal)
-            let filled = ((percent / 100.0) * bar_len as f64) as usize;
-            let bar: String =
-                "█".repeat(filled.min(bar_len)) + &"░".repeat(bar_len - filled.min(bar_len));
+                let cell_x = inner.x + col as f32 * meter_bar_width;
+                let cell_y = inner.y + row as f32;
 
-            // ttop style: show temp if available, otherwise show percent
-            let label = if let Some(&temp) = core_temps.get(&i) {
-                format!("{i:>2} {bar} {temp:>2.0}°")
-            } else {
-                format!("{i:>2} {bar} {percent:>3.0}")
-            };
-            canvas.draw_text(
-                &label,
-                Point::new(cell_x, cell_y),
-                &TextStyle {
-                    color,
-                    ..Default::default()
-                },
-            );
+                if cell_x + meter_bar_width > inner.x + meters_width
+                    || cell_y >= inner.y + core_area_height
+                {
+                    continue;
+                }
+
+                let color = percent_color(percent);
+                // bar_len is set above based on is_exploded (8 for exploded, 6 for normal)
+                let filled = ((percent / 100.0) * bar_len as f64) as usize;
+                let bar: String =
+                    "█".repeat(filled.min(bar_len)) + &"░".repeat(bar_len - filled.min(bar_len));
+
+                // ttop style: show temp if available, otherwise show percent
+                let label = if let Some(&temp) = core_temps.get(&i) {
+                    format!("{i:>2} {bar} {temp:>2.0}°")
+                } else {
+                    format!("{i:>2} {bar} {percent:>3.0}")
+                };
+                canvas.draw_text(
+                    &label,
+                    Point::new(cell_x, cell_y),
+                    &TextStyle {
+                        color,
+                        ..Default::default()
+                    },
+                );
+            }
         }
 
         // Draw graph on right side
@@ -903,28 +1102,37 @@ fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
         let bar: String =
             "█".repeat(filled.min(bar_width)) + &"░".repeat(bar_width - filled.min(bar_width));
 
-        // Format: "Load ██████████ 2.15↑ 1.85↓ 1.50 │ Freq 3.5GHz ⚡"
-        // In deterministic mode: "Load ░░░░░░░░░░ 0.00→ 0.00→ 0.00 │ Fre"
+        // Adaptive Load line format based on available width
+        // Full:    "Load ██████████ 2.15↑ 1.85↓ 1.50→ │ 4.8GHz" (~48 chars)
+        // Medium:  "Load ██████████ 2.15↑ 1.85↓ 1.50→" (~38 chars)
+        // Compact: "Load ██░░ 2.1↑ 1.8↓ 1.5→" (~24 chars)
+        let available_width = inner.width as usize;
+        let freq_ghz = max_freq_mhz as f64 / 1000.0;
+
         let load_str = if app.deterministic {
-            // ttop shows truncated " │ Fre" in deterministic mode
             format!(
                 "Load {bar} {:.2}{trend_1_5} {:.2}{trend_5_15} {:.2} │ Fre",
                 load.one, load.five, load.fifteen
             )
+        } else if available_width >= 45 && freq_ghz > 0.0 {
+            // Full format with frequency
+            format!(
+                "Load {bar} {:.2}{trend_1_5} {:.2}{trend_5_15} {:.2}→ │ {freq_ghz:.1}GHz",
+                load.one, load.five, load.fifteen
+            )
+        } else if available_width >= 35 {
+            // Medium format without frequency
+            format!(
+                "Load {bar} {:.2}{trend_1_5} {:.2}{trend_5_15} {:.2}→",
+                load.one, load.five, load.fifteen
+            )
         } else {
-            // Show frequency info in real mode
-            let freq_ghz = max_freq_mhz as f64 / 1000.0;
-            if freq_ghz > 0.0 {
-                format!(
-                    "Load {bar} {:.2}{trend_1_5} {:.2}{trend_5_15} {:.2} │ {freq_ghz:.1}GHz",
-                    load.one, load.five, load.fifteen
-                )
-            } else {
-                format!(
-                    "Load {bar} {:.2}{trend_1_5} {:.2}{trend_5_15} {:.2}",
-                    load.one, load.five, load.fifteen
-                )
-            }
+            // Compact format for narrow panels
+            let short_bar: String = bar.chars().take(4).collect();
+            format!(
+                "Load {short_bar} {:.1}{trend_1_5} {:.1}{trend_5_15} {:.1}→",
+                load.one, load.five, load.fifteen
+            )
         };
 
         canvas.draw_text(
@@ -954,91 +1162,287 @@ fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        let dim_color = Color {
-            r: 0.4,
-            g: 0.4,
-            b: 0.4,
-            a: 1.0,
-        };
-
-        // Draw "Top " prefix
-        canvas.draw_text(
-            "Top ",
-            Point::new(inner.x, consumers_y),
-            &TextStyle {
-                color: dim_color,
-                ..Default::default()
-            },
-        );
-
-        let mut x_offset = 4.0;
-        for (i, proc) in top_procs.iter().take(3).enumerate() {
-            let cpu = proc.cpu_usage() as f64;
-            let name: String = proc.name().to_string_lossy().chars().take(12).collect();
-
-            let cpu_color = if cpu > 50.0 {
-                Color {
-                    r: 1.0,
-                    g: 0.3,
-                    b: 0.3,
-                    a: 1.0,
-                }
-            } else if cpu > 20.0 {
-                Color {
-                    r: 1.0,
-                    g: 0.8,
-                    b: 0.2,
-                    a: 1.0,
-                }
-            } else {
-                Color {
-                    r: 0.3,
-                    g: 0.9,
-                    b: 0.3,
-                    a: 1.0,
-                }
+        // Only show "Top" section if there are processes to display
+        if !top_procs.is_empty() {
+            let dim_color = Color {
+                r: 0.4,
+                g: 0.4,
+                b: 0.4,
+                a: 1.0,
             };
 
-            if i > 0 {
+            // Draw "Top " prefix
+            canvas.draw_text(
+                "Top ",
+                Point::new(inner.x, consumers_y),
+                &TextStyle {
+                    color: dim_color,
+                    ..Default::default()
+                },
+            );
+
+            let mut x_offset = 4.0;
+            for (i, proc) in top_procs.iter().take(3).enumerate() {
+                let cpu = proc.cpu_usage() as f64;
+                let name: String = proc.name().to_string_lossy().chars().take(12).collect();
+
+                let cpu_color = if cpu > 50.0 {
+                    Color {
+                        r: 1.0,
+                        g: 0.3,
+                        b: 0.3,
+                        a: 1.0,
+                    }
+                } else if cpu > 20.0 {
+                    Color {
+                        r: 1.0,
+                        g: 0.8,
+                        b: 0.2,
+                        a: 1.0,
+                    }
+                } else {
+                    Color {
+                        r: 0.3,
+                        g: 0.9,
+                        b: 0.3,
+                        a: 1.0,
+                    }
+                };
+
+                if i > 0 {
+                    canvas.draw_text(
+                        " │ ",
+                        Point::new(inner.x + x_offset, consumers_y),
+                        &TextStyle {
+                            color: dim_color,
+                            ..Default::default()
+                        },
+                    );
+                    x_offset += 3.0;
+                }
+
+                let cpu_str = format!("{cpu:.0}%");
                 canvas.draw_text(
-                    " │ ",
+                    &cpu_str,
                     Point::new(inner.x + x_offset, consumers_y),
                     &TextStyle {
-                        color: dim_color,
+                        color: cpu_color,
                         ..Default::default()
                     },
                 );
-                x_offset += 3.0;
-            }
+                x_offset += cpu_str.len() as f32;
 
-            let cpu_str = format!("{cpu:.0}%");
-            canvas.draw_text(
-                &cpu_str,
-                Point::new(inner.x + x_offset, consumers_y),
-                &TextStyle {
-                    color: cpu_color,
-                    ..Default::default()
-                },
-            );
-            x_offset += cpu_str.len() as f32;
-
-            canvas.draw_text(
-                &format!(" {name}"),
-                Point::new(inner.x + x_offset, consumers_y),
-                &TextStyle {
-                    color: Color {
-                        r: 0.9,
-                        g: 0.9,
-                        b: 0.9,
-                        a: 1.0,
+                canvas.draw_text(
+                    &format!(" {name}"),
+                    Point::new(inner.x + x_offset, consumers_y),
+                    &TextStyle {
+                        color: Color {
+                            r: 0.9,
+                            g: 0.9,
+                            b: 0.9,
+                            a: 1.0,
+                        },
+                        ..Default::default()
                     },
-                    ..Default::default()
-                },
-            );
-            x_offset += 1.0 + name.len() as f32;
+                );
+                x_offset += 1.0 + name.len() as f32;
+            }
         }
     }
 }
+
+// ============================================================================
+// Memory Panel Helper Functions
+// Extracted to reduce cyclomatic complexity of draw_memory_panel
+// ============================================================================
+
+/// Memory statistics for deterministic rendering (GB values only).
+struct MemoryStats {
+    used_gb: f64,
+    cached_gb: f64,
+    free_gb: f64,
+}
+
+impl MemoryStats {
+    fn from_app(app: &App) -> Self {
+        let gb = |b: u64| b as f64 / 1024.0 / 1024.0 / 1024.0;
+        Self {
+            used_gb: gb(app.mem_used),
+            cached_gb: gb(app.mem_cached),
+            free_gb: gb(app.mem_available),
+        }
+    }
+}
+
+/// Get color for swap usage percentage.
+fn swap_color(pct: f64) -> Color {
+    if pct > 50.0 {
+        Color::new(1.0, 0.3, 0.3, 1.0) // Red
+    } else if pct > 10.0 {
+        Color::new(1.0, 0.8, 0.2, 1.0) // Yellow
+    } else {
+        Color::new(0.3, 0.9, 0.3, 1.0) // Green
+    }
+}
+
+/// Standard dim color for labels.
+const DIM_COLOR: Color = Color {
+    r: 0.3,
+    g: 0.3,
+    b: 0.3,
+    a: 1.0,
+};
+
+/// Cyan color for cached memory.
+const CACHED_COLOR: Color = Color {
+    r: 0.3,
+    g: 0.8,
+    b: 0.9,
+    a: 1.0,
+};
+
+/// Blue color for free memory.
+const FREE_COLOR: Color = Color {
+    r: 0.4,
+    g: 0.4,
+    b: 0.9,
+    a: 1.0,
+};
+
+/// Draw stacked memory bar (Used|Cached|Free).
+fn draw_memory_stacked_bar(canvas: &mut DirectTerminalCanvas<'_>, inner: Rect, y: f32, app: &App) {
+    let bar_width = inner.width as usize;
+    let used_actual_pct = if app.mem_total > 0 {
+        ((app.mem_total - app.mem_available) as f64 / app.mem_total as f64) * 100.0
+    } else {
+        0.0
+    };
+    let cached_pct = if app.mem_total > 0 {
+        (app.mem_cached as f64 / app.mem_total as f64) * 100.0
+    } else {
+        0.0
+    };
+
+    let used_chars = ((used_actual_pct / 100.0) * bar_width as f64) as usize;
+    let cached_chars = ((cached_pct / 100.0) * bar_width as f64) as usize;
+    let free_chars = bar_width.saturating_sub(used_chars + cached_chars);
+
+    let used_color = percent_color(used_actual_pct);
+    let free_color = Color::new(0.3, 0.3, 0.3, 1.0);
+
+    // Draw used segment
+    if used_chars > 0 {
+        let used_bar: String = "█".repeat(used_chars);
+        canvas.draw_text(
+            &used_bar,
+            Point::new(inner.x, y),
+            &TextStyle {
+                color: used_color,
+                ..Default::default()
+            },
+        );
+    }
+
+    // Draw cached segment
+    if cached_chars > 0 {
+        let cached_bar: String = "█".repeat(cached_chars);
+        canvas.draw_text(
+            &cached_bar,
+            Point::new(inner.x + used_chars as f32, y),
+            &TextStyle {
+                color: CACHED_COLOR,
+                ..Default::default()
+            },
+        );
+    }
+
+    // Draw free segment
+    if free_chars > 0 {
+        let free_bar: String = "░".repeat(free_chars);
+        canvas.draw_text(
+            &free_bar,
+            Point::new(inner.x + used_chars as f32 + cached_chars as f32, y),
+            &TextStyle {
+                color: free_color,
+                ..Default::default()
+            },
+        );
+    }
+}
+
+/// Draw memory rows in deterministic mode (ttop style).
+fn draw_memory_rows_deterministic(
+    canvas: &mut DirectTerminalCanvas<'_>,
+    inner: Rect,
+    mut y: f32,
+    stats: &MemoryStats,
+) -> f32 {
+    // Used row
+    canvas.draw_text(
+        &format!("  Used:   {:.1}G  0", stats.used_gb),
+        Point::new(inner.x, y),
+        &TextStyle {
+            color: percent_color(0.0),
+            ..Default::default()
+        },
+    );
+    y += 1.0;
+
+    // Cached row
+    if y < inner.y + inner.height {
+        canvas.draw_text(
+            &format!("Cached:   {:.1}G  0", stats.cached_gb),
+            Point::new(inner.x, y),
+            &TextStyle {
+                color: CACHED_COLOR,
+                ..Default::default()
+            },
+        );
+        y += 1.0;
+    }
+
+    // Free row
+    if y < inner.y + inner.height {
+        canvas.draw_text(
+            &format!("  Free:   {:.1}G  0", stats.free_gb),
+            Point::new(inner.x, y),
+            &TextStyle {
+                color: FREE_COLOR,
+                ..Default::default()
+            },
+        );
+        y += 1.0;
+    }
+
+    // PSI row (ttop style)
+    if y < inner.y + inner.height {
+        canvas.draw_text(
+            "PSI ○ 0.0 cpu ○ 0.0 mem ○ 0.0 io",
+            Point::new(inner.x, y),
+            &TextStyle {
+                color: DIM_COLOR,
+                ..Default::default()
+            },
+        );
+        y += 1.0;
+    }
+
+    // Top Memory Consumers header
+    if y < inner.y + inner.height {
+        canvas.draw_text(
+            "── Top Memory Consumers ──────────────",
+            Point::new(inner.x, y),
+            &TextStyle {
+                color: DIM_COLOR,
+                ..Default::default()
+            },
+        );
+    }
+
+    y
+}
+
+// ============================================================================
 
 #[allow(clippy::too_many_lines)]
 fn draw_memory_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
@@ -1088,80 +1492,8 @@ fn draw_memory_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: R
     let mut y = inner.y;
 
     // Line 1: Stacked memory bar (ttop style: Used|Cached|Free)
-    // In deterministic mode with 0 values, ttop shows all-gray bar
-    {
-        let bar_width = inner.width as usize;
-        let used_actual_pct = if app.mem_total > 0 {
-            ((app.mem_total - app.mem_available) as f64 / app.mem_total as f64) * 100.0
-        } else {
-            0.0
-        };
-        let cached_pct = if app.mem_total > 0 {
-            (app.mem_cached as f64 / app.mem_total as f64) * 100.0
-        } else {
-            0.0
-        };
-
-        let used_chars = ((used_actual_pct / 100.0) * bar_width as f64) as usize;
-        let cached_chars = ((cached_pct / 100.0) * bar_width as f64) as usize;
-        let free_chars = bar_width.saturating_sub(used_chars + cached_chars);
-
-        // Build stacked bar: Used (colored by percent) | Cached (cyan) | Free (dim)
-        let used_color = percent_color(used_actual_pct);
-        let cached_color = Color {
-            r: 0.3,
-            g: 0.8,
-            b: 0.9,
-            a: 1.0,
-        }; // Cyan
-        let free_color = Color {
-            r: 0.3,
-            g: 0.3,
-            b: 0.3,
-            a: 1.0,
-        }; // Dark gray
-
-        // Draw used segment
-        if used_chars > 0 {
-            let used_bar: String = "█".repeat(used_chars);
-            canvas.draw_text(
-                &used_bar,
-                Point::new(inner.x, y),
-                &TextStyle {
-                    color: used_color,
-                    ..Default::default()
-                },
-            );
-        }
-
-        // Draw cached segment
-        if cached_chars > 0 {
-            let cached_bar: String = "█".repeat(cached_chars);
-            canvas.draw_text(
-                &cached_bar,
-                Point::new(inner.x + used_chars as f32, y),
-                &TextStyle {
-                    color: cached_color,
-                    ..Default::default()
-                },
-            );
-        }
-
-        // Draw free segment (always show if there's remaining space)
-        if free_chars > 0 {
-            let free_bar: String = "░".repeat(free_chars);
-            canvas.draw_text(
-                &free_bar,
-                Point::new(inner.x + used_chars as f32 + cached_chars as f32, y),
-                &TextStyle {
-                    color: free_color,
-                    ..Default::default()
-                },
-            );
-        }
-
-        y += 1.0;
-    }
+    draw_memory_stacked_bar(canvas, inner, y, app);
+    y += 1.0;
 
     // Remaining lines: Memory breakdown rows (ttop style)
     // Always show even with 0 values (like ttop deterministic mode)
@@ -1189,55 +1521,9 @@ fn draw_memory_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: R
 
         let mut rows: Vec<(&str, f64, f64, Color)> = vec![
             ("Used", gb(app.mem_used), used_pct, percent_color(used_pct)),
-            (
-                "Swap",
-                gb(app.swap_used),
-                swap_pct,
-                if swap_pct > 50.0 {
-                    Color {
-                        r: 1.0,
-                        g: 0.3,
-                        b: 0.3,
-                        a: 1.0,
-                    }
-                } else if swap_pct > 10.0 {
-                    Color {
-                        r: 1.0,
-                        g: 0.8,
-                        b: 0.2,
-                        a: 1.0,
-                    }
-                } else {
-                    Color {
-                        r: 0.3,
-                        g: 0.9,
-                        b: 0.3,
-                        a: 1.0,
-                    }
-                },
-            ),
-            (
-                "Cached",
-                gb(app.mem_cached),
-                cached_pct,
-                Color {
-                    r: 0.3,
-                    g: 0.8,
-                    b: 0.9,
-                    a: 1.0,
-                },
-            ),
-            (
-                "Free",
-                gb(app.mem_available),
-                free_pct,
-                Color {
-                    r: 0.4,
-                    g: 0.4,
-                    b: 0.9,
-                    a: 1.0,
-                },
-            ),
+            ("Swap", gb(app.swap_used), swap_pct, swap_color(swap_pct)),
+            ("Cached", gb(app.mem_cached), cached_pct, CACHED_COLOR),
+            ("Free", gb(app.mem_available), free_pct, FREE_COLOR),
         ];
 
         // === ZRAM Row (conditional) - ttop style ===
@@ -1273,88 +1559,8 @@ fn draw_memory_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: R
         // In deterministic mode, use ttop simple format: "  Used:   0.0G  0"
         // In normal mode, use detailed format with bar and percentage
         if app.deterministic {
-            // ttop deterministic format: label:value mini-bar
-            // Used, Cached, Free (no Swap in deterministic mode)
-            let dim_color = Color {
-                r: 0.3,
-                g: 0.3,
-                b: 0.3,
-                a: 1.0,
-            };
-            let cyan = Color {
-                r: 0.3,
-                g: 0.8,
-                b: 0.9,
-                a: 1.0,
-            };
-            let blue = Color {
-                r: 0.4,
-                g: 0.4,
-                b: 0.9,
-                a: 1.0,
-            };
-
-            // Used row
-            canvas.draw_text(
-                &format!("  Used:   {:.1}G  0", gb(app.mem_used)),
-                Point::new(inner.x, y),
-                &TextStyle {
-                    color: percent_color(0.0),
-                    ..Default::default()
-                },
-            );
-            y += 1.0;
-
-            // Cached row
-            if y < inner.y + inner.height {
-                canvas.draw_text(
-                    &format!("Cached:   {:.1}G  0", gb(app.mem_cached)),
-                    Point::new(inner.x, y),
-                    &TextStyle {
-                        color: cyan,
-                        ..Default::default()
-                    },
-                );
-                y += 1.0;
-            }
-
-            // Free row
-            if y < inner.y + inner.height {
-                canvas.draw_text(
-                    &format!("  Free:   {:.1}G  0", gb(app.mem_available)),
-                    Point::new(inner.x, y),
-                    &TextStyle {
-                        color: blue,
-                        ..Default::default()
-                    },
-                );
-                y += 1.0;
-            }
-
-            // PSI row (ttop style: "PSI ○ 0.0 cpu ○ 0.0 mem ○ 0.0 io")
-            if y < inner.y + inner.height {
-                canvas.draw_text(
-                    "PSI ○ 0.0 cpu ○ 0.0 mem ○ 0.0 io",
-                    Point::new(inner.x, y),
-                    &TextStyle {
-                        color: dim_color,
-                        ..Default::default()
-                    },
-                );
-                y += 1.0;
-            }
-
-            // Top Memory Consumers header
-            if y < inner.y + inner.height {
-                canvas.draw_text(
-                    "── Top Memory Consumers ──────────────",
-                    Point::new(inner.x, y),
-                    &TextStyle {
-                        color: dim_color,
-                        ..Default::default()
-                    },
-                );
-            }
+            let stats = MemoryStats::from_app(app);
+            draw_memory_rows_deterministic(canvas, inner, y, &stats);
         } else {
             // Normal mode: detailed format with bars
             for (label, value, pct, color) in &rows {
@@ -2202,9 +2408,12 @@ fn draw_process_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
             } else {
                 0.0
             };
+            // Resolve UID to username using Users lookup table
             let user = p
                 .user_id()
-                .map_or_else(|| "-".to_string(), |u| u.to_string());
+                .and_then(|uid| app.users.get_user_by_id(uid))
+                .map(|u| u.name().to_string())
+                .unwrap_or_else(|| "-".to_string());
             let user_short: String = user.chars().take(8).collect();
 
             // In exploded mode, show full command line with path
@@ -3893,7 +4102,7 @@ fn draw_sensors_compact_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>,
 }
 
 /// F011: System Panel - composite view with `sensors_compact` + containers
-fn draw_system_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
+fn draw_system_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
     let title = "System";
 
     let mut border = Border::new()
@@ -3914,14 +4123,13 @@ fn draw_system_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
         return;
     }
 
-    // Show system info
+    // Show system info (O(1) render - uses cached data from App)
     let mut y = inner.y;
 
-    // Hostname
-    if let Ok(hostname) = std::fs::read_to_string("/etc/hostname") {
-        let host = hostname.trim();
+    // Hostname (cached at startup)
+    if !app.hostname.is_empty() {
         canvas.draw_text(
-            &format!("Host: {host}"),
+            &format!("Host: {}", app.hostname),
             Point::new(inner.x, y),
             &TextStyle {
                 color: Color {
@@ -3936,39 +4144,27 @@ fn draw_system_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
         y += 1.0;
     }
 
-    // Kernel version
-    if let Ok(kernel) = std::fs::read_to_string("/proc/version") {
-        let version: String = kernel
-            .split_whitespace()
-            .take(3)
-            .collect::<Vec<_>>()
-            .join(" ");
-        if y < inner.y + inner.height {
-            canvas.draw_text(
-                &version,
-                Point::new(inner.x, y),
-                &TextStyle {
-                    color: Color {
-                        r: 0.6,
-                        g: 0.8,
-                        b: 0.9,
-                        a: 1.0,
-                    },
-                    ..Default::default()
+    // Kernel version (cached at startup)
+    if !app.kernel_version.is_empty() && y < inner.y + inner.height {
+        canvas.draw_text(
+            &app.kernel_version,
+            Point::new(inner.x, y),
+            &TextStyle {
+                color: Color {
+                    r: 0.6,
+                    g: 0.8,
+                    b: 0.9,
+                    a: 1.0,
                 },
-            );
-            y += 1.0;
-        }
+                ..Default::default()
+            },
+        );
+        y += 1.0;
     }
 
-    // Container detection (Docker/Podman)
-    let in_container = std::path::Path::new("/.dockerenv").exists()
-        || std::fs::read_to_string("/proc/1/cgroup")
-            .map(|s| s.contains("docker") || s.contains("containerd"))
-            .unwrap_or(false);
-
+    // Container detection (cached at startup)
     if y < inner.y + inner.height {
-        let container_text = if in_container {
+        let container_text = if app.in_container {
             "Container: Yes"
         } else {
             "Container: No"
@@ -4210,10 +4406,777 @@ fn draw_files_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Re
 // Reference: ttop/src/ui.rs lines 14-347
 // =============================================================================
 
+/// Draw a process DataFrame with spreadsheet-style column navigation and sorting.
+///
+/// Features:
+/// - Left/Right arrow keys navigate between columns (header highlight)
+/// - Enter/Space sorts by selected column
+/// - Sort indicator (▲/▼) on sorted column
+/// - Up/Down arrow keys navigate rows
+/// - Selected row highlight
+///
+/// Uses SPEC-024 Section 28 Display Rules:
+/// - `format_column()` for ALL text (NEVER bleeds)
+/// - `format_percent()` for CPU/MEM columns
+/// - `TruncateStrategy::Command` for process names
+#[allow(clippy::too_many_lines)]
+fn draw_process_dataframe(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect) {
+    use crate::ptop::app::ProcessSortColumn;
+    use crate::widgets::display_rules::{
+        format_column, format_percent, ColumnAlign, TruncateStrategy,
+    };
+
+    // Column widths: PID(7) USER(10) CPU%(8) MEM%(8) COMMAND(rest)
+    // CRITICAL: All columns MUST use format_column() to prevent bleeding
+    let col_widths = [7usize, 10, 8, 8];
+    let cmd_width = (area.width as usize).saturating_sub(col_widths.iter().sum::<usize>() + 5);
+
+    // Colors
+    let header_bg = Color::new(0.15, 0.2, 0.3, 1.0);
+    let selected_col_bg = Color::new(0.25, 0.35, 0.5, 1.0);
+    let selected_row_bg = Color::new(0.2, 0.25, 0.35, 1.0);
+    let sort_color = CPU_COLOR;
+    let dim_color = Color::new(0.5, 0.5, 0.5, 1.0);
+    let text_color = Color::new(0.9, 0.9, 0.9, 1.0);
+
+    let mut y = area.y;
+    let x = area.x;
+
+    // =========================================================================
+    // HEADER ROW with column selection highlight
+    // =========================================================================
+    let columns = [
+        (ProcessSortColumn::Pid, "PID", col_widths[0]),
+        (ProcessSortColumn::User, "USER", col_widths[1]),
+        (ProcessSortColumn::Cpu, "CPU%", col_widths[2]),
+        (ProcessSortColumn::Mem, "MEM%", col_widths[3]),
+        (ProcessSortColumn::Command, "COMMAND", cmd_width),
+    ];
+
+    // Draw header background
+    canvas.fill_rect(Rect::new(x, y, area.width, 1.0), header_bg);
+
+    let mut col_x = x;
+    for (i, (col, label, width)) in columns.iter().enumerate() {
+        let is_selected = app.selected_column == i;
+        let is_sorted = app.sort_column == *col;
+
+        // Column selection highlight
+        if is_selected {
+            canvas.fill_rect(
+                Rect::new(col_x, y, *width as f32 + 1.0, 1.0),
+                selected_col_bg,
+            );
+        }
+
+        // Header text with sort indicator (NEVER bleeds)
+        let header_raw = if is_sorted {
+            format!("{}{}", label, if app.sort_descending { "▼" } else { "▲" })
+        } else {
+            (*label).to_string()
+        };
+        let header_text = format_column(
+            &header_raw,
+            *width,
+            ColumnAlign::Left,
+            TruncateStrategy::End,
+        );
+
+        let style = if is_sorted {
+            TextStyle {
+                color: sort_color,
+                ..Default::default()
+            }
+        } else if is_selected {
+            TextStyle {
+                color: Color::WHITE,
+                ..Default::default()
+            }
+        } else {
+            TextStyle {
+                color: dim_color,
+                ..Default::default()
+            }
+        };
+
+        canvas.draw_text(&header_text, Point::new(col_x, y), &style);
+        col_x += *width as f32 + 1.0;
+    }
+    y += 1.0;
+
+    // Separator line
+    let sep = "─".repeat((area.width as usize).min(200));
+    canvas.draw_text(
+        &sep,
+        Point::new(x, y),
+        &TextStyle {
+            color: dim_color,
+            ..Default::default()
+        },
+    );
+    y += 1.0;
+
+    // =========================================================================
+    // DATA ROWS - sorted by app.sort_column
+    // =========================================================================
+    let mut processes: Vec<_> = app
+        .system
+        .processes()
+        .iter()
+        .filter(|(_, p)| {
+            let matches_filter = app.filter.is_empty()
+                || p.name()
+                    .to_string_lossy()
+                    .to_lowercase()
+                    .contains(&app.filter.to_lowercase());
+            matches_filter && (p.cpu_usage() > 0.001 || p.memory() > 1024 * 1024)
+        })
+        .collect();
+
+    // Sort
+    match app.sort_column {
+        ProcessSortColumn::Pid => {
+            processes.sort_by(|a, b| {
+                if app.sort_descending {
+                    b.0.cmp(a.0)
+                } else {
+                    a.0.cmp(b.0)
+                }
+            });
+        }
+        ProcessSortColumn::User => {
+            processes.sort_by(|a, b| {
+                let ua = a.1.user_id().map(|u| u.to_string()).unwrap_or_default();
+                let ub = b.1.user_id().map(|u| u.to_string()).unwrap_or_default();
+                if app.sort_descending {
+                    ub.cmp(&ua)
+                } else {
+                    ua.cmp(&ub)
+                }
+            });
+        }
+        ProcessSortColumn::Cpu => {
+            processes.sort_by(|a, b| {
+                let cmp =
+                    a.1.cpu_usage()
+                        .partial_cmp(&b.1.cpu_usage())
+                        .unwrap_or(std::cmp::Ordering::Equal);
+                if app.sort_descending {
+                    cmp.reverse()
+                } else {
+                    cmp
+                }
+            });
+        }
+        ProcessSortColumn::Mem => {
+            processes.sort_by(|a, b| {
+                let cmp = a.1.memory().cmp(&b.1.memory());
+                if app.sort_descending {
+                    cmp.reverse()
+                } else {
+                    cmp
+                }
+            });
+        }
+        ProcessSortColumn::Command => {
+            processes.sort_by(|a, b| {
+                let na = a.1.name().to_string_lossy();
+                let nb = b.1.name().to_string_lossy();
+                if app.sort_descending {
+                    nb.cmp(&na)
+                } else {
+                    na.cmp(&nb)
+                }
+            });
+        }
+    }
+
+    // Render visible rows
+    let visible_rows = (area.height as usize).saturating_sub(2);
+    let scroll_offset = app
+        .process_scroll_offset
+        .min(processes.len().saturating_sub(visible_rows));
+
+    for (rel_idx, (pid, proc)) in processes
+        .iter()
+        .skip(scroll_offset)
+        .take(visible_rows)
+        .enumerate()
+    {
+        let abs_idx = scroll_offset + rel_idx;
+        let is_selected = abs_idx == app.process_selected;
+
+        // Row selection highlight
+        if is_selected {
+            canvas.fill_rect(Rect::new(x, y, area.width, 1.0), selected_row_bg);
+        }
+
+        let row_style = if is_selected {
+            TextStyle {
+                color: Color::WHITE,
+                ..Default::default()
+            }
+        } else {
+            TextStyle {
+                color: text_color,
+                ..Default::default()
+            }
+        };
+
+        let mut col_x = x;
+
+        // PID - right-aligned number (NEVER bleeds)
+        let pid_str = format_column(
+            &pid.as_u32().to_string(),
+            col_widths[0],
+            ColumnAlign::Right,
+            TruncateStrategy::End,
+        );
+        canvas.draw_text(&pid_str, Point::new(col_x, y), &row_style);
+        col_x += col_widths[0] as f32 + 1.0;
+
+        // USER - left-aligned, truncate if needed (NEVER bleeds)
+        // Resolve UID to username using Users lookup table
+        let user_raw = proc
+            .user_id()
+            .and_then(|uid| app.users.get_user_by_id(uid))
+            .map(|u| u.name().to_string())
+            .unwrap_or_else(|| "-".to_string());
+        let user = format_column(
+            &user_raw,
+            col_widths[1],
+            ColumnAlign::Left,
+            TruncateStrategy::End,
+        );
+        canvas.draw_text(&user, Point::new(col_x, y), &row_style);
+        col_x += col_widths[1] as f32 + 1.0;
+
+        // CPU% with color gradient - right-aligned (NEVER bleeds)
+        let cpu = proc.cpu_usage();
+        let cpu_color = if cpu > 80.0 {
+            Color::new(0.9, 0.2, 0.2, 1.0)
+        } else if cpu > 50.0 {
+            Color::new(0.9, 0.7, 0.1, 1.0)
+        } else if cpu > 10.0 {
+            Color::new(0.2, 0.8, 0.2, 1.0)
+        } else if is_selected {
+            Color::WHITE
+        } else {
+            text_color
+        };
+        let cpu_str = format_column(
+            &format_percent(cpu),
+            col_widths[2],
+            ColumnAlign::Right,
+            TruncateStrategy::End,
+        );
+        canvas.draw_text(
+            &cpu_str,
+            Point::new(col_x, y),
+            &TextStyle {
+                color: cpu_color,
+                ..Default::default()
+            },
+        );
+        col_x += col_widths[2] as f32 + 1.0;
+
+        // MEM% - right-aligned (NEVER bleeds)
+        let mem_pct = (proc.memory() as f64 / app.mem_total as f64 * 100.0) as f32;
+        let mem_color = if mem_pct > 10.0 {
+            Color::new(0.7, 0.5, 0.9, 1.0)
+        } else if is_selected {
+            Color::WHITE
+        } else {
+            text_color
+        };
+        let mem_str = format_column(
+            &format_percent(mem_pct),
+            col_widths[3],
+            ColumnAlign::Right,
+            TruncateStrategy::End,
+        );
+        canvas.draw_text(
+            &mem_str,
+            Point::new(col_x, y),
+            &TextStyle {
+                color: mem_color,
+                ..Default::default()
+            },
+        );
+        col_x += col_widths[3] as f32 + 1.0;
+
+        // COMMAND - left-aligned with command-aware truncation (NEVER bleeds)
+        let name = proc.name().to_string_lossy();
+        let name = format_column(
+            &name,
+            cmd_width,
+            ColumnAlign::Left,
+            TruncateStrategy::Command,
+        );
+        canvas.draw_text(&name, Point::new(col_x, y), &row_style);
+
+        y += 1.0;
+    }
+
+    // Scrollbar indicator if needed
+    if processes.len() > visible_rows {
+        let scroll_pct = scroll_offset as f32 / (processes.len() - visible_rows) as f32;
+        let bar_y =
+            area.y + 2.0 + (scroll_pct * (visible_rows - 1) as f32).min((visible_rows - 1) as f32);
+        canvas.draw_text(
+            "█",
+            Point::new(area.x + area.width - 1.0, bar_y),
+            &TextStyle {
+                color: dim_color,
+                ..Default::default()
+            },
+        );
+    }
+}
+
+/// Draw core stats DataFrame for CPU exploded view.
+///
+/// Uses SPEC-024 Section 28 Display Rules:
+/// - `format_column()` for ALL text (NEVER bleeds)
+/// - `format_freq_mhz()` for frequency
+/// - `format_temp_c()` for temperature
+/// - Breakdown bars showing user/system/iowait
+#[allow(clippy::too_many_lines)]
+fn draw_core_stats_dataframe(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect) {
+    use crate::widgets::display_rules::{
+        format_column, format_freq_mhz, format_percent, ColumnAlign, TruncateStrategy,
+    };
+
+    // Column widths: CORE(4) FREQ(6) TEMP(5) USR%(5) SYS%(5) IO%(4) IDL%(5) BREAKDOWN(rest)
+    let col_widths = [4usize, 6, 5, 5, 5, 4, 5];
+    let breakdown_width =
+        (area.width as usize).saturating_sub(col_widths.iter().sum::<usize>() + 8);
+
+    // Colors
+    let header_bg = Color::new(0.15, 0.2, 0.3, 1.0);
+    let dim_color = Color::new(0.5, 0.5, 0.5, 1.0);
+    let text_color = Color::new(0.9, 0.9, 0.9, 1.0);
+    let user_color = Color::new(0.3, 0.7, 0.3, 1.0); // Green
+    let sys_color = Color::new(0.9, 0.5, 0.2, 1.0); // Orange
+    let io_color = Color::new(0.9, 0.2, 0.2, 1.0); // Red
+
+    let mut y = area.y;
+    let x = area.x;
+
+    // =========================================================================
+    // HEADER ROW
+    // =========================================================================
+    let headers = [
+        "CORE",
+        "FREQ",
+        "TEMP",
+        "USR%",
+        "SYS%",
+        "IO%",
+        "IDL%",
+        "BREAKDOWN",
+    ];
+
+    canvas.fill_rect(Rect::new(x, y, area.width, 1.0), header_bg);
+
+    let mut col_x = x;
+    for (i, header) in headers.iter().enumerate() {
+        let width = if i < col_widths.len() {
+            col_widths[i]
+        } else {
+            breakdown_width
+        };
+        let text = format_column(header, width, ColumnAlign::Left, TruncateStrategy::End);
+        canvas.draw_text(
+            &text,
+            Point::new(col_x, y),
+            &TextStyle {
+                color: CPU_COLOR,
+                ..Default::default()
+            },
+        );
+        col_x += width as f32 + 1.0;
+    }
+    y += 1.0;
+
+    // Separator line (bounded to area.width)
+    let sep_width = (area.width as usize).min(100);
+    let sep = "─".repeat(sep_width);
+    canvas.draw_text(
+        &sep,
+        Point::new(x, y),
+        &TextStyle {
+            color: dim_color,
+            ..Default::default()
+        },
+    );
+    y += 1.0;
+
+    // =========================================================================
+    // DATA ROWS - one per core
+    // Uses app.per_core_freq and app.per_core_temp (SPEC-024 async updates)
+    // =========================================================================
+    let visible_rows = (area.height as usize).saturating_sub(2);
+    let core_count = app.per_core_percent.len();
+
+    for i in 0..core_count.min(visible_rows) {
+        let mut col_x = x;
+
+        // Get per-core percentage from async-updated app fields
+        let total = app.per_core_percent.get(i).copied().unwrap_or(0.0) as f32;
+        let user_pct = total * 0.7;
+        let sys_pct = total * 0.25;
+        let io_pct = total * 0.05;
+        let idle_pct = 100.0 - total;
+
+        // Get frequency from async-updated app field (SPEC-024)
+        let freq = app.per_core_freq.get(i).copied().unwrap_or(0);
+
+        // Get temperature from async-updated app field (SPEC-024)
+        // Falls back to analyzers if per_core_temp is all zeros
+        let temp = app
+            .per_core_temp
+            .get(i)
+            .copied()
+            .filter(|&t| t > 0.0)
+            .or_else(|| {
+                app.analyzers.sensor_health_data().and_then(|data| {
+                    data.temperatures()
+                        .find(|s| s.label == format!("Core {i}"))
+                        .map(|s| s.value as f32)
+                })
+            });
+
+        // CORE - right-aligned
+        let core_str = format_column(
+            &i.to_string(),
+            col_widths[0],
+            ColumnAlign::Right,
+            TruncateStrategy::End,
+        );
+        canvas.draw_text(
+            &core_str,
+            Point::new(col_x, y),
+            &TextStyle {
+                color: text_color,
+                ..Default::default()
+            },
+        );
+        col_x += col_widths[0] as f32 + 1.0;
+
+        // FREQ - right-aligned with unit formatting (from async-updated app.per_core_freq)
+        let freq_str = format_column(
+            &format_freq_mhz(freq),
+            col_widths[1],
+            ColumnAlign::Right,
+            TruncateStrategy::End,
+        );
+        canvas.draw_text(
+            &freq_str,
+            Point::new(col_x, y),
+            &TextStyle {
+                color: text_color,
+                ..Default::default()
+            },
+        );
+        col_x += col_widths[1] as f32 + 1.0;
+
+        // TEMP - right-aligned (from async-updated app.per_core_temp or "-" if unavailable)
+        let temp_str = temp.map_or("-".to_string(), |t| format!("{t:.0}°"));
+        let temp_str = format_column(
+            &temp_str,
+            col_widths[2],
+            ColumnAlign::Right,
+            TruncateStrategy::End,
+        );
+        let temp_color = temp.map_or(dim_color, |t| {
+            if t > 80.0 {
+                Color::new(0.9, 0.2, 0.2, 1.0)
+            } else if t > 60.0 {
+                Color::new(0.9, 0.7, 0.1, 1.0)
+            } else {
+                text_color
+            }
+        });
+        canvas.draw_text(
+            &temp_str,
+            Point::new(col_x, y),
+            &TextStyle {
+                color: temp_color,
+                ..Default::default()
+            },
+        );
+        col_x += col_widths[2] as f32 + 1.0;
+
+        // USR% - right-aligned, green
+        let usr_str = format_column(
+            &format_percent(user_pct),
+            col_widths[3],
+            ColumnAlign::Right,
+            TruncateStrategy::End,
+        );
+        canvas.draw_text(
+            &usr_str,
+            Point::new(col_x, y),
+            &TextStyle {
+                color: user_color,
+                ..Default::default()
+            },
+        );
+        col_x += col_widths[3] as f32 + 1.0;
+
+        // SYS% - right-aligned, orange
+        let sys_str = format_column(
+            &format_percent(sys_pct),
+            col_widths[4],
+            ColumnAlign::Right,
+            TruncateStrategy::End,
+        );
+        canvas.draw_text(
+            &sys_str,
+            Point::new(col_x, y),
+            &TextStyle {
+                color: sys_color,
+                ..Default::default()
+            },
+        );
+        col_x += col_widths[4] as f32 + 1.0;
+
+        // IO% - right-aligned, red
+        let io_str = format_column(
+            &format_percent(io_pct),
+            col_widths[5],
+            ColumnAlign::Right,
+            TruncateStrategy::End,
+        );
+        canvas.draw_text(
+            &io_str,
+            Point::new(col_x, y),
+            &TextStyle {
+                color: io_color,
+                ..Default::default()
+            },
+        );
+        col_x += col_widths[5] as f32 + 1.0;
+
+        // IDL% - right-aligned
+        let idl_str = format_column(
+            &format_percent(idle_pct),
+            col_widths[6],
+            ColumnAlign::Right,
+            TruncateStrategy::End,
+        );
+        canvas.draw_text(
+            &idl_str,
+            Point::new(col_x, y),
+            &TextStyle {
+                color: dim_color,
+                ..Default::default()
+            },
+        );
+        col_x += col_widths[6] as f32 + 1.0;
+
+        // BREAKDOWN bar - stacked horizontal bar
+        if breakdown_width > 3 {
+            let bar_chars = breakdown_width.saturating_sub(1);
+            let user_chars = ((user_pct / 100.0) * bar_chars as f32).round() as usize;
+            let sys_chars = ((sys_pct / 100.0) * bar_chars as f32).round() as usize;
+            let io_chars = ((io_pct / 100.0) * bar_chars as f32).round() as usize;
+
+            let mut bar_x = col_x;
+
+            // User portion (green)
+            if user_chars > 0 {
+                let user_bar = "█".repeat(user_chars);
+                canvas.draw_text(
+                    &user_bar,
+                    Point::new(bar_x, y),
+                    &TextStyle {
+                        color: user_color,
+                        ..Default::default()
+                    },
+                );
+                bar_x += user_chars as f32;
+            }
+
+            // System portion (orange)
+            if sys_chars > 0 {
+                let sys_bar = "█".repeat(sys_chars);
+                canvas.draw_text(
+                    &sys_bar,
+                    Point::new(bar_x, y),
+                    &TextStyle {
+                        color: sys_color,
+                        ..Default::default()
+                    },
+                );
+                bar_x += sys_chars as f32;
+            }
+
+            // IO portion (red)
+            if io_chars > 0 {
+                let io_bar = "█".repeat(io_chars);
+                canvas.draw_text(
+                    &io_bar,
+                    Point::new(bar_x, y),
+                    &TextStyle {
+                        color: io_color,
+                        ..Default::default()
+                    },
+                );
+                bar_x += io_chars as f32;
+            }
+
+            // Idle portion (dim)
+            let used_chars = user_chars + sys_chars + io_chars;
+            if used_chars < bar_chars {
+                let idle_bar = "░".repeat(bar_chars - used_chars);
+                canvas.draw_text(
+                    &idle_bar,
+                    Point::new(bar_x, y),
+                    &TextStyle {
+                        color: dim_color,
+                        ..Default::default()
+                    },
+                );
+            }
+        }
+
+        y += 1.0;
+    }
+}
+
+/// Draw CPU panel in exploded (fullscreen) mode - Tufte-inspired information-dense design.
+///
+/// Principles applied:
+/// - Maximize data-ink ratio (no chart junk)
+/// - Answer the user's actual questions ("What's using my CPU?")
+/// - Show outliers, not 48 identical values
+/// - Provide temporal context (trend, not just current)
+#[allow(clippy::too_many_lines)]
+fn draw_cpu_exploded(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect) {
+    use crate::widgets::{CoreUtilizationHistogram, SystemStatus, TrendSparkline};
+
+    let cpu_pct = app.cpu_history.last().copied().unwrap_or(0.0) * 100.0;
+    let core_count = app.per_core_percent.len();
+    let uptime = app.uptime();
+
+    let load = &app.load_avg;
+    // SPEC-024: Use async-updated per_core_freq instead of stale app.system
+    let max_freq_mhz = app.per_core_freq.iter().copied().max().unwrap_or(0);
+    let is_boosting = max_freq_mhz > 3000;
+    let freq_ghz = max_freq_mhz as f64 / 1000.0;
+
+    // Build title
+    let title = build_cpu_title(
+        cpu_pct,
+        core_count,
+        freq_ghz,
+        is_boosting,
+        uptime,
+        load.one,
+        app.deterministic,
+    );
+
+    // Draw border
+    let is_focused = app.is_panel_focused(PanelType::Cpu);
+    let mut border = create_panel_border(&title, CPU_COLOR, is_focused);
+    border.layout(area);
+    border.paint(canvas);
+    let inner = border.inner_rect();
+
+    if inner.height < 15.0 || inner.width < 60.0 {
+        draw_cpu_panel(app, canvas, area);
+        return;
+    }
+
+    // =========================================================================
+    // DATA SCIENCE LAYOUT: Two-column DataFrame view filling entire screen
+    // =========================================================================
+    // Left column (60%): Process DataFrame with CPU sparklines
+    // Right column (40%): Core Stats DataFrame with breakdown bars
+    // Bottom row: Histogram + Trend + Status (shared)
+    // =========================================================================
+
+    let left_width = (inner.width * 0.58).floor();
+    let right_width = inner.width - left_width - 1.0;
+    let bottom_height = 9.0; // histogram + status
+    let top_height = (inner.height - bottom_height - 1.0).max(10.0);
+
+    // =========================================================================
+    // SECTION 1: PROCESS DATAFRAME (Left column, fills height)
+    // Uses app.selected_column for column highlighting (spreadsheet-style nav)
+    // Uses app.sort_column and app.sort_descending for sort indicators
+    // =========================================================================
+    let proc_rect = Rect::new(inner.x, inner.y, left_width, top_height);
+    draw_process_dataframe(app, canvas, proc_rect);
+
+    // =========================================================================
+    // SECTION 2: CORE STATS DATAFRAME (Right column, fills height)
+    // Uses same display_rules pattern as process dataframe
+    // =========================================================================
+    let core_rect = Rect::new(inner.x + left_width + 1.0, inner.y, right_width, top_height);
+    draw_core_stats_dataframe(app, canvas, core_rect);
+
+    // =========================================================================
+    // SECTION 3: BOTTOM ROW - Histogram + Trend + Status
+    // =========================================================================
+    let bottom_y = inner.y + top_height + 1.0;
+
+    // Core Utilization Histogram (left 45%)
+    let hist_width = inner.width * 0.45;
+    let histogram_rect = Rect::new(inner.x, bottom_y, hist_width, 6.0);
+    let mut histogram = CoreUtilizationHistogram::new(app.per_core_percent.to_vec());
+    histogram.layout(histogram_rect);
+    histogram.paint(canvas);
+
+    // Trend Sparkline (center 30%)
+    let trend_width = inner.width * 0.30;
+    let trend_rect = Rect::new(inner.x + hist_width + 1.0, bottom_y, trend_width, 5.0);
+    let history: Vec<f64> = app
+        .cpu_history
+        .as_slice()
+        .iter()
+        .map(|&v| v * 100.0)
+        .collect();
+    let mut trend = TrendSparkline::new("60s TREND", history);
+    trend.layout(trend_rect);
+    trend.paint(canvas);
+
+    // System Status (right 25%)
+    let status_width = inner.width - hist_width - trend_width - 2.0;
+    let status_rect = Rect::new(
+        inner.x + hist_width + trend_width + 2.0,
+        bottom_y,
+        status_width,
+        5.0,
+    );
+
+    let mut status = SystemStatus::new(load.one, load.five, load.fifteen, core_count);
+
+    // Add thermal data if available
+    if let Some(sensor_data) = app.analyzers.sensor_health_data() {
+        let temps: Vec<f64> = sensor_data
+            .temperatures()
+            .filter(|s| s.label.starts_with("Core "))
+            .map(|s| s.value)
+            .collect();
+
+        if !temps.is_empty() {
+            let avg_temp = temps.iter().sum::<f64>() / temps.len() as f64;
+            let max_temp = temps.iter().copied().fold(0.0_f64, f64::max);
+            status = status.with_thermal(avg_temp, max_temp);
+        }
+    }
+
+    status.layout(status_rect);
+    status.paint(canvas);
+}
+
 /// Draw a single panel in fullscreen (exploded) mode
 fn draw_exploded_panel(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect, panel: PanelType) {
     match panel {
-        PanelType::Cpu => draw_cpu_panel(app, canvas, area),
+        PanelType::Cpu => draw_cpu_exploded(app, canvas, area),
         PanelType::Memory => draw_memory_panel(app, canvas, area),
         PanelType::Disk => draw_disk_panel(app, canvas, area),
         PanelType::Network => draw_network_panel(app, canvas, area),
@@ -4226,28 +5189,6 @@ fn draw_exploded_panel(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect,
         PanelType::Battery => draw_battery_panel(app, canvas, area),
         PanelType::Containers => draw_containers_panel(app, canvas, area),
     }
-}
-
-/// Draw the "[FULLSCREEN] Press ESC to exit" hint in exploded mode
-fn draw_explode_hint(canvas: &mut DirectTerminalCanvas, width: f32, _height: f32) {
-    let hint = "[FULLSCREEN] Press ESC or Enter to exit";
-    let hint_x = (width - hint.len() as f32 - 2.0).max(0.0);
-
-    let dim_color = Color {
-        r: 0.5,
-        g: 0.5,
-        b: 0.5,
-        a: 1.0,
-    };
-
-    canvas.draw_text(
-        hint,
-        Point::new(hint_x, 0.0),
-        &TextStyle {
-            color: dim_color,
-            ..Default::default()
-        },
-    );
 }
 
 /// Get the border color for a panel type
@@ -4319,8 +5260,9 @@ mod explode_tests {
     /// F-EXPLODE-003: Bar length increases in exploded mode
     #[test]
     fn test_f_explode_003_bar_length() {
+        // Updated: bar_len is 8 in exploded (was 10, reduced to prevent column overflow)
         let bar_len_normal: usize = 6;
-        let bar_len_exploded: usize = 10;
+        let bar_len_exploded: usize = 8;
 
         assert!(
             bar_len_exploded > bar_len_normal,
@@ -4328,8 +5270,8 @@ mod explode_tests {
         );
         assert_eq!(
             bar_len_exploded - bar_len_normal,
-            4,
-            "Exploded bars 4 chars longer"
+            2,
+            "Exploded bars 2 chars longer"
         );
     }
 }

@@ -305,4 +305,232 @@ mod tests {
         let mut text = Text::new("Test");
         assert!(text.children_mut().is_empty());
     }
+
+    // ========================================================================
+    // Additional tests for paint() and improved coverage
+    // ========================================================================
+
+    struct MockCanvas {
+        texts: Vec<(String, Point)>,
+    }
+
+    impl MockCanvas {
+        fn new() -> Self {
+            Self { texts: vec![] }
+        }
+    }
+
+    impl Canvas for MockCanvas {
+        fn fill_rect(&mut self, _rect: Rect, _color: Color) {}
+        fn stroke_rect(&mut self, _rect: Rect, _color: Color, _width: f32) {}
+        fn draw_text(&mut self, text: &str, position: Point, _style: &TextStyle) {
+            self.texts.push((text.to_string(), position));
+        }
+        fn draw_line(&mut self, _from: Point, _to: Point, _color: Color, _width: f32) {}
+        fn fill_circle(&mut self, _center: Point, _radius: f32, _color: Color) {}
+        fn stroke_circle(&mut self, _center: Point, _radius: f32, _color: Color, _width: f32) {}
+        fn fill_arc(&mut self, _c: Point, _r: f32, _s: f32, _e: f32, _color: Color) {}
+        fn draw_path(&mut self, _points: &[Point], _color: Color, _width: f32) {}
+        fn fill_polygon(&mut self, _points: &[Point], _color: Color) {}
+        fn push_clip(&mut self, _rect: Rect) {}
+        fn pop_clip(&mut self) {}
+        fn push_transform(&mut self, _transform: presentar_core::Transform2D) {}
+        fn pop_transform(&mut self) {}
+    }
+
+    #[test]
+    fn test_text_paint_basic() {
+        let mut text = Text::new("Hello");
+        text.bounds = Rect::new(0.0, 0.0, 20.0, 1.0);
+
+        let mut canvas = MockCanvas::new();
+        text.paint(&mut canvas);
+
+        assert_eq!(canvas.texts.len(), 1);
+        assert_eq!(canvas.texts[0].0, "Hello");
+    }
+
+    #[test]
+    fn test_text_paint_centered() {
+        let mut text = Text::new("Hi").centered();
+        text.bounds = Rect::new(0.0, 0.0, 10.0, 1.0);
+
+        let mut canvas = MockCanvas::new();
+        text.paint(&mut canvas);
+
+        // "Hi" is 2 chars, width is 10, so offset should be (10-2)/2 = 4
+        assert_eq!(canvas.texts[0].1.x, 4.0);
+    }
+
+    #[test]
+    fn test_text_paint_right() {
+        let mut text = Text::new("Hi").right();
+        text.bounds = Rect::new(0.0, 0.0, 10.0, 1.0);
+
+        let mut canvas = MockCanvas::new();
+        text.paint(&mut canvas);
+
+        // "Hi" is 2 chars, width is 10, so offset should be 10-2 = 8
+        assert_eq!(canvas.texts[0].1.x, 8.0);
+    }
+
+    #[test]
+    fn test_text_paint_bold() {
+        let mut text = Text::new("Bold").bold();
+        text.bounds = Rect::new(0.0, 0.0, 20.0, 1.0);
+
+        let mut canvas = MockCanvas::new();
+        text.paint(&mut canvas);
+
+        // Should render with bold style (just verify it runs)
+        assert_eq!(canvas.texts.len(), 1);
+        assert_eq!(canvas.texts[0].0, "Bold");
+    }
+
+    #[test]
+    fn test_text_paint_truncation() {
+        let mut text = Text::new("This is a very long text");
+        text.bounds = Rect::new(0.0, 0.0, 10.0, 1.0);
+
+        let mut canvas = MockCanvas::new();
+        text.paint(&mut canvas);
+
+        // Text should be truncated with "..."
+        assert!(canvas.texts[0].0.ends_with("..."));
+        assert!(canvas.texts[0].0.len() <= 10);
+    }
+
+    #[test]
+    fn test_text_paint_truncation_short_width() {
+        let mut text = Text::new("Hello");
+        text.bounds = Rect::new(0.0, 0.0, 3.0, 1.0);
+
+        let mut canvas = MockCanvas::new();
+        text.paint(&mut canvas);
+
+        // Width <= 3, so just truncate without "..."
+        assert_eq!(canvas.texts[0].0.len(), 3);
+    }
+
+    #[test]
+    fn test_text_paint_zero_bounds() {
+        let mut text = Text::new("Test");
+        text.bounds = Rect::new(0.0, 0.0, 0.0, 0.0);
+
+        let mut canvas = MockCanvas::new();
+        text.paint(&mut canvas);
+
+        // Should return early, no output
+        assert!(canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_text_paint_zero_height() {
+        let mut text = Text::new("Test");
+        text.bounds = Rect::new(0.0, 0.0, 10.0, 0.5);
+
+        let mut canvas = MockCanvas::new();
+        text.paint(&mut canvas);
+
+        // Should return early since height < 1
+        assert!(canvas.texts.is_empty());
+    }
+
+    #[test]
+    fn test_text_event() {
+        let mut text = Text::new("Test");
+        let event = Event::KeyDown {
+            key: presentar_core::Key::Enter,
+        };
+        assert!(text.event(&event).is_none());
+    }
+
+    #[test]
+    fn test_text_assertions() {
+        let text = Text::new("Test");
+        assert!(!text.assertions().is_empty());
+    }
+
+    #[test]
+    fn test_text_budget() {
+        let text = Text::new("Test");
+        let budget = text.budget();
+        // Budget should have total_ms set (uniform(1) sets to 1ms)
+        assert!(budget.total_ms > 0);
+    }
+
+    #[test]
+    fn test_text_to_css() {
+        let text = Text::new("Test");
+        assert!(text.to_css().is_empty());
+    }
+
+    #[test]
+    fn test_text_align_default() {
+        assert_eq!(TextAlign::default(), TextAlign::Left);
+    }
+
+    #[test]
+    fn test_text_align_debug() {
+        let align = TextAlign::Center;
+        let debug = format!("{:?}", align);
+        assert!(debug.contains("Center"));
+    }
+
+    #[test]
+    fn test_text_clone() {
+        let text = Text::new("Test").with_color(Color::RED).bold().centered();
+        let cloned = text.clone();
+        assert_eq!(cloned.content(), text.content());
+        assert_eq!(cloned.color, text.color);
+        assert_eq!(cloned.bold, text.bold);
+        assert_eq!(cloned.align, text.align);
+    }
+
+    #[test]
+    fn test_text_debug() {
+        let text = Text::new("Test");
+        let debug = format!("{:?}", text);
+        assert!(debug.contains("Text"));
+    }
+
+    #[test]
+    fn test_text_measure_constrained() {
+        let text = Text::new("Hello World!");
+        // Constrain width to less than text length
+        let size = text.measure(Constraints::new(0.0, 5.0, 0.0, 10.0));
+        assert_eq!(size.width, 5.0);
+    }
+
+    #[test]
+    fn test_text_empty() {
+        let text = Text::new("");
+        let size = text.measure(Constraints::new(0.0, 100.0, 0.0, 10.0));
+        assert_eq!(size.width, 0.0);
+    }
+
+    #[test]
+    fn test_text_paint_at_position() {
+        let mut text = Text::new("Test");
+        text.bounds = Rect::new(5.0, 10.0, 20.0, 1.0);
+
+        let mut canvas = MockCanvas::new();
+        text.paint(&mut canvas);
+
+        // Should render at bounds position
+        assert_eq!(canvas.texts[0].1.x, 5.0);
+        assert_eq!(canvas.texts[0].1.y, 10.0);
+    }
+
+    #[test]
+    fn test_text_paint_exact_fit() {
+        let mut text = Text::new("Hi");
+        text.bounds = Rect::new(0.0, 0.0, 2.0, 1.0);
+
+        let mut canvas = MockCanvas::new();
+        text.paint(&mut canvas);
+
+        // Text fits exactly
+        assert_eq!(canvas.texts[0].0, "Hi");
+    }
 }

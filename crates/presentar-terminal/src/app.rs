@@ -1,4 +1,32 @@
 //! TUI application runner with Jidoka verification gates.
+//!
+//! ## Non-Blocking UI Pattern (CB-INPUT-006)
+//!
+//! For applications with heavy data collection (system monitors, dashboards),
+//! use the [`AsyncCollector`] pattern to ensure the main thread never blocks.
+//!
+//! ```ignore
+//! // Background thread owns collectors, sends snapshots through channel
+//! let (tx, rx) = mpsc::channel::<MySnapshot>();
+//!
+//! std::thread::spawn(move || {
+//!     let mut collector = MyCollector::new();
+//!     loop {
+//!         let snapshot = collector.collect();  // Can take seconds
+//!         tx.send(snapshot).ok();
+//!         std::thread::sleep(Duration::from_secs(1));
+//!     }
+//! });
+//!
+//! // Main thread: input + render only (always <16ms)
+//! loop {
+//!     while let Ok(snapshot) = rx.try_recv() {
+//!         app.apply_snapshot(snapshot);  // O(1) operation
+//!     }
+//!     app.handle_input();  // Non-blocking
+//!     app.render();        // <16ms budget
+//! }
+//! ```
 
 #![allow(dead_code, unreachable_pub)]
 
@@ -15,6 +43,158 @@ use crossterm::{
 use presentar_core::{Constraints, Rect, Widget};
 use std::io::{self, Stdout, Write};
 use std::time::{Duration, Instant};
+
+// =============================================================================
+// Non-Blocking UI Pattern (CB-INPUT-006)
+// =============================================================================
+
+/// Snapshot of collected metrics, transportable via channel.
+///
+/// Implement this trait for data structures that are sent from a background
+/// collector thread to the main UI thread.
+///
+/// # Requirements
+/// - Must be `Clone` (for potential buffering)
+/// - Must be `Send` (for channel transport)
+/// - Must be `'static` (for thread safety)
+pub trait Snapshot: Clone + Send + 'static {
+    /// Create an empty snapshot for initial state before first collection.
+    fn empty() -> Self;
+}
+
+/// Background collector that produces snapshots.
+///
+/// Implement this trait for objects that collect metrics in a background thread.
+/// The collector owns all heavy I/O objects (System, Disks, Networks, etc.)
+/// and produces lightweight snapshots that can be sent through a channel.
+///
+/// # Example
+/// ```ignore
+/// struct SystemCollector {
+///     system: System,
+///     disks: Disks,
+/// }
+///
+/// impl AsyncCollector for SystemCollector {
+///     type Snapshot = MetricsSnapshot;
+///
+///     fn collect(&mut self) -> MetricsSnapshot {
+///         self.system.refresh_all();  // Heavy I/O
+///         MetricsSnapshot {
+///             cpu_usage: self.system.global_cpu_usage(),
+///             // ... extract other data
+///         }
+///     }
+/// }
+/// ```
+pub trait AsyncCollector: Send + 'static {
+    /// The snapshot type produced by this collector.
+    type Snapshot: Snapshot;
+
+    /// Collect metrics and return a snapshot.
+    ///
+    /// This method may take seconds to complete (heavy I/O).
+    /// It runs in a background thread, never blocking the UI.
+    fn collect(&mut self) -> Self::Snapshot;
+}
+
+/// Application that can apply snapshots to update its state.
+///
+/// Implement this trait for your application state. The `apply_snapshot`
+/// method is called on the main thread and MUST complete in <1ms.
+///
+/// # Example
+/// ```ignore
+/// impl SnapshotReceiver for MyApp {
+///     type Snapshot = MetricsSnapshot;
+///
+///     fn apply_snapshot(&mut self, snapshot: MetricsSnapshot) {
+///         // O(1) operations only - just copy/swap data
+///         self.cpu_usage = snapshot.cpu_usage;
+///         self.processes = snapshot.processes;
+///     }
+/// }
+/// ```
+pub trait SnapshotReceiver {
+    /// The snapshot type this receiver accepts.
+    type Snapshot: Snapshot;
+
+    /// Apply a snapshot to update the application state.
+    ///
+    /// **MUST be O(1) and complete in <1ms.**
+    /// Only perform simple assignments, no I/O or heavy computation.
+    fn apply_snapshot(&mut self, snapshot: Self::Snapshot);
+}
+
+/// QA timing diagnostics for non-blocking UI verification.
+///
+/// Use this struct to collect timing data for `--qa-timing` output.
+#[derive(Debug, Clone, Default)]
+pub struct QaTimings {
+    /// Input event processing times in microseconds.
+    pub input_times_us: Vec<u64>,
+    /// Lock acquisition times in microseconds (should be 0 with channel pattern).
+    pub lock_times_us: Vec<u64>,
+    /// Render times in microseconds.
+    pub render_times_us: Vec<u64>,
+    /// Last collect duration in microseconds (from background thread).
+    pub last_collect_us: u64,
+}
+
+impl QaTimings {
+    /// Create new QA timing collector.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Record an input event processing time.
+    pub fn record_input(&mut self, duration: Duration) {
+        self.input_times_us.push(duration.as_micros() as u64);
+    }
+
+    /// Record a lock acquisition time.
+    pub fn record_lock(&mut self, duration: Duration) {
+        self.lock_times_us.push(duration.as_micros() as u64);
+    }
+
+    /// Record a render time.
+    pub fn record_render(&mut self, duration: Duration) {
+        self.render_times_us.push(duration.as_micros() as u64);
+    }
+
+    /// Format timing report for stderr output.
+    #[must_use]
+    pub fn format_report(&self) -> String {
+        let avg = |v: &[u64]| {
+            if v.is_empty() {
+                0
+            } else {
+                v.iter().sum::<u64>() / v.len() as u64
+            }
+        };
+        let max = |v: &[u64]| v.iter().max().copied().unwrap_or(0);
+
+        format!(
+            "[QA] input: avg={}us max={}us | lock: avg={}us max={}us | render: avg={}us max={}us | collect: {}us",
+            avg(&self.input_times_us), max(&self.input_times_us),
+            avg(&self.lock_times_us), max(&self.lock_times_us),
+            avg(&self.render_times_us), max(&self.render_times_us),
+            self.last_collect_us
+        )
+    }
+
+    /// Clear accumulated timing data.
+    pub fn clear(&mut self) {
+        self.input_times_us.clear();
+        self.lock_times_us.clear();
+        self.render_times_us.clear();
+    }
+}
+
+// =============================================================================
+// Terminal Abstraction
+// =============================================================================
 
 /// Terminal abstraction for testability.
 pub trait Terminal {

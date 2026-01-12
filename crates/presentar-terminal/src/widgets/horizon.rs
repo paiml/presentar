@@ -31,7 +31,7 @@ pub enum HorizonScheme {
 
 impl HorizonScheme {
     /// Get colors for each band (from light to dark).
-    fn band_colors(&self, bands: u8) -> Vec<Color> {
+    fn band_colors(self, bands: u8) -> Vec<Color> {
         let base = match self {
             Self::Blues => (0.2, 0.4, 0.9),
             Self::Reds => (0.9, 0.3, 0.2),
@@ -186,7 +186,8 @@ impl HorizonGraph {
 
             // For higher bands, draw additional layers above
             for b in 0..band {
-                if (height as i32 - 2 - b as i32) >= 0 {
+                let offset = 2 + b as usize;
+                if height > offset {
                     let layer_color = if (b as usize) < colors.len() {
                         colors[b as usize]
                     } else {
@@ -200,7 +201,7 @@ impl HorizonGraph {
                         "█",
                         Point::new(
                             self.bounds.x + x as f32,
-                            self.bounds.y + (height as i32 - 2 - b as i32) as f32,
+                            self.bounds.y + (height - offset) as f32,
                         ),
                         &layer_style,
                     );
@@ -396,5 +397,89 @@ mod tests {
     fn test_horizon_type_id() {
         let graph = HorizonGraph::new(vec![]);
         assert_eq!(Widget::type_id(&graph), TypeId::of::<HorizonGraph>());
+    }
+
+    #[test]
+    fn test_horizon_layout_and_paint() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let mut graph = HorizonGraph::new(vec![0.1, 0.3, 0.5, 0.7, 0.9])
+            .with_bands(4)
+            .with_label("Test")
+            .with_scheme(HorizonScheme::Blues);
+
+        let bounds = presentar_core::Rect::new(0.0, 0.0, 40.0, 3.0);
+        graph.layout(bounds);
+
+        let mut buffer = CellBuffer::new(40, 3);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        graph.paint(&mut canvas);
+        // Verify it doesn't panic
+    }
+
+    #[test]
+    fn test_horizon_all_schemes() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        for scheme in [
+            HorizonScheme::Blues,
+            HorizonScheme::Greens,
+            HorizonScheme::Reds,
+            HorizonScheme::Purples,
+        ] {
+            let mut graph = HorizonGraph::new(vec![0.2, 0.5, 0.8]).with_scheme(scheme);
+            let bounds = presentar_core::Rect::new(0.0, 0.0, 20.0, 2.0);
+            graph.layout(bounds);
+
+            let mut buffer = CellBuffer::new(20, 2);
+            let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+            graph.paint(&mut canvas);
+        }
+    }
+
+    #[test]
+    fn test_horizon_different_band_counts() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        for bands in [2, 3, 4, 5, 8] {
+            let mut graph = HorizonGraph::new(vec![0.1, 0.5, 0.9]).with_bands(bands);
+            let bounds = presentar_core::Rect::new(0.0, 0.0, 30.0, 2.0);
+            graph.layout(bounds);
+
+            let mut buffer = CellBuffer::new(30, 2);
+            let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+            graph.paint(&mut canvas);
+        }
+    }
+
+    #[test]
+    fn test_horizon_empty_data() {
+        use crate::direct::{CellBuffer, DirectTerminalCanvas};
+
+        let mut graph = HorizonGraph::new(vec![]);
+        let bounds = presentar_core::Rect::new(0.0, 0.0, 20.0, 2.0);
+        graph.layout(bounds);
+
+        let mut buffer = CellBuffer::new(20, 2);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+        graph.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_horizon_edge_values() {
+        let graph = HorizonGraph::new(vec![]).with_bands(4);
+
+        // Edge cases
+        let (band, _) = graph.value_to_band(0.0);
+        assert_eq!(band, 0);
+
+        let (band, _) = graph.value_to_band(1.0);
+        assert_eq!(band, 3); // Last band for max value
+
+        let (band, _) = graph.value_to_band(-0.1);
+        assert_eq!(band, 0); // Clamped to min
+
+        let (band, _) = graph.value_to_band(1.5);
+        assert_eq!(band, 3); // Clamped to max
     }
 }

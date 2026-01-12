@@ -1,0 +1,8 @@
+# Rust Toolchain Configuration for Reproducible Builds
+# See: https://rust-lang.github.io/rustup/overrides.html
+
+[toolchain]
+channel = "1.83.0"
+components = ["rustfmt", "clippy", "rust-src", "rust-analyzer"]
+targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
+profile = "default"

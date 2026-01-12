@@ -2,6 +2,42 @@ roadmap_version: '1.0'
 github_enabled: true
 github_repo: null
 roadmap:
+- id: 'SPEC-024 Architectural Enforcement'
+  github_issue: null
+  item_type: task
+  title: 'Implement ComputeBlock architectural enforcement - tests define interface'
+  status: done
+  priority: critical
+  assigned_to: null
+  created: 2026-01-11T00:00:00.000000000+00:00
+  updated: 2026-01-11T00:00:00.000000000+00:00
+  spec: docs/specifications/compute-block-tui-cbtop.md
+  acceptance_criteria:
+    - 'build.rs panics if interface test files missing'
+    - 'include_str! enforces test file existence at compile time'
+    - 'Proc macros #[interface_test] and #[requires_interface] implemented'
+    - 'Git hooks installed via scripts/install-hooks.sh'
+    - 'CI workflow .github/workflows/enforce.yml blocks PRs without tests'
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: ['architecture', 'enforcement', 'testing']
+  notes: |
+    TESTS DEFINE INTERFACE. IMPLEMENTATION FOLLOWS.
+
+    Five layers of enforcement implemented:
+    1. build.rs - panic! on missing test files
+    2. include_str! - compile error if test missing
+    3. Proc macros - #[interface_test], #[requires_interface]
+    4. Git hooks - pre-commit blocks commits without tests
+    5. CI workflow - blocks PRs without test coverage
+
+    Proof it works:
+    $ rm tests/cpu_exploded_async.rs
+    $ cargo build --features ptop
+    → SPEC-024 ENFORCEMENT FAILURE: MISSING INTERFACE TEST
+
+    It is now IMPOSSIBLE to build presentar-terminal without interface tests.
 - id: 'Implement TUI widgets from cbtop spec: TuiGauge, TuiTree, TuiConfusionMatrix, TuiBoxPlot, TuiSparkline, TuiHeatmap'
   github_issue: null
   item_type: task

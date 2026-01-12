@@ -460,4 +460,35 @@ mod tests {
         let de2 = ciede2000(lab2, lab1);
         assert!((de1 - de2).abs() < 0.0001);
     }
+
+    #[test]
+    fn test_average_delta_e_empty() {
+        let empty: Vec<Lab> = vec![];
+        let result = average_delta_e(&empty, &empty);
+        assert_eq!(result, f64::MAX);
+    }
+
+    #[test]
+    fn test_average_delta_e_different_lengths() {
+        let colors1 = vec![Lab::new(50.0, 0.0, 0.0)];
+        let colors2 = vec![Lab::new(50.0, 0.0, 0.0), Lab::new(60.0, 0.0, 0.0)];
+        let result = average_delta_e(&colors1, &colors2);
+        assert_eq!(result, f64::MAX);
+    }
+
+    #[test]
+    fn test_average_delta_e_identical() {
+        let colors1 = vec![Lab::new(50.0, 0.0, 0.0), Lab::new(60.0, 10.0, -10.0)];
+        let colors2 = colors1.clone();
+        let result = average_delta_e(&colors1, &colors2);
+        assert!(result < 0.001); // Should be nearly zero
+    }
+
+    #[test]
+    fn test_average_delta_e_different() {
+        let colors1 = vec![Lab::new(50.0, 0.0, 0.0), Lab::new(50.0, 0.0, 0.0)];
+        let colors2 = vec![Lab::new(70.0, 20.0, 20.0), Lab::new(70.0, 20.0, 20.0)];
+        let result = average_delta_e(&colors1, &colors2);
+        assert!(result > 0.0);
+    }
 }

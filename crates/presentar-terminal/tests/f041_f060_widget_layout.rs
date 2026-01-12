@@ -213,6 +213,11 @@ fn f046_processtable_has_header() {
         oom_score: None,
         cgroup: None,
         nice: None,
+        threads: None,
+        parent_pid: None,
+        tree_depth: 0,
+        is_last_child: false,
+        tree_prefix: String::new(),
     });
 
     let mut canvas = TestCanvas::new(80, 10);
@@ -244,6 +249,11 @@ fn f047_processtable_has_separator() {
         oom_score: None,
         cgroup: None,
         nice: None,
+        threads: None,
+        parent_pid: None,
+        tree_depth: 0,
+        is_last_child: false,
+        tree_prefix: String::new(),
     });
 
     let mut canvas = TestCanvas::new(80, 10);
@@ -277,6 +287,11 @@ fn f048_processtable_selection_works() {
         oom_score: None,
         cgroup: None,
         nice: None,
+        threads: None,
+        parent_pid: None,
+        tree_depth: 0,
+        is_last_child: false,
+        tree_prefix: String::new(),
     });
     table.add_process(ProcessEntry {
         pid: 2,
@@ -289,6 +304,11 @@ fn f048_processtable_selection_works() {
         oom_score: None,
         cgroup: None,
         nice: None,
+        threads: None,
+        parent_pid: None,
+        tree_depth: 0,
+        is_last_child: false,
+        tree_prefix: String::new(),
     });
 
     // Select the first row
@@ -318,6 +338,11 @@ fn f049_processtable_sorting() {
         oom_score: None,
         cgroup: None,
         nice: None,
+        threads: None,
+        parent_pid: None,
+        tree_depth: 0,
+        is_last_child: false,
+        tree_prefix: String::new(),
     });
     table.add_process(ProcessEntry {
         pid: 2,
@@ -330,6 +355,11 @@ fn f049_processtable_sorting() {
         oom_score: None,
         cgroup: None,
         nice: None,
+        threads: None,
+        parent_pid: None,
+        tree_depth: 0,
+        is_last_child: false,
+        tree_prefix: String::new(),
     });
 
     // Sort by CPU
@@ -360,6 +390,11 @@ fn f050_processtable_scrolling() {
             oom_score: None,
             cgroup: None,
             nice: None,
+            threads: None,
+            parent_pid: None,
+            tree_depth: 0,
+            is_last_child: false,
+            tree_prefix: String::new(),
         });
     }
 

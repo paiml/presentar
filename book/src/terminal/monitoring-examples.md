@@ -318,5 +318,4 @@ This displays all five widgets with sample data, demonstrating distribution visu
 ## See Also
 
 - [Direct Backend](./direct-backend.md) - Architecture details
-- [cbtop Specification](../../docs/specifications/compute-block-tui-cbtop.md) - Full specification
-- [Trueno-Viz Examples](/ecosystem/trueno-viz.md) - Related visualization examples
+- [ptop Specification](../../../docs/specifications/pixel-by-pixel-demo-ptop-ttop.md) - Full specification (unified)

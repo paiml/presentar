@@ -599,19 +599,16 @@ fn f040_color_alpha_handling() {
         _ => panic!("F040 FAILED: Should produce valid Rgb color"),
     }
 
-    // Test with alpha = 0.0
+    // Test with alpha = 0.0 - should return Reset to avoid black artifacts
     let transparent = Color::new(0.0, 1.0, 0.0, 0.0);
     let result_transparent = mode.to_crossterm(transparent);
 
-    match result_transparent {
-        crossterm::style::Color::Rgb { r, g, b } => {
-            assert_eq!(
-                g, 255,
-                "F040 FAILED: Green should be preserved with alpha=0"
-            );
-        }
-        _ => panic!("F040 FAILED: Should produce valid Rgb color with alpha=0"),
-    }
+    // Transparent colors (alpha=0) should return Reset, not Rgb
+    // This is intentional to avoid black squares on the terminal
+    assert!(
+        matches!(result_transparent, crossterm::style::Color::Reset),
+        "F040 FAILED: Transparent colors (alpha=0) should return Reset to avoid black artifacts"
+    );
 }
 
 // =============================================================================

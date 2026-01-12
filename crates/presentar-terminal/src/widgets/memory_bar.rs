@@ -2,6 +2,13 @@
 //!
 //! Displays memory segments (Used, Cached, Swap, Free) in stacked bars.
 //! Reference: btop/ttop memory displays.
+//!
+//! # Features
+//!
+//! - Stacked memory segments with labels and values
+//! - Single-row mode for compact displays
+//! - Huge pages tracking (SPEC-024 Section 15: CB-MEM-006)
+//! - Memory pressure indicator integration
 
 use presentar_core::{
     Brick, BrickAssertion, BrickBudget, BrickVerification, Canvas, Color, Constraints, Event,
@@ -9,6 +16,84 @@ use presentar_core::{
 };
 use std::any::Any;
 use std::time::Duration;
+
+/// Huge pages statistics for memory bar display.
+#[derive(Debug, Clone, Default)]
+pub struct HugePages {
+    /// Total huge pages allocated.
+    pub total: u64,
+    /// Free huge pages.
+    pub free: u64,
+    /// Reserved huge pages.
+    pub reserved: u64,
+    /// Page size in KB (e.g., 2048 for 2MB pages).
+    pub page_size_kb: u64,
+}
+
+impl HugePages {
+    /// Create new huge pages stats.
+    #[must_use]
+    pub fn new(total: u64, free: u64, reserved: u64, page_size_kb: u64) -> Self {
+        Self {
+            total,
+            free,
+            reserved,
+            page_size_kb,
+        }
+    }
+
+    /// Get used huge pages count.
+    #[must_use]
+    pub fn used(&self) -> u64 {
+        self.total.saturating_sub(self.free)
+    }
+
+    /// Get used huge pages in bytes.
+    #[must_use]
+    pub fn used_bytes(&self) -> u64 {
+        self.used() * self.page_size_kb * 1024
+    }
+
+    /// Get total huge pages in bytes.
+    #[must_use]
+    pub fn total_bytes(&self) -> u64 {
+        self.total * self.page_size_kb * 1024
+    }
+
+    /// Get usage percentage.
+    #[must_use]
+    pub fn usage_percent(&self) -> f64 {
+        if self.total == 0 {
+            0.0
+        } else {
+            (self.used() as f64 / self.total as f64) * 100.0
+        }
+    }
+
+    /// Check if huge pages are configured.
+    #[must_use]
+    pub fn is_configured(&self) -> bool {
+        self.total > 0
+    }
+
+    /// Format as display string (e.g., "`HugePages`: 256/512 2M").
+    #[must_use]
+    pub fn to_display_string(&self) -> String {
+        if !self.is_configured() {
+            return String::from("HugePages: not configured");
+        }
+
+        let size_str = if self.page_size_kb >= 1024 * 1024 {
+            format!("{}G", self.page_size_kb / (1024 * 1024))
+        } else if self.page_size_kb >= 1024 {
+            format!("{}M", self.page_size_kb / 1024)
+        } else {
+            format!("{}K", self.page_size_kb)
+        };
+
+        format!("{}/{} {}", self.used(), self.total, size_str)
+    }
+}
 
 /// A segment of the memory bar.
 #[derive(Debug, Clone)]
@@ -48,6 +133,10 @@ pub struct MemoryBar {
     bar_width: usize,
     /// Cached bounds.
     bounds: Rect,
+    /// Huge pages statistics (SPEC-024 CB-MEM-006).
+    huge_pages: Option<HugePages>,
+    /// Show huge pages in display.
+    show_huge_pages: bool,
 }
 
 impl Default for MemoryBar {
@@ -67,6 +156,8 @@ impl MemoryBar {
             show_values: true,
             bar_width: 30,
             bounds: Rect::default(),
+            huge_pages: None,
+            show_huge_pages: false,
         }
     }
 
@@ -144,6 +235,42 @@ impl MemoryBar {
         self
     }
 
+    /// Set huge pages statistics (SPEC-024 CB-MEM-006).
+    ///
+    /// When enabled, huge pages are displayed as an additional row/indicator.
+    #[must_use]
+    pub fn with_huge_pages(mut self, huge_pages: HugePages) -> Self {
+        self.huge_pages = Some(huge_pages);
+        self.show_huge_pages = true;
+        self
+    }
+
+    /// Enable/disable huge pages display.
+    #[must_use]
+    pub fn show_huge_pages(mut self, show: bool) -> Self {
+        self.show_huge_pages = show;
+        self
+    }
+
+    /// Update huge pages data.
+    pub fn set_huge_pages(&mut self, huge_pages: HugePages) {
+        self.huge_pages = Some(huge_pages);
+    }
+
+    /// Get huge pages statistics, if set.
+    #[must_use]
+    pub fn huge_pages(&self) -> Option<&HugePages> {
+        self.huge_pages.as_ref()
+    }
+
+    /// Check if huge pages are configured and being tracked.
+    #[must_use]
+    pub fn has_huge_pages(&self) -> bool {
+        self.huge_pages
+            .as_ref()
+            .is_some_and(HugePages::is_configured)
+    }
+
     /// Update total bytes.
     pub fn set_total(&mut self, total: u64) {
         self.total_bytes = total;
@@ -199,11 +326,17 @@ impl Widget for MemoryBar {
 
     fn measure(&self, constraints: Constraints) -> Size {
         // Each segment gets one row if showing labels
-        let height = if self.show_labels {
+        let mut height = if self.show_labels {
             self.segments.len().max(1) as f32
         } else {
             1.0
         };
+
+        // Add extra row for huge pages if showing
+        if self.show_huge_pages && self.has_huge_pages() {
+            height += 1.0;
+        }
+
         let width = constraints.max_width.min(80.0);
         constraints.constrain(Size::new(width, height))
     }
@@ -215,8 +348,9 @@ impl Widget for MemoryBar {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn paint(&self, canvas: &mut dyn Canvas) {
-        if self.total_bytes == 0 {
+        if self.bounds.width < 1.0 || self.bounds.height < 1.0 {
             return;
         }
 
@@ -323,6 +457,77 @@ impl Widget for MemoryBar {
                         ..Default::default()
                     },
                 );
+            }
+        }
+
+        // Draw huge pages row if enabled (SPEC-024 CB-MEM-006)
+        if self.show_huge_pages {
+            if let Some(hp) = &self.huge_pages {
+                if hp.is_configured() {
+                    let y = if self.show_labels {
+                        self.bounds.y + self.segments.len() as f32
+                    } else {
+                        self.bounds.y + 1.0
+                    };
+
+                    // Huge pages indicator color (cyan/teal for distinction)
+                    let hp_color = Color::new(0.39, 0.82, 0.75, 1.0); // Tokyo Night cyan
+
+                    // Label
+                    let label = "HPages:";
+                    canvas.draw_text(
+                        label,
+                        Point::new(self.bounds.x, y),
+                        &TextStyle {
+                            color: Color::new(0.5, 0.5, 0.6, 1.0),
+                            ..Default::default()
+                        },
+                    );
+
+                    // Value: "256/512 2M"
+                    let value = hp.to_display_string();
+                    canvas.draw_text(
+                        &format!("{value:>12}"),
+                        Point::new(self.bounds.x + 8.0, y),
+                        &TextStyle {
+                            color: hp_color,
+                            ..Default::default()
+                        },
+                    );
+
+                    // Usage bar
+                    let bar_x = if self.show_values { 21.0 } else { 8.0 };
+                    let pct = hp.usage_percent();
+                    let filled = ((pct / 100.0) * bar_chars as f64).round() as usize;
+
+                    let mut bar = String::with_capacity(bar_chars);
+                    for j in 0..bar_chars {
+                        if j < filled {
+                            bar.push('█');
+                        } else {
+                            bar.push('░');
+                        }
+                    }
+                    canvas.draw_text(
+                        &bar,
+                        Point::new(self.bounds.x + bar_x, y),
+                        &TextStyle {
+                            color: hp_color,
+                            ..Default::default()
+                        },
+                    );
+
+                    // Percentage
+                    let pct_x = self.bounds.x + bar_x + bar_chars as f32 + 1.0;
+                    canvas.draw_text(
+                        &format!("{pct:3.0}%"),
+                        Point::new(pct_x, y),
+                        &TextStyle {
+                            color: hp_color,
+                            ..Default::default()
+                        },
+                    );
+                }
             }
         }
     }
@@ -713,5 +918,205 @@ mod tests {
         let bar = MemoryBar::new(1000);
         let debug = format!("{bar:?}");
         assert!(debug.contains("1000"));
+    }
+
+    // ===== Huge Pages Tests (SPEC-024 Section 15: CB-MEM-006) =====
+
+    #[test]
+    fn test_huge_pages_new() {
+        let hp = HugePages::new(512, 256, 0, 2048); // 2MB pages
+        assert_eq!(hp.total, 512);
+        assert_eq!(hp.free, 256);
+        assert_eq!(hp.reserved, 0);
+        assert_eq!(hp.page_size_kb, 2048);
+    }
+
+    #[test]
+    fn test_huge_pages_used() {
+        let hp = HugePages::new(512, 256, 0, 2048);
+        assert_eq!(hp.used(), 256); // 512 - 256
+    }
+
+    #[test]
+    fn test_huge_pages_used_bytes() {
+        let hp = HugePages::new(512, 256, 0, 2048); // 2MB pages
+                                                    // 256 used pages * 2048 KB * 1024 bytes = 536870912 bytes
+        assert_eq!(hp.used_bytes(), 256 * 2048 * 1024);
+    }
+
+    #[test]
+    fn test_huge_pages_total_bytes() {
+        let hp = HugePages::new(512, 256, 0, 2048);
+        assert_eq!(hp.total_bytes(), 512 * 2048 * 1024);
+    }
+
+    #[test]
+    fn test_huge_pages_usage_percent() {
+        let hp = HugePages::new(100, 50, 0, 2048);
+        assert!((hp.usage_percent() - 50.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_huge_pages_usage_percent_zero_total() {
+        let hp = HugePages::new(0, 0, 0, 2048);
+        assert_eq!(hp.usage_percent(), 0.0);
+    }
+
+    #[test]
+    fn test_huge_pages_is_configured() {
+        let configured = HugePages::new(512, 256, 0, 2048);
+        let not_configured = HugePages::new(0, 0, 0, 2048);
+
+        assert!(configured.is_configured());
+        assert!(!not_configured.is_configured());
+    }
+
+    #[test]
+    fn test_huge_pages_to_display_string() {
+        let hp = HugePages::new(512, 256, 0, 2048); // 2MB pages
+        assert_eq!(hp.to_display_string(), "256/512 2M");
+    }
+
+    #[test]
+    fn test_huge_pages_to_display_string_1g_pages() {
+        let hp = HugePages::new(8, 4, 0, 1024 * 1024); // 1GB pages
+        assert_eq!(hp.to_display_string(), "4/8 1G");
+    }
+
+    #[test]
+    fn test_huge_pages_to_display_string_not_configured() {
+        let hp = HugePages::new(0, 0, 0, 2048);
+        assert_eq!(hp.to_display_string(), "HugePages: not configured");
+    }
+
+    #[test]
+    fn test_huge_pages_default() {
+        let hp = HugePages::default();
+        assert_eq!(hp.total, 0);
+        assert_eq!(hp.free, 0);
+        assert!(!hp.is_configured());
+    }
+
+    #[test]
+    fn test_huge_pages_clone() {
+        let hp = HugePages::new(512, 256, 32, 2048);
+        let cloned = hp.clone();
+        assert_eq!(cloned.total, hp.total);
+        assert_eq!(cloned.free, hp.free);
+        assert_eq!(cloned.reserved, hp.reserved);
+    }
+
+    #[test]
+    fn test_huge_pages_debug() {
+        let hp = HugePages::new(512, 256, 0, 2048);
+        let debug = format!("{hp:?}");
+        assert!(debug.contains("512"));
+        assert!(debug.contains("256"));
+    }
+
+    #[test]
+    fn test_memory_bar_with_huge_pages() {
+        let hp = HugePages::new(512, 256, 0, 2048);
+        let bar = MemoryBar::new(1024 * 1024 * 1024).with_huge_pages(hp);
+
+        assert!(bar.has_huge_pages());
+        assert!(bar.show_huge_pages);
+        assert!(bar.huge_pages().is_some());
+    }
+
+    #[test]
+    fn test_memory_bar_set_huge_pages() {
+        let mut bar = MemoryBar::new(1024 * 1024 * 1024);
+        assert!(!bar.has_huge_pages());
+
+        bar.set_huge_pages(HugePages::new(512, 256, 0, 2048));
+        assert!(bar.huge_pages().is_some());
+    }
+
+    #[test]
+    fn test_memory_bar_huge_pages_show_toggle() {
+        let hp = HugePages::new(512, 256, 0, 2048);
+        let bar = MemoryBar::new(1024 * 1024 * 1024)
+            .with_huge_pages(hp)
+            .show_huge_pages(false);
+
+        assert!(!bar.show_huge_pages);
+    }
+
+    #[test]
+    fn test_memory_bar_measure_with_huge_pages() {
+        let hp = HugePages::new(512, 256, 0, 2048);
+        let mut bar = MemoryBar::new(1000).with_huge_pages(hp);
+        bar.add_segment(MemorySegment::new("Used", 500, Color::RED));
+        bar.add_segment(MemorySegment::new("Cached", 300, Color::YELLOW));
+
+        let constraints = Constraints::new(0.0, 100.0, 0.0, 50.0);
+        let size = bar.measure(constraints);
+
+        // 2 segments + 1 huge pages row = 3
+        assert_eq!(size.height, 3.0);
+    }
+
+    #[test]
+    fn test_memory_bar_measure_huge_pages_disabled() {
+        let hp = HugePages::new(512, 256, 0, 2048);
+        let mut bar = MemoryBar::new(1000)
+            .with_huge_pages(hp)
+            .show_huge_pages(false);
+        bar.add_segment(MemorySegment::new("Used", 500, Color::RED));
+
+        let constraints = Constraints::new(0.0, 100.0, 0.0, 50.0);
+        let size = bar.measure(constraints);
+
+        // Only 1 segment, no huge pages
+        assert_eq!(size.height, 1.0);
+    }
+
+    #[test]
+    fn test_memory_bar_paint_with_huge_pages() {
+        use crate::{CellBuffer, DirectTerminalCanvas};
+
+        let hp = HugePages::new(512, 256, 0, 2048);
+        let mut bar = MemoryBar::new(1000).with_huge_pages(hp);
+        bar.add_segment(MemorySegment::new("Used", 500, Color::RED));
+
+        let mut buffer = CellBuffer::new(80, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+
+        bar.layout(Rect::new(0.0, 0.0, 80.0, 10.0));
+        bar.paint(&mut canvas);
+
+        // Should paint without panic
+        assert!(bar.has_huge_pages());
+    }
+
+    #[test]
+    fn test_memory_bar_paint_huge_pages_no_labels() {
+        use crate::{CellBuffer, DirectTerminalCanvas};
+
+        let hp = HugePages::new(512, 256, 0, 2048);
+        let mut bar = MemoryBar::new(1000).with_huge_pages(hp).without_labels();
+        bar.add_segment(MemorySegment::new("Used", 500, Color::RED));
+
+        let mut buffer = CellBuffer::new(80, 10);
+        let mut canvas = DirectTerminalCanvas::new(&mut buffer);
+
+        bar.layout(Rect::new(0.0, 0.0, 80.0, 10.0));
+        bar.paint(&mut canvas);
+    }
+
+    #[test]
+    fn test_memory_bar_has_huge_pages_not_configured() {
+        let hp = HugePages::new(0, 0, 0, 2048); // Not configured
+        let bar = MemoryBar::new(1000).with_huge_pages(hp);
+
+        // has_huge_pages returns false if total is 0
+        assert!(!bar.has_huge_pages());
+    }
+
+    #[test]
+    fn test_huge_pages_small_page_size() {
+        let hp = HugePages::new(1000, 500, 0, 64); // 64KB pages
+        assert_eq!(hp.to_display_string(), "500/1000 64K");
     }
 }
