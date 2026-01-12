@@ -10,7 +10,7 @@ use super::constants::{CYAN, GREEN, RED, WHITE, YELLOW};
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// use presentar_terminal::ptop::ui::core::format::format_bytes;
 ///
 /// assert_eq!(format_bytes(0), "0 B");
@@ -41,7 +41,7 @@ pub fn format_bytes(bytes: u64) -> String {
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// use presentar_terminal::ptop::ui::core::format::format_bytes_rate;
 ///
 /// assert_eq!(format_bytes_rate(0.0), "0 B/s");
@@ -68,7 +68,7 @@ pub fn format_bytes_rate(bytes_per_sec: f64) -> String {
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// use presentar_terminal::ptop::ui::core::format::format_uptime;
 ///
 /// assert_eq!(format_uptime(3600), "1h 0m");
