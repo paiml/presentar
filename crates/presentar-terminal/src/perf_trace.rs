@@ -20739,3 +20739,914 @@ mod memory_pressure_tests {
         assert_eq!(mp.allocated_bytes, cloned.allocated_bytes);
     }
 }
+
+// ============================================================================
+// FileDescriptorTracker - O(1) file descriptor usage tracking
+// ============================================================================
+
+/// O(1) file descriptor usage tracking.
+///
+/// Tracks open/close operations, leaks, and usage patterns for FD management.
+#[derive(Debug, Clone)]
+pub struct FileDescriptorTracker {
+    /// Currently open FDs
+    pub open_fds: u32,
+    /// Maximum allowed FDs
+    pub max_fds: u32,
+    /// Total opens
+    pub opens: u64,
+    /// Total closes
+    pub closes: u64,
+    /// Detected leaks
+    pub leaks: u64,
+    /// Peak open FDs
+    pub peak_open: u32,
+}
+
+impl Default for FileDescriptorTracker {
+    fn default() -> Self {
+        Self::for_process()
+    }
+}
+
+impl FileDescriptorTracker {
+    /// Create new FD tracker with max limit.
+    #[must_use]
+    pub fn new(max_fds: u32) -> Self {
+        Self {
+            open_fds: 0,
+            max_fds,
+            opens: 0,
+            closes: 0,
+            leaks: 0,
+            peak_open: 0,
+        }
+    }
+
+    /// Factory for process-level tracking (1024 default).
+    #[must_use]
+    pub fn for_process() -> Self {
+        Self::new(1024)
+    }
+
+    /// Factory for server tracking (65536).
+    #[must_use]
+    pub fn for_server() -> Self {
+        Self::new(65536)
+    }
+
+    /// Record FD open.
+    pub fn open(&mut self) {
+        self.opens += 1;
+        self.open_fds += 1;
+        if self.open_fds > self.peak_open {
+            self.peak_open = self.open_fds;
+        }
+    }
+
+    /// Record FD close.
+    pub fn close(&mut self) {
+        self.closes += 1;
+        self.open_fds = self.open_fds.saturating_sub(1);
+    }
+
+    /// Record detected leak.
+    pub fn leak(&mut self) {
+        self.leaks += 1;
+    }
+
+    /// Get FD utilization percentage.
+    #[must_use]
+    pub fn utilization(&self) -> f64 {
+        if self.max_fds == 0 {
+            return 0.0;
+        }
+        (self.open_fds as f64 / self.max_fds as f64) * 100.0
+    }
+
+    /// Check if FD exhaustion risk.
+    #[must_use]
+    pub fn is_at_risk(&self) -> bool {
+        self.utilization() > 80.0
+    }
+
+    /// Get leak rate percentage.
+    #[must_use]
+    pub fn leak_rate(&self) -> f64 {
+        if self.opens == 0 {
+            return 0.0;
+        }
+        (self.leaks as f64 / self.opens as f64) * 100.0
+    }
+
+    /// Reset counters.
+    pub fn reset(&mut self) {
+        self.open_fds = 0;
+        self.opens = 0;
+        self.closes = 0;
+        self.leaks = 0;
+        self.peak_open = 0;
+    }
+}
+
+#[cfg(test)]
+mod fd_tracker_tests {
+    use super::*;
+
+    /// F-FD-001: New tracker has max FDs
+    #[test]
+    fn f_fd_001_new() {
+        let fd = FileDescriptorTracker::new(1024);
+        assert_eq!(fd.max_fds, 1024);
+    }
+
+    /// F-FD-002: Default uses process limit
+    #[test]
+    fn f_fd_002_default() {
+        let fd = FileDescriptorTracker::default();
+        assert_eq!(fd.max_fds, 1024);
+    }
+
+    /// F-FD-003: Open increases count
+    #[test]
+    fn f_fd_003_open() {
+        let mut fd = FileDescriptorTracker::new(100);
+        fd.open();
+        assert_eq!(fd.open_fds, 1);
+        assert_eq!(fd.opens, 1);
+    }
+
+    /// F-FD-004: Close decreases count
+    #[test]
+    fn f_fd_004_close() {
+        let mut fd = FileDescriptorTracker::new(100);
+        fd.open();
+        fd.close();
+        assert_eq!(fd.open_fds, 0);
+        assert_eq!(fd.closes, 1);
+    }
+
+    /// F-FD-005: Utilization calculated
+    #[test]
+    fn f_fd_005_utilization() {
+        let mut fd = FileDescriptorTracker::new(100);
+        for _ in 0..50 {
+            fd.open();
+        }
+        assert!((fd.utilization() - 50.0).abs() < 0.01);
+    }
+
+    /// F-FD-006: Risk detected at high utilization
+    #[test]
+    fn f_fd_006_risk() {
+        let mut fd = FileDescriptorTracker::new(100);
+        for _ in 0..85 {
+            fd.open();
+        }
+        assert!(fd.is_at_risk());
+    }
+
+    /// F-FD-007: Factory for_process
+    #[test]
+    fn f_fd_007_for_process() {
+        let fd = FileDescriptorTracker::for_process();
+        assert_eq!(fd.max_fds, 1024);
+    }
+
+    /// F-FD-008: Factory for_server
+    #[test]
+    fn f_fd_008_for_server() {
+        let fd = FileDescriptorTracker::for_server();
+        assert_eq!(fd.max_fds, 65536);
+    }
+
+    /// F-FD-009: Leak tracked
+    #[test]
+    fn f_fd_009_leak() {
+        let mut fd = FileDescriptorTracker::new(100);
+        fd.leak();
+        assert_eq!(fd.leaks, 1);
+    }
+
+    /// F-FD-010: Leak rate calculated
+    #[test]
+    fn f_fd_010_leak_rate() {
+        let mut fd = FileDescriptorTracker::new(100);
+        fd.open();
+        fd.open();
+        fd.leak();
+        assert!((fd.leak_rate() - 50.0).abs() < 0.01);
+    }
+
+    /// F-FD-011: Reset clears state
+    #[test]
+    fn f_fd_011_reset() {
+        let mut fd = FileDescriptorTracker::new(100);
+        fd.open();
+        fd.reset();
+        assert_eq!(fd.open_fds, 0);
+    }
+
+    /// F-FD-012: Clone preserves state
+    #[test]
+    fn f_fd_012_clone() {
+        let mut fd = FileDescriptorTracker::new(100);
+        fd.open();
+        let cloned = fd.clone();
+        assert_eq!(fd.open_fds, cloned.open_fds);
+    }
+}
+
+// ============================================================================
+// SocketTracker - O(1) socket state tracking
+// ============================================================================
+
+/// O(1) socket state tracking.
+///
+/// Tracks socket lifecycle, states, and connection patterns.
+#[derive(Debug, Clone)]
+pub struct SocketTracker {
+    /// Active sockets
+    pub active: u32,
+    /// Maximum sockets
+    pub max_sockets: u32,
+    /// Sockets in TIME_WAIT
+    pub time_wait: u32,
+    /// Total connections
+    pub connections: u64,
+    /// Total accepts
+    pub accepts: u64,
+    /// Connection errors
+    pub errors: u64,
+}
+
+impl Default for SocketTracker {
+    fn default() -> Self {
+        Self::for_server()
+    }
+}
+
+impl SocketTracker {
+    /// Create new socket tracker.
+    #[must_use]
+    pub fn new(max_sockets: u32) -> Self {
+        Self {
+            active: 0,
+            max_sockets,
+            time_wait: 0,
+            connections: 0,
+            accepts: 0,
+            errors: 0,
+        }
+    }
+
+    /// Factory for server tracking (10000).
+    #[must_use]
+    pub fn for_server() -> Self {
+        Self::new(10000)
+    }
+
+    /// Factory for client tracking (100).
+    #[must_use]
+    pub fn for_client() -> Self {
+        Self::new(100)
+    }
+
+    /// Record new connection.
+    pub fn connect(&mut self) {
+        self.connections += 1;
+        self.active += 1;
+    }
+
+    /// Record accepted connection.
+    pub fn accept(&mut self) {
+        self.accepts += 1;
+        self.active += 1;
+    }
+
+    /// Record socket close (enters TIME_WAIT).
+    pub fn close(&mut self) {
+        self.active = self.active.saturating_sub(1);
+        self.time_wait += 1;
+    }
+
+    /// Record TIME_WAIT expiry.
+    pub fn expire_time_wait(&mut self) {
+        self.time_wait = self.time_wait.saturating_sub(1);
+    }
+
+    /// Record connection error.
+    pub fn error(&mut self) {
+        self.errors += 1;
+    }
+
+    /// Get socket utilization percentage.
+    #[must_use]
+    pub fn utilization(&self) -> f64 {
+        if self.max_sockets == 0 {
+            return 0.0;
+        }
+        ((self.active + self.time_wait) as f64 / self.max_sockets as f64) * 100.0
+    }
+
+    /// Check if TIME_WAIT buildup issue.
+    #[must_use]
+    pub fn has_time_wait_issue(&self) -> bool {
+        self.time_wait > self.active * 2
+    }
+
+    /// Get error rate percentage.
+    #[must_use]
+    pub fn error_rate(&self) -> f64 {
+        let total = self.connections + self.accepts;
+        if total == 0 {
+            return 0.0;
+        }
+        (self.errors as f64 / total as f64) * 100.0
+    }
+
+    /// Reset counters.
+    pub fn reset(&mut self) {
+        self.active = 0;
+        self.time_wait = 0;
+        self.connections = 0;
+        self.accepts = 0;
+        self.errors = 0;
+    }
+}
+
+#[cfg(test)]
+mod socket_tracker_tests {
+    use super::*;
+
+    /// F-SOCK-001: New tracker has max
+    #[test]
+    fn f_sock_001_new() {
+        let sock = SocketTracker::new(1000);
+        assert_eq!(sock.max_sockets, 1000);
+    }
+
+    /// F-SOCK-002: Default uses server
+    #[test]
+    fn f_sock_002_default() {
+        let sock = SocketTracker::default();
+        assert_eq!(sock.max_sockets, 10000);
+    }
+
+    /// F-SOCK-003: Connect increases active
+    #[test]
+    fn f_sock_003_connect() {
+        let mut sock = SocketTracker::new(100);
+        sock.connect();
+        assert_eq!(sock.active, 1);
+        assert_eq!(sock.connections, 1);
+    }
+
+    /// F-SOCK-004: Accept increases active
+    #[test]
+    fn f_sock_004_accept() {
+        let mut sock = SocketTracker::new(100);
+        sock.accept();
+        assert_eq!(sock.active, 1);
+        assert_eq!(sock.accepts, 1);
+    }
+
+    /// F-SOCK-005: Close moves to TIME_WAIT
+    #[test]
+    fn f_sock_005_close() {
+        let mut sock = SocketTracker::new(100);
+        sock.connect();
+        sock.close();
+        assert_eq!(sock.active, 0);
+        assert_eq!(sock.time_wait, 1);
+    }
+
+    /// F-SOCK-006: TIME_WAIT expiry
+    #[test]
+    fn f_sock_006_expire() {
+        let mut sock = SocketTracker::new(100);
+        sock.connect();
+        sock.close();
+        sock.expire_time_wait();
+        assert_eq!(sock.time_wait, 0);
+    }
+
+    /// F-SOCK-007: Factory for_server
+    #[test]
+    fn f_sock_007_for_server() {
+        let sock = SocketTracker::for_server();
+        assert_eq!(sock.max_sockets, 10000);
+    }
+
+    /// F-SOCK-008: Factory for_client
+    #[test]
+    fn f_sock_008_for_client() {
+        let sock = SocketTracker::for_client();
+        assert_eq!(sock.max_sockets, 100);
+    }
+
+    /// F-SOCK-009: Utilization includes TIME_WAIT
+    #[test]
+    fn f_sock_009_utilization() {
+        let mut sock = SocketTracker::new(100);
+        for _ in 0..30 {
+            sock.connect();
+        }
+        for _ in 0..20 {
+            sock.close();
+        }
+        // 10 active + 20 time_wait = 30 total
+        assert!((sock.utilization() - 30.0).abs() < 0.01);
+    }
+
+    /// F-SOCK-010: TIME_WAIT issue detected
+    #[test]
+    fn f_sock_010_time_wait_issue() {
+        let mut sock = SocketTracker::new(100);
+        sock.active = 10;
+        sock.time_wait = 30;
+        assert!(sock.has_time_wait_issue());
+    }
+
+    /// F-SOCK-011: Error rate calculated
+    #[test]
+    fn f_sock_011_error_rate() {
+        let mut sock = SocketTracker::new(100);
+        sock.connect();
+        sock.connect();
+        sock.error();
+        assert!((sock.error_rate() - 50.0).abs() < 0.01);
+    }
+
+    /// F-SOCK-012: Clone preserves state
+    #[test]
+    fn f_sock_012_clone() {
+        let mut sock = SocketTracker::new(100);
+        sock.connect();
+        let cloned = sock.clone();
+        assert_eq!(sock.active, cloned.active);
+    }
+}
+
+// ============================================================================
+// ThreadPoolTracker - O(1) thread pool utilization tracking
+// ============================================================================
+
+/// O(1) thread pool utilization tracking.
+///
+/// Tracks worker threads, task queuing, and pool efficiency.
+#[derive(Debug, Clone)]
+pub struct ThreadPoolTracker {
+    /// Worker count
+    pub workers: u32,
+    /// Active workers
+    pub active: u32,
+    /// Queued tasks
+    pub queued: u64,
+    /// Completed tasks
+    pub completed: u64,
+    /// Rejected tasks (queue full)
+    pub rejected: u64,
+    /// Peak queue depth
+    pub peak_queued: u64,
+}
+
+impl Default for ThreadPoolTracker {
+    fn default() -> Self {
+        Self::for_cpu()
+    }
+}
+
+impl ThreadPoolTracker {
+    /// Create new thread pool tracker.
+    #[must_use]
+    pub fn new(workers: u32) -> Self {
+        Self {
+            workers,
+            active: 0,
+            queued: 0,
+            completed: 0,
+            rejected: 0,
+            peak_queued: 0,
+        }
+    }
+
+    /// Factory for CPU-bound pools (num_cpus).
+    #[must_use]
+    pub fn for_cpu() -> Self {
+        Self::new(8)
+    }
+
+    /// Factory for IO-bound pools (larger).
+    #[must_use]
+    pub fn for_io() -> Self {
+        Self::new(64)
+    }
+
+    /// Submit task to pool.
+    pub fn submit(&mut self) {
+        self.queued += 1;
+        if self.queued > self.peak_queued {
+            self.peak_queued = self.queued;
+        }
+    }
+
+    /// Worker starts task.
+    pub fn start(&mut self) {
+        if self.queued > 0 {
+            self.queued -= 1;
+        }
+        self.active += 1;
+    }
+
+    /// Worker completes task.
+    pub fn complete(&mut self) {
+        self.active = self.active.saturating_sub(1);
+        self.completed += 1;
+    }
+
+    /// Task rejected (queue full).
+    pub fn reject(&mut self) {
+        self.rejected += 1;
+    }
+
+    /// Get worker utilization percentage.
+    #[must_use]
+    pub fn utilization(&self) -> f64 {
+        if self.workers == 0 {
+            return 0.0;
+        }
+        (self.active as f64 / self.workers as f64) * 100.0
+    }
+
+    /// Check if pool is saturated.
+    #[must_use]
+    pub fn is_saturated(&self) -> bool {
+        self.active >= self.workers
+    }
+
+    /// Get rejection rate percentage.
+    #[must_use]
+    pub fn rejection_rate(&self) -> f64 {
+        let submitted = self.completed + self.rejected + self.queued;
+        if submitted == 0 {
+            return 0.0;
+        }
+        (self.rejected as f64 / submitted as f64) * 100.0
+    }
+
+    /// Get throughput (completed per period).
+    #[must_use]
+    pub fn throughput(&self) -> u64 {
+        self.completed
+    }
+
+    /// Reset counters.
+    pub fn reset(&mut self) {
+        self.active = 0;
+        self.queued = 0;
+        self.completed = 0;
+        self.rejected = 0;
+        self.peak_queued = 0;
+    }
+}
+
+#[cfg(test)]
+mod thread_pool_tests {
+    use super::*;
+
+    /// F-TPOOL-001: New tracker has workers
+    #[test]
+    fn f_tpool_001_new() {
+        let tp = ThreadPoolTracker::new(8);
+        assert_eq!(tp.workers, 8);
+    }
+
+    /// F-TPOOL-002: Default uses CPU count
+    #[test]
+    fn f_tpool_002_default() {
+        let tp = ThreadPoolTracker::default();
+        assert_eq!(tp.workers, 8);
+    }
+
+    /// F-TPOOL-003: Submit increases queue
+    #[test]
+    fn f_tpool_003_submit() {
+        let mut tp = ThreadPoolTracker::new(8);
+        tp.submit();
+        assert_eq!(tp.queued, 1);
+    }
+
+    /// F-TPOOL-004: Start activates worker
+    #[test]
+    fn f_tpool_004_start() {
+        let mut tp = ThreadPoolTracker::new(8);
+        tp.submit();
+        tp.start();
+        assert_eq!(tp.active, 1);
+        assert_eq!(tp.queued, 0);
+    }
+
+    /// F-TPOOL-005: Complete releases worker
+    #[test]
+    fn f_tpool_005_complete() {
+        let mut tp = ThreadPoolTracker::new(8);
+        tp.submit();
+        tp.start();
+        tp.complete();
+        assert_eq!(tp.active, 0);
+        assert_eq!(tp.completed, 1);
+    }
+
+    /// F-TPOOL-006: Utilization calculated
+    #[test]
+    fn f_tpool_006_utilization() {
+        let mut tp = ThreadPoolTracker::new(8);
+        tp.active = 4;
+        assert!((tp.utilization() - 50.0).abs() < 0.01);
+    }
+
+    /// F-TPOOL-007: Saturation detected
+    #[test]
+    fn f_tpool_007_saturated() {
+        let mut tp = ThreadPoolTracker::new(8);
+        tp.active = 8;
+        assert!(tp.is_saturated());
+    }
+
+    /// F-TPOOL-008: Factory for_cpu
+    #[test]
+    fn f_tpool_008_for_cpu() {
+        let tp = ThreadPoolTracker::for_cpu();
+        assert_eq!(tp.workers, 8);
+    }
+
+    /// F-TPOOL-009: Factory for_io
+    #[test]
+    fn f_tpool_009_for_io() {
+        let tp = ThreadPoolTracker::for_io();
+        assert_eq!(tp.workers, 64);
+    }
+
+    /// F-TPOOL-010: Rejection tracked
+    #[test]
+    fn f_tpool_010_reject() {
+        let mut tp = ThreadPoolTracker::new(8);
+        tp.reject();
+        assert_eq!(tp.rejected, 1);
+    }
+
+    /// F-TPOOL-011: Rejection rate calculated
+    #[test]
+    fn f_tpool_011_rejection_rate() {
+        let mut tp = ThreadPoolTracker::new(8);
+        tp.completed = 9;
+        tp.rejected = 1;
+        assert!((tp.rejection_rate() - 10.0).abs() < 0.01);
+    }
+
+    /// F-TPOOL-012: Clone preserves state
+    #[test]
+    fn f_tpool_012_clone() {
+        let mut tp = ThreadPoolTracker::new(8);
+        tp.submit();
+        let cloned = tp.clone();
+        assert_eq!(tp.queued, cloned.queued);
+    }
+}
+
+// ============================================================================
+// IoCostTracker - O(1) IO cost tracking
+// ============================================================================
+
+/// O(1) IO cost tracking.
+///
+/// Tracks IO operations, latency, and throughput for cost analysis.
+#[derive(Debug, Clone)]
+pub struct IoCostTracker {
+    /// Read operations
+    pub reads: u64,
+    /// Write operations
+    pub writes: u64,
+    /// Read bytes
+    pub read_bytes: u64,
+    /// Write bytes
+    pub write_bytes: u64,
+    /// Total latency microseconds
+    pub total_latency_us: u64,
+    /// IO errors
+    pub errors: u64,
+}
+
+impl Default for IoCostTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl IoCostTracker {
+    /// Create new IO cost tracker.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            reads: 0,
+            writes: 0,
+            read_bytes: 0,
+            write_bytes: 0,
+            total_latency_us: 0,
+            errors: 0,
+        }
+    }
+
+    /// Factory for disk IO tracking.
+    #[must_use]
+    pub fn for_disk() -> Self {
+        Self::new()
+    }
+
+    /// Factory for network IO tracking.
+    #[must_use]
+    pub fn for_network() -> Self {
+        Self::new()
+    }
+
+    /// Record read operation.
+    pub fn read(&mut self, bytes: u64, latency_us: u64) {
+        self.reads += 1;
+        self.read_bytes += bytes;
+        self.total_latency_us += latency_us;
+    }
+
+    /// Record write operation.
+    pub fn write(&mut self, bytes: u64, latency_us: u64) {
+        self.writes += 1;
+        self.write_bytes += bytes;
+        self.total_latency_us += latency_us;
+    }
+
+    /// Record IO error.
+    pub fn error(&mut self) {
+        self.errors += 1;
+    }
+
+    /// Get total operations.
+    #[must_use]
+    pub fn total_ops(&self) -> u64 {
+        self.reads + self.writes
+    }
+
+    /// Get total bytes.
+    #[must_use]
+    pub fn total_bytes(&self) -> u64 {
+        self.read_bytes + self.write_bytes
+    }
+
+    /// Get average latency in microseconds.
+    #[must_use]
+    pub fn avg_latency_us(&self) -> u64 {
+        let ops = self.total_ops();
+        if ops == 0 {
+            return 0;
+        }
+        self.total_latency_us / ops
+    }
+
+    /// Get read/write ratio.
+    #[must_use]
+    pub fn read_ratio(&self) -> f64 {
+        let ops = self.total_ops();
+        if ops == 0 {
+            return 0.0;
+        }
+        (self.reads as f64 / ops as f64) * 100.0
+    }
+
+    /// Get error rate percentage.
+    #[must_use]
+    pub fn error_rate(&self) -> f64 {
+        let ops = self.total_ops();
+        if ops == 0 {
+            return 0.0;
+        }
+        (self.errors as f64 / ops as f64) * 100.0
+    }
+
+    /// Check if IO is healthy (error rate < 1%).
+    #[must_use]
+    pub fn is_healthy(&self) -> bool {
+        self.error_rate() < 1.0
+    }
+
+    /// Reset counters.
+    pub fn reset(&mut self) {
+        self.reads = 0;
+        self.writes = 0;
+        self.read_bytes = 0;
+        self.write_bytes = 0;
+        self.total_latency_us = 0;
+        self.errors = 0;
+    }
+}
+
+#[cfg(test)]
+mod io_cost_tests {
+    use super::*;
+
+    /// F-IO-001: New tracker is empty
+    #[test]
+    fn f_io_001_new() {
+        let io = IoCostTracker::new();
+        assert_eq!(io.total_ops(), 0);
+    }
+
+    /// F-IO-002: Default is empty
+    #[test]
+    fn f_io_002_default() {
+        let io = IoCostTracker::default();
+        assert_eq!(io.total_ops(), 0);
+    }
+
+    /// F-IO-003: Read operation tracked
+    #[test]
+    fn f_io_003_read() {
+        let mut io = IoCostTracker::new();
+        io.read(1024, 100);
+        assert_eq!(io.reads, 1);
+        assert_eq!(io.read_bytes, 1024);
+    }
+
+    /// F-IO-004: Write operation tracked
+    #[test]
+    fn f_io_004_write() {
+        let mut io = IoCostTracker::new();
+        io.write(2048, 200);
+        assert_eq!(io.writes, 1);
+        assert_eq!(io.write_bytes, 2048);
+    }
+
+    /// F-IO-005: Total ops calculated
+    #[test]
+    fn f_io_005_total_ops() {
+        let mut io = IoCostTracker::new();
+        io.read(1024, 100);
+        io.write(1024, 100);
+        assert_eq!(io.total_ops(), 2);
+    }
+
+    /// F-IO-006: Average latency calculated
+    #[test]
+    fn f_io_006_avg_latency() {
+        let mut io = IoCostTracker::new();
+        io.read(1024, 100);
+        io.write(1024, 200);
+        assert_eq!(io.avg_latency_us(), 150);
+    }
+
+    /// F-IO-007: Factory for_disk
+    #[test]
+    fn f_io_007_for_disk() {
+        let io = IoCostTracker::for_disk();
+        assert_eq!(io.total_ops(), 0);
+    }
+
+    /// F-IO-008: Factory for_network
+    #[test]
+    fn f_io_008_for_network() {
+        let io = IoCostTracker::for_network();
+        assert_eq!(io.total_ops(), 0);
+    }
+
+    /// F-IO-009: Read ratio calculated
+    #[test]
+    fn f_io_009_read_ratio() {
+        let mut io = IoCostTracker::new();
+        io.read(1024, 100);
+        io.write(1024, 100);
+        assert!((io.read_ratio() - 50.0).abs() < 0.01);
+    }
+
+    /// F-IO-010: Error tracked
+    #[test]
+    fn f_io_010_error() {
+        let mut io = IoCostTracker::new();
+        io.error();
+        assert_eq!(io.errors, 1);
+    }
+
+    /// F-IO-011: Is healthy check
+    #[test]
+    fn f_io_011_healthy() {
+        let mut io = IoCostTracker::new();
+        io.reads = 100;
+        assert!(io.is_healthy());
+    }
+
+    /// F-IO-012: Clone preserves state
+    #[test]
+    fn f_io_012_clone() {
+        let mut io = IoCostTracker::new();
+        io.read(1024, 100);
+        let cloned = io.clone();
+        assert_eq!(io.reads, cloned.reads);
+    }
+}
