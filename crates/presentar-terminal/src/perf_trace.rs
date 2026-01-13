@@ -23373,3 +23373,1723 @@ mod signal_tests {
         assert_eq!(sig.received, cloned.received);
     }
 }
+
+// ============================================================================
+// FutexTracker - O(1) futex wait/wake tracking (v9.35.0)
+// ============================================================================
+
+/// O(1) futex (fast userspace mutex) tracking.
+///
+/// Tracks futex wait/wake operations for synchronization analysis.
+#[derive(Debug, Clone)]
+pub struct FutexTracker {
+    /// Wait operations
+    pub waits: u64,
+    /// Wake operations
+    pub wakes: u64,
+    /// Requeue operations
+    pub requeues: u64,
+    /// Timeouts
+    pub timeouts: u64,
+    /// Total wait time in microseconds
+    pub total_wait_us: u64,
+    /// Peak waiters at any time
+    pub peak_waiters: u64,
+}
+
+impl Default for FutexTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl FutexTracker {
+    /// Create new futex tracker.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            waits: 0,
+            wakes: 0,
+            requeues: 0,
+            timeouts: 0,
+            total_wait_us: 0,
+            peak_waiters: 0,
+        }
+    }
+
+    /// Create for mutex workload.
+    #[must_use]
+    pub const fn for_mutex() -> Self {
+        Self::new()
+    }
+
+    /// Create for condition variable workload.
+    #[must_use]
+    pub const fn for_condvar() -> Self {
+        Self::new()
+    }
+
+    /// Record a wait operation.
+    pub fn wait(&mut self, duration_us: u64) {
+        self.waits += 1;
+        self.total_wait_us += duration_us;
+    }
+
+    /// Record a wake operation.
+    pub fn wake(&mut self, count: u64) {
+        self.wakes += 1;
+        if count > self.peak_waiters {
+            self.peak_waiters = count;
+        }
+    }
+
+    /// Record a requeue operation.
+    pub fn requeue(&mut self) {
+        self.requeues += 1;
+    }
+
+    /// Record a timeout.
+    pub fn timeout(&mut self) {
+        self.timeouts += 1;
+    }
+
+    /// Get average wait time.
+    #[must_use]
+    pub fn avg_wait_us(&self) -> u64 {
+        if self.waits == 0 {
+            return 0;
+        }
+        self.total_wait_us / self.waits
+    }
+
+    /// Get timeout rate.
+    #[must_use]
+    pub fn timeout_rate(&self) -> f64 {
+        if self.waits == 0 {
+            return 0.0;
+        }
+        (self.timeouts as f64 / self.waits as f64) * 100.0
+    }
+
+    /// Total operations.
+    #[must_use]
+    pub fn total(&self) -> u64 {
+        self.waits + self.wakes + self.requeues
+    }
+
+    /// Reset counters.
+    pub fn reset(&mut self) {
+        self.waits = 0;
+        self.wakes = 0;
+        self.requeues = 0;
+        self.timeouts = 0;
+        self.total_wait_us = 0;
+        self.peak_waiters = 0;
+    }
+}
+
+#[cfg(test)]
+mod futex_tests {
+    use super::*;
+
+    /// F-FUTEX-001: New tracker is empty
+    #[test]
+    fn f_futex_001_new() {
+        let ft = FutexTracker::new();
+        assert_eq!(ft.total(), 0);
+    }
+
+    /// F-FUTEX-002: Default is empty
+    #[test]
+    fn f_futex_002_default() {
+        let ft = FutexTracker::default();
+        assert_eq!(ft.total(), 0);
+    }
+
+    /// F-FUTEX-003: Wait tracked
+    #[test]
+    fn f_futex_003_wait() {
+        let mut ft = FutexTracker::new();
+        ft.wait(100);
+        assert_eq!(ft.waits, 1);
+        assert_eq!(ft.total_wait_us, 100);
+    }
+
+    /// F-FUTEX-004: Wake tracked
+    #[test]
+    fn f_futex_004_wake() {
+        let mut ft = FutexTracker::new();
+        ft.wake(5);
+        assert_eq!(ft.wakes, 1);
+        assert_eq!(ft.peak_waiters, 5);
+    }
+
+    /// F-FUTEX-005: Requeue tracked
+    #[test]
+    fn f_futex_005_requeue() {
+        let mut ft = FutexTracker::new();
+        ft.requeue();
+        assert_eq!(ft.requeues, 1);
+    }
+
+    /// F-FUTEX-006: Timeout tracked
+    #[test]
+    fn f_futex_006_timeout() {
+        let mut ft = FutexTracker::new();
+        ft.timeout();
+        assert_eq!(ft.timeouts, 1);
+    }
+
+    /// F-FUTEX-007: Average wait calculated
+    #[test]
+    fn f_futex_007_avg_wait() {
+        let mut ft = FutexTracker::new();
+        ft.wait(100);
+        ft.wait(200);
+        assert_eq!(ft.avg_wait_us(), 150);
+    }
+
+    /// F-FUTEX-008: Timeout rate calculated
+    #[test]
+    fn f_futex_008_timeout_rate() {
+        let mut ft = FutexTracker::new();
+        ft.wait(100);
+        ft.timeout();
+        ft.wait(100);
+        assert!((ft.timeout_rate() - 50.0).abs() < 0.01);
+    }
+
+    /// F-FUTEX-009: Factory for_mutex
+    #[test]
+    fn f_futex_009_for_mutex() {
+        let ft = FutexTracker::for_mutex();
+        assert_eq!(ft.total(), 0);
+    }
+
+    /// F-FUTEX-010: Factory for_condvar
+    #[test]
+    fn f_futex_010_for_condvar() {
+        let ft = FutexTracker::for_condvar();
+        assert_eq!(ft.total(), 0);
+    }
+
+    /// F-FUTEX-011: Reset clears state
+    #[test]
+    fn f_futex_011_reset() {
+        let mut ft = FutexTracker::new();
+        ft.wait(100);
+        ft.reset();
+        assert_eq!(ft.total(), 0);
+    }
+
+    /// F-FUTEX-012: Clone preserves state
+    #[test]
+    fn f_futex_012_clone() {
+        let mut ft = FutexTracker::new();
+        ft.wait(100);
+        let cloned = ft.clone();
+        assert_eq!(ft.waits, cloned.waits);
+    }
+}
+
+// ============================================================================
+// EpollTracker - O(1) epoll event tracking (v9.35.0)
+// ============================================================================
+
+/// O(1) epoll event loop tracking.
+///
+/// Tracks epoll_wait calls and event processing efficiency.
+#[derive(Debug, Clone)]
+pub struct EpollTracker {
+    /// Number of epoll_wait calls
+    pub waits: u64,
+    /// Total events returned
+    pub events: u64,
+    /// Empty waits (returned 0)
+    pub empty_waits: u64,
+    /// Timeouts
+    pub timeouts: u64,
+    /// Peak events per wait
+    pub peak_events: u64,
+    /// Total wait time in microseconds
+    pub total_wait_us: u64,
+}
+
+impl Default for EpollTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl EpollTracker {
+    /// Create new epoll tracker.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            waits: 0,
+            events: 0,
+            empty_waits: 0,
+            timeouts: 0,
+            peak_events: 0,
+            total_wait_us: 0,
+        }
+    }
+
+    /// Create for network server.
+    #[must_use]
+    pub const fn for_network() -> Self {
+        Self::new()
+    }
+
+    /// Create for file I/O.
+    #[must_use]
+    pub const fn for_file_io() -> Self {
+        Self::new()
+    }
+
+    /// Record a wait returning events.
+    pub fn wait(&mut self, event_count: u64, duration_us: u64) {
+        self.waits += 1;
+        self.events += event_count;
+        self.total_wait_us += duration_us;
+        if event_count == 0 {
+            self.empty_waits += 1;
+        }
+        if event_count > self.peak_events {
+            self.peak_events = event_count;
+        }
+    }
+
+    /// Record a timeout.
+    pub fn timeout(&mut self) {
+        self.timeouts += 1;
+    }
+
+    /// Get average events per wait.
+    #[must_use]
+    pub fn avg_events_per_wait(&self) -> f64 {
+        if self.waits == 0 {
+            return 0.0;
+        }
+        self.events as f64 / self.waits as f64
+    }
+
+    /// Get empty wait rate.
+    #[must_use]
+    pub fn empty_rate(&self) -> f64 {
+        if self.waits == 0 {
+            return 0.0;
+        }
+        (self.empty_waits as f64 / self.waits as f64) * 100.0
+    }
+
+    /// Get average wait time.
+    #[must_use]
+    pub fn avg_wait_us(&self) -> u64 {
+        if self.waits == 0 {
+            return 0;
+        }
+        self.total_wait_us / self.waits
+    }
+
+    /// Reset counters.
+    pub fn reset(&mut self) {
+        self.waits = 0;
+        self.events = 0;
+        self.empty_waits = 0;
+        self.timeouts = 0;
+        self.peak_events = 0;
+        self.total_wait_us = 0;
+    }
+}
+
+#[cfg(test)]
+mod epoll_tests {
+    use super::*;
+
+    /// F-EPOLL-001: New tracker is empty
+    #[test]
+    fn f_epoll_001_new() {
+        let ep = EpollTracker::new();
+        assert_eq!(ep.waits, 0);
+    }
+
+    /// F-EPOLL-002: Default is empty
+    #[test]
+    fn f_epoll_002_default() {
+        let ep = EpollTracker::default();
+        assert_eq!(ep.waits, 0);
+    }
+
+    /// F-EPOLL-003: Wait with events tracked
+    #[test]
+    fn f_epoll_003_wait_events() {
+        let mut ep = EpollTracker::new();
+        ep.wait(5, 100);
+        assert_eq!(ep.events, 5);
+        assert_eq!(ep.waits, 1);
+    }
+
+    /// F-EPOLL-004: Empty wait tracked
+    #[test]
+    fn f_epoll_004_empty_wait() {
+        let mut ep = EpollTracker::new();
+        ep.wait(0, 100);
+        assert_eq!(ep.empty_waits, 1);
+    }
+
+    /// F-EPOLL-005: Peak events tracked
+    #[test]
+    fn f_epoll_005_peak_events() {
+        let mut ep = EpollTracker::new();
+        ep.wait(5, 100);
+        ep.wait(10, 100);
+        ep.wait(3, 100);
+        assert_eq!(ep.peak_events, 10);
+    }
+
+    /// F-EPOLL-006: Timeout tracked
+    #[test]
+    fn f_epoll_006_timeout() {
+        let mut ep = EpollTracker::new();
+        ep.timeout();
+        assert_eq!(ep.timeouts, 1);
+    }
+
+    /// F-EPOLL-007: Average events calculated
+    #[test]
+    fn f_epoll_007_avg_events() {
+        let mut ep = EpollTracker::new();
+        ep.wait(5, 100);
+        ep.wait(15, 100);
+        assert!((ep.avg_events_per_wait() - 10.0).abs() < 0.01);
+    }
+
+    /// F-EPOLL-008: Empty rate calculated
+    #[test]
+    fn f_epoll_008_empty_rate() {
+        let mut ep = EpollTracker::new();
+        ep.wait(0, 100);
+        ep.wait(5, 100);
+        assert!((ep.empty_rate() - 50.0).abs() < 0.01);
+    }
+
+    /// F-EPOLL-009: Factory for_network
+    #[test]
+    fn f_epoll_009_for_network() {
+        let ep = EpollTracker::for_network();
+        assert_eq!(ep.waits, 0);
+    }
+
+    /// F-EPOLL-010: Factory for_file_io
+    #[test]
+    fn f_epoll_010_for_file_io() {
+        let ep = EpollTracker::for_file_io();
+        assert_eq!(ep.waits, 0);
+    }
+
+    /// F-EPOLL-011: Reset clears state
+    #[test]
+    fn f_epoll_011_reset() {
+        let mut ep = EpollTracker::new();
+        ep.wait(5, 100);
+        ep.reset();
+        assert_eq!(ep.waits, 0);
+    }
+
+    /// F-EPOLL-012: Clone preserves state
+    #[test]
+    fn f_epoll_012_clone() {
+        let mut ep = EpollTracker::new();
+        ep.wait(5, 100);
+        let cloned = ep.clone();
+        assert_eq!(ep.events, cloned.events);
+    }
+}
+
+// ============================================================================
+// MmapTracker - O(1) memory mapping tracking (v9.35.0)
+// ============================================================================
+
+/// O(1) memory mapping (mmap) tracking.
+///
+/// Tracks mmap/munmap operations and memory usage.
+#[derive(Debug, Clone)]
+pub struct MmapTracker {
+    /// Active mappings
+    pub active: u64,
+    /// Total mmap calls
+    pub maps: u64,
+    /// Total munmap calls
+    pub unmaps: u64,
+    /// Total mapped bytes
+    pub mapped_bytes: u64,
+    /// Peak mapped bytes
+    pub peak_mapped_bytes: u64,
+    /// Failed mmap calls
+    pub failures: u64,
+}
+
+impl Default for MmapTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MmapTracker {
+    /// Create new mmap tracker.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            active: 0,
+            maps: 0,
+            unmaps: 0,
+            mapped_bytes: 0,
+            peak_mapped_bytes: 0,
+            failures: 0,
+        }
+    }
+
+    /// Create for file-backed mappings.
+    #[must_use]
+    pub const fn for_file() -> Self {
+        Self::new()
+    }
+
+    /// Create for anonymous mappings.
+    #[must_use]
+    pub const fn for_anonymous() -> Self {
+        Self::new()
+    }
+
+    /// Record a mmap operation.
+    pub fn map(&mut self, size: u64) {
+        self.maps += 1;
+        self.active += 1;
+        self.mapped_bytes += size;
+        if self.mapped_bytes > self.peak_mapped_bytes {
+            self.peak_mapped_bytes = self.mapped_bytes;
+        }
+    }
+
+    /// Record a munmap operation.
+    pub fn unmap(&mut self, size: u64) {
+        self.unmaps += 1;
+        if self.active > 0 {
+            self.active -= 1;
+        }
+        self.mapped_bytes = self.mapped_bytes.saturating_sub(size);
+    }
+
+    /// Record a failed mmap.
+    pub fn failure(&mut self) {
+        self.failures += 1;
+    }
+
+    /// Get failure rate.
+    #[must_use]
+    pub fn failure_rate(&self) -> f64 {
+        let total = self.maps + self.failures;
+        if total == 0 {
+            return 0.0;
+        }
+        (self.failures as f64 / total as f64) * 100.0
+    }
+
+    /// Check for leak (more maps than unmaps).
+    #[must_use]
+    pub fn has_leak(&self) -> bool {
+        self.maps > self.unmaps + 10 // Allow some tolerance
+    }
+
+    /// Reset counters.
+    pub fn reset(&mut self) {
+        self.active = 0;
+        self.maps = 0;
+        self.unmaps = 0;
+        self.mapped_bytes = 0;
+        self.peak_mapped_bytes = 0;
+        self.failures = 0;
+    }
+}
+
+#[cfg(test)]
+mod mmap_tests {
+    use super::*;
+
+    /// F-MMAP-001: New tracker is empty
+    #[test]
+    fn f_mmap_001_new() {
+        let mm = MmapTracker::new();
+        assert_eq!(mm.active, 0);
+    }
+
+    /// F-MMAP-002: Default is empty
+    #[test]
+    fn f_mmap_002_default() {
+        let mm = MmapTracker::default();
+        assert_eq!(mm.active, 0);
+    }
+
+    /// F-MMAP-003: Map tracked
+    #[test]
+    fn f_mmap_003_map() {
+        let mut mm = MmapTracker::new();
+        mm.map(4096);
+        assert_eq!(mm.maps, 1);
+        assert_eq!(mm.active, 1);
+        assert_eq!(mm.mapped_bytes, 4096);
+    }
+
+    /// F-MMAP-004: Unmap tracked
+    #[test]
+    fn f_mmap_004_unmap() {
+        let mut mm = MmapTracker::new();
+        mm.map(4096);
+        mm.unmap(4096);
+        assert_eq!(mm.unmaps, 1);
+        assert_eq!(mm.active, 0);
+    }
+
+    /// F-MMAP-005: Peak bytes tracked
+    #[test]
+    fn f_mmap_005_peak() {
+        let mut mm = MmapTracker::new();
+        mm.map(4096);
+        mm.map(4096);
+        mm.unmap(4096);
+        assert_eq!(mm.peak_mapped_bytes, 8192);
+    }
+
+    /// F-MMAP-006: Failure tracked
+    #[test]
+    fn f_mmap_006_failure() {
+        let mut mm = MmapTracker::new();
+        mm.failure();
+        assert_eq!(mm.failures, 1);
+    }
+
+    /// F-MMAP-007: Failure rate calculated
+    #[test]
+    fn f_mmap_007_failure_rate() {
+        let mut mm = MmapTracker::new();
+        mm.map(4096);
+        mm.failure();
+        assert!((mm.failure_rate() - 50.0).abs() < 0.01);
+    }
+
+    /// F-MMAP-008: Leak detection
+    #[test]
+    fn f_mmap_008_leak() {
+        let mut mm = MmapTracker::new();
+        for _ in 0..20 {
+            mm.map(4096);
+        }
+        assert!(mm.has_leak());
+    }
+
+    /// F-MMAP-009: Factory for_file
+    #[test]
+    fn f_mmap_009_for_file() {
+        let mm = MmapTracker::for_file();
+        assert_eq!(mm.active, 0);
+    }
+
+    /// F-MMAP-010: Factory for_anonymous
+    #[test]
+    fn f_mmap_010_for_anonymous() {
+        let mm = MmapTracker::for_anonymous();
+        assert_eq!(mm.active, 0);
+    }
+
+    /// F-MMAP-011: Reset clears state
+    #[test]
+    fn f_mmap_011_reset() {
+        let mut mm = MmapTracker::new();
+        mm.map(4096);
+        mm.reset();
+        assert_eq!(mm.active, 0);
+    }
+
+    /// F-MMAP-012: Clone preserves state
+    #[test]
+    fn f_mmap_012_clone() {
+        let mut mm = MmapTracker::new();
+        mm.map(4096);
+        let cloned = mm.clone();
+        assert_eq!(mm.mapped_bytes, cloned.mapped_bytes);
+    }
+}
+
+// ============================================================================
+// CgroupTracker - O(1) cgroup resource tracking (v9.35.0)
+// ============================================================================
+
+/// O(1) cgroup (control group) resource tracking.
+///
+/// Tracks cgroup limits and usage for containerization.
+#[derive(Debug, Clone)]
+pub struct CgroupTracker {
+    /// CPU shares allocated
+    pub cpu_shares: u64,
+    /// Memory limit bytes
+    pub memory_limit: u64,
+    /// Current memory usage
+    pub memory_usage: u64,
+    /// CPU throttle events
+    pub cpu_throttled: u64,
+    /// OOM events
+    pub oom_events: u64,
+    /// IO weight
+    pub io_weight: u64,
+}
+
+impl Default for CgroupTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl CgroupTracker {
+    /// Create new cgroup tracker.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            cpu_shares: 1024,      // Default shares
+            memory_limit: 0,       // No limit
+            memory_usage: 0,
+            cpu_throttled: 0,
+            oom_events: 0,
+            io_weight: 100,        // Default weight
+        }
+    }
+
+    /// Create for container.
+    #[must_use]
+    pub const fn for_container() -> Self {
+        Self {
+            cpu_shares: 1024,
+            memory_limit: 1024 * 1024 * 1024, // 1GB
+            memory_usage: 0,
+            cpu_throttled: 0,
+            oom_events: 0,
+            io_weight: 100,
+        }
+    }
+
+    /// Create for service (systemd).
+    #[must_use]
+    pub const fn for_service() -> Self {
+        Self::new()
+    }
+
+    /// Set CPU shares.
+    pub fn set_cpu_shares(&mut self, shares: u64) {
+        self.cpu_shares = shares;
+    }
+
+    /// Set memory limit.
+    pub fn set_memory_limit(&mut self, limit: u64) {
+        self.memory_limit = limit;
+    }
+
+    /// Update memory usage.
+    pub fn update_memory(&mut self, usage: u64) {
+        self.memory_usage = usage;
+    }
+
+    /// Record CPU throttle event.
+    pub fn throttle(&mut self) {
+        self.cpu_throttled += 1;
+    }
+
+    /// Record OOM event.
+    pub fn oom(&mut self) {
+        self.oom_events += 1;
+    }
+
+    /// Get memory utilization percentage.
+    #[must_use]
+    pub fn memory_utilization(&self) -> f64 {
+        if self.memory_limit == 0 {
+            return 0.0;
+        }
+        (self.memory_usage as f64 / self.memory_limit as f64) * 100.0
+    }
+
+    /// Check if memory is near limit (>90%).
+    #[must_use]
+    pub fn is_memory_pressure(&self) -> bool {
+        self.memory_utilization() > 90.0
+    }
+
+    /// Reset counters.
+    pub fn reset(&mut self) {
+        self.cpu_throttled = 0;
+        self.oom_events = 0;
+    }
+}
+
+#[cfg(test)]
+mod cgroup_tests {
+    use super::*;
+
+    /// F-CGROUP-001: New tracker has defaults
+    #[test]
+    fn f_cgroup_001_new() {
+        let cg = CgroupTracker::new();
+        assert_eq!(cg.cpu_shares, 1024);
+    }
+
+    /// F-CGROUP-002: Default has defaults
+    #[test]
+    fn f_cgroup_002_default() {
+        let cg = CgroupTracker::default();
+        assert_eq!(cg.cpu_shares, 1024);
+    }
+
+    /// F-CGROUP-003: CPU shares settable
+    #[test]
+    fn f_cgroup_003_cpu_shares() {
+        let mut cg = CgroupTracker::new();
+        cg.set_cpu_shares(2048);
+        assert_eq!(cg.cpu_shares, 2048);
+    }
+
+    /// F-CGROUP-004: Memory limit settable
+    #[test]
+    fn f_cgroup_004_memory_limit() {
+        let mut cg = CgroupTracker::new();
+        cg.set_memory_limit(1024 * 1024 * 1024);
+        assert_eq!(cg.memory_limit, 1024 * 1024 * 1024);
+    }
+
+    /// F-CGROUP-005: Memory usage updated
+    #[test]
+    fn f_cgroup_005_memory_usage() {
+        let mut cg = CgroupTracker::new();
+        cg.update_memory(512 * 1024 * 1024);
+        assert_eq!(cg.memory_usage, 512 * 1024 * 1024);
+    }
+
+    /// F-CGROUP-006: Throttle tracked
+    #[test]
+    fn f_cgroup_006_throttle() {
+        let mut cg = CgroupTracker::new();
+        cg.throttle();
+        assert_eq!(cg.cpu_throttled, 1);
+    }
+
+    /// F-CGROUP-007: OOM tracked
+    #[test]
+    fn f_cgroup_007_oom() {
+        let mut cg = CgroupTracker::new();
+        cg.oom();
+        assert_eq!(cg.oom_events, 1);
+    }
+
+    /// F-CGROUP-008: Memory utilization calculated
+    #[test]
+    fn f_cgroup_008_memory_util() {
+        let mut cg = CgroupTracker::new();
+        cg.set_memory_limit(1000);
+        cg.update_memory(500);
+        assert!((cg.memory_utilization() - 50.0).abs() < 0.01);
+    }
+
+    /// F-CGROUP-009: Memory pressure detected
+    #[test]
+    fn f_cgroup_009_memory_pressure() {
+        let mut cg = CgroupTracker::new();
+        cg.set_memory_limit(1000);
+        cg.update_memory(950);
+        assert!(cg.is_memory_pressure());
+    }
+
+    /// F-CGROUP-010: Factory for_container
+    #[test]
+    fn f_cgroup_010_for_container() {
+        let cg = CgroupTracker::for_container();
+        assert_eq!(cg.memory_limit, 1024 * 1024 * 1024);
+    }
+
+    /// F-CGROUP-011: Reset clears counters
+    #[test]
+    fn f_cgroup_011_reset() {
+        let mut cg = CgroupTracker::new();
+        cg.throttle();
+        cg.oom();
+        cg.reset();
+        assert_eq!(cg.cpu_throttled, 0);
+        assert_eq!(cg.oom_events, 0);
+    }
+
+    /// F-CGROUP-012: Clone preserves state
+    #[test]
+    fn f_cgroup_012_clone() {
+        let mut cg = CgroupTracker::new();
+        cg.throttle();
+        let cloned = cg.clone();
+        assert_eq!(cg.cpu_throttled, cloned.cpu_throttled);
+    }
+}
+
+// ============================================================================
+// NetfilterTracker - O(1) netfilter/iptables tracking (v9.36.0)
+// ============================================================================
+
+/// O(1) netfilter (iptables/nftables) packet tracking.
+///
+/// Tracks packet filtering decisions and rule matches.
+#[derive(Debug, Clone)]
+pub struct NetfilterTracker {
+    /// Packets accepted
+    pub accepted: u64,
+    /// Packets dropped
+    pub dropped: u64,
+    /// Packets rejected
+    pub rejected: u64,
+    /// Packets NATed
+    pub nated: u64,
+    /// Rule matches
+    pub rule_matches: u64,
+    /// Connection tracking entries
+    pub conntrack_entries: u64,
+}
+
+impl Default for NetfilterTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl NetfilterTracker {
+    /// Create new netfilter tracker.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            accepted: 0,
+            dropped: 0,
+            rejected: 0,
+            nated: 0,
+            rule_matches: 0,
+            conntrack_entries: 0,
+        }
+    }
+
+    /// Create for firewall workload.
+    #[must_use]
+    pub const fn for_firewall() -> Self {
+        Self::new()
+    }
+
+    /// Create for NAT gateway.
+    #[must_use]
+    pub const fn for_nat() -> Self {
+        Self::new()
+    }
+
+    /// Record accepted packet.
+    pub fn accept(&mut self) {
+        self.accepted += 1;
+        self.rule_matches += 1;
+    }
+
+    /// Record dropped packet.
+    pub fn drop(&mut self) {
+        self.dropped += 1;
+        self.rule_matches += 1;
+    }
+
+    /// Record rejected packet.
+    pub fn reject(&mut self) {
+        self.rejected += 1;
+        self.rule_matches += 1;
+    }
+
+    /// Record NAT operation.
+    pub fn nat(&mut self) {
+        self.nated += 1;
+    }
+
+    /// Update conntrack entries.
+    pub fn set_conntrack(&mut self, entries: u64) {
+        self.conntrack_entries = entries;
+    }
+
+    /// Total packets processed.
+    #[must_use]
+    pub fn total_packets(&self) -> u64 {
+        self.accepted + self.dropped + self.rejected
+    }
+
+    /// Get drop rate.
+    #[must_use]
+    pub fn drop_rate(&self) -> f64 {
+        let total = self.total_packets();
+        if total == 0 {
+            return 0.0;
+        }
+        (self.dropped as f64 / total as f64) * 100.0
+    }
+
+    /// Reset counters.
+    pub fn reset(&mut self) {
+        self.accepted = 0;
+        self.dropped = 0;
+        self.rejected = 0;
+        self.nated = 0;
+        self.rule_matches = 0;
+    }
+}
+
+#[cfg(test)]
+mod netfilter_tests {
+    use super::*;
+
+    /// F-NF-001: New tracker is empty
+    #[test]
+    fn f_nf_001_new() {
+        let nf = NetfilterTracker::new();
+        assert_eq!(nf.total_packets(), 0);
+    }
+
+    /// F-NF-002: Default is empty
+    #[test]
+    fn f_nf_002_default() {
+        let nf = NetfilterTracker::default();
+        assert_eq!(nf.total_packets(), 0);
+    }
+
+    /// F-NF-003: Accept tracked
+    #[test]
+    fn f_nf_003_accept() {
+        let mut nf = NetfilterTracker::new();
+        nf.accept();
+        assert_eq!(nf.accepted, 1);
+        assert_eq!(nf.rule_matches, 1);
+    }
+
+    /// F-NF-004: Drop tracked
+    #[test]
+    fn f_nf_004_drop() {
+        let mut nf = NetfilterTracker::new();
+        nf.drop();
+        assert_eq!(nf.dropped, 1);
+    }
+
+    /// F-NF-005: Reject tracked
+    #[test]
+    fn f_nf_005_reject() {
+        let mut nf = NetfilterTracker::new();
+        nf.reject();
+        assert_eq!(nf.rejected, 1);
+    }
+
+    /// F-NF-006: NAT tracked
+    #[test]
+    fn f_nf_006_nat() {
+        let mut nf = NetfilterTracker::new();
+        nf.nat();
+        assert_eq!(nf.nated, 1);
+    }
+
+    /// F-NF-007: Drop rate calculated
+    #[test]
+    fn f_nf_007_drop_rate() {
+        let mut nf = NetfilterTracker::new();
+        nf.accept();
+        nf.drop();
+        assert!((nf.drop_rate() - 50.0).abs() < 0.01);
+    }
+
+    /// F-NF-008: Conntrack updated
+    #[test]
+    fn f_nf_008_conntrack() {
+        let mut nf = NetfilterTracker::new();
+        nf.set_conntrack(1000);
+        assert_eq!(nf.conntrack_entries, 1000);
+    }
+
+    /// F-NF-009: Factory for_firewall
+    #[test]
+    fn f_nf_009_for_firewall() {
+        let nf = NetfilterTracker::for_firewall();
+        assert_eq!(nf.total_packets(), 0);
+    }
+
+    /// F-NF-010: Factory for_nat
+    #[test]
+    fn f_nf_010_for_nat() {
+        let nf = NetfilterTracker::for_nat();
+        assert_eq!(nf.total_packets(), 0);
+    }
+
+    /// F-NF-011: Reset clears counters
+    #[test]
+    fn f_nf_011_reset() {
+        let mut nf = NetfilterTracker::new();
+        nf.accept();
+        nf.drop();
+        nf.reset();
+        assert_eq!(nf.total_packets(), 0);
+    }
+
+    /// F-NF-012: Clone preserves state
+    #[test]
+    fn f_nf_012_clone() {
+        let mut nf = NetfilterTracker::new();
+        nf.accept();
+        let cloned = nf.clone();
+        assert_eq!(nf.accepted, cloned.accepted);
+    }
+}
+
+// ============================================================================
+// BpfTracker - O(1) eBPF program tracking (v9.36.0)
+// ============================================================================
+
+/// O(1) eBPF (extended Berkeley Packet Filter) tracking.
+///
+/// Tracks BPF program execution and map operations.
+#[derive(Debug, Clone)]
+pub struct BpfTracker {
+    /// Programs loaded
+    pub programs: u64,
+    /// Maps created
+    pub maps: u64,
+    /// Program runs
+    pub runs: u64,
+    /// Map lookups
+    pub map_lookups: u64,
+    /// Map updates
+    pub map_updates: u64,
+    /// Verification failures
+    pub verification_fails: u64,
+}
+
+impl Default for BpfTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl BpfTracker {
+    /// Create new BPF tracker.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            programs: 0,
+            maps: 0,
+            runs: 0,
+            map_lookups: 0,
+            map_updates: 0,
+            verification_fails: 0,
+        }
+    }
+
+    /// Create for tracing workload.
+    #[must_use]
+    pub const fn for_tracing() -> Self {
+        Self::new()
+    }
+
+    /// Create for XDP workload.
+    #[must_use]
+    pub const fn for_xdp() -> Self {
+        Self::new()
+    }
+
+    /// Record program load.
+    pub fn load_program(&mut self) {
+        self.programs += 1;
+    }
+
+    /// Record map creation.
+    pub fn create_map(&mut self) {
+        self.maps += 1;
+    }
+
+    /// Record program run.
+    pub fn run(&mut self) {
+        self.runs += 1;
+    }
+
+    /// Record map lookup.
+    pub fn map_lookup(&mut self) {
+        self.map_lookups += 1;
+    }
+
+    /// Record map update.
+    pub fn map_update(&mut self) {
+        self.map_updates += 1;
+    }
+
+    /// Record verification failure.
+    pub fn verification_fail(&mut self) {
+        self.verification_fails += 1;
+    }
+
+    /// Total map operations.
+    #[must_use]
+    pub fn total_map_ops(&self) -> u64 {
+        self.map_lookups + self.map_updates
+    }
+
+    /// Get failure rate.
+    #[must_use]
+    pub fn failure_rate(&self) -> f64 {
+        let total_loads = self.programs + self.verification_fails;
+        if total_loads == 0 {
+            return 0.0;
+        }
+        (self.verification_fails as f64 / total_loads as f64) * 100.0
+    }
+
+    /// Reset counters.
+    pub fn reset(&mut self) {
+        self.programs = 0;
+        self.maps = 0;
+        self.runs = 0;
+        self.map_lookups = 0;
+        self.map_updates = 0;
+        self.verification_fails = 0;
+    }
+}
+
+#[cfg(test)]
+mod bpf_tests {
+    use super::*;
+
+    /// F-BPF-001: New tracker is empty
+    #[test]
+    fn f_bpf_001_new() {
+        let bpf = BpfTracker::new();
+        assert_eq!(bpf.programs, 0);
+    }
+
+    /// F-BPF-002: Default is empty
+    #[test]
+    fn f_bpf_002_default() {
+        let bpf = BpfTracker::default();
+        assert_eq!(bpf.programs, 0);
+    }
+
+    /// F-BPF-003: Program load tracked
+    #[test]
+    fn f_bpf_003_load() {
+        let mut bpf = BpfTracker::new();
+        bpf.load_program();
+        assert_eq!(bpf.programs, 1);
+    }
+
+    /// F-BPF-004: Map creation tracked
+    #[test]
+    fn f_bpf_004_map() {
+        let mut bpf = BpfTracker::new();
+        bpf.create_map();
+        assert_eq!(bpf.maps, 1);
+    }
+
+    /// F-BPF-005: Run tracked
+    #[test]
+    fn f_bpf_005_run() {
+        let mut bpf = BpfTracker::new();
+        bpf.run();
+        assert_eq!(bpf.runs, 1);
+    }
+
+    /// F-BPF-006: Map lookup tracked
+    #[test]
+    fn f_bpf_006_lookup() {
+        let mut bpf = BpfTracker::new();
+        bpf.map_lookup();
+        assert_eq!(bpf.map_lookups, 1);
+    }
+
+    /// F-BPF-007: Map update tracked
+    #[test]
+    fn f_bpf_007_update() {
+        let mut bpf = BpfTracker::new();
+        bpf.map_update();
+        assert_eq!(bpf.map_updates, 1);
+    }
+
+    /// F-BPF-008: Total map ops calculated
+    #[test]
+    fn f_bpf_008_total_ops() {
+        let mut bpf = BpfTracker::new();
+        bpf.map_lookup();
+        bpf.map_update();
+        assert_eq!(bpf.total_map_ops(), 2);
+    }
+
+    /// F-BPF-009: Factory for_tracing
+    #[test]
+    fn f_bpf_009_for_tracing() {
+        let bpf = BpfTracker::for_tracing();
+        assert_eq!(bpf.programs, 0);
+    }
+
+    /// F-BPF-010: Factory for_xdp
+    #[test]
+    fn f_bpf_010_for_xdp() {
+        let bpf = BpfTracker::for_xdp();
+        assert_eq!(bpf.programs, 0);
+    }
+
+    /// F-BPF-011: Reset clears counters
+    #[test]
+    fn f_bpf_011_reset() {
+        let mut bpf = BpfTracker::new();
+        bpf.load_program();
+        bpf.run();
+        bpf.reset();
+        assert_eq!(bpf.programs, 0);
+    }
+
+    /// F-BPF-012: Clone preserves state
+    #[test]
+    fn f_bpf_012_clone() {
+        let mut bpf = BpfTracker::new();
+        bpf.load_program();
+        let cloned = bpf.clone();
+        assert_eq!(bpf.programs, cloned.programs);
+    }
+}
+
+// ============================================================================
+// PerfEventTracker - O(1) perf_event tracking (v9.36.0)
+// ============================================================================
+
+/// O(1) perf_event (Linux perf subsystem) tracking.
+///
+/// Tracks hardware/software performance counters.
+#[derive(Debug, Clone)]
+pub struct PerfEventTracker {
+    /// Events opened
+    pub events: u64,
+    /// Samples collected
+    pub samples: u64,
+    /// Lost samples
+    pub lost: u64,
+    /// Context switches recorded
+    pub context_switches: u64,
+    /// CPU cycles recorded
+    pub cycles: u64,
+    /// Instructions recorded
+    pub instructions: u64,
+}
+
+impl Default for PerfEventTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PerfEventTracker {
+    /// Create new perf event tracker.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            events: 0,
+            samples: 0,
+            lost: 0,
+            context_switches: 0,
+            cycles: 0,
+            instructions: 0,
+        }
+    }
+
+    /// Create for sampling profiler.
+    #[must_use]
+    pub const fn for_sampling() -> Self {
+        Self::new()
+    }
+
+    /// Create for counting mode.
+    #[must_use]
+    pub const fn for_counting() -> Self {
+        Self::new()
+    }
+
+    /// Record event open.
+    pub fn open_event(&mut self) {
+        self.events += 1;
+    }
+
+    /// Record sample.
+    pub fn sample(&mut self) {
+        self.samples += 1;
+    }
+
+    /// Record lost sample.
+    pub fn lost_sample(&mut self) {
+        self.lost += 1;
+    }
+
+    /// Record context switch.
+    pub fn context_switch(&mut self) {
+        self.context_switches += 1;
+    }
+
+    /// Update CPU cycles.
+    pub fn add_cycles(&mut self, count: u64) {
+        self.cycles += count;
+    }
+
+    /// Update instructions.
+    pub fn add_instructions(&mut self, count: u64) {
+        self.instructions += count;
+    }
+
+    /// Get IPC (instructions per cycle).
+    #[must_use]
+    pub fn ipc(&self) -> f64 {
+        if self.cycles == 0 {
+            return 0.0;
+        }
+        self.instructions as f64 / self.cycles as f64
+    }
+
+    /// Get loss rate.
+    #[must_use]
+    pub fn loss_rate(&self) -> f64 {
+        let total = self.samples + self.lost;
+        if total == 0 {
+            return 0.0;
+        }
+        (self.lost as f64 / total as f64) * 100.0
+    }
+
+    /// Reset counters.
+    pub fn reset(&mut self) {
+        self.events = 0;
+        self.samples = 0;
+        self.lost = 0;
+        self.context_switches = 0;
+        self.cycles = 0;
+        self.instructions = 0;
+    }
+}
+
+#[cfg(test)]
+mod perfevent_tests {
+    use super::*;
+
+    /// F-PERF-001: New tracker is empty
+    #[test]
+    fn f_perf_001_new() {
+        let pe = PerfEventTracker::new();
+        assert_eq!(pe.events, 0);
+    }
+
+    /// F-PERF-002: Default is empty
+    #[test]
+    fn f_perf_002_default() {
+        let pe = PerfEventTracker::default();
+        assert_eq!(pe.events, 0);
+    }
+
+    /// F-PERF-003: Event open tracked
+    #[test]
+    fn f_perf_003_open() {
+        let mut pe = PerfEventTracker::new();
+        pe.open_event();
+        assert_eq!(pe.events, 1);
+    }
+
+    /// F-PERF-004: Sample tracked
+    #[test]
+    fn f_perf_004_sample() {
+        let mut pe = PerfEventTracker::new();
+        pe.sample();
+        assert_eq!(pe.samples, 1);
+    }
+
+    /// F-PERF-005: Lost sample tracked
+    #[test]
+    fn f_perf_005_lost() {
+        let mut pe = PerfEventTracker::new();
+        pe.lost_sample();
+        assert_eq!(pe.lost, 1);
+    }
+
+    /// F-PERF-006: Context switch tracked
+    #[test]
+    fn f_perf_006_ctxsw() {
+        let mut pe = PerfEventTracker::new();
+        pe.context_switch();
+        assert_eq!(pe.context_switches, 1);
+    }
+
+    /// F-PERF-007: Cycles added
+    #[test]
+    fn f_perf_007_cycles() {
+        let mut pe = PerfEventTracker::new();
+        pe.add_cycles(1000);
+        assert_eq!(pe.cycles, 1000);
+    }
+
+    /// F-PERF-008: IPC calculated
+    #[test]
+    fn f_perf_008_ipc() {
+        let mut pe = PerfEventTracker::new();
+        pe.add_cycles(1000);
+        pe.add_instructions(2000);
+        assert!((pe.ipc() - 2.0).abs() < 0.01);
+    }
+
+    /// F-PERF-009: Loss rate calculated
+    #[test]
+    fn f_perf_009_loss_rate() {
+        let mut pe = PerfEventTracker::new();
+        pe.sample();
+        pe.lost_sample();
+        assert!((pe.loss_rate() - 50.0).abs() < 0.01);
+    }
+
+    /// F-PERF-010: Factory for_sampling
+    #[test]
+    fn f_perf_010_for_sampling() {
+        let pe = PerfEventTracker::for_sampling();
+        assert_eq!(pe.events, 0);
+    }
+
+    /// F-PERF-011: Reset clears counters
+    #[test]
+    fn f_perf_011_reset() {
+        let mut pe = PerfEventTracker::new();
+        pe.sample();
+        pe.add_cycles(1000);
+        pe.reset();
+        assert_eq!(pe.samples, 0);
+    }
+
+    /// F-PERF-012: Clone preserves state
+    #[test]
+    fn f_perf_012_clone() {
+        let mut pe = PerfEventTracker::new();
+        pe.sample();
+        let cloned = pe.clone();
+        assert_eq!(pe.samples, cloned.samples);
+    }
+}
+
+// ============================================================================
+// KprobeTracker - O(1) kprobe/ftrace tracking (v9.36.0)
+// ============================================================================
+
+/// O(1) kprobe/kretprobe tracking.
+///
+/// Tracks kernel probe insertions and hits.
+#[derive(Debug, Clone)]
+pub struct KprobeTracker {
+    /// Probes registered
+    pub probes: u64,
+    /// Probe hits
+    pub hits: u64,
+    /// Probe misses (filtered out)
+    pub misses: u64,
+    /// Registration failures
+    pub reg_failures: u64,
+    /// Total latency in nanoseconds
+    pub total_latency_ns: u64,
+    /// Peak hit count per second
+    pub peak_hits_per_sec: u64,
+}
+
+impl Default for KprobeTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl KprobeTracker {
+    /// Create new kprobe tracker.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            probes: 0,
+            hits: 0,
+            misses: 0,
+            reg_failures: 0,
+            total_latency_ns: 0,
+            peak_hits_per_sec: 0,
+        }
+    }
+
+    /// Create for tracing workload.
+    #[must_use]
+    pub const fn for_tracing() -> Self {
+        Self::new()
+    }
+
+    /// Create for debugging.
+    #[must_use]
+    pub const fn for_debugging() -> Self {
+        Self::new()
+    }
+
+    /// Record probe registration.
+    pub fn register(&mut self) {
+        self.probes += 1;
+    }
+
+    /// Record registration failure.
+    pub fn reg_failure(&mut self) {
+        self.reg_failures += 1;
+    }
+
+    /// Record probe hit.
+    pub fn hit(&mut self, latency_ns: u64) {
+        self.hits += 1;
+        self.total_latency_ns += latency_ns;
+    }
+
+    /// Record probe miss.
+    pub fn miss(&mut self) {
+        self.misses += 1;
+    }
+
+    /// Update peak hits per second.
+    pub fn update_peak(&mut self, hits_per_sec: u64) {
+        if hits_per_sec > self.peak_hits_per_sec {
+            self.peak_hits_per_sec = hits_per_sec;
+        }
+    }
+
+    /// Get average hit latency.
+    #[must_use]
+    pub fn avg_latency_ns(&self) -> u64 {
+        if self.hits == 0 {
+            return 0;
+        }
+        self.total_latency_ns / self.hits
+    }
+
+    /// Get hit rate.
+    #[must_use]
+    pub fn hit_rate(&self) -> f64 {
+        let total = self.hits + self.misses;
+        if total == 0 {
+            return 0.0;
+        }
+        (self.hits as f64 / total as f64) * 100.0
+    }
+
+    /// Reset counters.
+    pub fn reset(&mut self) {
+        self.probes = 0;
+        self.hits = 0;
+        self.misses = 0;
+        self.reg_failures = 0;
+        self.total_latency_ns = 0;
+        self.peak_hits_per_sec = 0;
+    }
+}
+
+#[cfg(test)]
+mod kprobe_tests {
+    use super::*;
+
+    /// F-KPROBE-001: New tracker is empty
+    #[test]
+    fn f_kprobe_001_new() {
+        let kp = KprobeTracker::new();
+        assert_eq!(kp.probes, 0);
+    }
+
+    /// F-KPROBE-002: Default is empty
+    #[test]
+    fn f_kprobe_002_default() {
+        let kp = KprobeTracker::default();
+        assert_eq!(kp.probes, 0);
+    }
+
+    /// F-KPROBE-003: Register tracked
+    #[test]
+    fn f_kprobe_003_register() {
+        let mut kp = KprobeTracker::new();
+        kp.register();
+        assert_eq!(kp.probes, 1);
+    }
+
+    /// F-KPROBE-004: Reg failure tracked
+    #[test]
+    fn f_kprobe_004_reg_failure() {
+        let mut kp = KprobeTracker::new();
+        kp.reg_failure();
+        assert_eq!(kp.reg_failures, 1);
+    }
+
+    /// F-KPROBE-005: Hit tracked
+    #[test]
+    fn f_kprobe_005_hit() {
+        let mut kp = KprobeTracker::new();
+        kp.hit(100);
+        assert_eq!(kp.hits, 1);
+        assert_eq!(kp.total_latency_ns, 100);
+    }
+
+    /// F-KPROBE-006: Miss tracked
+    #[test]
+    fn f_kprobe_006_miss() {
+        let mut kp = KprobeTracker::new();
+        kp.miss();
+        assert_eq!(kp.misses, 1);
+    }
+
+    /// F-KPROBE-007: Average latency calculated
+    #[test]
+    fn f_kprobe_007_avg_latency() {
+        let mut kp = KprobeTracker::new();
+        kp.hit(100);
+        kp.hit(200);
+        assert_eq!(kp.avg_latency_ns(), 150);
+    }
+
+    /// F-KPROBE-008: Hit rate calculated
+    #[test]
+    fn f_kprobe_008_hit_rate() {
+        let mut kp = KprobeTracker::new();
+        kp.hit(100);
+        kp.miss();
+        assert!((kp.hit_rate() - 50.0).abs() < 0.01);
+    }
+
+    /// F-KPROBE-009: Peak hits tracked
+    #[test]
+    fn f_kprobe_009_peak() {
+        let mut kp = KprobeTracker::new();
+        kp.update_peak(1000);
+        kp.update_peak(500);
+        assert_eq!(kp.peak_hits_per_sec, 1000);
+    }
+
+    /// F-KPROBE-010: Factory for_tracing
+    #[test]
+    fn f_kprobe_010_for_tracing() {
+        let kp = KprobeTracker::for_tracing();
+        assert_eq!(kp.probes, 0);
+    }
+
+    /// F-KPROBE-011: Reset clears counters
+    #[test]
+    fn f_kprobe_011_reset() {
+        let mut kp = KprobeTracker::new();
+        kp.register();
+        kp.hit(100);
+        kp.reset();
+        assert_eq!(kp.probes, 0);
+    }
+
+    /// F-KPROBE-012: Clone preserves state
+    #[test]
+    fn f_kprobe_012_clone() {
+        let mut kp = KprobeTracker::new();
+        kp.hit(100);
+        let cloned = kp.clone();
+        assert_eq!(kp.hits, cloned.hits);
+    }
+}
