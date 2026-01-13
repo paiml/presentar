@@ -34,24 +34,12 @@ const NL: CountryInfo = CountryInfo::new("NL", "🇳🇱", "Netherlands");
 const JP: CountryInfo = CountryInfo::new("JP", "🇯🇵", "Japan");
 const SG: CountryInfo = CountryInfo::new("SG", "🇸🇬", "Singapore");
 const AU: CountryInfo = CountryInfo::new("AU", "🇦🇺", "Australia");
-#[allow(dead_code)]
-const CA: CountryInfo = CountryInfo::new("CA", "🇨🇦", "Canada");
 const BR: CountryInfo = CountryInfo::new("BR", "🇧🇷", "Brazil");
 const IN: CountryInfo = CountryInfo::new("IN", "🇮🇳", "India");
 const CN: CountryInfo = CountryInfo::new("CN", "🇨🇳", "China");
 const RU: CountryInfo = CountryInfo::new("RU", "🇷🇺", "Russia");
 const KR: CountryInfo = CountryInfo::new("KR", "🇰🇷", "South Korea");
 const IE: CountryInfo = CountryInfo::new("IE", "🇮🇪", "Ireland");
-#[allow(dead_code)]
-const SE: CountryInfo = CountryInfo::new("SE", "🇸🇪", "Sweden");
-#[allow(dead_code)]
-const CH: CountryInfo = CountryInfo::new("CH", "🇨🇭", "Switzerland");
-#[allow(dead_code)]
-const IT: CountryInfo = CountryInfo::new("IT", "🇮🇹", "Italy");
-#[allow(dead_code)]
-const ES: CountryInfo = CountryInfo::new("ES", "🇪🇸", "Spain");
-#[allow(dead_code)]
-const PL: CountryInfo = CountryInfo::new("PL", "🇵🇱", "Poland");
 
 // Special designations
 const LOCAL: CountryInfo = CountryInfo::new("LO", "🏠", "Local");

@@ -39,6 +39,10 @@ impl BoxStats {
     /// Create box stats from values.
     #[must_use]
     pub fn new(min: f64, q1: f64, median: f64, q3: f64, max: f64) -> Self {
+        debug_assert!(min <= q1, "min must be <= q1");
+        debug_assert!(q1 <= median, "q1 must be <= median");
+        debug_assert!(median <= q3, "median must be <= q3");
+        debug_assert!(q3 <= max, "q3 must be <= max");
         Self {
             min,
             q1,

@@ -89,7 +89,7 @@ pub use analyzers::{
     AnalyzerRegistry, ConnectionsAnalyzer, ConnectionsData, PsiAnalyzer, PsiData, TcpConnection,
     TcpState,
 };
-pub use app::App;
+pub use app::{App, MetricsSnapshot};
 pub use config::{
     calculate_grid_layout, snap_to_grid, DetailLevel, FocusStyle, LayoutConfig, PanelConfig,
     PanelRect, PanelType, PtopConfig,

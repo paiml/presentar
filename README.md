@@ -22,6 +22,7 @@ Presentar provides a WASM-first UI framework for building high-performance visua
 
 - [Features](#features)
 - [Installation](#installation)
+- [Usage](#usage)
 - [Quick Start](#quick-start)
 - [Brick Architecture](#brick-architecture-probar-spec-009)
 - [Examples](#examples)
@@ -53,6 +54,20 @@ Add to your `Cargo.toml`:
 [dependencies]
 presentar = "0.2"
 presentar-widgets = "0.2"
+```
+
+## Usage
+
+```bash
+# Run the system monitor (ptop)
+cargo run -p presentar-terminal --features ptop --bin ptop
+
+# Run examples
+cargo run --example brick_computer -p presentar
+cargo run --example dashboard -p presentar
+
+# Build for WASM
+cargo build --target wasm32-unknown-unknown -p presentar
 ```
 
 ## Quick Start

@@ -524,6 +524,34 @@ fn compute_track_sizes(
     result
 }
 
+/// Get explicit placement from item's row/column or named area.
+fn get_explicit_position(item: &GridItem, template: &GridTemplate) -> Option<(usize, usize)> {
+    if item.column_start > 0 && item.row_start > 0 {
+        return Some((item.row_start - 1, item.column_start - 1));
+    }
+    item.area
+        .as_ref()
+        .and_then(|name| template.areas.get(name))
+        .map(|area| (area.row_start, area.col_start))
+}
+
+/// Mark grid cells as occupied.
+fn mark_occupied(
+    occupied: &mut Vec<Vec<bool>>,
+    row: usize,
+    col: usize,
+    row_span: usize,
+    col_span: usize,
+    col_count: usize,
+) {
+    ensure_rows(occupied, row + row_span, col_count);
+    for r in row..(row + row_span) {
+        for c in col..(col + col_span).min(col_count) {
+            occupied[r][c] = true;
+        }
+    }
+}
+
 /// Auto-place items in a grid.
 #[must_use]
 pub fn auto_place_items(
@@ -536,18 +564,10 @@ pub fn auto_place_items(
     let mut placements = Vec::with_capacity(items.len());
 
     for item in items {
-        // Check if item has explicit placement
-        if item.column_start > 0 && item.row_start > 0 {
-            placements.push((item.row_start - 1, item.column_start - 1));
+        // Check for explicit placement
+        if let Some(pos) = get_explicit_position(item, template) {
+            placements.push(pos);
             continue;
-        }
-
-        // Check if item uses a named area
-        if let Some(area_name) = &item.area {
-            if let Some(area) = template.areas.get(area_name) {
-                placements.push((area.row_start, area.col_start));
-                continue;
-            }
         }
 
         // Auto-place
@@ -563,16 +583,7 @@ pub fn auto_place_items(
             }
         };
 
-        // Mark as occupied
-        ensure_rows(&mut occupied, row + row_span, col_count);
-        for r in row..(row + row_span) {
-            for c in col..(col + col_span) {
-                if c < col_count {
-                    occupied[r][c] = true;
-                }
-            }
-        }
-
+        mark_occupied(&mut occupied, row, col, row_span, col_span, col_count);
         placements.push((row, col));
     }
 

@@ -66,7 +66,10 @@ impl HugePages {
         if self.total == 0 {
             0.0
         } else {
-            (self.used() as f64 / self.total as f64) * 100.0
+            let pct = (self.used() as f64 / self.total as f64) * 100.0;
+            // Provability: percentage must be in valid range
+            debug_assert!((0.0..=100.0).contains(&pct), "usage_percent must be 0-100");
+            pct
         }
     }
 

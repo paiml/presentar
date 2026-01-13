@@ -1080,15 +1080,14 @@ impl GpuProcsAnalyzer {
     /// Get Apple GPU temperature (PMAT-GAP-030)
     #[cfg(target_os = "macos")]
     fn get_apple_gpu_temperature() -> Option<f32> {
-        // Temperature requires SMC access which typically needs elevated privileges
-        // or third-party tools like osx-cpu-temp
+        // Temperature requires SMC access which needs elevated privileges.
         None
     }
 
     /// Get Apple GPU power draw (PMAT-GAP-030)
     #[cfg(target_os = "macos")]
     fn get_apple_gpu_power() -> Option<f32> {
-        // Power metrics require powermetrics tool with sudo
+        // Power metrics require elevated privileges.
         None
     }
 }

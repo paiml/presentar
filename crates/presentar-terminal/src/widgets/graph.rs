@@ -159,6 +159,8 @@ impl BrailleGraph {
     /// Set explicit min/max range.
     #[must_use]
     pub fn with_range(mut self, min: f64, max: f64) -> Self {
+        debug_assert!(min.is_finite(), "min must be finite");
+        debug_assert!(max.is_finite(), "max must be finite");
         self.min = min;
         self.max = max;
         self

@@ -670,12 +670,55 @@ fn progress_bar(pct: f64, width: usize) -> String {
     )
 }
 
+/// Color codes for output formatting.
+struct Colors {
+    green: &'static str,
+    yellow: &'static str,
+    red: &'static str,
+    reset: &'static str,
+}
+
+impl Colors {
+    fn new(no_color: bool) -> Self {
+        if no_color {
+            Self { green: "", yellow: "", red: "", reset: "" }
+        } else {
+            Self { green: "\x1b[32m", yellow: "\x1b[33m", red: "\x1b[31m", reset: "\x1b[0m" }
+        }
+    }
+
+    fn for_percent(&self, pct: f64) -> &str {
+        if pct >= 80.0 { self.green } else if pct >= 60.0 { self.yellow } else { self.red }
+    }
+}
+
+/// Format a metric value for display.
+fn format_metric(value: &MetricValue) -> String {
+    match value {
+        MetricValue::Number(n) => format!("{:.1}", n),
+        MetricValue::Text(s) => s.clone(),
+        MetricValue::Bool(b) => if *b { "yes" } else { "no" }.into(),
+    }
+}
+
+/// Print a single dimension row with optional verbose metrics.
+fn print_dimension(name: &str, dim: &DimensionResult, colors: &Colors, verbose: bool) {
+    let pct = (dim.score / dim.max as f64) * 100.0;
+    let bar = progress_bar(pct, 20);
+    println!(
+        "\u{2551} {:20} \u{2502} {:5.1}/{:2} ({:5.1}%) \u{2502} {}{}{} \u{2551}",
+        name, dim.score, dim.max, pct, colors.for_percent(pct), bar, colors.reset
+    );
+    if verbose {
+        for (key, value) in &dim.metrics {
+            println!("\u{2551}   - {:18}: {:>10}", key, format_metric(value));
+        }
+    }
+}
+
 /// Print text format report
 fn print_text_report(report: &QualityReport, verbose: bool, no_color: bool) {
-    let green = if no_color { "" } else { "\x1b[32m" };
-    let yellow = if no_color { "" } else { "\x1b[33m" };
-    let red = if no_color { "" } else { "\x1b[31m" };
-    let reset = if no_color { "" } else { "\x1b[0m" };
+    let colors = Colors::new(no_color);
 
     println!();
     println!("\u{2554}{}\u{2557}", "\u{2550}".repeat(64));
@@ -695,43 +738,16 @@ fn print_text_report(report: &QualityReport, verbose: bool, no_color: bool) {
     ];
 
     for (name, dim) in dims {
-        let pct = (dim.score / dim.max as f64) * 100.0;
-        let color = if pct >= 80.0 {
-            green
-        } else if pct >= 60.0 {
-            yellow
-        } else {
-            red
-        };
-        let bar = progress_bar(pct, 20);
-        println!(
-            "\u{2551} {:20} \u{2502} {:5.1}/{:2} ({:5.1}%) \u{2502} {}{}{} \u{2551}",
-            name, dim.score, dim.max, pct, color, bar, reset
-        );
-
-        if verbose {
-            for (key, value) in &dim.metrics {
-                let val_str = match value {
-                    MetricValue::Number(n) => format!("{:.1}", n),
-                    MetricValue::Text(s) => s.clone(),
-                    MetricValue::Bool(b) => if *b { "yes" } else { "no" }.into(),
-                };
-                println!("\u{2551}   - {:18}: {:>10}", key, val_str);
-            }
-        }
+        print_dimension(name, dim, &colors, verbose);
     }
 
     println!("\u{2560}{}\u{2563}", "\u{2550}".repeat(64));
 
-    let status_color = if report.pass { green } else { red };
-    let status = if report.pass {
-        "\u{2705} PASS"
-    } else {
-        "\u{274c} FAIL"
-    };
+    let status_color = if report.pass { colors.green } else { colors.red };
+    let status = if report.pass { "\u{2705} PASS" } else { "\u{274c} FAIL" };
     println!(
         "\u{2551} TOTAL: {:5.1}/100  GRADE: {}  {}{:<12}{} \u{2551}",
-        report.total_score, report.grade, status_color, status, reset
+        report.total_score, report.grade, status_color, status, colors.reset
     );
     println!("\u{255a}{}\u{255d}", "\u{2550}".repeat(64));
 

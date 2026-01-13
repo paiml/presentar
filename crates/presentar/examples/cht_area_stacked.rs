@@ -152,42 +152,46 @@ impl StackedAreaChart {
     }
 }
 
-fn main() {
-    println!("=== Stacked Area Chart ===\n");
+/// Get character for series index.
+fn series_char(idx: usize) -> char {
+    match idx { 0 => '█', 1 => '▓', 2 => '░', _ => '·' }
+}
 
-    let mut chart = StackedAreaChart::new("Monthly Revenue by Product")
-        .with_x_labels(
-            ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
-                .iter()
-                .map(|s| (*s).to_string())
-                .collect(),
-        )
-        .with_y_label("Revenue ($K)");
+/// Find character for cell at (x, level) in stacked chart.
+fn stacked_cell_char(stacked: &[Vec<f32>], x: usize, threshold: f32) -> char {
+    for (s_idx, series_stacked) in stacked.iter().enumerate().rev() {
+        if series_stacked[x] > threshold {
+            return series_char(s_idx);
+        }
+    }
+    ' '
+}
 
-    // Add revenue series
-    chart.add_series(
-        "Product A",
-        vec![120.0, 135.0, 142.0, 160.0, 175.0, 190.0],
-        Color::new(0.4, 0.6, 0.9, 0.8),
-    );
-    chart.add_series(
-        "Product B",
-        vec![80.0, 95.0, 88.0, 105.0, 115.0, 125.0],
-        Color::new(0.9, 0.5, 0.4, 0.8),
-    );
-    chart.add_series(
-        "Product C",
-        vec![45.0, 52.0, 60.0, 58.0, 70.0, 85.0],
-        Color::new(0.4, 0.8, 0.5, 0.8),
-    );
+/// Print ASCII stacked area chart.
+fn print_ascii_chart(chart: &StackedAreaChart) {
+    println!("\n=== ASCII Stacked Area ===\n");
+    let height = 15;
+    let max_val = chart.max_value();
+    let stacked = chart.stacked_values();
 
-    // Print chart info
-    println!("Title: {}", chart.title());
-    println!("Y-axis: {}", chart.y_label());
-    println!("Data points: {}", chart.data_points());
-    println!("Max stacked value: {:.1}", chart.max_value());
+    for level in (0..height).rev() {
+        let threshold = (level as f32 / height as f32) * max_val;
+        print!("{threshold:>6.0} |");
+        for x in 0..chart.data_points() {
+            print!("  {}  ", stacked_cell_char(&stacked, x, threshold));
+        }
+        println!();
+    }
+    println!("       +{}", "-".repeat(chart.data_points() * 5));
+    print!("        ");
+    for label in chart.x_labels() {
+        print!("{label:^5}");
+    }
+    println!();
+}
 
-    // Print data table
+/// Print data table.
+fn print_data_table(chart: &StackedAreaChart) {
     println!("\n{:<12} {}", "", chart.x_labels().join("    "));
     println!("{}", "-".repeat(60));
 
@@ -199,49 +203,32 @@ fn main() {
         }
         println!();
     }
+}
 
-    // ASCII stacked area chart
-    println!("\n=== ASCII Stacked Area ===\n");
-    let height = 15;
-    let max_val = chart.max_value();
-    let stacked = chart.stacked_values();
+fn main() {
+    println!("=== Stacked Area Chart ===\n");
 
-    for level in (0..height).rev() {
-        let threshold = (level as f32 / height as f32) * max_val;
-        print!("{threshold:>6.0} |");
+    let mut chart = StackedAreaChart::new("Monthly Revenue by Product")
+        .with_x_labels(["Jan", "Feb", "Mar", "Apr", "May", "Jun"].iter().map(|s| (*s).to_string()).collect())
+        .with_y_label("Revenue ($K)");
 
-        for x in 0..chart.data_points() {
-            let mut c = ' ';
-            for (s_idx, series_stacked) in stacked.iter().enumerate().rev() {
-                if series_stacked[x] > threshold {
-                    c = match s_idx {
-                        0 => '█',
-                        1 => '▓',
-                        2 => '░',
-                        _ => '·',
-                    };
-                    break;
-                }
-            }
-            print!("  {c}  ");
-        }
-        println!();
-    }
-    println!("       +{}", "-".repeat(chart.data_points() * 5));
-    print!("        ");
-    for label in chart.x_labels() {
-        print!("{label:^5}");
-    }
-    println!();
+    chart.add_series("Product A", vec![120.0, 135.0, 142.0, 160.0, 175.0, 190.0], Color::new(0.4, 0.6, 0.9, 0.8));
+    chart.add_series("Product B", vec![80.0, 95.0, 88.0, 105.0, 115.0, 125.0], Color::new(0.9, 0.5, 0.4, 0.8));
+    chart.add_series("Product C", vec![45.0, 52.0, 60.0, 58.0, 70.0, 85.0], Color::new(0.4, 0.8, 0.5, 0.8));
 
-    // Percentages
+    println!("Title: {}", chart.title());
+    println!("Y-axis: {}", chart.y_label());
+    println!("Data points: {}", chart.data_points());
+    println!("Max stacked value: {:.1}", chart.max_value());
+
+    print_data_table(&chart);
+    print_ascii_chart(&chart);
+
     println!("\n=== Percentage Breakdown ===\n");
     let pcts = chart.percentages();
     for (i, series) in chart.series().iter().enumerate() {
         print!("{:<12}", series.name);
-        for &pct in &pcts[i] {
-            print!(" {pct:>5.1}%");
-        }
+        for &pct in &pcts[i] { print!(" {pct:>5.1}%"); }
         println!();
     }
 

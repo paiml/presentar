@@ -147,6 +147,9 @@ impl DiffRenderer {
         buffer: &mut CellBuffer,
         writer: &mut W,
     ) -> io::Result<usize> {
+        debug_assert!(buffer.width() > 0, "buffer width must be positive");
+        debug_assert!(buffer.height() > 0, "buffer height must be positive");
+
         // Reset statistics
         self.cells_written = 0;
         self.cursor_moves = 0;

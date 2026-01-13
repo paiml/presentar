@@ -51,6 +51,11 @@ impl ColorMode {
     /// uses the terminal's default background color instead of rendering as black.
     #[must_use]
     pub fn to_crossterm(&self, color: Color) -> CrosstermColor {
+        debug_assert!(color.r >= 0.0 && color.r <= 1.0, "r must be in 0.0-1.0");
+        debug_assert!(color.g >= 0.0 && color.g <= 1.0, "g must be in 0.0-1.0");
+        debug_assert!(color.b >= 0.0 && color.b <= 1.0, "b must be in 0.0-1.0");
+        debug_assert!(color.a >= 0.0 && color.a <= 1.0, "a must be in 0.0-1.0");
+
         // CRITICAL: Handle transparent colors specially to avoid black squares!
         // Color::TRANSPARENT is {r: 0, g: 0, b: 0, a: 0} - without this check,
         // it would convert to RGB(0,0,0) = BLACK, creating ugly black artifacts.

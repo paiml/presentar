@@ -53,7 +53,7 @@ fn map_ccd_temps_to_cores(
     let core_count = temps.len();
     let cores_per_ccd = core_count / 4;
 
-    // Map each CCD's temp to its cores
+    // Assign CCD temperatures to corresponding cores.
     for (ccd_idx, label) in ["Tccd1", "Tccd2", "Tccd3", "Tccd4"].iter().enumerate() {
         if let Some(&temp) = ccd_temps.get(*label) {
             let start = cores_per_ccd * ccd_idx;
@@ -84,7 +84,7 @@ fn read_amd_temps(path: &std::path::Path, temps: &mut [f32]) -> bool {
 
     let mut ccd_temps: HashMap<String, f32> = HashMap::new();
 
-    // Discover all temp sensors by reading labels
+    // Read temperature sensor labels and values.
     for i in 1..=10 {
         let label_path = path.join(format!("temp{i}_label"));
         let input_path = path.join(format!("temp{i}_input"));
@@ -120,7 +120,7 @@ fn read_intel_temps(path: &std::path::Path, temps: &mut [f32]) -> bool {
         }
     }
 
-    // Fallback to package temp if no per-core temps
+    // Use package temperature when per-core temps unavailable.
     if temps.iter().all(|&t| t == 0.0) {
         let temp_file = path.join("temp1_input");
         if let Ok(temp_str) = fs::read_to_string(&temp_file) {
@@ -134,6 +134,22 @@ fn read_intel_temps(path: &std::path::Path, temps: &mut [f32]) -> bool {
     true
 }
 
+/// Try to read CPU temperatures from a single hwmon device.
+#[cfg(target_os = "linux")]
+fn try_read_hwmon_temps(path: &std::path::Path, temps: &mut [f32]) -> bool {
+    use std::fs;
+
+    let Ok(name) = fs::read_to_string(path.join("name")) else {
+        return false;
+    };
+
+    match name.trim() {
+        "k10temp" | "zenpower" => read_amd_temps(path, temps),
+        "coretemp" => read_intel_temps(path, temps),
+        _ => false,
+    }
+}
+
 /// Read per-core CPU temperatures from /sys/class/hwmon (Linux only).
 /// Returns temperatures in °C, or zeros if unavailable.
 #[cfg(target_os = "linux")]
@@ -142,35 +158,15 @@ fn read_core_temperatures(core_count: usize) -> Vec<f32> {
     use std::path::Path;
 
     let mut temps = vec![0.0f32; core_count];
-
     let hwmon_dir = Path::new("/sys/class/hwmon");
-    if !hwmon_dir.exists() {
-        return temps;
-    }
 
     let Ok(entries) = fs::read_dir(hwmon_dir) else {
         return temps;
     };
 
     for entry in entries.flatten() {
-        let path = entry.path();
-        let name_path = path.join("name");
-        let Ok(name) = fs::read_to_string(&name_path) else {
-            continue;
-        };
-        let name = name.trim();
-
-        // AMD processors: k10temp or zenpower drivers
-        if name == "k10temp" || name == "zenpower" {
-            if read_amd_temps(&path, &mut temps) {
-                return temps;
-            }
-        }
-        // Intel processors: coretemp driver
-        else if name == "coretemp" {
-            if read_intel_temps(&path, &mut temps) {
-                return temps;
-            }
+        if try_read_hwmon_temps(&entry.path(), &mut temps) {
+            return temps;
         }
     }
 
@@ -1072,6 +1068,8 @@ impl App {
     /// Collect metrics from all sources
     pub fn collect_metrics(&mut self) {
         self.frame_id += 1;
+        // Provability: frame_id is monotonically increasing
+        debug_assert!(self.frame_id > 0, "frame_id must be positive after increment");
 
         // Check for config hot reload (SPEC-024 v5.2.0 Feature A)
         // Only check every 10 frames to reduce filesystem overhead
@@ -1110,6 +1108,12 @@ impl App {
             .iter()
             .map(|c| c.cpu_usage() as f64)
             .collect();
+        // Provability: per_core_percent length matches CPU count
+        debug_assert_eq!(
+            self.per_core_percent.len(),
+            self.system.cpus().len(),
+            "per_core_percent must have one entry per CPU"
+        );
 
         // SPEC-024: Per-core frequency and temperature for render-once mode
         // (async mode uses MetricsSnapshot, but sync mode needs direct update)
@@ -1377,171 +1381,104 @@ impl App {
 
     /// Handle keyboard input. Returns true if app should quit.
     pub fn handle_key(&mut self, code: KeyCode, modifiers: KeyModifiers) -> bool {
-        // Help overlay mode - block all inputs except close
+        // Dispatch to mode-specific handlers
         if self.show_help {
-            match code {
-                KeyCode::Esc | KeyCode::Char('?' | 'h') | KeyCode::F(1) => {
-                    self.show_help = false;
-                }
-                KeyCode::Char('q') => return true,
-                KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => return true,
-                _ => {} // Swallow all other inputs
-            }
-            return false;
+            return self.handle_help_mode_key(code, modifiers);
         }
-
-        // Signal confirmation mode - Y/n/Esc (SPEC-024 Appendix G.6 P0)
         if self.pending_signal.is_some() {
-            match code {
-                KeyCode::Char('Y') | KeyCode::Enter => {
-                    self.confirm_signal();
-                }
-                KeyCode::Char('n' | 'N') | KeyCode::Esc => {
-                    self.cancel_signal();
-                }
-                KeyCode::Char('q') => return true,
-                KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => return true,
-                // In confirmation mode, signal keys change the pending signal type
-                KeyCode::Char('x') => {
-                    self.request_signal(SignalType::Term);
-                }
-                KeyCode::Char('K') => {
-                    self.request_signal(SignalType::Kill);
-                }
-                KeyCode::Char('H') => {
-                    self.request_signal(SignalType::Hup);
-                }
-                KeyCode::Char('i') => {
-                    self.request_signal(SignalType::Int);
-                }
-                KeyCode::Char('p') => {
-                    self.request_signal(SignalType::Stop);
-                }
-                _ => {} // Swallow other inputs
-            }
-            return false;
+            return self.handle_signal_confirmation_key(code, modifiers);
         }
-
-        // Exploded mode - DataFrame controls + Esc to collapse (SPEC-024 v5.0 Feature D)
         if self.exploded_panel.is_some() {
-            match code {
-                // Exit exploded mode
-                KeyCode::Esc | KeyCode::Char('z') => {
-                    self.exploded_panel = None;
-                    return false;
-                }
-                KeyCode::Char('q') => return true,
-                KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => return true,
-
-                // DataFrame column navigation (Left/Right or h/l)
-                KeyCode::Left | KeyCode::Char('h') => {
-                    if self.selected_column > 0 {
-                        self.selected_column -= 1;
-                    } else {
-                        self.selected_column = ProcessSortColumn::COUNT - 1;
-                    }
-                }
-                KeyCode::Right | KeyCode::Char('l') => {
-                    self.selected_column = (self.selected_column + 1) % ProcessSortColumn::COUNT;
-                }
-
-                // Sort by selected column (Enter or Space)
-                KeyCode::Enter | KeyCode::Char(' ') => {
-                    let new_col = ProcessSortColumn::from_index(self.selected_column);
-                    if self.sort_column == new_col {
-                        // Toggle direction if same column
-                        self.sort_descending = !self.sort_descending;
-                    } else {
-                        // New column: default to descending for numeric, ascending for text
-                        self.sort_column = new_col;
-                        self.sort_descending =
-                            matches!(new_col, ProcessSortColumn::Cpu | ProcessSortColumn::Mem);
-                    }
-                }
-
-                // Row navigation (Up/Down or j/k)
-                KeyCode::Up | KeyCode::Char('k') => self.navigate_process(-1),
-                KeyCode::Down | KeyCode::Char('j') => self.navigate_process(1),
-                KeyCode::PageUp => self.navigate_process(-10),
-                KeyCode::PageDown => self.navigate_process(10),
-                KeyCode::Home | KeyCode::Char('g') => self.process_selected = 0,
-                KeyCode::End | KeyCode::Char('G') => {
-                    let count = self.process_count();
-                    if count > 0 {
-                        self.process_selected = count - 1;
-                    }
-                }
-
-                // Quick sort keys
-                KeyCode::Char('c') => {
-                    self.sort_column = ProcessSortColumn::Cpu;
-                    self.selected_column = ProcessSortColumn::Cpu.to_index();
-                    self.sort_descending = true;
-                }
-                KeyCode::Char('m') => {
-                    self.sort_column = ProcessSortColumn::Mem;
-                    self.selected_column = ProcessSortColumn::Mem.to_index();
-                    self.sort_descending = true;
-                }
-                KeyCode::Char('p') => {
-                    self.sort_column = ProcessSortColumn::Pid;
-                    self.selected_column = ProcessSortColumn::Pid.to_index();
-                    self.sort_descending = false;
-                }
-                KeyCode::Char('n') => {
-                    self.sort_column = ProcessSortColumn::Command;
-                    self.selected_column = ProcessSortColumn::Command.to_index();
-                    self.sort_descending = false;
-                }
-                KeyCode::Char('r') => self.sort_descending = !self.sort_descending,
-
-                // Filter in exploded mode
-                KeyCode::Char('/' | 'f') => {
-                    self.show_filter_input = true;
-                }
-
-                _ => {} // Swallow other inputs
-            }
-            return false;
+            return self.handle_exploded_mode_key(code, modifiers);
         }
-
-        // Filter input mode
         if self.show_filter_input {
-            match code {
-                KeyCode::Esc => {
-                    self.show_filter_input = false;
-                    self.filter.clear();
-                }
-                KeyCode::Enter => {
-                    self.show_filter_input = false;
-                }
-                KeyCode::Backspace => {
-                    self.filter.pop();
-                }
-                KeyCode::Char(c) => {
-                    self.filter.push(c);
-                }
-                _ => {}
-            }
-            return false;
+            return self.handle_filter_input_key(code);
         }
+        self.handle_normal_mode_key(code, modifiers)
+    }
 
-        // Normal mode
-        #[allow(clippy::match_same_arms)]
+    /// Handle keys in help overlay mode. Returns true if app should quit.
+    fn handle_help_mode_key(&mut self, code: KeyCode, modifiers: KeyModifiers) -> bool {
         match code {
-            // Quit
+            KeyCode::Esc | KeyCode::Char('?' | 'h') | KeyCode::F(1) => {
+                self.show_help = false;
+            }
             KeyCode::Char('q') => return true,
             KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => return true,
+            _ => {} // Swallow all other inputs
+        }
+        false
+    }
 
-            // Explode focused panel (SPEC-024 v5.0 Feature D)
+    /// Handle keys in signal confirmation mode. Returns true if app should quit.
+    fn handle_signal_confirmation_key(&mut self, code: KeyCode, modifiers: KeyModifiers) -> bool {
+        match code {
+            KeyCode::Char('Y') | KeyCode::Enter => self.confirm_signal(),
+            KeyCode::Char('n' | 'N') | KeyCode::Esc => self.cancel_signal(),
+            KeyCode::Char('q') => return true,
+            KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => return true,
+            KeyCode::Char('x') => self.request_signal(SignalType::Term),
+            KeyCode::Char('K') => self.request_signal(SignalType::Kill),
+            KeyCode::Char('H') => self.request_signal(SignalType::Hup),
+            KeyCode::Char('i') => self.request_signal(SignalType::Int),
+            KeyCode::Char('p') => self.request_signal(SignalType::Stop),
+            _ => {} // Swallow other inputs
+        }
+        false
+    }
+
+    /// Handle keys in exploded mode. Returns true if app should quit.
+    fn handle_exploded_mode_key(&mut self, code: KeyCode, modifiers: KeyModifiers) -> bool {
+        match code {
+            KeyCode::Esc | KeyCode::Char('z') => self.exploded_panel = None,
+            KeyCode::Char('q') => return true,
+            KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => return true,
+            KeyCode::Left | KeyCode::Char('h') => self.navigate_column_left(),
+            KeyCode::Right | KeyCode::Char('l') => self.navigate_column_right(),
+            KeyCode::Enter | KeyCode::Char(' ') => self.sort_by_selected_column(),
+            KeyCode::Up | KeyCode::Char('k') => self.navigate_process(-1),
+            KeyCode::Down | KeyCode::Char('j') => self.navigate_process(1),
+            KeyCode::PageUp => self.navigate_process(-10),
+            KeyCode::PageDown => self.navigate_process(10),
+            KeyCode::Home | KeyCode::Char('g') => self.process_selected = 0,
+            KeyCode::End | KeyCode::Char('G') => self.select_last_process(),
+            KeyCode::Char('c') => self.quick_sort(ProcessSortColumn::Cpu, true),
+            KeyCode::Char('m') => self.quick_sort(ProcessSortColumn::Mem, true),
+            KeyCode::Char('p') => self.quick_sort(ProcessSortColumn::Pid, false),
+            KeyCode::Char('n') => self.quick_sort(ProcessSortColumn::Command, false),
+            KeyCode::Char('r') => self.sort_descending = !self.sort_descending,
+            KeyCode::Char('/' | 'f') => self.show_filter_input = true,
+            _ => {} // Swallow other inputs
+        }
+        false
+    }
+
+    /// Handle keys in filter input mode. Returns true if app should quit.
+    fn handle_filter_input_key(&mut self, code: KeyCode) -> bool {
+        match code {
+            KeyCode::Esc => {
+                self.show_filter_input = false;
+                self.filter.clear();
+            }
+            KeyCode::Enter => self.show_filter_input = false,
+            KeyCode::Backspace => { self.filter.pop(); }
+            KeyCode::Char(c) => self.filter.push(c),
+            _ => {}
+        }
+        false
+    }
+
+    /// Handle keys in normal mode. Returns true if app should quit.
+    #[allow(clippy::match_same_arms)]
+    fn handle_normal_mode_key(&mut self, code: KeyCode, modifiers: KeyModifiers) -> bool {
+        match code {
+            KeyCode::Char('q') | KeyCode::Esc => return true,
+            KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => return true,
             KeyCode::Enter | KeyCode::Char('z') => {
                 if let Some(panel) = self.focused_panel {
                     self.exploded_panel = Some(panel);
                 }
             }
-
-            // Panel navigation - Tab cycles forward (SPEC-024 v5.0 Feature D)
-            // PMAT-GAP-031: When Network panel is focused, Tab cycles interfaces instead
             KeyCode::Tab if !modifiers.contains(KeyModifiers::SHIFT) => {
                 if self.focused_panel == Some(PanelType::Network) {
                     self.cycle_interface();
@@ -1549,25 +1486,12 @@ impl App {
                     self.navigate_panel_forward();
                 }
             }
-
-            // Panel navigation - Shift+Tab cycles backward
-            KeyCode::BackTab => {
-                self.navigate_panel_backward();
+            KeyCode::BackTab => self.navigate_panel_backward(),
+            KeyCode::Char('l') if !self.show_filter_input => self.navigate_panel_forward(),
+            KeyCode::Char('H') => self.navigate_panel_backward(),
+            KeyCode::Char('?') | KeyCode::F(1) | KeyCode::Char('h') => {
+                self.show_help = !self.show_help;
             }
-
-            // Vim-style panel navigation (hjkl)
-            KeyCode::Char('l') if !self.show_filter_input => {
-                self.navigate_panel_forward();
-            }
-            KeyCode::Char('H') => {
-                self.navigate_panel_backward();
-            }
-
-            // Help
-            KeyCode::Char('?') | KeyCode::F(1) => self.show_help = !self.show_help,
-            KeyCode::Char('h') => self.show_help = !self.show_help,
-
-            // Panel toggles with collapse memory (PMAT-GAP-035 - ttop parity)
             KeyCode::Char('1') => self.toggle_panel(PanelType::Cpu),
             KeyCode::Char('2') => self.toggle_panel(PanelType::Memory),
             KeyCode::Char('3') => self.toggle_panel(PanelType::Disk),
@@ -1577,27 +1501,15 @@ impl App {
             KeyCode::Char('7') => self.toggle_panel(PanelType::Sensors),
             KeyCode::Char('8') => self.toggle_panel(PanelType::Connections),
             KeyCode::Char('9') => self.toggle_panel(PanelType::Psi),
-
-            // Files view mode toggle (PMAT-GAP-034 - ttop parity)
-            // 'v' cycles: Size -> Tree -> Flat -> Size (when Files panel focused)
             KeyCode::Char('v') if self.focused_panel == Some(PanelType::Files) => {
                 self.cycle_files_view_mode();
             }
-
-            // Process navigation (when Process panel focused)
             KeyCode::Down | KeyCode::Char('j') => self.navigate_process(1),
             KeyCode::Up | KeyCode::Char('k') => self.navigate_process(-1),
             KeyCode::PageDown => self.navigate_process(10),
             KeyCode::PageUp => self.navigate_process(-10),
             KeyCode::Home | KeyCode::Char('g') => self.process_selected = 0,
-            KeyCode::End | KeyCode::Char('G') => {
-                let count = self.process_count();
-                if count > 0 {
-                    self.process_selected = count - 1;
-                }
-            }
-
-            // Sorting
+            KeyCode::End | KeyCode::Char('G') => self.select_last_process(),
             KeyCode::Char('c') => {
                 self.sort_column = ProcessSortColumn::Cpu;
                 self.sort_descending = true;
@@ -1610,38 +1522,56 @@ impl App {
                 self.sort_column = ProcessSortColumn::Pid;
                 self.sort_descending = false;
             }
-            KeyCode::Char('s') => {
-                self.sort_column = self.sort_column.next();
-            }
+            KeyCode::Char('s') => self.sort_column = self.sort_column.next(),
             KeyCode::Char('r') => self.sort_descending = !self.sort_descending,
-
-            // Filter
-            KeyCode::Char('/' | 'f') => {
-                self.show_filter_input = true;
-            }
+            KeyCode::Char('/' | 'f') => self.show_filter_input = true,
             KeyCode::Delete => self.filter.clear(),
-
-            // Reset panels
-            KeyCode::Char('0') => {
-                self.panels = PanelVisibility::default();
-            }
-
-            // Process signals (SPEC-024 Appendix G.6 P0 - ttop parity)
-            // x = SIGTERM (graceful), X/K = SIGKILL (force kill)
-            KeyCode::Char('x') => {
-                self.request_signal(SignalType::Term);
-            }
-            KeyCode::Char('X') => {
-                self.request_signal(SignalType::Kill);
-            }
-
-            // Escape in normal mode quits
-            KeyCode::Esc => return true,
-
+            KeyCode::Char('0') => self.panels = PanelVisibility::default(),
+            KeyCode::Char('x') => self.request_signal(SignalType::Term),
+            KeyCode::Char('X') => self.request_signal(SignalType::Kill),
             _ => {}
         }
-
         false
+    }
+
+    /// Navigate column selection left with wrap-around.
+    fn navigate_column_left(&mut self) {
+        if self.selected_column > 0 {
+            self.selected_column -= 1;
+        } else {
+            self.selected_column = ProcessSortColumn::COUNT - 1;
+        }
+    }
+
+    /// Navigate column selection right with wrap-around.
+    fn navigate_column_right(&mut self) {
+        self.selected_column = (self.selected_column + 1) % ProcessSortColumn::COUNT;
+    }
+
+    /// Sort by currently selected column.
+    fn sort_by_selected_column(&mut self) {
+        let new_col = ProcessSortColumn::from_index(self.selected_column);
+        if self.sort_column == new_col {
+            self.sort_descending = !self.sort_descending;
+        } else {
+            self.sort_column = new_col;
+            self.sort_descending = matches!(new_col, ProcessSortColumn::Cpu | ProcessSortColumn::Mem);
+        }
+    }
+
+    /// Quick sort by column with specified direction.
+    fn quick_sort(&mut self, column: ProcessSortColumn, descending: bool) {
+        self.sort_column = column;
+        self.selected_column = column.to_index();
+        self.sort_descending = descending;
+    }
+
+    /// Select last process in list.
+    fn select_last_process(&mut self) {
+        let count = self.process_count();
+        if count > 0 {
+            self.process_selected = count - 1;
+        }
     }
 
     /// Navigate to next visible panel (SPEC-024 v5.0 Feature D)

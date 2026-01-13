@@ -134,27 +134,25 @@ impl CorrelationMatrix {
     }
 }
 
-fn main() {
-    println!("=== Correlation Heatmap ===\n");
+/// Get ASCII character for correlation value.
+fn correlation_char(val: f32) -> char {
+    if val > 0.8 { '█' }
+    else if val > 0.5 { '▓' }
+    else if val > 0.0 { '░' }
+    else if val > -0.5 { '·' }
+    else if val > -0.8 { '▒' }
+    else { '▓' }
+}
 
-    // Example dataset with known correlations
-    let n = 100;
-    let x: Vec<f32> = (0..n).map(|i| i as f32).collect();
-    let y: Vec<f32> = x.iter().map(|v| v * 2.0 + 1.0).collect(); // Perfect positive
-    let z: Vec<f32> = x.iter().map(|v| -v + 100.0).collect(); // Perfect negative
-    let w: Vec<f32> = (0..n).map(|i| (i % 10) as f32).collect(); // Uncorrelated
+/// Get strength label for correlation value.
+fn correlation_strength(corr: f32) -> &'static str {
+    if corr.abs() > 0.8 { "strong" }
+    else if corr.abs() > 0.5 { "moderate" }
+    else { "weak" }
+}
 
-    let matrix = CorrelationMatrix::from_columns(
-        vec![
-            "x".to_string(),
-            "y".to_string(),
-            "z".to_string(),
-            "w".to_string(),
-        ],
-        vec![x, y, z, w],
-    );
-
-    // Print matrix
+/// Print correlation matrix.
+fn print_matrix(matrix: &CorrelationMatrix) {
     print!("{:>10}", "");
     for name in &matrix.column_names {
         print!("{name:>10}");
@@ -164,51 +162,49 @@ fn main() {
     for (i, name) in matrix.column_names.iter().enumerate() {
         print!("{name:>10}");
         for j in 0..matrix.values.len() {
-            let val = matrix.get(i, j);
-            print!("{val:>10.3}");
+            print!("{:>10.3}", matrix.get(i, j));
         }
         println!();
     }
+}
 
-    // Validate properties
+/// Print ASCII heatmap.
+fn print_heatmap(matrix: &CorrelationMatrix) {
+    println!("\n=== Heatmap (ASCII) ===");
+    for row in &matrix.values {
+        for &val in row {
+            print!("{} ", correlation_char(val));
+        }
+        println!();
+    }
+}
+
+fn main() {
+    println!("=== Correlation Heatmap ===\n");
+
+    let n = 100;
+    let x: Vec<f32> = (0..n).map(|i| i as f32).collect();
+    let y: Vec<f32> = x.iter().map(|v| v * 2.0 + 1.0).collect();
+    let z: Vec<f32> = x.iter().map(|v| -v + 100.0).collect();
+    let w: Vec<f32> = (0..n).map(|i| (i % 10) as f32).collect();
+
+    let matrix = CorrelationMatrix::from_columns(
+        vec!["x".to_string(), "y".to_string(), "z".to_string(), "w".to_string()],
+        vec![x, y, z, w],
+    );
+
+    print_matrix(&matrix);
+
     println!("\n=== Validation ===");
     println!("Diagonal is 1.0: {}", matrix.diagonal_is_one());
     println!("Is symmetric: {}", matrix.is_symmetric());
 
-    // Show strongest correlations
     println!("\n=== Strongest Correlations ===");
     for (a, b, corr) in matrix.strongest_correlations(5) {
-        let strength = if corr.abs() > 0.8 {
-            "strong"
-        } else if corr.abs() > 0.5 {
-            "moderate"
-        } else {
-            "weak"
-        };
-        println!("{a} <-> {b}: {corr:.3} ({strength})");
+        println!("{a} <-> {b}: {corr:.3} ({})", correlation_strength(corr));
     }
 
-    // ASCII heatmap
-    println!("\n=== Heatmap (ASCII) ===");
-    for row in &matrix.values {
-        for &val in row {
-            let char = if val > 0.8 {
-                '█'
-            } else if val > 0.5 {
-                '▓'
-            } else if val > 0.0 {
-                '░'
-            } else if val > -0.5 {
-                '·'
-            } else if val > -0.8 {
-                '▒'
-            } else {
-                '▓'
-            };
-            print!("{char} ");
-        }
-        println!();
-    }
+    print_heatmap(&matrix);
 
     println!("\n=== Acceptance Criteria ===");
     println!("- [x] Correlation values [-1, 1] range");

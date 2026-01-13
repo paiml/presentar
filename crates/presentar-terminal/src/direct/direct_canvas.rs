@@ -311,10 +311,9 @@ impl Canvas for DirectTerminalCanvas<'_> {
             }
 
             if xu >= clip.x {
-                // CRITICAL FIX: Preserve existing background when drawing text.
+                // CRITICAL: Preserve existing background when drawing text.
                 // Text rendering should NOT overwrite background colors set by fill_rect.
-                // This fixes the selection artifact bug where blue backgrounds persisted
-                // after row deselection because draw_text was setting bg to TRANSPARENT.
+                // Without this, backgrounds would be lost during text rendering.
                 let existing_bg = self
                     .buffer
                     .get(xu, y)

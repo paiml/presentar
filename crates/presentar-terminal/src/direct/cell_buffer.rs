@@ -237,14 +237,18 @@ impl CellBuffer {
     /// Convert (x, y) to linear index.
     #[must_use]
     pub fn index(&self, x: u16, y: u16) -> usize {
+        debug_assert!(x < self.width, "x coordinate out of bounds");
+        debug_assert!(y < self.height, "y coordinate out of bounds");
         (y as usize) * (self.width as usize) + (x as usize)
     }
 
     /// Convert linear index to (x, y).
     #[must_use]
     pub fn coords(&self, idx: usize) -> (u16, u16) {
+        debug_assert!(idx < self.cells.len(), "index out of bounds");
         let x = (idx % (self.width as usize)) as u16;
         let y = (idx / (self.width as usize)) as u16;
+        debug_assert!(x < self.width && y < self.height, "coords must be in bounds");
         (x, y)
     }
 

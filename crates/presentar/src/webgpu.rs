@@ -604,6 +604,20 @@ pub fn measure_text(text: &str, cache: &GlyphCache, options: &TextOptions) -> (f
     (max_width, height)
 }
 
+/// Check if word wrap should occur at this character.
+fn should_wrap(line_width: f32, max_width: Option<f32>, ch: char) -> bool {
+    max_width.is_some_and(|mw| line_width > mw && ch.is_whitespace())
+}
+
+/// Get glyph advance width (or fallback estimate).
+fn get_advance(cache: &GlyphCache, ch: char, options: &TextOptions, scale: f32) -> f32 {
+    let key = GlyphKey::new(ch, options.size_px as u16, options.weight);
+    cache
+        .get(&key)
+        .map(|g| g.advance_x * scale + options.letter_spacing)
+        .unwrap_or(options.size_px * 0.5 + options.letter_spacing)
+}
+
 /// Layout text for rendering.
 #[must_use]
 pub fn layout_text(
@@ -620,31 +634,24 @@ pub fn layout_text(
     let mut line_width: f32 = 0.0;
     let scale = options.size_px / 16.0;
     let atlas_size = cache.atlas_size();
+    let line_advance = options.size_px * options.line_height;
 
     layout.lines = 1;
 
     for ch in text.chars() {
-        if ch == '\n' {
+        // Handle newline or word wrap
+        if ch == '\n' || should_wrap(line_width, options.max_width, ch) {
             layout.width = layout.width.max(line_width);
             line_width = 0.0;
             cursor_x = x;
-            cursor_y += options.size_px * options.line_height;
+            cursor_y += line_advance;
             layout.lines += 1;
-            continue;
-        }
-
-        // Check for word wrap
-        if let Some(max_width) = options.max_width {
-            if line_width > max_width && ch.is_whitespace() {
-                layout.width = layout.width.max(line_width);
-                line_width = 0.0;
-                cursor_x = x;
-                cursor_y += options.size_px * options.line_height;
-                layout.lines += 1;
+            if ch == '\n' || ch.is_whitespace() {
                 continue;
             }
         }
 
+        // Render glyph if cached
         let key = GlyphKey::new(ch, options.size_px as u16, options.weight);
         if let Some(glyph) = cache.get(&key) {
             if !glyph.region.is_empty() {
@@ -652,17 +659,16 @@ pub fn layout_text(
                     GlyphInstance::from_cached(glyph, cursor_x, cursor_y, scale, atlas_size, color);
                 layout.glyphs.push(instance);
             }
-            cursor_x += glyph.advance_x * scale + options.letter_spacing;
-            line_width += glyph.advance_x * scale + options.letter_spacing;
-        } else {
-            // Fallback advance for uncached glyphs
-            cursor_x += options.size_px * 0.5 + options.letter_spacing;
-            line_width += options.size_px * 0.5 + options.letter_spacing;
         }
+
+        // Advance cursor
+        let advance = get_advance(cache, ch, options, scale);
+        cursor_x += advance;
+        line_width += advance;
     }
 
     layout.width = layout.width.max(line_width);
-    layout.height = layout.lines as f32 * options.size_px * options.line_height;
+    layout.height = layout.lines as f32 * line_advance;
 
     layout
 }

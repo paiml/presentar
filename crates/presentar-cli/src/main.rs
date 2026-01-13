@@ -318,6 +318,46 @@ fn inject_hot_reload_script(html: &[u8]) -> Vec<u8> {
     }
 }
 
+/// Check if WebSocket client disconnected (non-blocking).
+/// Returns true if client is still connected.
+fn is_client_connected(websocket: &mut tungstenite::WebSocket<std::net::TcpStream>) -> bool {
+    websocket.get_mut().set_nonblocking(true).ok();
+    let connected = match websocket.read() {
+        Ok(tungstenite::Message::Close(_)) => false,
+        Err(tungstenite::Error::Io(ref e)) if e.kind() == std::io::ErrorKind::WouldBlock => true,
+        Err(_) => false,
+        _ => true,
+    };
+    websocket.get_mut().set_nonblocking(false).ok();
+    connected
+}
+
+/// Handle a single WebSocket client connection for hot reload.
+fn handle_hot_reload_client(mut websocket: tungstenite::WebSocket<std::net::TcpStream>) {
+    let mut last_sent = RELOAD_COUNTER.load(Ordering::Relaxed);
+
+    // Send current version immediately
+    let _ = websocket.send(tungstenite::Message::Text(last_sent.to_string().into()));
+
+    // Poll for changes
+    loop {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let current = RELOAD_COUNTER.load(Ordering::Relaxed);
+        if current > last_sent {
+            last_sent = current;
+            if websocket
+                .send(tungstenite::Message::Text(current.to_string().into()))
+                .is_err()
+            {
+                break;
+            }
+        }
+        if !is_client_connected(&mut websocket) {
+            break;
+        }
+    }
+}
+
 /// Run WebSocket server that broadcasts reload events
 fn run_hot_reload_server() {
     let server = match TcpListener::bind("127.0.0.1:35729") {
@@ -329,46 +369,10 @@ fn run_hot_reload_server() {
     };
 
     for stream in server.incoming() {
-        let stream = match stream {
-            Ok(s) => s,
-            Err(_) => continue,
-        };
-
+        let Ok(stream) = stream else { continue };
         std::thread::spawn(move || {
-            let mut websocket = match accept(stream) {
-                Ok(ws) => ws,
-                Err(_) => return,
-            };
-
-            let mut last_sent = RELOAD_COUNTER.load(Ordering::Relaxed);
-
-            // Send current version immediately
-            let _ = websocket.send(tungstenite::Message::Text(last_sent.to_string().into()));
-
-            // Poll for changes
-            loop {
-                std::thread::sleep(std::time::Duration::from_millis(100));
-                let current = RELOAD_COUNTER.load(Ordering::Relaxed);
-                if current > last_sent {
-                    last_sent = current;
-                    if websocket
-                        .send(tungstenite::Message::Text(current.to_string().into()))
-                        .is_err()
-                    {
-                        break;
-                    }
-                }
-
-                // Check if client disconnected with non-blocking read
-                websocket.get_mut().set_nonblocking(true).ok();
-                match websocket.read() {
-                    Ok(tungstenite::Message::Close(_)) => break,
-                    Err(tungstenite::Error::Io(ref e))
-                        if e.kind() == std::io::ErrorKind::WouldBlock => {}
-                    Err(_) => break,
-                    _ => {}
-                }
-                websocket.get_mut().set_nonblocking(false).ok();
+            if let Ok(websocket) = accept(stream) {
+                handle_hot_reload_client(websocket);
             }
         });
     }
@@ -377,6 +381,38 @@ fn run_hot_reload_server() {
 /// Trigger a hot reload for all connected clients
 fn trigger_hot_reload() {
     RELOAD_COUNTER.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Handle YAML file change: validate and trigger reload if valid.
+fn handle_yaml_change(path: &std::path::Path) {
+    println!("[watch] YAML change: {}", path.display());
+    if let Ok(content) = fs::read_to_string(path) {
+        match presentar_yaml::Manifest::from_yaml(&content) {
+            Ok(_) => {
+                println!("[watch] YAML valid");
+                trigger_hot_reload();
+            }
+            Err(e) => eprintln!("[watch] YAML error: {}", e),
+        }
+    }
+}
+
+/// Handle file change based on extension.
+fn handle_file_change(path: &std::path::Path) {
+    let ext = path.extension().and_then(|e| e.to_str());
+    match ext {
+        Some("rs") => {
+            println!("[watch] Rust change detected, rebuilding WASM...");
+            rebuild_wasm();
+            trigger_hot_reload();
+        }
+        Some("yaml" | "yml") => handle_yaml_change(path),
+        Some("html" | "js" | "css") => {
+            println!("[watch] Static file changed: {}", path.display());
+            trigger_hot_reload();
+        }
+        _ => {}
+    }
 }
 
 fn watch_and_rebuild(dir: &PathBuf) {
@@ -396,7 +432,6 @@ fn watch_and_rebuild(dir: &PathBuf) {
     )
     .expect("watcher");
 
-    // Watch the directory
     watcher.watch(dir, RecursiveMode::Recursive).expect("watch");
 
     // Also watch crates directory for Rust changes
@@ -409,42 +444,17 @@ fn watch_and_rebuild(dir: &PathBuf) {
     println!("[watch] Watching for changes...");
 
     let mut last_rebuild = std::time::Instant::now();
+    let debounce = Duration::from_secs(1);
+
     loop {
         match rx.recv_timeout(Duration::from_millis(500)) {
-            Ok(event) => {
-                // Debounce: only rebuild if >1s since last rebuild
-                if last_rebuild.elapsed() > Duration::from_secs(1) {
-                    if let Some(path) = event.paths.first() {
-                        let ext = path.extension().and_then(|e| e.to_str());
-                        match ext {
-                            Some("rs") => {
-                                println!("[watch] Rust change detected, rebuilding WASM...");
-                                rebuild_wasm();
-                                trigger_hot_reload();
-                            }
-                            Some("yaml" | "yml") => {
-                                println!("[watch] YAML change: {}", path.display());
-                                // Validate YAML
-                                if let Ok(content) = fs::read_to_string(path) {
-                                    match presentar_yaml::Manifest::from_yaml(&content) {
-                                        Ok(_) => {
-                                            println!("[watch] YAML valid");
-                                            trigger_hot_reload();
-                                        }
-                                        Err(e) => eprintln!("[watch] YAML error: {}", e),
-                                    }
-                                }
-                            }
-                            Some("html" | "js" | "css") => {
-                                println!("[watch] Static file changed: {}", path.display());
-                                trigger_hot_reload();
-                            }
-                            _ => {}
-                        }
-                        last_rebuild = std::time::Instant::now();
-                    }
+            Ok(event) if last_rebuild.elapsed() > debounce => {
+                if let Some(path) = event.paths.first() {
+                    handle_file_change(path);
+                    last_rebuild = std::time::Instant::now();
                 }
             }
+            Ok(_) => {} // Debounced
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
             Err(_) => break,
         }
@@ -493,7 +503,7 @@ fn bundle(output: PathBuf, no_optimize: bool) {
         std::process::exit(1);
     }
 
-    // Optimize with wasm-opt
+    // Run wasm-opt for size reduction.
     if !no_optimize {
         let wasm_file = output.join("pkg/presentar_bg.wasm");
         if wasm_file.exists() {
@@ -1027,6 +1037,74 @@ fn deploy(
     }
 }
 
+/// Print files that would be uploaded (dry-run mode).
+fn print_deploy_files(source: &PathBuf, files: &[(PathBuf, String)]) {
+    println!();
+    println!("Files that would be uploaded:");
+    for (path, content_type) in files {
+        let rel_path = path.strip_prefix(source).unwrap_or(path);
+        println!(
+            "  {} ({}, {} bytes)",
+            rel_path.display(),
+            content_type,
+            fs::metadata(path).map(|m| m.len()).unwrap_or(0)
+        );
+    }
+}
+
+/// Upload a single file to S3.
+fn upload_file_to_s3(path: &PathBuf, source: &PathBuf, bucket: &str, region: &str) {
+    let rel_path = path.strip_prefix(source).unwrap_or(path);
+    let s3_key = rel_path.to_string_lossy();
+    let content_type = get_content_type(path);
+
+    let mut cmd = Command::new("aws");
+    cmd.args(["s3", "cp"])
+        .arg(path)
+        .arg(format!("s3://{}/{}", bucket, s3_key))
+        .args(["--content-type", &content_type])
+        .args(["--region", region]);
+
+    let cache_control = get_cache_control(path);
+    if !cache_control.is_empty() {
+        cmd.args(["--cache-control", cache_control]);
+    }
+
+    match cmd.status() {
+        Ok(s) if s.success() => println!("  Uploaded: {}", s3_key),
+        Ok(_) => eprintln!("  Failed: {}", s3_key),
+        Err(e) => {
+            eprintln!("Error running aws cli: {}", e);
+            eprintln!("Make sure AWS CLI is installed and configured");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Invalidate CloudFront cache.
+fn invalidate_cloudfront(dist_id: &str, dry_run: bool) {
+    println!();
+    println!("Step 3: Invalidating CloudFront cache...");
+    println!("  Distribution: {}", dist_id);
+
+    if dry_run {
+        println!("  [dry-run] Would invalidate: /*");
+        return;
+    }
+
+    let status = Command::new("aws")
+        .args(["cloudfront", "create-invalidation"])
+        .args(["--distribution-id", dist_id])
+        .args(["--paths", "/*"])
+        .status();
+
+    match status {
+        Ok(s) if s.success() => println!("  Cache invalidated successfully"),
+        Ok(_) => eprintln!("  Cache invalidation failed"),
+        Err(e) => eprintln!("  CloudFront invalidation error: {}", e),
+    }
+}
+
 /// Deploy to AWS S3 with optional CloudFront invalidation.
 fn deploy_to_s3(
     source: &PathBuf,
@@ -1035,88 +1113,28 @@ fn deploy_to_s3(
     region: &str,
     dry_run: bool,
 ) {
-    let bucket = match bucket {
-        Some(b) => b,
-        None => {
-            eprintln!("Error: --bucket is required for S3 deployment");
-            std::process::exit(1);
-        }
+    let Some(bucket) = bucket else {
+        eprintln!("Error: --bucket is required for S3 deployment");
+        std::process::exit(1);
     };
 
     println!("Step 2: Deploying to S3...");
     println!("  Bucket: {}", bucket);
     println!("  Region: {}", region);
 
-    // Collect files to deploy
     let files = collect_deploy_files(source);
     println!("  Files: {} to upload", files.len());
 
     if dry_run {
-        println!();
-        println!("Files that would be uploaded:");
-        for (path, content_type) in &files {
-            let rel_path = path.strip_prefix(source).unwrap_or(path);
-            println!(
-                "  {} ({}, {} bytes)",
-                rel_path.display(),
-                content_type,
-                fs::metadata(path).map(|m| m.len()).unwrap_or(0)
-            );
-        }
+        print_deploy_files(source, &files);
     } else {
-        // Upload files using AWS CLI
-        for (path, content_type) in &files {
-            let rel_path = path.strip_prefix(source).unwrap_or(path);
-            let s3_key = rel_path.to_string_lossy();
-
-            let mut cmd = Command::new("aws");
-            cmd.args(["s3", "cp"])
-                .arg(path)
-                .arg(format!("s3://{}/{}", bucket, s3_key))
-                .args(["--content-type", content_type])
-                .args(["--region", region]);
-
-            // Add cache control based on file type
-            let cache_control = get_cache_control(path);
-            if !cache_control.is_empty() {
-                cmd.args(["--cache-control", cache_control]);
-            }
-
-            let status = cmd.status();
-
-            match status {
-                Ok(s) if s.success() => println!("  Uploaded: {}", s3_key),
-                Ok(_) => eprintln!("  Failed: {}", s3_key),
-                Err(e) => {
-                    eprintln!("Error running aws cli: {}", e);
-                    eprintln!("Make sure AWS CLI is installed and configured");
-                    std::process::exit(1);
-                }
-            }
+        for (path, _) in &files {
+            upload_file_to_s3(path, source, bucket, region);
         }
     }
 
-    // CloudFront invalidation
     if let Some(dist_id) = distribution {
-        println!();
-        println!("Step 3: Invalidating CloudFront cache...");
-        println!("  Distribution: {}", dist_id);
-
-        if dry_run {
-            println!("  [dry-run] Would invalidate: /*");
-        } else {
-            let status = Command::new("aws")
-                .args(["cloudfront", "create-invalidation"])
-                .args(["--distribution-id", dist_id])
-                .args(["--paths", "/*"])
-                .status();
-
-            match status {
-                Ok(s) if s.success() => println!("  Cache invalidated successfully"),
-                Ok(_) => eprintln!("  Cache invalidation failed"),
-                Err(e) => eprintln!("  CloudFront invalidation error: {}", e),
-            }
-        }
+        invalidate_cloudfront(dist_id, dry_run);
     }
 
     println!();

@@ -40,7 +40,8 @@ impl Gradient {
     /// Sample the gradient at position t (0.0 - 1.0).
     #[must_use]
     pub fn sample(&self, t: f64) -> Color {
-        let t = t.clamp(0.0, 1.0);
+        // Handle NaN/Inf by treating as 0.0
+        let t = if t.is_finite() { t.clamp(0.0, 1.0) } else { 0.0 };
 
         if self.stops.is_empty() {
             return Color::WHITE;

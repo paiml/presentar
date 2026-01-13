@@ -97,6 +97,7 @@ impl HorizonGraph {
     /// Set the number of bands (2-4 recommended).
     #[must_use]
     pub fn with_bands(mut self, bands: u8) -> Self {
+        debug_assert!((1..=6).contains(&bands), "bands must be 1-6");
         self.bands = bands.clamp(1, 6);
         self
     }
@@ -441,7 +442,7 @@ mod tests {
     fn test_horizon_different_band_counts() {
         use crate::direct::{CellBuffer, DirectTerminalCanvas};
 
-        for bands in [2, 3, 4, 5, 8] {
+        for bands in [2, 3, 4, 5, 6] {
             let mut graph = HorizonGraph::new(vec![0.1, 0.5, 0.9]).with_bands(bands);
             let bounds = presentar_core::Rect::new(0.0, 0.0, 30.0, 2.0);
             graph.layout(bounds);

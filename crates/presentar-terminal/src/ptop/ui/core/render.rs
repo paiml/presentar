@@ -354,51 +354,60 @@ impl ZramStats {
     }
 }
 
+/// Parse compression algorithm from comp_algorithm file content.
+/// Format: "lzo lzo-rle [lz4] zstd" - bracketed = active
+#[cfg(target_os = "linux")]
+fn parse_zram_algorithm(content: &str) -> String {
+    content
+        .split_whitespace()
+        .find(|p| p.starts_with('[') && p.ends_with(']'))
+        .map(|p| p.trim_matches(|c| c == '[' || c == ']').to_string())
+        .unwrap_or_else(|| "?".to_string())
+}
+
+/// Read ZRAM stats from a specific device path.
+#[cfg(target_os = "linux")]
+fn read_zram_device(base_path: &str) -> Option<ZramStats> {
+    use std::fs;
+
+    let mm_stat_path = format!("{base_path}/mm_stat");
+    let content = fs::read_to_string(&mm_stat_path).ok()?;
+    let parts: Vec<&str> = content.split_whitespace().collect();
+
+    if parts.len() < 2 {
+        return None;
+    }
+
+    let orig = parts[0].parse::<u64>().unwrap_or(0);
+    let compr = parts[1].parse::<u64>().unwrap_or(0);
+
+    if orig == 0 {
+        return None;
+    }
+
+    let algo_path = format!("{base_path}/comp_algorithm");
+    let algorithm = fs::read_to_string(&algo_path)
+        .map(|s| parse_zram_algorithm(&s))
+        .unwrap_or_else(|_| "?".to_string());
+
+    Some(ZramStats {
+        orig_data_size: orig,
+        compr_data_size: compr,
+        algorithm,
+    })
+}
+
 /// Read ZRAM statistics from /sys/block/zram* (Linux only)
 fn read_zram_stats() -> Option<ZramStats> {
     #[cfg(target_os = "linux")]
     {
-        use std::fs;
-
-        // Try zram0 first (most common)
         for i in 0..4 {
-            let device = format!("zram{i}");
-            let base_path = format!("/sys/block/{device}");
-
-            // Check if device exists
+            let base_path = format!("/sys/block/zram{i}");
             if !std::path::Path::new(&base_path).exists() {
                 continue;
             }
-
-            // Read mm_stat: contains orig_data_size, compr_data_size, etc.
-            // Format: orig_data_size compr_data_size mem_used_total mem_limit max_used_pages same_pages pages_compacted huge_pages
-            let mm_stat_path = format!("{base_path}/mm_stat");
-            if let Ok(content) = fs::read_to_string(&mm_stat_path) {
-                let parts: Vec<&str> = content.split_whitespace().collect();
-                if parts.len() >= 2 {
-                    let orig = parts[0].parse::<u64>().unwrap_or(0);
-                    let compr = parts[1].parse::<u64>().unwrap_or(0);
-
-                    if orig > 0 {
-                        // Read compression algorithm
-                        let algo_path = format!("{base_path}/comp_algorithm");
-                        let algorithm = fs::read_to_string(&algo_path)
-                            .ok()
-                            .and_then(|s| {
-                                // Format: "lzo lzo-rle [lz4] zstd" - bracketed = active
-                                s.split_whitespace()
-                                    .find(|p| p.starts_with('[') && p.ends_with(']'))
-                                    .map(|p| p.trim_matches(|c| c == '[' || c == ']').to_string())
-                            })
-                            .unwrap_or_else(|| "?".to_string());
-
-                        return Some(ZramStats {
-                            orig_data_size: orig,
-                            compr_data_size: compr,
-                            algorithm,
-                        });
-                    }
-                }
+            if let Some(stats) = read_zram_device(&base_path) {
+                return Some(stats);
             }
         }
         None
@@ -681,126 +690,91 @@ fn draw_status_bar(app: &App, canvas: &mut DirectTerminalCanvas<'_>, w: f32, h: 
     }
 }
 
-#[allow(clippy::type_complexity)]
-fn draw_top_panels(app: &App, canvas: &mut DirectTerminalCanvas<'_>, area: Rect) {
-    // ttop layout at 120x40:
-    // Row 0 (rows 0-8, 9 rows):   CPU | Memory | Disk
-    // Row 1 (rows 9-17, 9 rows):  Network | GPU | Sensors (3 rows) + Containers (6 rows)
-    //
-    // The third column of row 1 is split into stacked panels:
-    // - Sensors: 3 rows (33%)
-    // - Containers: 6 rows (67%)
-
-    // For ttop-style deterministic layout with 6 core panels:
-    let is_ttop_layout = app.panels.cpu
+/// Check if app is configured for ttop-style 6-panel layout.
+fn is_ttop_layout(app: &App) -> bool {
+    app.panels.cpu
         && app.panels.memory
         && app.panels.disk
         && app.panels.network
         && app.panels.gpu
         && app.panels.sensors
         && !app.panels.psi
-        && !app.panels.battery;
+        && !app.panels.battery
+}
 
-    if is_ttop_layout && area.width >= 100.0 {
-        // ttop-specific 3x2 grid with stacked third column in row 1
-        let cols = 3;
-        let rows = 2;
-        let cell_w = area.width / cols as f32;
-        let cell_h = area.height / rows as f32;
+/// Draw ttop-specific 3x2 grid layout with stacked third column.
+fn draw_ttop_grid(app: &App, canvas: &mut DirectTerminalCanvas<'_>, area: Rect) {
+    let cell_w = area.width / 3.0;
+    let cell_h = area.height / 2.0;
 
-        // Row 0: CPU, Memory, Disk
-        draw_cpu_panel(app, canvas, Rect::new(area.x, area.y, cell_w, cell_h));
-        draw_memory_panel(
-            app,
-            canvas,
-            Rect::new(area.x + cell_w, area.y, cell_w, cell_h),
-        );
-        draw_disk_panel(
-            app,
-            canvas,
-            Rect::new(area.x + 2.0 * cell_w, area.y, cell_w, cell_h),
-        );
+    // Row 0: CPU, Memory, Disk
+    draw_cpu_panel(app, canvas, Rect::new(area.x, area.y, cell_w, cell_h));
+    draw_memory_panel(app, canvas, Rect::new(area.x + cell_w, area.y, cell_w, cell_h));
+    draw_disk_panel(app, canvas, Rect::new(area.x + 2.0 * cell_w, area.y, cell_w, cell_h));
 
-        // Row 1: Network, GPU, Sensors+Containers stacked
-        let row1_y = area.y + cell_h;
-        draw_network_panel(app, canvas, Rect::new(area.x, row1_y, cell_w, cell_h));
-        draw_gpu_panel(
-            app,
-            canvas,
-            Rect::new(area.x + cell_w, row1_y, cell_w, cell_h),
-        );
+    // Row 1: Network, GPU, Sensors+Containers stacked
+    let row1_y = area.y + cell_h;
+    draw_network_panel(app, canvas, Rect::new(area.x, row1_y, cell_w, cell_h));
+    draw_gpu_panel(app, canvas, Rect::new(area.x + cell_w, row1_y, cell_w, cell_h));
 
-        // Third column: split into Sensors (33%) + Containers (67%)
-        let col3_x = area.x + 2.0 * cell_w;
-        let sensors_h = (cell_h / 3.0).round(); // 3 rows for sensors
-        let containers_h = cell_h - sensors_h; // 6 rows for containers
+    // Third column: Sensors (33%) + Containers (67%)
+    let col3_x = area.x + 2.0 * cell_w;
+    let sensors_h = (cell_h / 3.0).round();
+    draw_sensors_panel(app, canvas, Rect::new(col3_x, row1_y, cell_w, sensors_h));
+    draw_containers_panel(app, canvas, Rect::new(col3_x, row1_y + sensors_h, cell_w, cell_h - sensors_h));
+}
 
-        draw_sensors_panel(app, canvas, Rect::new(col3_x, row1_y, cell_w, sensors_h));
-        draw_containers_panel(
-            app,
-            canvas,
-            Rect::new(col3_x, row1_y + sensors_h, cell_w, containers_h),
-        );
-    } else {
-        // Generic grid layout for non-ttop configurations (SPEC-024 v5.0 Feature B)
-        // Uses calculate_grid_layout and snap_to_grid for automatic space packing
-        let mut panels: Vec<fn(&App, &mut DirectTerminalCanvas<'_>, Rect)> = Vec::new();
+/// Build list of panel draw functions based on app configuration.
+#[allow(clippy::type_complexity)]
+fn build_panel_list(app: &App) -> Vec<fn(&App, &mut DirectTerminalCanvas<'_>, Rect)> {
+    let mut panels: Vec<fn(&App, &mut DirectTerminalCanvas<'_>, Rect)> = Vec::new();
 
-        if app.panels.cpu {
-            panels.push(draw_cpu_panel);
-        }
-        if app.panels.memory {
-            panels.push(draw_memory_panel);
-        }
-        if app.panels.disk {
-            panels.push(draw_disk_panel);
-        }
-        if app.panels.network {
-            panels.push(draw_network_panel);
-        }
-        // Use display rules for optional panels (SPEC-024 Appendix F)
-        // GPU: no compact variant
-        push_if_visible(&mut panels, app, app.panels.gpu, PanelType::Gpu, draw_gpu_panel, None);
-        // Sensors: has compact variant
-        push_if_visible(&mut panels, app, app.panels.sensors, PanelType::Sensors, draw_sensors_panel, Some(draw_sensors_compact_panel));
-        // PSI: hide if not available on desktop
-        push_if_visible(&mut panels, app, app.panels.psi, PanelType::Psi, draw_psi_panel, None);
-        // Battery: hide on desktop without battery
-        push_if_visible(&mut panels, app, app.panels.battery, PanelType::Battery, draw_battery_panel, None);
-        if app.panels.sensors_compact {
-            panels.push(draw_sensors_compact_panel);
-        }
-        if app.panels.system {
-            panels.push(draw_system_panel);
-        }
+    if app.panels.cpu { panels.push(draw_cpu_panel); }
+    if app.panels.memory { panels.push(draw_memory_panel); }
+    if app.panels.disk { panels.push(draw_disk_panel); }
+    if app.panels.network { panels.push(draw_network_panel); }
 
-        if panels.is_empty() {
-            return;
-        }
+    push_if_visible(&mut panels, app, app.panels.gpu, PanelType::Gpu, draw_gpu_panel, None);
+    push_if_visible(&mut panels, app, app.panels.sensors, PanelType::Sensors, draw_sensors_panel, Some(draw_sensors_compact_panel));
+    push_if_visible(&mut panels, app, app.panels.psi, PanelType::Psi, draw_psi_panel, None);
+    push_if_visible(&mut panels, app, app.panels.battery, PanelType::Battery, draw_battery_panel, None);
 
-        // Use config's grid layout algorithm (SPEC-024 v5.0 Feature B)
-        let layout_config = &app.config.layout;
+    if app.panels.sensors_compact { panels.push(draw_sensors_compact_panel); }
+    if app.panels.system { panels.push(draw_system_panel); }
 
-        let grid_rects = calculate_grid_layout(
-            panels.len() as u32,
-            area.width as u16,
-            area.height as u16,
-            layout_config,
-        );
+    panels
+}
 
-        for (i, draw_fn) in panels.iter().enumerate() {
-            if let Some(rect) = grid_rects.get(i) {
-                // Apply snap_to_grid for pixel-perfect alignment
-                let snapped_x = snap_to_grid(rect.x, layout_config.grid_size);
-                let snapped_y = snap_to_grid(rect.y, layout_config.grid_size);
-                let bounds = Rect::new(
-                    area.x + snapped_x as f32,
-                    area.y + snapped_y as f32,
-                    rect.width as f32,
-                    rect.height as f32,
-                );
-                draw_fn(app, canvas, bounds);
-            }
+fn draw_top_panels(app: &App, canvas: &mut DirectTerminalCanvas<'_>, area: Rect) {
+    if is_ttop_layout(app) && area.width >= 100.0 {
+        draw_ttop_grid(app, canvas, area);
+        return;
+    }
+
+    let panels = build_panel_list(app);
+    if panels.is_empty() {
+        return;
+    }
+
+    let layout_config = &app.config.layout;
+    let grid_rects = calculate_grid_layout(
+        panels.len() as u32,
+        area.width as u16,
+        area.height as u16,
+        layout_config,
+    );
+
+    for (i, draw_fn) in panels.iter().enumerate() {
+        if let Some(rect) = grid_rects.get(i) {
+            let snapped_x = snap_to_grid(rect.x, layout_config.grid_size);
+            let snapped_y = snap_to_grid(rect.y, layout_config.grid_size);
+            let bounds = Rect::new(
+                area.x + snapped_x as f32,
+                area.y + snapped_y as f32,
+                rect.width as f32,
+                rect.height as f32,
+            );
+            draw_fn(app, canvas, bounds);
         }
     }
 }
@@ -809,243 +783,153 @@ fn draw_top_panels(app: &App, canvas: &mut DirectTerminalCanvas<'_>, area: Rect)
 // CPU Panel - uses extracted helpers from panel_cpu module
 // ============================================================================
 
-#[allow(clippy::too_many_lines)]
+/// Get CPU load average and max frequency.
+fn get_cpu_load_freq(app: &App) -> (sysinfo::LoadAvg, u64) {
+    use sysinfo::Cpu;
+    if app.deterministic {
+        (sysinfo::LoadAvg { one: 0.0, five: 0.0, fifteen: 0.0 }, 0)
+    } else {
+        let freq = app.system.cpus().iter().map(Cpu::frequency).max().unwrap_or(0);
+        (app.load_avg.clone(), freq)
+    }
+}
+
+/// Draw CPU meters and history graph.
+fn draw_cpu_meters_graph(
+    app: &App,
+    canvas: &mut DirectTerminalCanvas<'_>,
+    inner: Rect,
+    core_area_height: f32,
+    max_freq_mhz: u64,
+) {
+    let core_count = app.per_core_percent.len();
+    let is_exploded = inner.width > 100.0;
+
+    let layout = CpuMeterLayout::calculate(core_count, core_area_height, is_exploded);
+    let max_meter_ratio = if is_exploded { 0.70 } else { 0.5 };
+    let meters_width = (layout.num_meter_cols as f32 * layout.meter_bar_width).min(inner.width * max_meter_ratio);
+
+    let mut grid = CpuGrid::new(app.per_core_percent.clone())
+        .with_frequencies(
+            app.per_core_freq.iter().map(|&f| f as u32).collect(),
+            vec![max_freq_mhz as u32; core_count],
+        )
+        .with_freq_indicators();
+
+    if is_exploded { grid = grid.with_percentages(); }
+
+    grid.layout(Rect::new(inner.x, inner.y, meters_width, core_area_height));
+    grid.paint(canvas);
+
+    let graph_x = inner.x + meters_width + 1.0;
+    let graph_width = inner.width - meters_width - 1.0;
+
+    if graph_width > 5.0 && !app.cpu_history.as_slice().is_empty() {
+        let history: Vec<f64> = app.cpu_history.as_slice().iter().map(|&v| v * 100.0).collect();
+        let mut graph = BrailleGraph::new(history)
+            .with_color(CPU_COLOR)
+            .with_range(0.0, 100.0)
+            .with_mode(GraphMode::Block);
+        graph.layout(Rect::new(graph_x, inner.y, graph_width, core_area_height));
+        graph.paint(canvas);
+    }
+}
+
+/// Format load average string based on available width.
+fn format_load_string(load: &sysinfo::LoadAvg, core_count: usize, freq_ghz: f64, width: usize, deterministic: bool) -> String {
+    let load_normalized = load.one / core_count as f64;
+    let trend_1_5 = load_trend_arrow(load.one, load.five);
+    let trend_5_15 = load_trend_arrow(load.five, load.fifteen);
+    let load_pct = (load_normalized / 2.0).min(1.0);
+
+    if deterministic {
+        let bar = build_load_bar(load_pct, 10);
+        format!("Load {bar} {:.2}{trend_1_5} {:.2}{trend_5_15} {:.2} │ Fre", load.one, load.five, load.fifteen)
+    } else if width >= 45 && freq_ghz > 0.0 {
+        let bar = build_load_bar(load_pct, 10);
+        format!("Load {bar} {:.2}{trend_1_5} {:.2}{trend_5_15} {:.2}→ │ {freq_ghz:.1}GHz", load.one, load.five, load.fifteen)
+    } else if width >= 35 {
+        let bar = build_load_bar(load_pct, 10);
+        format!("Load {bar} {:.2}{trend_1_5} {:.2}{trend_5_15} {:.2}→", load.one, load.five, load.fifteen)
+    } else {
+        let bar = build_load_bar(load_pct, 4);
+        format!("Load {bar} {:.1}{trend_1_5} {:.1}{trend_5_15} {:.1}→", load.one, load.five, load.fifteen)
+    }
+}
+
+/// Draw load average gauge row.
+fn draw_load_gauge(canvas: &mut DirectTerminalCanvas<'_>, inner: Rect, load_y: f32, load: &sysinfo::LoadAvg, core_count: usize, freq_ghz: f64, deterministic: bool) {
+    if load_y >= inner.y + inner.height || inner.width <= 20.0 { return; }
+
+    let load_normalized = load.one / core_count as f64;
+    let load_str = format_load_string(load, core_count, freq_ghz, inner.width as usize, deterministic);
+
+    canvas.draw_text(&load_str, Point::new(inner.x, load_y), &TextStyle { color: load_color(load_normalized), ..Default::default() });
+}
+
+/// Draw top CPU consumers row.
+fn draw_top_consumers(app: &App, canvas: &mut DirectTerminalCanvas<'_>, inner: Rect, consumers_y: f32) {
+    if app.deterministic || consumers_y >= inner.y + inner.height || inner.width <= 20.0 { return; }
+
+    let mut top_procs: Vec<_> = app.system.processes().values().filter(|p| p.cpu_usage() > 0.1).collect();
+    top_procs.sort_by(|a, b| b.cpu_usage().partial_cmp(&a.cpu_usage()).unwrap_or(std::cmp::Ordering::Equal));
+
+    if top_procs.is_empty() { return; }
+
+    canvas.draw_text("Top ", Point::new(inner.x, consumers_y), &TextStyle { color: DIM_LABEL_COLOR, ..Default::default() });
+
+    let mut x_offset = 4.0;
+    for (i, proc) in top_procs.iter().take(3).enumerate() {
+        let cpu = proc.cpu_usage() as f64;
+        let name: String = proc.name().to_string_lossy().chars().take(12).collect();
+
+        if i > 0 {
+            canvas.draw_text(" │ ", Point::new(inner.x + x_offset, consumers_y), &TextStyle { color: DIM_LABEL_COLOR, ..Default::default() });
+            x_offset += 3.0;
+        }
+
+        let cpu_str = format!("{cpu:.0}%");
+        canvas.draw_text(&cpu_str, Point::new(inner.x + x_offset, consumers_y), &TextStyle { color: consumer_cpu_color(cpu), ..Default::default() });
+        x_offset += cpu_str.len() as f32;
+
+        canvas.draw_text(&format!(" {name}"), Point::new(inner.x + x_offset, consumers_y), &TextStyle { color: PROCESS_NAME_COLOR, ..Default::default() });
+        x_offset += 1.0 + name.len() as f32;
+    }
+}
+
 fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
-    use sysinfo::{Cpu, LoadAvg};
-
-    // Determine detail level based on available height (SPEC-024 v5.0 Feature E)
-    let _detail_level = DetailLevel::for_height(bounds.height as u16);
-
     let cpu_pct = app.cpu_history.last().copied().unwrap_or(0.0) * 100.0;
     let core_count = app.per_core_percent.len();
     let uptime = app.uptime();
+    let (load, max_freq_mhz) = get_cpu_load_freq(app);
 
-    // Use cached load_avg from App (O(1) render - no I/O in render path)
-    let (load, max_freq_mhz) = if app.deterministic {
-        (
-            LoadAvg {
-                one: 0.0,
-                five: 0.0,
-                fifteen: 0.0,
-            },
-            0u64,
-        )
-    } else {
-        let freq = app
-            .system
-            .cpus()
-            .iter()
-            .map(Cpu::frequency)
-            .max()
-            .unwrap_or(0);
-        (app.load_avg.clone(), freq)
-    };
-
-    let is_boosting = max_freq_mhz > 3000; // Heuristic: >3GHz = boosting
+    let is_boosting = max_freq_mhz > 3000;
     let freq_ghz = max_freq_mhz as f64 / 1000.0;
 
-    // Build title - use compact version for narrow panels to ensure frequency is visible
     let title = if bounds.width < 35.0 {
-        // Very narrow: just show essentials
         build_cpu_title_compact(cpu_pct, core_count, freq_ghz, is_boosting)
     } else {
-        build_cpu_title(
-            cpu_pct,
-            core_count,
-            freq_ghz,
-            is_boosting,
-            uptime,
-            load.one,
-            app.deterministic,
-        )
+        build_cpu_title(cpu_pct, core_count, freq_ghz, is_boosting, uptime, load.one, app.deterministic)
     };
 
-    // Check if this panel is focused (SPEC-024 v5.0 Feature D)
     let is_focused = app.is_panel_focused(PanelType::Cpu);
     let mut border = create_panel_border(&title, CPU_COLOR, is_focused);
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
 
-    if inner.height < 2.0 || inner.width < 10.0 {
-        return;
-    }
+    if inner.height < 2.0 || inner.width < 10.0 { return; }
 
-    // Reserve 2 rows for load gauge + top consumers at bottom (like ttop)
     let reserved_bottom = 2.0_f32;
     let core_area_height = (inner.height - reserved_bottom).max(1.0);
-
-    // In deterministic mode with zeroed data, ttop shows empty interior (no per-core meters)
-    // Only show per-core meters when there's actual data
     let has_cpu_data = !app.deterministic || app.per_core_percent.iter().any(|&p| p > 0.0);
 
     if has_cpu_data {
-        // CB-EXPLODE-001 v2: Responsive layout for exploded mode
-        let is_exploded = inner.width > 100.0;
-
-        // Calculate meter layout using helper
-        let layout = CpuMeterLayout::calculate(core_count, core_area_height, is_exploded);
-        let meter_bar_width = layout.meter_bar_width;
-        let num_meter_cols = layout.num_meter_cols;
-
-        // In exploded mode, allow meters to take up to 70% of width
-        let max_meter_ratio = if is_exploded { 0.70 } else { 0.5 };
-        let meters_width =
-            (num_meter_cols as f32 * meter_bar_width).min(inner.width * max_meter_ratio);
-
-        // FRAMEWORK INTEGRATION: Use CpuGrid widget instead of manual drawing
-        let mut grid = CpuGrid::new(app.per_core_percent.clone())
-            .with_frequencies(
-                app.per_core_freq.iter().map(|&f| f as u32).collect(),
-                vec![max_freq_mhz as u32; core_count],
-            )
-            .with_freq_indicators();
-
-        if is_exploded {
-            grid = grid.with_percentages();
-        }
-
-        // Layout and paint CpuGrid
-        grid.layout(Rect::new(inner.x, inner.y, meters_width, core_area_height));
-        grid.paint(canvas);
-
-        // Draw graph on right side
-        let graph_x = inner.x + meters_width + 1.0;
-        let graph_width = inner.width - meters_width - 1.0;
-
-        if graph_width > 5.0 && !app.cpu_history.as_slice().is_empty() {
-            let history: Vec<f64> = app
-                .cpu_history
-                .as_slice()
-                .iter()
-                .map(|&v| v * 100.0)
-                .collect();
-            let mut graph = BrailleGraph::new(history)
-                .with_color(CPU_COLOR)
-                .with_range(0.0, 100.0)
-                .with_mode(GraphMode::Block);
-            graph.layout(Rect::new(graph_x, inner.y, graph_width, core_area_height));
-            graph.paint(canvas);
-        }
-    }
-    // In deterministic mode with no data, interior is left empty (just like ttop)
-
-    // === Bottom Row 1: Load Average Gauge with trend arrows (ttop style) ===
-    // Uses extracted helpers from panel_cpu module
-    let load_y = inner.y + core_area_height;
-    if load_y < inner.y + inner.height && inner.width > 20.0 {
-        let load_normalized = load.one / core_count as f64;
-        let gauge_color = load_color(load_normalized);
-        let available_width = inner.width as usize;
-        let freq_ghz = max_freq_mhz as f64 / 1000.0;
-
-        // Use format_load_line helper (but inline for deterministic special case)
-        let trend_1_5 = load_trend_arrow(load.one, load.five);
-        let trend_5_15 = load_trend_arrow(load.five, load.fifteen);
-        let load_pct = (load_normalized / 2.0).min(1.0);
-
-        let load_str = if app.deterministic {
-            let bar = build_load_bar(load_pct, 10);
-            format!(
-                "Load {bar} {:.2}{trend_1_5} {:.2}{trend_5_15} {:.2} │ Fre",
-                load.one, load.five, load.fifteen
-            )
-        } else if available_width >= 45 && freq_ghz > 0.0 {
-            let bar = build_load_bar(load_pct, 10);
-            format!(
-                "Load {bar} {:.2}{trend_1_5} {:.2}{trend_5_15} {:.2}→ │ {freq_ghz:.1}GHz",
-                load.one, load.five, load.fifteen
-            )
-        } else if available_width >= 35 {
-            let bar = build_load_bar(load_pct, 10);
-            format!("Load {bar} {:.2}{trend_1_5} {:.2}{trend_5_15} {:.2}→", load.one, load.five, load.fifteen)
-        } else {
-            let bar = build_load_bar(load_pct, 4);
-            format!("Load {bar} {:.1}{trend_1_5} {:.1}{trend_5_15} {:.1}→", load.one, load.five, load.fifteen)
-        };
-
-        canvas.draw_text(
-            &load_str,
-            Point::new(inner.x, load_y),
-            &TextStyle {
-                color: gauge_color,
-                ..Default::default()
-            },
-        );
+        draw_cpu_meters_graph(app, canvas, inner, core_area_height, max_freq_mhz);
     }
 
-    // === Bottom Row 2: Top 3 CPU Consumers (ttop style) ===
-    // Skip in deterministic mode (ttop shows empty row)
-    // Uses extracted colors from panel_cpu module
-    let consumers_y = inner.y + core_area_height + 1.0;
-    if !app.deterministic && consumers_y < inner.y + inner.height && inner.width > 20.0 {
-        // Get top 3 processes by CPU
-        let mut top_procs: Vec<_> = app
-            .system
-            .processes()
-            .values()
-            .filter(|p| p.cpu_usage() > 0.1)
-            .collect();
-        top_procs.sort_by(|a, b| {
-            b.cpu_usage()
-                .partial_cmp(&a.cpu_usage())
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        // Only show "Top" section if there are processes to display
-        if !top_procs.is_empty() {
-            // Draw "Top " prefix
-            canvas.draw_text(
-                "Top ",
-                Point::new(inner.x, consumers_y),
-                &TextStyle {
-                    color: DIM_LABEL_COLOR,
-                    ..Default::default()
-                },
-            );
-
-            let mut x_offset = 4.0;
-            for (i, proc) in top_procs.iter().take(3).enumerate() {
-                let cpu = proc.cpu_usage() as f64;
-                let name: String = proc.name().to_string_lossy().chars().take(12).collect();
-
-                let cpu_color = consumer_cpu_color(cpu);
-
-                if i > 0 {
-                    canvas.draw_text(
-                        " │ ",
-                        Point::new(inner.x + x_offset, consumers_y),
-                        &TextStyle {
-                            color: DIM_LABEL_COLOR,
-                            ..Default::default()
-                        },
-                    );
-                    x_offset += 3.0;
-                }
-
-                let cpu_str = format!("{cpu:.0}%");
-                canvas.draw_text(
-                    &cpu_str,
-                    Point::new(inner.x + x_offset, consumers_y),
-                    &TextStyle {
-                        color: cpu_color,
-                        ..Default::default()
-                    },
-                );
-                x_offset += cpu_str.len() as f32;
-
-                canvas.draw_text(
-                    &format!(" {name}"),
-                    Point::new(inner.x + x_offset, consumers_y),
-                    &TextStyle {
-                        color: PROCESS_NAME_COLOR,
-                        ..Default::default()
-                    },
-                );
-                x_offset += 1.0 + name.len() as f32;
-            }
-        }
-    }
+    draw_load_gauge(canvas, inner, inner.y + core_area_height, &load, core_count, freq_ghz, app.deterministic);
+    draw_top_consumers(app, canvas, inner, inner.y + core_area_height + 1.0);
 }
 
 // ============================================================================
@@ -1207,775 +1091,332 @@ fn draw_memory_rows_deterministic(
 // ============================================================================
 
 #[allow(clippy::too_many_lines)]
-fn draw_memory_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
-    // Determine detail level based on available height (SPEC-024 v5.0 Feature E)
-    let _detail_level = DetailLevel::for_height(bounds.height as u16);
+/// Compute memory percentages from app state.
+fn compute_mem_percentages(app: &App) -> (f64, f64, f64, f64) {
+    let mem_total = app.mem_total;
+    let swap_total = app.swap_total;
+    let used_pct = if mem_total > 0 { (app.mem_used as f64 / mem_total as f64) * 100.0 } else { 0.0 };
+    let cached_pct = if mem_total > 0 { (app.mem_cached as f64 / mem_total as f64) * 100.0 } else { 0.0 };
+    let free_pct = if mem_total > 0 { (app.mem_available as f64 / mem_total as f64) * 100.0 } else { 0.0 };
+    let swap_pct = if swap_total > 0 { (app.swap_used as f64 / swap_total as f64) * 100.0 } else { 0.0 };
+    (used_pct, cached_pct, free_pct, swap_pct)
+}
 
+/// Build memory rows vector with optional ZRAM row.
+fn build_memory_rows(app: &App, has_zram: bool) -> Vec<(&'static str, f64, f64, Color)> {
     let gb = |b: u64| b as f64 / 1024.0 / 1024.0 / 1024.0;
-    let mem_pct = if app.mem_total > 0 {
-        (app.mem_used as f64 / app.mem_total as f64) * 100.0
-    } else {
-        0.0
-    };
+    let (used_pct, cached_pct, free_pct, swap_pct) = compute_mem_percentages(app);
+    let mut rows: Vec<(&str, f64, f64, Color)> = vec![
+        ("Used", gb(app.mem_used), used_pct, percent_color(used_pct)),
+        ("Swap", gb(app.swap_used), swap_pct, swap_color(swap_pct)),
+        ("Cached", gb(app.mem_cached), cached_pct, CACHED_COLOR),
+        ("Free", gb(app.mem_available), free_pct, FREE_COLOR),
+    ];
+    if has_zram {
+        rows.insert(2, ("ZRAM", 0.0, 0.0, Color { r: 0.8, g: 0.4, b: 1.0, a: 1.0 }));
+    }
+    rows
+}
 
-    // Check for ZRAM (skip in deterministic mode)
-    let zram_stats = if app.deterministic {
-        None
-    } else {
-        read_zram_stats()
-    };
-    let zram_info = zram_stats
-        .as_ref()
-        .filter(|z| z.is_active())
-        .map(|z| format!(" │ ZRAM:{:.1}x", z.ratio()))
-        .unwrap_or_default();
+/// Draw ZRAM row in ttop style.
+fn draw_zram_row(canvas: &mut DirectTerminalCanvas<'_>, inner: Rect, y: f32, zram_data: &(f64, f64, f64, &str)) {
+    let (orig_gb, compr_gb, ratio, algo) = zram_data;
+    let orig_str = ZramDisplay::format_size(*orig_gb);
+    let compr_str = ZramDisplay::format_size(*compr_gb);
+    canvas.draw_text("  ZRAM ", Point::new(inner.x, y), &TextStyle { color: DIM_COLOR, ..Default::default() });
+    canvas.draw_text(&format!("{orig_str}→{compr_str} "), Point::new(inner.x + 7.0, y), &TextStyle { color: ZRAM_COLOR, ..Default::default() });
+    let ratio_x = inner.x + 7.0 + orig_str.len() as f32 + 1.0 + compr_str.len() as f32 + 1.0;
+    canvas.draw_text(&format!("{ratio:.1}x"), Point::new(ratio_x, y), &TextStyle { color: RATIO_COLOR, ..Default::default() });
+    canvas.draw_text(&format!(" {algo}"), Point::new(ratio_x + 4.0, y), &TextStyle { color: DIM_COLOR, ..Default::default() });
+}
 
-    // ttop-style title (Border widget adds outer spaces)
-    // Deterministic: "Memory │ 0.0G / 0.0G (0%)"
-    let title = format!(
-        "Memory │ {:.1}G / {:.1}G ({:.0}%){}",
-        gb(app.mem_used),
-        gb(app.mem_total),
-        mem_pct,
-        zram_info
-    );
+/// Draw a single memory row with progress bar.
+fn draw_memory_row_bar(canvas: &mut DirectTerminalCanvas<'_>, inner: Rect, y: f32, label: &str, value: f64, pct: f64, color: Color) {
+    let bar_width = 10.min((inner.width as usize).saturating_sub(22));
+    let filled = ((pct / 100.0) * bar_width as f64) as usize;
+    let bar: String = "█".repeat(filled.min(bar_width)) + &"░".repeat(bar_width - filled.min(bar_width));
+    let text = format!("{label:>6} {value:>5.1}G {bar} {pct:>5.1}%");
+    canvas.draw_text(&text, Point::new(inner.x, y), &TextStyle { color, ..Default::default() });
+}
 
-    // Check if this panel is focused (SPEC-024 v5.0 Feature D)
+/// Draw swap thrashing indicator if active.
+fn draw_swap_thrash_indicator(app: &App, canvas: &mut DirectTerminalCanvas<'_>, inner: Rect, y: f32) {
+    if let Some(swap_data) = app.analyzers.swap_data() {
+        let (is_thrashing, severity) = swap_data.is_thrashing();
+        if has_swap_activity(is_thrashing, swap_data.swap_in_rate, swap_data.swap_out_rate) {
+            let (indicator, ind_color) = thrashing_indicator(severity);
+            let bar_width = 10.min((inner.width as usize).saturating_sub(22));
+            let thrash_x = inner.x + 28.0 + bar_width as f32;
+            let thrash_text = format!(" {indicator} I:{:.0}/O:{:.0}", swap_data.swap_in_rate, swap_data.swap_out_rate);
+            canvas.draw_text(&thrash_text, Point::new(thrash_x, y), &TextStyle { color: ind_color, ..Default::default() });
+        }
+    }
+}
+
+/// Draw PSI memory pressure indicator.
+fn draw_mem_psi_indicator(app: &App, canvas: &mut DirectTerminalCanvas<'_>, inner: Rect, y: f32) {
+    if let Some(psi) = app.psi_data() {
+        let mem_some = psi.memory.some.avg10;
+        let mem_full = psi.memory.full.as_ref().map_or(0.0, |f| f.avg10);
+        let (symbol, color) = psi_memory_indicator(mem_some, mem_full);
+        let psi_text = format!("   PSI {symbol} {mem_some:>5.1}% some {mem_full:>5.1}% full");
+        canvas.draw_text(&psi_text, Point::new(inner.x, y), &TextStyle { color, ..Default::default() });
+    }
+}
+
+/// Draw memory rows in normal mode with bars and indicators.
+fn draw_memory_rows_normal(app: &App, canvas: &mut DirectTerminalCanvas<'_>, inner: Rect, mut y: f32, rows: &[(&str, f64, f64, Color)], zram_data: Option<(f64, f64, f64, &str)>) {
+    for (label, value, pct, color) in rows {
+        if y >= inner.y + inner.height { break; }
+        if *label == "ZRAM" {
+            if let Some(ref data) = zram_data {
+                draw_zram_row(canvas, inner, y, data);
+            }
+            y += 1.0;
+            continue;
+        }
+        draw_memory_row_bar(canvas, inner, y, label, *value, *pct, *color);
+        if *label == "Swap" { draw_swap_thrash_indicator(app, canvas, inner, y); }
+        y += 1.0;
+    }
+    if y < inner.y + inner.height { draw_mem_psi_indicator(app, canvas, inner, y); }
+}
+
+fn draw_memory_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
+    let _detail_level = DetailLevel::for_height(bounds.height as u16);
+    let gb = |b: u64| b as f64 / 1024.0 / 1024.0 / 1024.0;
+    let mem_pct = if app.mem_total > 0 { (app.mem_used as f64 / app.mem_total as f64) * 100.0 } else { 0.0 };
+
+    let zram_stats = if app.deterministic { None } else { read_zram_stats() };
+    let zram_info = zram_stats.as_ref().filter(|z| z.is_active()).map(|z| format!(" │ ZRAM:{:.1}x", z.ratio())).unwrap_or_default();
+    let title = format!("Memory │ {:.1}G / {:.1}G ({:.0}%){}", gb(app.mem_used), gb(app.mem_total), mem_pct, zram_info);
+
     let is_focused = app.is_panel_focused(PanelType::Memory);
     let mut border = create_panel_border(&title, MEMORY_COLOR, is_focused);
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
 
-    if inner.height < 1.0 || inner.width < 10.0 {
-        return;
-    }
+    if inner.height < 1.0 || inner.width < 10.0 { return; }
 
     let mut y = inner.y;
-
-    // Line 1: Stacked memory bar (ttop style: Used|Cached|Free)
     draw_memory_stacked_bar(canvas, inner, y, app);
     y += 1.0;
 
-    // Remaining lines: Memory breakdown rows (ttop style)
-    // Always show even with 0 values (like ttop deterministic mode)
-    if y < inner.y + inner.height {
-        let used_pct = if app.mem_total > 0 {
-            (app.mem_used as f64 / app.mem_total as f64) * 100.0
-        } else {
-            0.0
-        };
-        let cached_pct = if app.mem_total > 0 {
-            (app.mem_cached as f64 / app.mem_total as f64) * 100.0
-        } else {
-            0.0
-        };
-        let free_pct = if app.mem_total > 0 {
-            (app.mem_available as f64 / app.mem_total as f64) * 100.0
-        } else {
-            0.0
-        };
-        let swap_pct = if app.swap_total > 0 {
-            (app.swap_used as f64 / app.swap_total as f64) * 100.0
-        } else {
-            0.0
-        };
+    if y >= inner.y + inner.height { return; }
 
-        let mut rows: Vec<(&str, f64, f64, Color)> = vec![
-            ("Used", gb(app.mem_used), used_pct, percent_color(used_pct)),
-            ("Swap", gb(app.swap_used), swap_pct, swap_color(swap_pct)),
-            ("Cached", gb(app.mem_cached), cached_pct, CACHED_COLOR),
-            ("Free", gb(app.mem_available), free_pct, FREE_COLOR),
-        ];
+    let zram_row_data = zram_stats.as_ref().filter(|z| z.is_active()).map(|z| (gb(z.orig_data_size), gb(z.compr_data_size), z.ratio(), z.algorithm.as_str()));
+    let rows = build_memory_rows(app, zram_row_data.is_some());
 
-        // === ZRAM Row (conditional) - ttop style ===
-        // We need to render ZRAM separately due to special formatting
-        let zram_row_data = zram_stats.as_ref().filter(|z| z.is_active()).map(|z| {
-            let orig_gb = gb(z.orig_data_size);
-            let compr_gb = gb(z.compr_data_size);
-            let ratio = z.ratio();
-            let algo = z.algorithm.as_str();
-            (orig_gb, compr_gb, ratio, algo)
-        });
-
-        // Remove the "Cached" and "Free" rows for now to make room for ZRAM if needed
-        // Actually, just add ZRAM after Swap
-        if zram_row_data.is_some() {
-            // Insert ZRAM as a special row - we'll handle it separately
-            rows.insert(
-                2,
-                (
-                    "ZRAM",
-                    0.0,
-                    0.0,
-                    Color {
-                        r: 0.8,
-                        g: 0.4,
-                        b: 1.0,
-                        a: 1.0,
-                    },
-                ),
-            );
-        }
-
-        // In deterministic mode, use ttop simple format: "  Used:   0.0G  0"
-        // In normal mode, use detailed format with bar and percentage
-        if app.deterministic {
-            let stats = MemoryStats::from_app(app);
-            draw_memory_rows_deterministic(canvas, inner, y, &stats);
-        } else {
-            // Normal mode: detailed format with bars
-            for (label, value, pct, color) in &rows {
-                if y >= inner.y + inner.height {
-                    break;
-                }
-
-                // Special handling for ZRAM row (ttop style: "ZRAM 2.5G→1.0G 2.5x lz4")
-                if *label == "ZRAM" {
-                    if let Some((orig_gb, compr_gb, ratio, algo)) = &zram_row_data {
-                        let orig_str = ZramDisplay::format_size(*orig_gb);
-                        let compr_str = ZramDisplay::format_size(*compr_gb);
-
-                        canvas.draw_text(
-                            "  ZRAM ",
-                            Point::new(inner.x, y),
-                            &TextStyle {
-                                color: DIM_COLOR,
-                                ..Default::default()
-                            },
-                        );
-                        canvas.draw_text(
-                            &format!("{orig_str}→{compr_str} "),
-                            Point::new(inner.x + 7.0, y),
-                            &TextStyle {
-                                color: ZRAM_COLOR,
-                                ..Default::default()
-                            },
-                        );
-                        let ratio_x = inner.x
-                            + 7.0
-                            + orig_str.len() as f32
-                            + 1.0
-                            + compr_str.len() as f32
-                            + 1.0;
-                        canvas.draw_text(
-                            &format!("{ratio:.1}x"),
-                            Point::new(ratio_x, y),
-                            &TextStyle {
-                                color: RATIO_COLOR,
-                                ..Default::default()
-                            },
-                        );
-                        canvas.draw_text(
-                            &format!(" {algo}"),
-                            Point::new(ratio_x + 4.0, y),
-                            &TextStyle {
-                                color: DIM_COLOR,
-                                ..Default::default()
-                            },
-                        );
-                    }
-                    y += 1.0;
-                    continue;
-                }
-
-                let bar_width = 10.min((inner.width as usize).saturating_sub(22));
-                let filled = ((*pct / 100.0) * bar_width as f64) as usize;
-                let bar: String = "█".repeat(filled.min(bar_width))
-                    + &"░".repeat(bar_width - filled.min(bar_width));
-
-                let text = format!("{label:>6} {value:>5.1}G {bar} {pct:>5.1}%");
-                canvas.draw_text(
-                    &text,
-                    Point::new(inner.x, y),
-                    &TextStyle {
-                        color: *color,
-                        ..Default::default()
-                    },
-                );
-
-                // Add swap thrashing indicator (CB-MEM-004) after Swap row
-                if *label == "Swap" {
-                    if let Some(swap_data) = app.analyzers.swap_data() {
-                        let (is_thrashing, severity) = swap_data.is_thrashing();
-                        if has_swap_activity(is_thrashing, swap_data.swap_in_rate, swap_data.swap_out_rate) {
-                            let (indicator, ind_color) = thrashing_indicator(severity);
-                            let thrash_x = inner.x + 28.0 + bar_width as f32;
-                            let thrash_text = format!(
-                                " {indicator} I:{:.0}/O:{:.0}",
-                                swap_data.swap_in_rate, swap_data.swap_out_rate
-                            );
-                            canvas.draw_text(
-                                &thrash_text,
-                                Point::new(thrash_x, y),
-                                &TextStyle {
-                                    color: ind_color,
-                                    ..Default::default()
-                                },
-                            );
-                        }
-                    }
-                }
-
-                y += 1.0;
-            }
-
-            // Memory Pressure indicator (CB-MEM-003) - show PSI memory pressure
-            if y < inner.y + inner.height {
-                if let Some(psi) = app.psi_data() {
-                    let mem_some = psi.memory.some.avg10;
-                    let mem_full = psi.memory.full.as_ref().map_or(0.0, |f| f.avg10);
-
-                    // Use helper for indicator selection (ttop style)
-                    let (symbol, color) = psi_memory_indicator(mem_some, mem_full);
-
-                    let psi_text =
-                        format!("   PSI {symbol} {mem_some:>5.1}% some {mem_full:>5.1}% full");
-                    canvas.draw_text(
-                        &psi_text,
-                        Point::new(inner.x, y),
-                        &TextStyle {
-                            color,
-                            ..Default::default()
-                        },
-                    );
-                }
-            }
-        }
+    if app.deterministic {
+        let stats = MemoryStats::from_app(app);
+        draw_memory_rows_deterministic(canvas, inner, y, &stats);
+    } else {
+        draw_memory_rows_normal(app, canvas, inner, y, &rows, zram_row_data);
     }
 }
 
-fn draw_disk_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
-    // Get disk I/O data
+/// Compute total disk stats (used, space, read_rate, write_rate).
+fn compute_disk_stats(app: &App) -> (u64, u64, f64, f64) {
+    if app.deterministic { return (0, 0, 0.0, 0.0); }
     let disk_io = app.disk_io_data();
+    let (used, space): (u64, u64) = app.disks.iter()
+        .map(|d| (d.total_space() - d.available_space(), d.total_space()))
+        .fold((0, 0), |(au, at), (u, t)| (au + u, at + t));
+    let r_rate = disk_io.map_or(0.0, |d| d.total_read_bytes_per_sec);
+    let w_rate = disk_io.map_or(0.0, |d| d.total_write_bytes_per_sec);
+    (used, space, r_rate, w_rate)
+}
 
-    // In deterministic mode, use zeroed values like ttop
-    let (total_used, total_space, read_rate, write_rate) = if app.deterministic {
-        (0u64, 0u64, 0.0, 0.0)
-    } else {
-        // Calculate total disk usage for title
-        let (used, space): (u64, u64) = app
-            .disks
-            .iter()
-            .map(|d| (d.total_space() - d.available_space(), d.total_space()))
-            .fold((0, 0), |(au, at), (u, t)| (au + u, at + t));
-
-        let r_rate = disk_io.map_or(0.0, |d| d.total_read_bytes_per_sec);
-        let w_rate = disk_io.map_or(0.0, |d| d.total_write_bytes_per_sec);
-
-        (used, space, r_rate, w_rate)
-    };
-    let total_pct = if total_space > 0 {
-        (total_used as f64 / total_space as f64) * 100.0
-    } else {
-        0.0
-    };
-
-    // ttop-style title (Border adds outer spaces)
-    // Deterministic: "Disk │ R: 0B/s │ W: 0B/s │ -0 IOPS │"
-    let title = if app.deterministic {
-        // ttop deterministic format with IOPS
+/// Format disk panel title.
+fn format_disk_title(deterministic: bool, used: u64, space: u64, r_rate: f64, w_rate: f64) -> String {
+    let gb = |b: u64| b as f64 / 1024.0 / 1024.0 / 1024.0;
+    if deterministic {
         "Disk │ R: 0B/s │ W: 0B/s │ -0 IOPS │".to_string()
-    } else if read_rate > 0.0 || write_rate > 0.0 {
-        format!(
-            "Disk │ R: {} │ W: {} │ {:.0}G / {:.0}G",
-            format_bytes_rate(read_rate),
-            format_bytes_rate(write_rate),
-            total_used as f64 / 1024.0 / 1024.0 / 1024.0,
-            total_space as f64 / 1024.0 / 1024.0 / 1024.0,
-        )
+    } else if r_rate > 0.0 || w_rate > 0.0 {
+        format!("Disk │ R: {} │ W: {} │ {:.0}G / {:.0}G", format_bytes_rate(r_rate), format_bytes_rate(w_rate), gb(used), gb(space))
     } else {
-        // Fallback when no I/O data
-        format!(
-            "Disk │ {:.0}G / {:.0}G ({:.0}%)",
-            total_used as f64 / 1024.0 / 1024.0 / 1024.0,
-            total_space as f64 / 1024.0 / 1024.0 / 1024.0,
-            total_pct
-        )
-    };
+        let pct = if space > 0 { (used as f64 / space as f64) * 100.0 } else { 0.0 };
+        format!("Disk │ {:.0}G / {:.0}G ({:.0}%)", gb(used), gb(space), pct)
+    }
+}
 
-    // Check if this panel is focused (SPEC-024 v5.0 Feature D)
+/// Draw disk panel in deterministic mode.
+fn draw_disk_deterministic(canvas: &mut DirectTerminalCanvas<'_>, inner: Rect) {
+    let dim_color = Color { r: 0.3, g: 0.3, b: 0.3, a: 1.0 };
+    canvas.draw_text("I/O Pressure ○  0.0% some    0.0% full", Point::new(inner.x, inner.y), &TextStyle { color: dim_color, ..Default::default() });
+    if inner.height >= 2.0 {
+        canvas.draw_text("── Top Active Processes ──────────────", Point::new(inner.x, inner.y + 1.0), &TextStyle { color: dim_color, ..Default::default() });
+    }
+}
+
+/// Get I/O rates for a specific disk device.
+fn get_disk_io_rates(app: &App, device_name: &str) -> (f64, f64) {
+    app.disk_io_data()
+        .and_then(|data| data.rates.get(device_name))
+        .map_or((0.0, 0.0), |rate| (rate.read_bytes_per_sec, rate.write_bytes_per_sec))
+}
+
+/// Draw a single disk row.
+fn draw_disk_row(canvas: &mut DirectTerminalCanvas<'_>, inner: Rect, y: f32, disk: &sysinfo::Disk, d_read: f64, d_write: f64) {
+    let mount = disk.mount_point().to_string_lossy();
+    let mount_short: String = if mount == "/" { "/".to_string() } else { mount.split('/').next_back().unwrap_or(&mount).chars().take(8).collect() };
+    let total = disk.total_space();
+    let used = total - disk.available_space();
+    let pct = if total > 0 { (used as f64 / total as f64) * 100.0 } else { 0.0 };
+    let total_gb = total as f64 / 1024.0 / 1024.0 / 1024.0;
+    let io_str = if d_read > 0.0 || d_write > 0.0 { format!(" R:{} W:{}", format_bytes_rate(d_read), format_bytes_rate(d_write)) } else { String::new() };
+    let bar_width = (inner.width as usize).saturating_sub(24 + io_str.len()).max(2);
+    let filled = ((pct / 100.0) * bar_width as f64) as usize;
+    let bar: String = "█".repeat(filled.min(bar_width)) + &"░".repeat(bar_width - filled.min(bar_width));
+    let text = format!("{mount_short:<8} {total_gb:>5.0}G {bar} {pct:>5.1}%{io_str}");
+    let color = if d_read > 1024.0 || d_write > 1024.0 { Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 } } else { percent_color(pct) };
+    canvas.draw_text(&text, Point::new(inner.x, y), &TextStyle { color, ..Default::default() });
+}
+
+fn draw_disk_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
+    let (total_used, total_space, read_rate, write_rate) = compute_disk_stats(app);
+    let title = format_disk_title(app.deterministic, total_used, total_space, read_rate, write_rate);
+
     let is_focused = app.is_panel_focused(PanelType::Disk);
     let mut border = create_panel_border(&title, DISK_COLOR, is_focused);
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
 
-    if inner.height < 1.0 {
-        return;
-    }
-
-    // In deterministic mode, show ttop-style content
-    if app.deterministic {
-        let dim_color = Color {
-            r: 0.3,
-            g: 0.3,
-            b: 0.3,
-            a: 1.0,
-        };
-
-        // Row 1: I/O Pressure
-        canvas.draw_text(
-            "I/O Pressure ○  0.0% some    0.0% full",
-            Point::new(inner.x, inner.y),
-            &TextStyle {
-                color: dim_color,
-                ..Default::default()
-            },
-        );
-
-        // Row 2: Top Active Processes header
-        if inner.height >= 2.0 {
-            canvas.draw_text(
-                "── Top Active Processes ──────────────",
-                Point::new(inner.x, inner.y + 1.0),
-                &TextStyle {
-                    color: dim_color,
-                    ..Default::default()
-                },
-            );
-        }
-
-        return;
-    }
+    if inner.height < 1.0 { return; }
+    if app.deterministic { draw_disk_deterministic(canvas, inner); return; }
 
     let max_disks = inner.height as usize;
     for (i, disk) in app.disks.iter().take(max_disks).enumerate() {
         let y = inner.y + i as f32;
-        if y >= inner.y + inner.height {
-            break;
-        }
-
-        let mount = disk.mount_point().to_string_lossy();
-        let mount_short: String = if mount == "/" {
-            "/".to_string()
-        } else {
-            mount
-                .split('/')
-                .next_back()
-                .unwrap_or(&mount)
-                .chars()
-                .take(8)
-                .collect()
-        };
-
-        let total = disk.total_space();
-        let used = total - disk.available_space();
-        let pct = if total > 0 {
-            (used as f64 / total as f64) * 100.0
-        } else {
-            0.0
-        };
-        let total_gb = total as f64 / 1024.0 / 1024.0 / 1024.0;
-
-        // Try to find I/O rates for this disk
+        if y >= inner.y + inner.height { break; }
         let disk_name = disk.name().to_string_lossy();
         let device_name = disk_name.trim_start_matches("/dev/");
-
-        let (d_read, d_write) = if let Some(data) = disk_io {
-            if let Some(rate) = data.rates.get(device_name) {
-                (rate.read_bytes_per_sec, rate.write_bytes_per_sec)
-            } else {
-                (0.0, 0.0)
-            }
-        } else {
-            (0.0, 0.0)
-        };
-
-        let io_str = if d_read > 0.0 || d_write > 0.0 {
-            format!(
-                " R:{} W:{}",
-                format_bytes_rate(d_read),
-                format_bytes_rate(d_write)
-            )
-        } else {
-            String::new()
-        };
-
-        // Layout: mount(8) | size(5)G | bar(...) | pct(5)% | IO(...)
-        // Fixed parts: 8 + 1 + 6 + 1 + 1 + 6 + 1 = 24 chars
-        // IO string is variable width
-        let fixed_width = 24;
-        let io_width = io_str.len();
-        let available_width = (inner.width as usize).saturating_sub(fixed_width + io_width);
-        let bar_width = available_width.max(2);
-
-        let filled = ((pct / 100.0) * bar_width as f64) as usize;
-        let bar: String =
-            "█".repeat(filled.min(bar_width)) + &"░".repeat(bar_width - filled.min(bar_width));
-
-        // Format: "mnt      100G  ████░░  50.0%  R:10M W:5M"
-        let text = format!("{mount_short:<8} {total_gb:>5.0}G {bar} {pct:>5.1}%{io_str}");
-
-        // Highlight active disks
-        let color = if d_read > 1024.0 || d_write > 1024.0 {
-            Color {
-                r: 1.0,
-                g: 1.0,
-                b: 1.0,
-                a: 1.0,
-            } // White for active
-        } else {
-            percent_color(pct) // Gradient for idle
-        };
-
-        canvas.draw_text(
-            &text,
-            Point::new(inner.x, y),
-            &TextStyle {
-                color,
-                ..Default::default()
-            },
-        );
+        let (d_read, d_write) = get_disk_io_rates(app, device_name);
+        draw_disk_row(canvas, inner, y, disk, d_read, d_write);
     }
 }
 
+/// Compute network stats (rx_total, tx_total, primary_iface).
+fn compute_network_stats(app: &App) -> (u64, u64, &str) {
+    if app.deterministic { return (0, 0, "none"); }
+    let (rx, tx): (u64, u64) = app.networks.values().map(|d| (d.received(), d.transmitted())).fold((0, 0), |(ar, at), (r, t)| (ar + r, at + t));
+    let iface = app.networks.iter().filter(|(name, _)| !name.starts_with("lo")).max_by_key(|(_, data)| data.received() + data.transmitted()).map_or("none", |(name, _)| name.as_str());
+    (rx, tx, iface)
+}
+
+/// Draw network deterministic download/upload rows.
+fn draw_net_dl_ul_rows(canvas: &mut DirectTerminalCanvas<'_>, inner: Rect, y: &mut f32) {
+    let cyan = Color { r: 0.3, g: 0.8, b: 0.9, a: 1.0 };
+    let red = Color { r: 1.0, g: 0.3, b: 0.3, a: 1.0 };
+    let white = Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 };
+    canvas.draw_text("↓", Point::new(inner.x, *y), &TextStyle { color: cyan, ..Default::default() });
+    canvas.draw_text(" Download ", Point::new(inner.x + 1.0, *y), &TextStyle { color: cyan, ..Default::default() });
+    canvas.draw_text("0B/s", Point::new(inner.x + 11.0, *y), &TextStyle { color: white, ..Default::default() });
+    *y += 1.0;
+    if *y < inner.y + inner.height {
+        canvas.draw_text(&"⠀".repeat(inner.width as usize), Point::new(inner.x, *y), &TextStyle { color: cyan, ..Default::default() });
+        *y += 1.0;
+    }
+    if *y < inner.y + inner.height {
+        canvas.draw_text("↑", Point::new(inner.x, *y), &TextStyle { color: red, ..Default::default() });
+        canvas.draw_text(" Upload   ", Point::new(inner.x + 1.0, *y), &TextStyle { color: red, ..Default::default() });
+        canvas.draw_text("0B/s", Point::new(inner.x + 11.0, *y), &TextStyle { color: white, ..Default::default() });
+        *y += 1.0;
+    }
+    for _ in 0..2 {
+        if *y < inner.y + inner.height {
+            canvas.draw_text(&"⠀".repeat(inner.width as usize), Point::new(inner.x, *y), &TextStyle { color: red, ..Default::default() });
+            *y += 1.0;
+        }
+    }
+}
+
+/// Draw network deterministic session and TCP/UDP rows.
+fn draw_net_session_stats(canvas: &mut DirectTerminalCanvas<'_>, inner: Rect, y: f32) {
+    let cyan = Color { r: 0.3, g: 0.8, b: 0.9, a: 1.0 };
+    let red = Color { r: 1.0, g: 0.3, b: 0.3, a: 1.0 };
+    let dim = Color { r: 0.3, g: 0.3, b: 0.3, a: 1.0 };
+    let white = Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 };
+    let green = Color { r: 0.3, g: 0.9, b: 0.3, a: 1.0 };
+    let mut y = y;
+    if y < inner.y + inner.height {
+        canvas.draw_text("Session ", Point::new(inner.x, y), &TextStyle { color: dim, ..Default::default() });
+        canvas.draw_text("↓", Point::new(inner.x + 8.0, y), &TextStyle { color: cyan, ..Default::default() });
+        canvas.draw_text("0B", Point::new(inner.x + 9.0, y), &TextStyle { color: white, ..Default::default() });
+        canvas.draw_text(" ↑", Point::new(inner.x + 11.0, y), &TextStyle { color: red, ..Default::default() });
+        canvas.draw_text("0B", Point::new(inner.x + 13.0, y), &TextStyle { color: white, ..Default::default() });
+        y += 1.0;
+    }
+    if y < inner.y + inner.height {
+        let tcp_col = Color { r: 0.3, g: 0.7, b: 0.9, a: 1.0 };
+        let udp_col = Color { r: 0.8, g: 0.3, b: 0.8, a: 1.0 };
+        canvas.draw_text("TCP ", Point::new(inner.x, y), &TextStyle { color: tcp_col, ..Default::default() });
+        canvas.draw_text("0", Point::new(inner.x + 4.0, y), &TextStyle { color: green, ..Default::default() });
+        canvas.draw_text("/", Point::new(inner.x + 5.0, y), &TextStyle { color: dim, ..Default::default() });
+        canvas.draw_text("0", Point::new(inner.x + 6.0, y), &TextStyle { color: tcp_col, ..Default::default() });
+        canvas.draw_text(" UDP ", Point::new(inner.x + 7.0, y), &TextStyle { color: udp_col, ..Default::default() });
+        canvas.draw_text("0", Point::new(inner.x + 12.0, y), &TextStyle { color: white, ..Default::default() });
+        canvas.draw_text(" │ RTT ", Point::new(inner.x + 13.0, y), &TextStyle { color: dim, ..Default::default() });
+        canvas.draw_text("●●●●●", Point::new(inner.x + 20.0, y), &TextStyle { color: green, ..Default::default() });
+    }
+}
+
+/// Draw network panel in deterministic mode.
+fn draw_network_deterministic(canvas: &mut DirectTerminalCanvas<'_>, inner: Rect) {
+    let mut y = inner.y;
+    draw_net_dl_ul_rows(canvas, inner, &mut y);
+    draw_net_session_stats(canvas, inner, y);
+}
+
+/// Build network interfaces list with stats.
+fn build_network_interfaces(app: &App) -> Vec<NetworkInterface> {
+    let network_stats_data = app.analyzers.network_stats_data();
+    let mut interfaces: Vec<NetworkInterface> = Vec::new();
+    for (name, data) in &app.networks {
+        let mut iface = NetworkInterface::new(name);
+        iface.update(data.received() as f64, data.transmitted() as f64);
+        iface.set_totals(data.total_received(), data.total_transmitted());
+        if let Some(stats_data) = network_stats_data {
+            if let Some(stats) = stats_data.stats.get(name.as_str()) {
+                iface.set_stats(stats.rx_errors, stats.tx_errors, stats.rx_dropped, stats.tx_dropped);
+            }
+            if let Some(rates) = stats_data.rates.get(name.as_str()) {
+                iface.set_rates(rates.errors_per_sec, rates.drops_per_sec);
+                iface.set_utilization(rates.utilization_percent());
+            }
+        }
+        interfaces.push(iface);
+    }
+    interfaces.sort_by(|a, b| (b.rx_bps + b.tx_bps).partial_cmp(&(a.rx_bps + a.tx_bps)).unwrap_or(std::cmp::Ordering::Equal));
+    interfaces
+}
+
 fn draw_network_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
-    // In deterministic mode, use zeroed values like ttop
-    let (rx_total, tx_total, primary_iface) = if app.deterministic {
-        (0u64, 0u64, "none")
-    } else {
-        // Calculate total network rates for title
-        let (rx, tx): (u64, u64) = app
-            .networks
-            .values()
-            .map(|d| (d.received(), d.transmitted()))
-            .fold((0, 0), |(ar, at), (r, t)| (ar + r, at + t));
+    let (rx_total, tx_total, primary_iface) = compute_network_stats(app);
+    let title = format!("Network ({}) │ ↓ {}/s │ ↑ {}/s", primary_iface, format_bytes(rx_total), format_bytes(tx_total));
 
-        // Find primary interface (highest traffic, excluding loopback)
-        let iface = app
-            .networks
-            .iter()
-            .filter(|(name, _)| !name.starts_with("lo"))
-            .max_by_key(|(_, data)| data.received() + data.transmitted())
-            .map_or("none", |(name, _)| name.as_str());
-        (rx, tx, iface)
-    };
-
-    // ttop-style title (Border adds outer spaces)
-    // Deterministic: "Network (none) │ ↓ 0B/s │ ↑ 0B/s"
-    let title = format!(
-        "Network ({}) │ ↓ {}/s │ ↑ {}/s",
-        primary_iface,
-        format_bytes(rx_total),
-        format_bytes(tx_total)
-    );
-
-    // Check if this panel is focused (SPEC-024 v5.0 Feature D)
     let is_focused = app.is_panel_focused(PanelType::Network);
     let mut border = create_panel_border(&title, NETWORK_COLOR, is_focused);
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
 
-    // In deterministic mode, show ttop-style network content
-    if app.deterministic {
-        let cyan = Color {
-            r: 0.3,
-            g: 0.8,
-            b: 0.9,
-            a: 1.0,
-        };
-        let red = Color {
-            r: 1.0,
-            g: 0.3,
-            b: 0.3,
-            a: 1.0,
-        };
-        let dim_color = Color {
-            r: 0.3,
-            g: 0.3,
-            b: 0.3,
-            a: 1.0,
-        };
-        let white = Color {
-            r: 1.0,
-            g: 1.0,
-            b: 1.0,
-            a: 1.0,
-        };
-        let green = Color {
-            r: 0.3,
-            g: 0.9,
-            b: 0.3,
-            a: 1.0,
-        };
+    if app.deterministic { draw_network_deterministic(canvas, inner); return; }
 
-        let mut y = inner.y;
-
-        // Row 1: Download label
-        canvas.draw_text(
-            "↓",
-            Point::new(inner.x, y),
-            &TextStyle {
-                color: cyan,
-                ..Default::default()
-            },
-        );
-        canvas.draw_text(
-            " Download ",
-            Point::new(inner.x + 1.0, y),
-            &TextStyle {
-                color: cyan,
-                ..Default::default()
-            },
-        );
-        canvas.draw_text(
-            "0B/s",
-            Point::new(inner.x + 11.0, y),
-            &TextStyle {
-                color: white,
-                ..Default::default()
-            },
-        );
-        y += 1.0;
-
-        // Row 2: Download braille graph (empty)
-        if y < inner.y + inner.height {
-            let empty_braille = "⠀".repeat(inner.width as usize);
-            canvas.draw_text(
-                &empty_braille,
-                Point::new(inner.x, y),
-                &TextStyle {
-                    color: cyan,
-                    ..Default::default()
-                },
-            );
-            y += 1.0;
-        }
-
-        // Row 3: Upload label
-        if y < inner.y + inner.height {
-            canvas.draw_text(
-                "↑",
-                Point::new(inner.x, y),
-                &TextStyle {
-                    color: red,
-                    ..Default::default()
-                },
-            );
-            canvas.draw_text(
-                " Upload   ",
-                Point::new(inner.x + 1.0, y),
-                &TextStyle {
-                    color: red,
-                    ..Default::default()
-                },
-            );
-            canvas.draw_text(
-                "0B/s",
-                Point::new(inner.x + 11.0, y),
-                &TextStyle {
-                    color: white,
-                    ..Default::default()
-                },
-            );
-            y += 1.0;
-        }
-
-        // Row 4-5: Upload braille graph (empty)
-        for _ in 0..2 {
-            if y < inner.y + inner.height {
-                let empty_braille = "⠀".repeat(inner.width as usize);
-                canvas.draw_text(
-                    &empty_braille,
-                    Point::new(inner.x, y),
-                    &TextStyle {
-                        color: red,
-                        ..Default::default()
-                    },
-                );
-                y += 1.0;
-            }
-        }
-
-        // Row 6: Session stats
-        if y < inner.y + inner.height {
-            canvas.draw_text(
-                "Session ",
-                Point::new(inner.x, y),
-                &TextStyle {
-                    color: dim_color,
-                    ..Default::default()
-                },
-            );
-            canvas.draw_text(
-                "↓",
-                Point::new(inner.x + 8.0, y),
-                &TextStyle {
-                    color: cyan,
-                    ..Default::default()
-                },
-            );
-            canvas.draw_text(
-                "0B",
-                Point::new(inner.x + 9.0, y),
-                &TextStyle {
-                    color: white,
-                    ..Default::default()
-                },
-            );
-            canvas.draw_text(
-                " ↑",
-                Point::new(inner.x + 11.0, y),
-                &TextStyle {
-                    color: red,
-                    ..Default::default()
-                },
-            );
-            canvas.draw_text(
-                "0B",
-                Point::new(inner.x + 13.0, y),
-                &TextStyle {
-                    color: white,
-                    ..Default::default()
-                },
-            );
-            y += 1.0;
-        }
-
-        // Row 7: TCP/UDP stats
-        if y < inner.y + inner.height {
-            canvas.draw_text(
-                "TCP ",
-                Point::new(inner.x, y),
-                &TextStyle {
-                    color: Color {
-                        r: 0.3,
-                        g: 0.7,
-                        b: 0.9,
-                        a: 1.0,
-                    },
-                    ..Default::default()
-                },
-            );
-            canvas.draw_text(
-                "0",
-                Point::new(inner.x + 4.0, y),
-                &TextStyle {
-                    color: green,
-                    ..Default::default()
-                },
-            );
-            canvas.draw_text(
-                "/",
-                Point::new(inner.x + 5.0, y),
-                &TextStyle {
-                    color: dim_color,
-                    ..Default::default()
-                },
-            );
-            canvas.draw_text(
-                "0",
-                Point::new(inner.x + 6.0, y),
-                &TextStyle {
-                    color: Color {
-                        r: 0.3,
-                        g: 0.7,
-                        b: 0.9,
-                        a: 1.0,
-                    },
-                    ..Default::default()
-                },
-            );
-            canvas.draw_text(
-                " UDP ",
-                Point::new(inner.x + 7.0, y),
-                &TextStyle {
-                    color: Color {
-                        r: 0.8,
-                        g: 0.3,
-                        b: 0.8,
-                        a: 1.0,
-                    },
-                    ..Default::default()
-                },
-            );
-            canvas.draw_text(
-                "0",
-                Point::new(inner.x + 12.0, y),
-                &TextStyle {
-                    color: white,
-                    ..Default::default()
-                },
-            );
-            canvas.draw_text(
-                " │ RTT ",
-                Point::new(inner.x + 13.0, y),
-                &TextStyle {
-                    color: dim_color,
-                    ..Default::default()
-                },
-            );
-            canvas.draw_text(
-                "●●●●●",
-                Point::new(inner.x + 20.0, y),
-                &TextStyle {
-                    color: green,
-                    ..Default::default()
-                },
-            );
-        }
-
-        return;
-    }
-
-    // Get network stats from analyzer for errors/drops
-    let network_stats_data = app.analyzers.network_stats_data();
-
-    // Build interface list with historical data for sparklines
-    let mut interfaces: Vec<NetworkInterface> = Vec::new();
-    for (name, data) in &app.networks {
-        let mut iface = NetworkInterface::new(name);
-        iface.update(data.received() as f64, data.transmitted() as f64);
-        iface.set_totals(data.total_received(), data.total_transmitted());
-
-        // Add error/drop stats from analyzer if available
-        if let Some(stats_data) = network_stats_data {
-            if let Some(stats) = stats_data.stats.get(name.as_str()) {
-                iface.set_stats(
-                    stats.rx_errors,
-                    stats.tx_errors,
-                    stats.rx_dropped,
-                    stats.tx_dropped,
-                );
-            }
-            if let Some(rates) = stats_data.rates.get(name.as_str()) {
-                iface.set_rates(rates.errors_per_sec, rates.drops_per_sec);
-                // Set bandwidth utilization (CB-NET-006)
-                iface.set_utilization(rates.utilization_percent());
-            }
-        }
-
-        interfaces.push(iface);
-    }
-
-    // Sort by traffic (highest first) and keep primary interface
-    interfaces.sort_by(|a, b| {
-        let a_total = a.rx_bps + a.tx_bps;
-        let b_total = b.rx_bps + b.tx_bps;
-        b_total
-            .partial_cmp(&a_total)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    // Inject per-interface history for sparklines (SPEC-024 Task 4)
+    let mut interfaces = build_network_interfaces(app);
     for iface in interfaces.iter_mut() {
         if let Some((rx_hist, tx_hist)) = app.net_iface_history.get(&iface.name) {
             iface.rx_history = rx_hist.as_slice().to_vec();
             iface.tx_history = tx_hist.as_slice().to_vec();
         }
     }
-
     interfaces.truncate(4);
 
     if !interfaces.is_empty() && inner.height > 0.0 {
         let spark_w = (inner.width as usize / 4).max(5);
-        let mut panel = NetworkPanel::new()
-            .with_spark_width(spark_w)
-            .with_rx_color(NET_RX_COLOR)
-            .with_tx_color(NET_TX_COLOR)
-            .compact();
+        let mut panel = NetworkPanel::new().with_spark_width(spark_w).with_rx_color(NET_RX_COLOR).with_tx_color(NET_TX_COLOR).compact();
         panel.set_interfaces(interfaces);
         panel.layout(inner);
         panel.paint(canvas);
@@ -2389,7 +1830,7 @@ pub fn read_gpu_info() -> Option<GpuInfo> {
                 continue;
             }
 
-            // Check if it's an AMD GPU (has hwmon with temp/power)
+            // Check for AMD GPU via hwmon interface.
             let hwmon_path = format!("{card_path}/hwmon");
             if let Ok(entries) = fs::read_dir(&hwmon_path) {
                 for entry in entries.flatten() {
@@ -2889,7 +2330,7 @@ fn draw_sensors_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
     // Get additional sensor data from analyzer (fan RPM, voltage, etc.)
     let sensor_health_data = app.snapshot_sensor_health.as_ref();
 
-    // Build title with max temp and fan/voltage count
+    // Build title string with sensor counts.
     let extra_info = if let Some(health_data) = sensor_health_data {
         let fan_count = health_data
             .type_counts
@@ -3933,8 +3374,8 @@ fn draw_treemap_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
 fn draw_files_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
     use crate::widgets::display_rules::{format_column, ColumnAlign, TruncateStrategy};
 
-    // Get data from snapshots (CB-INPUT-006: async pattern)
-    // Prioritize FileAnalyzer (fast /proc scan) over Treemap (slow / scan)
+    // Get data from snapshots (CB-INPUT-006: async pattern).
+    // FileAnalyzer uses /proc; Treemap uses filesystem scan.
     let file_data = app.snapshot_file_analyzer.as_ref();
     let treemap_data = app.snapshot_treemap.as_ref();
     let disk_entropy = app.snapshot_disk_entropy.as_ref();
@@ -4470,7 +3911,7 @@ fn draw_core_stats_dataframe(app: &App, canvas: &mut DirectTerminalCanvas, area:
     use crate::widgets::selection::RowHighlight;
     use crate::{HeatScheme, MicroHeatBar};
 
-    // Column widths: CORE(4) FREQ(6) TEMP(5) USR%(5) SYS%(5) IO%(4) IDL%(5) BREAKDOWN(rest)
+    // Column widths for table layout.
     let col_widths = [4usize, 6, 5, 5, 5, 4, 5];
     let breakdown_width =
         (area.width as usize).saturating_sub(col_widths.iter().sum::<usize>() + 8);
@@ -4622,7 +4063,7 @@ fn draw_core_stats_dataframe(app: &App, canvas: &mut DirectTerminalCanvas, area:
         );
         col_x += col_widths[1] as f32 + 1.0;
 
-        // TEMP - right-aligned (from async-updated app.per_core_temp or "-" if unavailable)
+        // Temperature column, right-aligned.
         let temp_str = temp.map_or("-".to_string(), |t| format!("{t:.0}°"));
         let temp_str = format_column(
             &temp_str,
@@ -5292,8 +4733,8 @@ fn draw_disk_exploded(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect) 
         }
 
         let row_rect = Rect::new(inner.x, y, inner.width, 1.0);
-        // TODO: Add exploded_selected_row field to App for row navigation
-        let is_selected = i == 0; // First row selected by default
+        // Row selection: first row highlighted by default (future: support keyboard navigation)
+        let is_selected = i == 0;
 
         // Paint row background with RowHighlight
         let row_hl = RowHighlight::new(row_rect, is_selected);

@@ -168,6 +168,20 @@ fn capture_command(cmd: &str, width: u16, height: u16) -> io::Result<CellBuffer>
     parse_ansi_to_buffer(&content, width, height)
 }
 
+/// Skip an ANSI escape sequence (CSI sequence).
+fn skip_ansi_escape(chars: &mut std::iter::Peekable<std::str::Chars>) {
+    if chars.peek() == Some(&'[') {
+        chars.next(); // consume '['
+        // Skip parameters and command
+        while let Some(&c) = chars.peek() {
+            chars.next();
+            if c.is_ascii_alphabetic() {
+                break;
+            }
+        }
+    }
+}
+
 /// Parse ANSI escape sequences into a `CellBuffer`
 fn parse_ansi_to_buffer(content: &str, width: u16, height: u16) -> io::Result<CellBuffer> {
     let mut buffer = CellBuffer::new(width, height);
@@ -177,26 +191,12 @@ fn parse_ansi_to_buffer(content: &str, width: u16, height: u16) -> io::Result<Ce
 
     while let Some(ch) = chars.next() {
         match ch {
-            '\x1b' => {
-                // ANSI escape sequence - skip for now (simplified parser)
-                if chars.peek() == Some(&'[') {
-                    chars.next(); // consume '['
-                                  // Skip parameters and command
-                    while let Some(&c) = chars.peek() {
-                        chars.next();
-                        if c.is_ascii_alphabetic() {
-                            break;
-                        }
-                    }
-                }
-            }
+            '\x1b' => skip_ansi_escape(&mut chars),
             '\n' => {
                 x = 0;
                 y = y.saturating_add(1);
             }
-            '\r' => {
-                x = 0;
-            }
+            '\r' => x = 0,
             _ => {
                 if x < width && y < height {
                     buffer.set_char(x, y, ch);

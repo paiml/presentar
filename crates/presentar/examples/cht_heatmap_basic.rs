@@ -171,105 +171,76 @@ impl Heatmap {
     }
 }
 
-fn main() {
-    println!("=== Heatmap Basic ===\n");
+/// Get heat level character for normalized value.
+fn heat_char(t: f32) -> char {
+    if t > 0.8 { '█' }
+    else if t > 0.6 { '▓' }
+    else if t > 0.4 { '▒' }
+    else if t > 0.2 { '░' }
+    else { ' ' }
+}
 
-    // Create sample 2D data (e.g., monthly temperatures by city)
-    let data = vec![
-        vec![
-            5.0, 7.0, 12.0, 18.0, 23.0, 28.0, 30.0, 29.0, 24.0, 17.0, 10.0, 6.0,
-        ],
-        vec![
-            2.0, 4.0, 10.0, 16.0, 21.0, 26.0, 29.0, 28.0, 22.0, 14.0, 7.0, 3.0,
-        ],
-        vec![
-            10.0, 12.0, 16.0, 20.0, 25.0, 30.0, 33.0, 32.0, 28.0, 22.0, 15.0, 11.0,
-        ],
-        vec![
-            -5.0, -2.0, 5.0, 12.0, 18.0, 23.0, 26.0, 24.0, 18.0, 10.0, 2.0, -3.0,
-        ],
-    ];
-
-    let row_labels = vec![
-        "Paris".to_string(),
-        "Berlin".to_string(),
-        "Madrid".to_string(),
-        "Moscow".to_string(),
-    ];
-
-    let col_labels = [
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-    ]
-    .iter()
-    .map(|s| (*s).to_string())
-    .collect();
-
-    let heatmap = Heatmap::new(data, "Monthly Average Temperatures (°C)")
-        .with_labels(row_labels, col_labels)
-        .with_colormap(Colormap::Inferno)
-        .with_annotations(true);
-
-    // Print info
-    println!("Title: {}", heatmap.title());
-    println!("Size: {}x{}", heatmap.rows(), heatmap.cols());
-
-    let (min, max) = heatmap.range();
-    println!("Range: {min:.1} - {max:.1}");
-
-    // Print heatmap with values
+/// Print heatmap data table.
+fn print_data_table(heatmap: &Heatmap) {
     println!(
         "\n        {}",
-        heatmap
-            .col_labels
-            .iter()
+        heatmap.col_labels.iter()
             .map(|s| format!("{:>5}", &s[..3.min(s.len())]))
-            .collect::<Vec<_>>()
-            .join(" ")
+            .collect::<Vec<_>>().join(" ")
     );
     println!("       {}", "-".repeat(heatmap.cols() * 6));
 
     for (i, row_label) in heatmap.row_labels.iter().enumerate() {
         print!("{:>6} |", &row_label[..6.min(row_label.len())]);
         for j in 0..heatmap.cols() {
-            if let Some(val) = heatmap.get(i, j) {
-                print!("{val:>5.0} ");
-            }
+            if let Some(val) = heatmap.get(i, j) { print!("{val:>5.0} "); }
         }
         println!();
     }
+}
 
-    // ASCII heatmap with color indicators
+/// Print ASCII heatmap.
+fn print_ascii_heatmap(heatmap: &Heatmap) {
     println!("\n=== ASCII Heatmap ===\n");
-    println!(
-        "       {}",
-        heatmap
-            .col_labels
-            .iter()
-            .map(|s| format!("{:>3}", &s[..1]))
-            .collect::<String>()
-    );
+    println!("       {}", heatmap.col_labels.iter().map(|s| format!("{:>3}", &s[..1])).collect::<String>());
 
     for (i, row_label) in heatmap.row_labels.iter().enumerate() {
         print!("{:>6} ", &row_label[..6.min(row_label.len())]);
         for j in 0..heatmap.cols() {
             let t = heatmap.get(i, j).map_or(0.0, |v| heatmap.normalize(v));
-            let c = if t > 0.8 {
-                '█'
-            } else if t > 0.6 {
-                '▓'
-            } else if t > 0.4 {
-                '▒'
-            } else if t > 0.2 {
-                '░'
-            } else {
-                ' '
-            };
-            print!("{c:>3}");
+            print!("{:>3}", heat_char(t));
         }
         println!();
     }
-
     println!("\nLegend: █ hot  ▓ warm  ▒ mild  ░ cool  ' ' cold");
+}
+
+fn main() {
+    println!("=== Heatmap Basic ===\n");
+
+    let data = vec![
+        vec![5.0, 7.0, 12.0, 18.0, 23.0, 28.0, 30.0, 29.0, 24.0, 17.0, 10.0, 6.0],
+        vec![2.0, 4.0, 10.0, 16.0, 21.0, 26.0, 29.0, 28.0, 22.0, 14.0, 7.0, 3.0],
+        vec![10.0, 12.0, 16.0, 20.0, 25.0, 30.0, 33.0, 32.0, 28.0, 22.0, 15.0, 11.0],
+        vec![-5.0, -2.0, 5.0, 12.0, 18.0, 23.0, 26.0, 24.0, 18.0, 10.0, 2.0, -3.0],
+    ];
+
+    let row_labels = vec!["Paris".to_string(), "Berlin".to_string(), "Madrid".to_string(), "Moscow".to_string()];
+    let col_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        .iter().map(|s| (*s).to_string()).collect();
+
+    let heatmap = Heatmap::new(data, "Monthly Average Temperatures (°C)")
+        .with_labels(row_labels, col_labels)
+        .with_colormap(Colormap::Inferno)
+        .with_annotations(true);
+
+    println!("Title: {}", heatmap.title());
+    println!("Size: {}x{}", heatmap.rows(), heatmap.cols());
+    let (min, max) = heatmap.range();
+    println!("Range: {min:.1} - {max:.1}");
+
+    print_data_table(&heatmap);
+    print_ascii_heatmap(&heatmap);
 
     println!("\n=== Acceptance Criteria ===");
     println!("- [x] Data grid correct");

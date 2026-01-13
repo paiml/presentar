@@ -101,6 +101,9 @@ impl Sparkline {
     /// Set the data range.
     #[must_use]
     pub fn with_range(mut self, min: f64, max: f64) -> Self {
+        // Provability: range values must be finite
+        debug_assert!(min.is_finite(), "min must be finite");
+        debug_assert!(max.is_finite(), "max must be finite");
         self.min = min;
         self.max = max.max(min + 0.001);
         self

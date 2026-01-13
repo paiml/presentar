@@ -140,8 +140,7 @@ impl LossCurve {
         let mut smoothed = Vec::with_capacity(values.len());
 
         // EMA: S_t = α * X_t + (1-α) * S_{t-1}
-        // For large datasets, this is inherently sequential due to the recurrence,
-        // but we can still optimize memory access patterns.
+        // Sequential processing due to recurrence relation.
 
         let mut prev = values[0];
         smoothed.push(prev);

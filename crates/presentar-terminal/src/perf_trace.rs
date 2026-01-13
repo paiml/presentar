@@ -24296,7 +24296,7 @@ impl NetfilterTracker {
     }
 
     /// Record dropped packet.
-    pub fn drop(&mut self) {
+    pub fn record_drop(&mut self) {
         self.dropped += 1;
         self.rule_matches += 1;
     }
@@ -24374,7 +24374,7 @@ mod netfilter_tests {
     #[test]
     fn f_nf_004_drop() {
         let mut nf = NetfilterTracker::new();
-        nf.drop();
+        nf.record_drop();
         assert_eq!(nf.dropped, 1);
     }
 
@@ -24399,7 +24399,7 @@ mod netfilter_tests {
     fn f_nf_007_drop_rate() {
         let mut nf = NetfilterTracker::new();
         nf.accept();
-        nf.drop();
+        nf.record_drop();
         assert!((nf.drop_rate() - 50.0).abs() < 0.01);
     }
 
@@ -24430,7 +24430,7 @@ mod netfilter_tests {
     fn f_nf_011_reset() {
         let mut nf = NetfilterTracker::new();
         nf.accept();
-        nf.drop();
+        nf.record_drop();
         nf.reset();
         assert_eq!(nf.total_packets(), 0);
     }

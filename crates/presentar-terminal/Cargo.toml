@@ -90,5 +90,9 @@ name = "cbtop-bench"
 path = "src/bin/cbtop-bench.rs"
 required-features = ["bench-tool"]
 
+[[example]]
+name = "test_connections"
+required-features = ["ptop"]
+
 [lints]
 workspace = true

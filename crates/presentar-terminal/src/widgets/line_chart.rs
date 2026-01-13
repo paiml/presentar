@@ -189,6 +189,8 @@ impl LineChart {
     /// UX-P01: Set custom margins for axis labels.
     #[must_use]
     pub fn with_margins(mut self, left: f32, bottom: f32) -> Self {
+        debug_assert!(left >= 0.0, "left margin must be non-negative");
+        debug_assert!(bottom >= 0.0, "bottom margin must be non-negative");
         self.margin_left = left;
         self.margin_bottom = bottom;
         self

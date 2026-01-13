@@ -2240,9 +2240,9 @@ mod tests {
 
     #[test]
     fn test_easing_quad() {
-        // EaseInQuad starts slow
+        // EaseInQuad: value at t=0.5 is below midpoint.
         assert!(EasingFunction::EaseInQuad.apply(0.5) < 0.5);
-        // EaseOutQuad ends slow
+        // EaseOutQuad: value at t=0.5 is above midpoint.
         assert!(EasingFunction::EaseOutQuad.apply(0.5) > 0.5);
         // Boundaries
         assert_eq!(EasingFunction::EaseInQuad.apply(0.0), 0.0);
@@ -3265,7 +3265,7 @@ mod tests {
         let to_refresh = manager.update(1000);
         assert!(to_refresh.contains(&"slow".to_string()));
 
-        // After 1200ms: fast should refresh (elapsed=200), slow should not (elapsed=200)
+        // At 1200ms: high-frequency source refreshes, low-frequency does not.
         let to_refresh = manager.update(1200);
         assert_eq!(to_refresh.len(), 1);
         assert!(to_refresh.contains(&"fast".to_string()));

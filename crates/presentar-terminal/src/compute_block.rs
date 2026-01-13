@@ -327,6 +327,7 @@ impl SparklineBlock {
     /// Create a new sparkline block with given history length
     #[must_use]
     pub fn new(max_samples: usize) -> Self {
+        debug_assert!(max_samples > 0, "max_samples must be positive");
         Self {
             history: Vec::with_capacity(max_samples),
             max_samples,
@@ -458,6 +459,7 @@ impl LoadTrendBlock {
     /// Create a new load trend block
     #[must_use]
     pub fn new(window_size: usize) -> Self {
+        debug_assert!(window_size > 0, "window_size must be positive");
         Self {
             history: Vec::with_capacity(window_size),
             window_size,
@@ -985,6 +987,10 @@ impl MemPressureBlock {
         avg300_some: f32,
         avg10_full: f32,
     ) {
+        debug_assert!(avg10_some >= 0.0, "avg10_some must be non-negative");
+        debug_assert!(avg60_some >= 0.0, "avg60_some must be non-negative");
+        debug_assert!(avg300_some >= 0.0, "avg300_some must be non-negative");
+        debug_assert!(avg10_full >= 0.0, "avg10_full must be non-negative");
         self.avg10_some = avg10_some;
         self.avg60_some = avg60_some;
         self.avg300_some = avg300_some;
@@ -1116,6 +1122,8 @@ impl HugePagesBlock {
 
     /// Set huge page values
     pub fn set_values(&mut self, total: u64, free: u64, reserved: u64, page_size_kb: u64) {
+        debug_assert!(free <= total, "free must be <= total");
+        debug_assert!(page_size_kb > 0, "page_size_kb must be positive");
         self.total = total;
         self.free = free;
         self.reserved = reserved;
@@ -1197,6 +1205,8 @@ impl GpuThermalBlock {
 
     /// Set thermal values
     pub fn set_values(&mut self, temp_c: f32, power_w: f32, power_limit_w: f32) {
+        debug_assert!(power_w >= 0.0, "power_w must be non-negative");
+        debug_assert!(power_limit_w >= 0.0, "power_limit_w must be non-negative");
         self.temperature_c = temp_c;
         self.power_w = power_w;
         self.power_limit_w = power_limit_w;

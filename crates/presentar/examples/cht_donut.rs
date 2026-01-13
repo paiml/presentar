@@ -156,18 +156,72 @@ impl DonutChart {
     }
 }
 
-fn main() {
-    println!("=== Donut Chart ===\n");
+/// Get character for segment index.
+fn segment_char(index: usize) -> char {
+    match index {
+        0 => '█',
+        1 => '▓',
+        2 => '░',
+        _ => '·',
+    }
+}
 
-    let mut chart = DonutChart::new("Model Accuracy by Category")
-        .with_inner_radius(0.6)
-        .with_center_metric("Overall", "87.3%");
+/// Normalize angle to handle wrap-around at -PI/2.
+fn normalize_angle(angle: f32) -> f32 {
+    if angle < -PI / 2.0 {
+        2.0f32.mul_add(PI, angle)
+    } else {
+        angle
+    }
+}
 
-    chart.add_segment("Correct", 87.3, Color::new(0.3, 0.7, 0.4, 1.0));
-    chart.add_segment("Partial", 8.2, Color::new(0.9, 0.7, 0.2, 1.0));
-    chart.add_segment("Incorrect", 4.5, Color::new(0.9, 0.3, 0.3, 1.0));
+/// Check if angle is within segment range.
+fn angle_in_segment(angle: f32, start: f32, end: f32) -> bool {
+    let norm_angle = normalize_angle(angle);
+    let norm_start = normalize_angle(start);
+    let norm_end = normalize_angle(end);
 
-    // Print chart info
+    (norm_start <= norm_angle && norm_angle < norm_end)
+        || (norm_start > norm_end && (norm_angle >= norm_start || norm_angle < norm_end))
+}
+
+/// Determine character for a point in the donut.
+fn donut_char_at(
+    chart: &DonutChart,
+    x: usize,
+    y: usize,
+    center: (usize, usize),
+    inner_r: f32,
+    outer_r: f32,
+) -> char {
+    let dx = x as f32 - center.0 as f32;
+    let dy = y as f32 - center.1 as f32;
+    let dist = dx.hypot(dy);
+    let angle = dy.atan2(dx);
+
+    if dist < inner_r - 0.5 {
+        if x == center.0 && y == center.1 { '*' } else { ' ' }
+    } else if dist <= outer_r + 0.5 {
+        find_segment_char(chart, angle)
+    } else {
+        ' '
+    }
+}
+
+/// Find which segment an angle belongs to and return its char.
+fn find_segment_char(chart: &DonutChart, angle: f32) -> char {
+    for (i, _) in chart.segments().iter().enumerate() {
+        if let Some((start, end)) = chart.segment_angles(i) {
+            if angle_in_segment(angle, start, end) {
+                return segment_char(i);
+            }
+        }
+    }
+    '·'
+}
+
+/// Print chart info and segments table.
+fn print_chart_info(chart: &DonutChart) {
     println!("Title: {}", chart.title());
     println!("Total: {:.1}", chart.total());
     println!("Inner radius: {:.0}%", chart.inner_radius_ratio() * 100.0);
@@ -176,7 +230,6 @@ fn main() {
         println!("Center: {label} = {value}");
     }
 
-    // Print segments
     println!(
         "\n{:<12} {:>8} {:>8} {:>12} {:>12}",
         "Segment", "Value", "%", "Start°", "End°"
@@ -188,15 +241,14 @@ fn main() {
         let (start, end) = chart.segment_angles(i).unwrap_or((0.0, 0.0));
         println!(
             "{:<12} {:>8.1} {:>7.1}% {:>12.1} {:>12.1}",
-            segment.label,
-            segment.value,
-            pct,
-            start.to_degrees(),
-            end.to_degrees()
+            segment.label, segment.value, pct,
+            start.to_degrees(), end.to_degrees()
         );
     }
+}
 
-    // ASCII donut
+/// Render ASCII donut visualization.
+fn render_ascii_donut(chart: &DonutChart) {
     println!("\n=== ASCII Donut ===\n");
     let size = 21;
     let center = (size / 2, size / 2);
@@ -205,78 +257,39 @@ fn main() {
 
     for y in 0..size {
         for x in 0..size {
-            let dx = x as f32 - center.0 as f32;
-            let dy = y as f32 - center.1 as f32;
-            let dist = dx.hypot(dy);
-            let angle = dy.atan2(dx);
-
-            let c = if dist < inner_r - 0.5 {
-                // Inside hole
-                if x == center.0 && y == center.1 {
-                    '*' // Center marker
-                } else {
-                    ' '
-                }
-            } else if dist <= outer_r + 0.5 {
-                // In donut ring - determine which segment
-                let mut segment_char = '·';
-                for (i, _) in chart.segments().iter().enumerate() {
-                    if let Some((start, end)) = chart.segment_angles(i) {
-                        let normalized_angle = if angle < -PI / 2.0 {
-                            2.0f32.mul_add(PI, angle)
-                        } else {
-                            angle
-                        };
-                        let norm_start = if start < -PI / 2.0 {
-                            2.0f32.mul_add(PI, start)
-                        } else {
-                            start
-                        };
-                        let norm_end = if end < -PI / 2.0 {
-                            2.0f32.mul_add(PI, end)
-                        } else {
-                            end
-                        };
-
-                        if (norm_start <= normalized_angle && normalized_angle < norm_end)
-                            || (norm_start > norm_end
-                                && (normalized_angle >= norm_start || normalized_angle < norm_end))
-                        {
-                            segment_char = match i {
-                                0 => '█',
-                                1 => '▓',
-                                2 => '░',
-                                _ => '·',
-                            };
-                            break;
-                        }
-                    }
-                }
-                segment_char
-            } else {
-                ' '
-            };
-            print!("{c}");
+            print!("{}", donut_char_at(chart, x, y, center, inner_r, outer_r));
         }
         println!();
     }
+}
 
-    // Legend
+/// Print legend for the chart.
+fn print_legend(chart: &DonutChart) {
     println!("\nLegend:");
     for (i, segment) in chart.segments().iter().enumerate() {
-        let c = match i {
-            0 => '█',
-            1 => '▓',
-            2 => '░',
-            _ => '·',
-        };
         println!(
             "  {} {} ({:.1}%)",
-            c,
+            segment_char(i),
             segment.label,
             chart.segment_percentage(i).unwrap_or(0.0)
         );
     }
+}
+
+fn main() {
+    println!("=== Donut Chart ===\n");
+
+    let mut chart = DonutChart::new("Model Accuracy by Category")
+        .with_inner_radius(0.6)
+        .with_center_metric("Overall", "87.3%");
+
+    chart.add_segment("Correct", 87.3, Color::new(0.3, 0.7, 0.4, 1.0));
+    chart.add_segment("Partial", 8.2, Color::new(0.9, 0.7, 0.2, 1.0));
+    chart.add_segment("Incorrect", 4.5, Color::new(0.9, 0.3, 0.3, 1.0));
+
+    print_chart_info(&chart);
+    render_ascii_donut(&chart);
+    print_legend(&chart);
 
     println!("\n=== Acceptance Criteria ===");
     println!("- [x] Donut hole renders correctly");

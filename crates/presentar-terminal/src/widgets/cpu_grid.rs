@@ -88,6 +88,7 @@ impl CpuGrid {
     /// Set explicit column count.
     #[must_use]
     pub fn with_columns(mut self, cols: usize) -> Self {
+        debug_assert!(cols > 0, "column count must be positive");
         self.columns = Some(cols);
         self
     }
@@ -134,6 +135,12 @@ impl CpuGrid {
     /// Both vectors should have the same length as `core_usage`.
     #[must_use]
     pub fn with_frequencies(mut self, current: Vec<u32>, max: Vec<u32>) -> Self {
+        // Provability: frequency vectors must have consistent lengths
+        debug_assert_eq!(
+            current.len(),
+            max.len(),
+            "current and max frequencies must have same length"
+        );
         self.frequencies = Some(current);
         self.max_frequencies = Some(max);
         self
