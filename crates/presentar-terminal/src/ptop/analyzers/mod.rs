@@ -47,7 +47,7 @@ pub use sensor_health::{
     SensorHealthAnalyzer, SensorHealthData, SensorReading, SensorStatus, SensorType,
 };
 pub use storage::{MountInfo, StorageAnalyzer, StorageData};
-pub use swap::{SwapAnalyzer, SwapData, SwapDevice, SwapType};
+pub use swap::{SwapAnalyzer, SwapData, SwapDevice, SwapType, ThrashingSeverity, ZramStats};
 pub use treemap::{TreemapAnalyzer, TreemapConfig, TreemapData, TreemapNode};
 
 /// Error type for analyzer operations

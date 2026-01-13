@@ -1,6 +1,7 @@
 //! Swap Analyzer
 //!
 //! Parses `/proc/swaps` and `/proc/meminfo` for swap usage statistics.
+//! Includes thrashing detection and ZRAM support (PMAT-GAP-027, PMAT-GAP-028).
 
 #![allow(clippy::uninlined_format_args)]
 
@@ -9,6 +10,107 @@ use std::path::Path;
 use std::time::Duration;
 
 use super::{Analyzer, AnalyzerError};
+use presentar_core::Color;
+
+// =============================================================================
+// THRASHING SEVERITY (PMAT-GAP-027) - ttop parity
+// =============================================================================
+
+/// Swap thrashing severity level (ttop parity).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ThrashingSeverity {
+    /// No thrashing detected
+    #[default]
+    None,
+    /// Mild thrashing - system slightly impacted
+    Mild,
+    /// Moderate thrashing - noticeable performance impact
+    Moderate,
+    /// Severe thrashing - system heavily impacted
+    Severe,
+}
+
+impl ThrashingSeverity {
+    /// Get a human-readable status string.
+    #[must_use]
+    pub fn status(&self) -> &'static str {
+        match self {
+            Self::None => "OK",
+            Self::Mild => "Mild",
+            Self::Moderate => "Warning",
+            Self::Severe => "Critical",
+        }
+    }
+
+    /// Get color for UI rendering.
+    #[must_use]
+    pub fn color(&self) -> Color {
+        match self {
+            Self::None => Color::new(0.3, 0.9, 0.5, 1.0),    // Green
+            Self::Mild => Color::new(1.0, 0.9, 0.3, 1.0),    // Yellow
+            Self::Moderate => Color::new(1.0, 0.6, 0.2, 1.0), // Orange
+            Self::Severe => Color::new(1.0, 0.3, 0.3, 1.0),   // Red
+        }
+    }
+
+    /// Get icon for display.
+    #[must_use]
+    pub fn icon(&self) -> &'static str {
+        match self {
+            Self::None => "○",
+            Self::Mild => "◔",
+            Self::Moderate => "◐",
+            Self::Severe => "●",
+        }
+    }
+
+    /// Check if thrashing is occurring.
+    #[must_use]
+    pub fn is_thrashing(&self) -> bool {
+        !matches!(self, Self::None)
+    }
+}
+
+// =============================================================================
+// ZRAM STATISTICS (PMAT-GAP-028)
+// =============================================================================
+
+/// ZRAM compression statistics.
+#[derive(Debug, Clone, Default)]
+pub struct ZramStats {
+    /// Original (uncompressed) data size in bytes.
+    pub orig_data_size: u64,
+    /// Compressed data size in bytes.
+    pub compr_data_size: u64,
+    /// Total memory used including metadata.
+    pub mem_used_total: u64,
+    /// Compression algorithm (e.g., "lz4", "zstd").
+    pub algorithm: String,
+}
+
+impl ZramStats {
+    /// Compression ratio (original / compressed).
+    #[must_use]
+    pub fn compression_ratio(&self) -> f64 {
+        if self.compr_data_size > 0 {
+            self.orig_data_size as f64 / self.compr_data_size as f64
+        } else {
+            0.0
+        }
+    }
+
+    /// Check if ZRAM is active.
+    #[must_use]
+    pub fn is_active(&self) -> bool {
+        self.orig_data_size > 0
+    }
+
+    /// Format for display (e.g., "2.5x lz4").
+    #[must_use]
+    pub fn format_display(&self) -> String {
+        format!("{:.1}x {}", self.compression_ratio(), self.algorithm)
+    }
+}
 
 /// Information about a single swap device
 #[derive(Debug, Clone, Default)]
@@ -160,6 +262,47 @@ impl SwapData {
     pub fn device_count(&self) -> usize {
         self.devices.len()
     }
+
+    /// Detect thrashing severity (PMAT-GAP-027) - ttop parity.
+    ///
+    /// Multi-signal detection based on swap I/O rates:
+    /// - Severe: >1000 pages/sec combined
+    /// - Moderate: >500 pages/sec combined
+    /// - Mild: >100 pages/sec combined
+    /// - None: ≤100 pages/sec combined
+    #[must_use]
+    pub fn detect_thrashing(&self) -> ThrashingSeverity {
+        let combined_rate = self.swap_in_rate + self.swap_out_rate;
+
+        if combined_rate > 1000.0 {
+            ThrashingSeverity::Severe
+        } else if combined_rate > 500.0 {
+            ThrashingSeverity::Moderate
+        } else if combined_rate > 100.0 {
+            ThrashingSeverity::Mild
+        } else {
+            ThrashingSeverity::None
+        }
+    }
+
+    /// Get thrashing severity with PSI integration (enhanced detection).
+    ///
+    /// Uses both swap I/O rates and memory PSI pressure for more accurate detection.
+    #[must_use]
+    pub fn detect_thrashing_with_psi(&self, psi_some_avg10: f64) -> ThrashingSeverity {
+        let combined_rate = self.swap_in_rate + self.swap_out_rate;
+
+        // Multi-signal detection per ttop specification
+        if psi_some_avg10 > 50.0 || (combined_rate > 1000.0) {
+            ThrashingSeverity::Severe
+        } else if psi_some_avg10 > 25.0 || (combined_rate > 500.0) {
+            ThrashingSeverity::Moderate
+        } else if psi_some_avg10 > 10.0 || (combined_rate > 100.0) {
+            ThrashingSeverity::Mild
+        } else {
+            ThrashingSeverity::None
+        }
+    }
 }
 
 /// Analyzer for swap statistics
@@ -169,6 +312,8 @@ pub struct SwapAnalyzer {
     /// Previous swap in/out pages for rate calculation
     prev_swap_in: u64,
     prev_swap_out: u64,
+    /// ZRAM statistics (PMAT-GAP-028)
+    zram: Option<ZramStats>,
 }
 
 impl Default for SwapAnalyzer {
@@ -185,12 +330,37 @@ impl SwapAnalyzer {
             interval: Duration::from_secs(2),
             prev_swap_in: 0,
             prev_swap_out: 0,
+            zram: None,
         }
     }
 
     /// Get the current data
     pub fn data(&self) -> &SwapData {
         &self.data
+    }
+
+    /// Get ZRAM statistics (PMAT-GAP-028).
+    #[must_use]
+    pub fn zram(&self) -> Option<&ZramStats> {
+        self.zram.as_ref()
+    }
+
+    /// Check if ZRAM is available.
+    #[must_use]
+    pub fn has_zram(&self) -> bool {
+        self.zram.as_ref().map_or(false, |z| z.is_active())
+    }
+
+    /// Get ZRAM compression ratio.
+    #[must_use]
+    pub fn zram_compression_ratio(&self) -> f64 {
+        self.zram.as_ref().map_or(0.0, |z| z.compression_ratio())
+    }
+
+    /// Detect thrashing severity (convenience wrapper).
+    #[must_use]
+    pub fn detect_thrashing(&self) -> ThrashingSeverity {
+        self.data.detect_thrashing()
     }
 
     /// Parse /proc/swaps
@@ -285,6 +455,51 @@ impl SwapAnalyzer {
 
         (pswpin, pswpout)
     }
+
+    /// Read ZRAM statistics from /sys/block/zram* (PMAT-GAP-028).
+    fn read_zram_stats(&self) -> Option<ZramStats> {
+        // Try zram0 first (most common), then iterate
+        for i in 0..4 {
+            let base = format!("/sys/block/zram{}", i);
+            if !Path::new(&base).exists() {
+                continue;
+            }
+
+            // Read mm_stat for compression statistics
+            let mm_stat_path = format!("{}/mm_stat", base);
+            if let Ok(contents) = fs::read_to_string(&mm_stat_path) {
+                // mm_stat format: orig_data_size compr_data_size mem_used_total ...
+                let parts: Vec<&str> = contents.split_whitespace().collect();
+                if parts.len() >= 3 {
+                    let orig_data_size = parts[0].parse().unwrap_or(0);
+                    let compr_data_size = parts[1].parse().unwrap_or(0);
+                    let mem_used_total = parts[2].parse().unwrap_or(0);
+
+                    // Read compression algorithm
+                    let algo_path = format!("{}/comp_algorithm", base);
+                    let algorithm = fs::read_to_string(algo_path)
+                        .ok()
+                        .and_then(|s| {
+                            // Format: "lzo lzo-rle [lz4] zstd" - bracketed is active
+                            s.split_whitespace()
+                                .find(|a| a.starts_with('[') && a.ends_with(']'))
+                                .map(|a| a.trim_matches(|c| c == '[' || c == ']').to_string())
+                        })
+                        .unwrap_or_else(|| "lz4".to_string());
+
+                    if orig_data_size > 0 {
+                        return Some(ZramStats {
+                            orig_data_size,
+                            compr_data_size,
+                            mem_used_total,
+                            algorithm,
+                        });
+                    }
+                }
+            }
+        }
+        None
+    }
 }
 
 impl Analyzer for SwapAnalyzer {
@@ -313,6 +528,9 @@ impl Analyzer for SwapAnalyzer {
             swap_in_rate,
             swap_out_rate,
         };
+
+        // Collect ZRAM stats (PMAT-GAP-028)
+        self.zram = self.read_zram_stats();
 
         Ok(())
     }
@@ -690,5 +908,214 @@ mod tests {
         assert_eq!(format_size(0), "0B");
         assert_eq!(format_size(1), "1B");
         assert_eq!(format_size(1023), "1023B");
+    }
+
+    // =========================================================================
+    // ThrashingSeverity tests (PMAT-GAP-027)
+    // =========================================================================
+
+    #[test]
+    fn test_thrashing_severity_default() {
+        let severity = ThrashingSeverity::default();
+        assert_eq!(severity, ThrashingSeverity::None);
+    }
+
+    #[test]
+    fn test_thrashing_severity_status() {
+        assert_eq!(ThrashingSeverity::None.status(), "OK");
+        assert_eq!(ThrashingSeverity::Mild.status(), "Mild");
+        assert_eq!(ThrashingSeverity::Moderate.status(), "Warning");
+        assert_eq!(ThrashingSeverity::Severe.status(), "Critical");
+    }
+
+    #[test]
+    fn test_thrashing_severity_icon() {
+        assert_eq!(ThrashingSeverity::None.icon(), "○");
+        assert_eq!(ThrashingSeverity::Mild.icon(), "◔");
+        assert_eq!(ThrashingSeverity::Moderate.icon(), "◐");
+        assert_eq!(ThrashingSeverity::Severe.icon(), "●");
+    }
+
+    #[test]
+    fn test_thrashing_severity_color() {
+        let none_color = ThrashingSeverity::None.color();
+        assert!(none_color.g > 0.8); // Green
+
+        let severe_color = ThrashingSeverity::Severe.color();
+        assert!(severe_color.r > 0.9); // Red
+    }
+
+    #[test]
+    fn test_thrashing_severity_is_thrashing() {
+        assert!(!ThrashingSeverity::None.is_thrashing());
+        assert!(ThrashingSeverity::Mild.is_thrashing());
+        assert!(ThrashingSeverity::Moderate.is_thrashing());
+        assert!(ThrashingSeverity::Severe.is_thrashing());
+    }
+
+    #[test]
+    fn test_detect_thrashing_none() {
+        let mut data = SwapData::default();
+        data.swap_in_rate = 50.0;
+        data.swap_out_rate = 40.0; // 90 total < 100
+        assert_eq!(data.detect_thrashing(), ThrashingSeverity::None);
+    }
+
+    #[test]
+    fn test_detect_thrashing_mild() {
+        let mut data = SwapData::default();
+        data.swap_in_rate = 200.0;
+        data.swap_out_rate = 100.0; // 300 total
+        assert_eq!(data.detect_thrashing(), ThrashingSeverity::Mild);
+    }
+
+    #[test]
+    fn test_detect_thrashing_moderate() {
+        let mut data = SwapData::default();
+        data.swap_in_rate = 400.0;
+        data.swap_out_rate = 200.0; // 600 total
+        assert_eq!(data.detect_thrashing(), ThrashingSeverity::Moderate);
+    }
+
+    #[test]
+    fn test_detect_thrashing_severe() {
+        let mut data = SwapData::default();
+        data.swap_in_rate = 800.0;
+        data.swap_out_rate = 500.0; // 1300 total
+        assert_eq!(data.detect_thrashing(), ThrashingSeverity::Severe);
+    }
+
+    #[test]
+    fn test_detect_thrashing_with_psi_none() {
+        let data = SwapData::default();
+        assert_eq!(data.detect_thrashing_with_psi(5.0), ThrashingSeverity::None);
+    }
+
+    #[test]
+    fn test_detect_thrashing_with_psi_mild() {
+        let data = SwapData::default();
+        assert_eq!(data.detect_thrashing_with_psi(15.0), ThrashingSeverity::Mild);
+    }
+
+    #[test]
+    fn test_detect_thrashing_with_psi_severe() {
+        let data = SwapData::default();
+        assert_eq!(data.detect_thrashing_with_psi(60.0), ThrashingSeverity::Severe);
+    }
+
+    // =========================================================================
+    // ZramStats tests (PMAT-GAP-028)
+    // =========================================================================
+
+    #[test]
+    fn test_zram_stats_default() {
+        let stats = ZramStats::default();
+        assert_eq!(stats.orig_data_size, 0);
+        assert_eq!(stats.compr_data_size, 0);
+        assert_eq!(stats.mem_used_total, 0);
+        assert!(stats.algorithm.is_empty());
+    }
+
+    #[test]
+    fn test_zram_stats_compression_ratio() {
+        let stats = ZramStats {
+            orig_data_size: 2_000_000_000,
+            compr_data_size: 1_000_000_000,
+            mem_used_total: 1_100_000_000,
+            algorithm: "lz4".to_string(),
+        };
+        assert!((stats.compression_ratio() - 2.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_zram_stats_compression_ratio_zero() {
+        let stats = ZramStats::default();
+        assert_eq!(stats.compression_ratio(), 0.0);
+    }
+
+    #[test]
+    fn test_zram_stats_is_active() {
+        let inactive = ZramStats::default();
+        assert!(!inactive.is_active());
+
+        let active = ZramStats {
+            orig_data_size: 1000,
+            compr_data_size: 500,
+            mem_used_total: 600,
+            algorithm: "zstd".to_string(),
+        };
+        assert!(active.is_active());
+    }
+
+    #[test]
+    fn test_zram_stats_format_display() {
+        let stats = ZramStats {
+            orig_data_size: 2_000_000_000,
+            compr_data_size: 1_000_000_000,
+            mem_used_total: 1_100_000_000,
+            algorithm: "lz4".to_string(),
+        };
+        let display = stats.format_display();
+        assert!(display.contains("2.0x"));
+        assert!(display.contains("lz4"));
+    }
+
+    #[test]
+    fn test_zram_stats_debug() {
+        let stats = ZramStats {
+            orig_data_size: 1000,
+            compr_data_size: 500,
+            mem_used_total: 600,
+            algorithm: "zstd".to_string(),
+        };
+        let debug = format!("{:?}", stats);
+        assert!(debug.contains("ZramStats"));
+        assert!(debug.contains("zstd"));
+    }
+
+    #[test]
+    fn test_zram_stats_clone() {
+        let stats = ZramStats {
+            orig_data_size: 1000,
+            compr_data_size: 500,
+            mem_used_total: 600,
+            algorithm: "lzo".to_string(),
+        };
+        let cloned = stats.clone();
+        assert_eq!(cloned.orig_data_size, 1000);
+        assert_eq!(cloned.algorithm, "lzo");
+    }
+
+    #[test]
+    fn test_analyzer_has_zram() {
+        let analyzer = SwapAnalyzer::new();
+        // New analyzer has no ZRAM data
+        assert!(!analyzer.has_zram());
+    }
+
+    #[test]
+    fn test_analyzer_zram_compression_ratio() {
+        let analyzer = SwapAnalyzer::new();
+        assert_eq!(analyzer.zram_compression_ratio(), 0.0);
+    }
+
+    #[test]
+    fn test_analyzer_detect_thrashing() {
+        let analyzer = SwapAnalyzer::new();
+        assert_eq!(analyzer.detect_thrashing(), ThrashingSeverity::None);
+    }
+
+    #[test]
+    fn test_thrashing_severity_clone_copy() {
+        let severity = ThrashingSeverity::Moderate;
+        let copied = severity;
+        assert_eq!(copied, ThrashingSeverity::Moderate);
+    }
+
+    #[test]
+    fn test_thrashing_severity_debug() {
+        let severity = ThrashingSeverity::Severe;
+        let debug = format!("{:?}", severity);
+        assert!(debug.contains("Severe"));
     }
 }
