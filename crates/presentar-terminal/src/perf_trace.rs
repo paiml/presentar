@@ -19944,3 +19944,798 @@ mod compaction_policy_tests {
         assert_eq!(cp.triggered, cloned.triggered);
     }
 }
+
+// ============================================================================
+// v9.31.0: Amplification & Lock O(1) Helpers
+// ============================================================================
+
+/// O(1) write amplification tracking.
+///
+/// Tracks write amplification factor for storage systems.
+#[derive(Debug, Clone)]
+pub struct WriteAmplification {
+    user_bytes: u64,
+    actual_bytes: u64,
+    writes: u64,
+    compaction_bytes: u64,
+}
+
+impl Default for WriteAmplification {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl WriteAmplification {
+    /// Create new write amplification tracker.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            user_bytes: 0,
+            actual_bytes: 0,
+            writes: 0,
+            compaction_bytes: 0,
+        }
+    }
+
+    /// Factory for LSM-tree storage.
+    #[must_use]
+    pub fn for_lsm() -> Self {
+        Self::new()
+    }
+
+    /// Factory for B-tree storage.
+    #[must_use]
+    pub fn for_btree() -> Self {
+        Self::new()
+    }
+
+    /// Record user write.
+    pub fn user_write(&mut self, bytes: u64) {
+        self.user_bytes += bytes;
+        self.writes += 1;
+    }
+
+    /// Record actual disk write.
+    pub fn disk_write(&mut self, bytes: u64) {
+        self.actual_bytes += bytes;
+    }
+
+    /// Record compaction write.
+    pub fn compaction_write(&mut self, bytes: u64) {
+        self.compaction_bytes += bytes;
+        self.actual_bytes += bytes;
+    }
+
+    /// Get write amplification factor.
+    #[must_use]
+    pub fn amplification(&self) -> f64 {
+        if self.user_bytes == 0 {
+            1.0
+        } else {
+            self.actual_bytes as f64 / self.user_bytes as f64
+        }
+    }
+
+    /// Check if amplification is acceptable.
+    #[must_use]
+    pub fn is_acceptable(&self, max_amp: f64) -> bool {
+        self.amplification() <= max_amp
+    }
+
+    /// Get total writes.
+    #[must_use]
+    pub fn writes(&self) -> u64 {
+        self.writes
+    }
+
+    /// Reset tracker.
+    pub fn reset(&mut self) {
+        self.user_bytes = 0;
+        self.actual_bytes = 0;
+        self.writes = 0;
+        self.compaction_bytes = 0;
+    }
+}
+
+/// O(1) read amplification tracking.
+///
+/// Tracks read amplification factor for storage lookups.
+#[derive(Debug, Clone)]
+pub struct ReadAmplification {
+    logical_reads: u64,
+    physical_reads: u64,
+    cache_hits: u64,
+    bloom_filter_hits: u64,
+}
+
+impl Default for ReadAmplification {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ReadAmplification {
+    /// Create new read amplification tracker.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            logical_reads: 0,
+            physical_reads: 0,
+            cache_hits: 0,
+            bloom_filter_hits: 0,
+        }
+    }
+
+    /// Factory for LSM-tree storage.
+    #[must_use]
+    pub fn for_lsm() -> Self {
+        Self::new()
+    }
+
+    /// Factory for B-tree storage.
+    #[must_use]
+    pub fn for_btree() -> Self {
+        Self::new()
+    }
+
+    /// Record a logical read request.
+    pub fn logical_read(&mut self) {
+        self.logical_reads += 1;
+    }
+
+    /// Record a physical disk read.
+    pub fn physical_read(&mut self) {
+        self.physical_reads += 1;
+    }
+
+    /// Record a cache hit.
+    pub fn cache_hit(&mut self) {
+        self.cache_hits += 1;
+    }
+
+    /// Record a bloom filter hit (avoided read).
+    pub fn bloom_hit(&mut self) {
+        self.bloom_filter_hits += 1;
+    }
+
+    /// Get read amplification factor.
+    #[must_use]
+    pub fn amplification(&self) -> f64 {
+        if self.logical_reads == 0 {
+            1.0
+        } else {
+            self.physical_reads as f64 / self.logical_reads as f64
+        }
+    }
+
+    /// Get cache hit rate.
+    #[must_use]
+    pub fn cache_hit_rate(&self) -> f64 {
+        let total = self.cache_hits + self.physical_reads;
+        if total == 0 {
+            0.0
+        } else {
+            (self.cache_hits as f64 / total as f64) * 100.0
+        }
+    }
+
+    /// Check if amplification is acceptable.
+    #[must_use]
+    pub fn is_acceptable(&self, max_amp: f64) -> bool {
+        self.amplification() <= max_amp
+    }
+
+    /// Reset tracker.
+    pub fn reset(&mut self) {
+        self.logical_reads = 0;
+        self.physical_reads = 0;
+        self.cache_hits = 0;
+        self.bloom_filter_hits = 0;
+    }
+}
+
+/// O(1) lock contention tracking.
+///
+/// Tracks lock acquisition patterns and contention.
+#[derive(Debug, Clone)]
+pub struct LockManager {
+    acquisitions: u64,
+    contentions: u64,
+    deadlocks: u64,
+    total_wait_us: u64,
+    held_count: u32,
+}
+
+impl Default for LockManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl LockManager {
+    /// Create new lock manager tracker.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            acquisitions: 0,
+            contentions: 0,
+            deadlocks: 0,
+            total_wait_us: 0,
+            held_count: 0,
+        }
+    }
+
+    /// Factory for mutex locks.
+    #[must_use]
+    pub fn for_mutex() -> Self {
+        Self::new()
+    }
+
+    /// Factory for RW locks.
+    #[must_use]
+    pub fn for_rwlock() -> Self {
+        Self::new()
+    }
+
+    /// Acquire a lock.
+    pub fn acquire(&mut self, wait_us: u64) {
+        self.acquisitions += 1;
+        self.total_wait_us += wait_us;
+        self.held_count += 1;
+        if wait_us > 0 {
+            self.contentions += 1;
+        }
+    }
+
+    /// Release a lock.
+    pub fn release(&mut self) {
+        self.held_count = self.held_count.saturating_sub(1);
+    }
+
+    /// Record a deadlock detection.
+    pub fn deadlock(&mut self) {
+        self.deadlocks += 1;
+    }
+
+    /// Get contention rate (%).
+    #[must_use]
+    pub fn contention_rate(&self) -> f64 {
+        if self.acquisitions == 0 {
+            0.0
+        } else {
+            (self.contentions as f64 / self.acquisitions as f64) * 100.0
+        }
+    }
+
+    /// Get average wait time (us).
+    #[must_use]
+    pub fn avg_wait_us(&self) -> u64 {
+        if self.acquisitions == 0 {
+            0
+        } else {
+            self.total_wait_us / self.acquisitions
+        }
+    }
+
+    /// Check if lock health is good.
+    #[must_use]
+    pub fn is_healthy(&self, max_contention_rate: f64) -> bool {
+        self.contention_rate() <= max_contention_rate && self.deadlocks == 0
+    }
+
+    /// Reset tracker.
+    pub fn reset(&mut self) {
+        self.acquisitions = 0;
+        self.contentions = 0;
+        self.deadlocks = 0;
+        self.total_wait_us = 0;
+        self.held_count = 0;
+    }
+}
+
+/// O(1) memory pressure tracking.
+///
+/// Tracks memory allocation pressure and GC triggers.
+#[derive(Debug, Clone)]
+pub struct MemoryPressure {
+    allocated_bytes: u64,
+    limit_bytes: u64,
+    pressure_events: u64,
+    gc_triggers: u64,
+    evictions: u64,
+}
+
+impl Default for MemoryPressure {
+    fn default() -> Self {
+        Self::new(1024 * 1024 * 1024) // 1GB default
+    }
+}
+
+impl MemoryPressure {
+    /// Create new memory pressure tracker.
+    #[must_use]
+    pub fn new(limit_bytes: u64) -> Self {
+        Self {
+            allocated_bytes: 0,
+            limit_bytes,
+            pressure_events: 0,
+            gc_triggers: 0,
+            evictions: 0,
+        }
+    }
+
+    /// Factory for heap memory.
+    #[must_use]
+    pub fn for_heap() -> Self {
+        Self::new(8 * 1024 * 1024 * 1024) // 8GB
+    }
+
+    /// Factory for cache memory.
+    #[must_use]
+    pub fn for_cache() -> Self {
+        Self::new(1024 * 1024 * 1024) // 1GB
+    }
+
+    /// Allocate memory.
+    pub fn allocate(&mut self, bytes: u64) {
+        self.allocated_bytes += bytes;
+        if self.allocated_bytes > self.limit_bytes * 80 / 100 {
+            self.pressure_events += 1;
+        }
+    }
+
+    /// Free memory.
+    pub fn free(&mut self, bytes: u64) {
+        self.allocated_bytes = self.allocated_bytes.saturating_sub(bytes);
+    }
+
+    /// Trigger GC.
+    pub fn trigger_gc(&mut self) {
+        self.gc_triggers += 1;
+    }
+
+    /// Record eviction.
+    pub fn evict(&mut self, bytes: u64) {
+        self.evictions += 1;
+        self.allocated_bytes = self.allocated_bytes.saturating_sub(bytes);
+    }
+
+    /// Get utilization percentage.
+    #[must_use]
+    pub fn utilization(&self) -> f64 {
+        if self.limit_bytes == 0 {
+            0.0
+        } else {
+            (self.allocated_bytes as f64 / self.limit_bytes as f64) * 100.0
+        }
+    }
+
+    /// Check if under pressure.
+    #[must_use]
+    pub fn is_under_pressure(&self) -> bool {
+        self.utilization() > 80.0
+    }
+
+    /// Check if healthy.
+    #[must_use]
+    pub fn is_healthy(&self, max_utilization: f64) -> bool {
+        self.utilization() <= max_utilization
+    }
+
+    /// Reset tracker.
+    pub fn reset(&mut self) {
+        self.allocated_bytes = 0;
+        self.pressure_events = 0;
+        self.gc_triggers = 0;
+        self.evictions = 0;
+    }
+}
+
+#[cfg(test)]
+mod write_amplification_tests {
+    use super::*;
+
+    /// F-WAMP-001: New creates empty tracker
+    #[test]
+    fn f_wamp_001_new() {
+        let wa = WriteAmplification::new();
+        assert_eq!(wa.writes(), 0);
+    }
+
+    /// F-WAMP-002: Default equals new
+    #[test]
+    fn f_wamp_002_default() {
+        let wa = WriteAmplification::default();
+        assert!((wa.amplification() - 1.0).abs() < 0.01);
+    }
+
+    /// F-WAMP-003: User write tracked
+    #[test]
+    fn f_wamp_003_user_write() {
+        let mut wa = WriteAmplification::new();
+        wa.user_write(100);
+        assert_eq!(wa.user_bytes, 100);
+    }
+
+    /// F-WAMP-004: Disk write tracked
+    #[test]
+    fn f_wamp_004_disk_write() {
+        let mut wa = WriteAmplification::new();
+        wa.disk_write(200);
+        assert_eq!(wa.actual_bytes, 200);
+    }
+
+    /// F-WAMP-005: Amplification calculated
+    #[test]
+    fn f_wamp_005_amplification() {
+        let mut wa = WriteAmplification::new();
+        wa.user_write(100);
+        wa.disk_write(300);
+        assert!((wa.amplification() - 3.0).abs() < 0.01);
+    }
+
+    /// F-WAMP-006: Compaction tracked
+    #[test]
+    fn f_wamp_006_compaction() {
+        let mut wa = WriteAmplification::new();
+        wa.compaction_write(500);
+        assert_eq!(wa.compaction_bytes, 500);
+    }
+
+    /// F-WAMP-007: Factory for_lsm
+    #[test]
+    fn f_wamp_007_for_lsm() {
+        let wa = WriteAmplification::for_lsm();
+        assert_eq!(wa.writes(), 0);
+    }
+
+    /// F-WAMP-008: Factory for_btree
+    #[test]
+    fn f_wamp_008_for_btree() {
+        let wa = WriteAmplification::for_btree();
+        assert_eq!(wa.user_bytes, 0);
+    }
+
+    /// F-WAMP-009: Acceptable when low amp
+    #[test]
+    fn f_wamp_009_acceptable() {
+        let mut wa = WriteAmplification::new();
+        wa.user_write(100);
+        wa.disk_write(150);
+        assert!(wa.is_acceptable(2.0));
+    }
+
+    /// F-WAMP-010: Not acceptable when high amp
+    #[test]
+    fn f_wamp_010_not_acceptable() {
+        let mut wa = WriteAmplification::new();
+        wa.user_write(100);
+        wa.disk_write(500);
+        assert!(!wa.is_acceptable(2.0));
+    }
+
+    /// F-WAMP-011: Reset clears counters
+    #[test]
+    fn f_wamp_011_reset() {
+        let mut wa = WriteAmplification::new();
+        wa.user_write(100);
+        wa.reset();
+        assert_eq!(wa.writes(), 0);
+    }
+
+    /// F-WAMP-012: Clone preserves state
+    #[test]
+    fn f_wamp_012_clone() {
+        let mut wa = WriteAmplification::new();
+        wa.user_write(100);
+        let cloned = wa.clone();
+        assert_eq!(wa.user_bytes, cloned.user_bytes);
+    }
+}
+
+#[cfg(test)]
+mod read_amplification_tests {
+    use super::*;
+
+    /// F-RAMP-001: New creates empty tracker
+    #[test]
+    fn f_ramp_001_new() {
+        let ra = ReadAmplification::new();
+        assert_eq!(ra.logical_reads, 0);
+    }
+
+    /// F-RAMP-002: Default equals new
+    #[test]
+    fn f_ramp_002_default() {
+        let ra = ReadAmplification::default();
+        assert!((ra.amplification() - 1.0).abs() < 0.01);
+    }
+
+    /// F-RAMP-003: Logical read tracked
+    #[test]
+    fn f_ramp_003_logical() {
+        let mut ra = ReadAmplification::new();
+        ra.logical_read();
+        assert_eq!(ra.logical_reads, 1);
+    }
+
+    /// F-RAMP-004: Physical read tracked
+    #[test]
+    fn f_ramp_004_physical() {
+        let mut ra = ReadAmplification::new();
+        ra.physical_read();
+        assert_eq!(ra.physical_reads, 1);
+    }
+
+    /// F-RAMP-005: Amplification calculated
+    #[test]
+    fn f_ramp_005_amplification() {
+        let mut ra = ReadAmplification::new();
+        ra.logical_read();
+        ra.physical_read();
+        ra.physical_read();
+        ra.physical_read();
+        assert!((ra.amplification() - 3.0).abs() < 0.01);
+    }
+
+    /// F-RAMP-006: Cache hit tracked
+    #[test]
+    fn f_ramp_006_cache() {
+        let mut ra = ReadAmplification::new();
+        ra.cache_hit();
+        assert_eq!(ra.cache_hits, 1);
+    }
+
+    /// F-RAMP-007: Factory for_lsm
+    #[test]
+    fn f_ramp_007_for_lsm() {
+        let ra = ReadAmplification::for_lsm();
+        assert_eq!(ra.logical_reads, 0);
+    }
+
+    /// F-RAMP-008: Factory for_btree
+    #[test]
+    fn f_ramp_008_for_btree() {
+        let ra = ReadAmplification::for_btree();
+        assert_eq!(ra.physical_reads, 0);
+    }
+
+    /// F-RAMP-009: Cache hit rate calculated
+    #[test]
+    fn f_ramp_009_cache_rate() {
+        let mut ra = ReadAmplification::new();
+        ra.cache_hit();
+        ra.physical_read();
+        assert!((ra.cache_hit_rate() - 50.0).abs() < 0.01);
+    }
+
+    /// F-RAMP-010: Bloom filter tracked
+    #[test]
+    fn f_ramp_010_bloom() {
+        let mut ra = ReadAmplification::new();
+        ra.bloom_hit();
+        assert_eq!(ra.bloom_filter_hits, 1);
+    }
+
+    /// F-RAMP-011: Reset clears counters
+    #[test]
+    fn f_ramp_011_reset() {
+        let mut ra = ReadAmplification::new();
+        ra.logical_read();
+        ra.reset();
+        assert_eq!(ra.logical_reads, 0);
+    }
+
+    /// F-RAMP-012: Clone preserves state
+    #[test]
+    fn f_ramp_012_clone() {
+        let mut ra = ReadAmplification::new();
+        ra.logical_read();
+        let cloned = ra.clone();
+        assert_eq!(ra.logical_reads, cloned.logical_reads);
+    }
+}
+
+#[cfg(test)]
+mod lock_manager_tests {
+    use super::*;
+
+    /// F-LOCK-001: New creates empty manager
+    #[test]
+    fn f_lock_001_new() {
+        let lm = LockManager::new();
+        assert_eq!(lm.acquisitions, 0);
+    }
+
+    /// F-LOCK-002: Default equals new
+    #[test]
+    fn f_lock_002_default() {
+        let lm = LockManager::default();
+        assert_eq!(lm.contentions, 0);
+    }
+
+    /// F-LOCK-003: Acquire increments count
+    #[test]
+    fn f_lock_003_acquire() {
+        let mut lm = LockManager::new();
+        lm.acquire(0);
+        assert_eq!(lm.acquisitions, 1);
+    }
+
+    /// F-LOCK-004: Release decrements held
+    #[test]
+    fn f_lock_004_release() {
+        let mut lm = LockManager::new();
+        lm.acquire(0);
+        lm.release();
+        assert_eq!(lm.held_count, 0);
+    }
+
+    /// F-LOCK-005: Contention tracked
+    #[test]
+    fn f_lock_005_contention() {
+        let mut lm = LockManager::new();
+        lm.acquire(100); // Wait indicates contention
+        assert_eq!(lm.contentions, 1);
+    }
+
+    /// F-LOCK-006: Contention rate calculated
+    #[test]
+    fn f_lock_006_rate() {
+        let mut lm = LockManager::new();
+        lm.acquire(0);
+        lm.acquire(100);
+        assert!((lm.contention_rate() - 50.0).abs() < 0.01);
+    }
+
+    /// F-LOCK-007: Factory for_mutex
+    #[test]
+    fn f_lock_007_for_mutex() {
+        let lm = LockManager::for_mutex();
+        assert_eq!(lm.acquisitions, 0);
+    }
+
+    /// F-LOCK-008: Factory for_rwlock
+    #[test]
+    fn f_lock_008_for_rwlock() {
+        let lm = LockManager::for_rwlock();
+        assert_eq!(lm.contentions, 0);
+    }
+
+    /// F-LOCK-009: Deadlock tracked
+    #[test]
+    fn f_lock_009_deadlock() {
+        let mut lm = LockManager::new();
+        lm.deadlock();
+        assert_eq!(lm.deadlocks, 1);
+    }
+
+    /// F-LOCK-010: Healthy when no deadlocks
+    #[test]
+    fn f_lock_010_healthy() {
+        let mut lm = LockManager::new();
+        lm.acquire(0);
+        assert!(lm.is_healthy(50.0));
+    }
+
+    /// F-LOCK-011: Reset clears counters
+    #[test]
+    fn f_lock_011_reset() {
+        let mut lm = LockManager::new();
+        lm.acquire(100);
+        lm.reset();
+        assert_eq!(lm.acquisitions, 0);
+    }
+
+    /// F-LOCK-012: Clone preserves state
+    #[test]
+    fn f_lock_012_clone() {
+        let mut lm = LockManager::new();
+        lm.acquire(100);
+        let cloned = lm.clone();
+        assert_eq!(lm.contentions, cloned.contentions);
+    }
+}
+
+#[cfg(test)]
+mod memory_pressure_tests {
+    use super::*;
+
+    /// F-MPRESS-001: New creates empty tracker
+    #[test]
+    fn f_mpress_001_new() {
+        let mp = MemoryPressure::new(1000);
+        assert_eq!(mp.allocated_bytes, 0);
+    }
+
+    /// F-MPRESS-002: Default has limit
+    #[test]
+    fn f_mpress_002_default() {
+        let mp = MemoryPressure::default();
+        assert!(mp.limit_bytes > 0);
+    }
+
+    /// F-MPRESS-003: Allocate increases bytes
+    #[test]
+    fn f_mpress_003_allocate() {
+        let mut mp = MemoryPressure::new(1000);
+        mp.allocate(100);
+        assert_eq!(mp.allocated_bytes, 100);
+    }
+
+    /// F-MPRESS-004: Free decreases bytes
+    #[test]
+    fn f_mpress_004_free() {
+        let mut mp = MemoryPressure::new(1000);
+        mp.allocate(100);
+        mp.free(50);
+        assert_eq!(mp.allocated_bytes, 50);
+    }
+
+    /// F-MPRESS-005: Utilization calculated
+    #[test]
+    fn f_mpress_005_utilization() {
+        let mut mp = MemoryPressure::new(100);
+        mp.allocate(50);
+        assert!((mp.utilization() - 50.0).abs() < 0.01);
+    }
+
+    /// F-MPRESS-006: Pressure detected
+    #[test]
+    fn f_mpress_006_pressure() {
+        let mut mp = MemoryPressure::new(100);
+        mp.allocate(90);
+        assert!(mp.is_under_pressure());
+    }
+
+    /// F-MPRESS-007: Factory for_heap
+    #[test]
+    fn f_mpress_007_for_heap() {
+        let mp = MemoryPressure::for_heap();
+        assert!(mp.limit_bytes > 1024 * 1024 * 1024);
+    }
+
+    /// F-MPRESS-008: Factory for_cache
+    #[test]
+    fn f_mpress_008_for_cache() {
+        let mp = MemoryPressure::for_cache();
+        assert_eq!(mp.limit_bytes, 1024 * 1024 * 1024);
+    }
+
+    /// F-MPRESS-009: GC trigger tracked
+    #[test]
+    fn f_mpress_009_gc() {
+        let mut mp = MemoryPressure::new(1000);
+        mp.trigger_gc();
+        assert_eq!(mp.gc_triggers, 1);
+    }
+
+    /// F-MPRESS-010: Eviction tracked
+    #[test]
+    fn f_mpress_010_evict() {
+        let mut mp = MemoryPressure::new(1000);
+        mp.allocate(100);
+        mp.evict(50);
+        assert_eq!(mp.evictions, 1);
+        assert_eq!(mp.allocated_bytes, 50);
+    }
+
+    /// F-MPRESS-011: Reset clears counters
+    #[test]
+    fn f_mpress_011_reset() {
+        let mut mp = MemoryPressure::new(1000);
+        mp.allocate(100);
+        mp.reset();
+        assert_eq!(mp.allocated_bytes, 0);
+    }
+
+    /// F-MPRESS-012: Clone preserves state
+    #[test]
+    fn f_mpress_012_clone() {
+        let mut mp = MemoryPressure::new(1000);
+        mp.allocate(100);
+        let cloned = mp.clone();
+        assert_eq!(mp.allocated_bytes, cloned.allocated_bytes);
+    }
+}
