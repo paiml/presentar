@@ -750,6 +750,7 @@ impl ProcessTable {
     }
 
     /// Draw command column with optional tree prefix.
+    #[allow(clippy::too_many_arguments)]
     fn draw_command(&self, canvas: &mut dyn Canvas, proc: &ProcessEntry, x: f32, y: f32, is_selected: bool, cmd_w: usize, default_style: &TextStyle) {
         let cmd = if self.show_cmdline { proc.cmdline.as_deref().unwrap_or(&proc.command) } else { &proc.command };
         let cmd_style = if is_selected { TextStyle { color: Color::new(1.0, 1.0, 1.0, 1.0), ..Default::default() } } else { default_style.clone() };

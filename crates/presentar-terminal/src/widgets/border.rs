@@ -225,6 +225,7 @@ impl Border {
     }
 
     /// Draw left-aligned title.
+    #[allow(clippy::too_many_arguments)]
     fn draw_left_aligned_title(&self, canvas: &mut dyn Canvas, title: &str, title_len: usize, width: usize, top: char, tr: char, style: &TextStyle, title_style: &TextStyle) {
         let (tl, _, _, _, _, _, _, _) = self.style.chars();
         canvas.draw_text(&tl.to_string(), Point::new(self.bounds.x, self.bounds.y), style);
@@ -238,6 +239,7 @@ impl Border {
     }
 
     /// Draw centered title.
+    #[allow(clippy::too_many_arguments)]
     fn draw_centered_title(&self, canvas: &mut dyn Canvas, title: &str, title_len: usize, width: usize, top: char, tr: char, style: &TextStyle, title_style: &TextStyle) {
         let (tl, _, _, _, _, _, _, _) = self.style.chars();
         let available = width.saturating_sub(4);

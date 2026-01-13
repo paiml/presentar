@@ -180,7 +180,7 @@ impl BatteryAnalyzer {
             data: BatteryData::default(),
             sysfs_path,
             update_interval: Duration::from_secs(5), // Update every 5s
-            last_update: Instant::now() - Duration::from_secs(10), // Force immediate update
+            last_update: Instant::now().checked_sub(Duration::from_secs(10)).unwrap_or_else(Instant::now), // Force immediate update
         })
     }
 
@@ -324,7 +324,7 @@ impl BatteryAnalyzer {
         std::fs::read_to_string(path.join("online"))
             .ok()
             .and_then(|s| s.trim().parse::<i32>().ok())
-            .map_or(false, |v| v == 1)
+            .is_some_and(|v| v == 1)
     }
 }
 
@@ -334,7 +334,7 @@ impl Default for BatteryAnalyzer {
             data: BatteryData::default(),
             sysfs_path: PathBuf::from("/sys/class/power_supply"),
             update_interval: Duration::from_secs(5),
-            last_update: Instant::now() - Duration::from_secs(10),
+            last_update: Instant::now().checked_sub(Duration::from_secs(10)).unwrap_or_else(Instant::now),
         }
     }
 }

@@ -160,7 +160,7 @@ fn render_once(app: &App, width: u16, height: u16) -> io::Result<()> {
 }
 
 /// Spawn background metrics collector thread.
-/// Returns (receiver, running_flag, collect_time_atomic).
+/// Returns (receiver, `running_flag`, `collect_time_atomic`).
 fn spawn_metrics_collector(
     refresh_ms: u64,
     deterministic: bool,

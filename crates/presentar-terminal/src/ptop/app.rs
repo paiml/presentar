@@ -1489,7 +1489,7 @@ impl App {
             KeyCode::BackTab => self.navigate_panel_backward(),
             KeyCode::Char('l') if !self.show_filter_input => self.navigate_panel_forward(),
             KeyCode::Char('H') => self.navigate_panel_backward(),
-            KeyCode::Char('?') | KeyCode::F(1) | KeyCode::Char('h') => {
+            KeyCode::Char('?' | 'h') | KeyCode::F(1) => {
                 self.show_help = !self.show_help;
             }
             KeyCode::Char('1') => self.toggle_panel(PanelType::Cpu),

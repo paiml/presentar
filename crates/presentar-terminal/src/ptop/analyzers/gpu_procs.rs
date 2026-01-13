@@ -726,10 +726,8 @@ impl GpuProcsAnalyzer {
     /// Query AMD GPU - tries rocm-smi first, then falls back to sysfs (PMAT-GAP-029)
     fn query_amd(&mut self) -> Result<(), AnalyzerError> {
         // Try rocm-smi first for more detailed stats
-        if self.rocm_smi_path.is_some() {
-            if let Ok(()) = self.query_amd_rocm_smi() {
-                return Ok(());
-            }
+        if self.rocm_smi_path.is_some() && self.query_amd_rocm_smi().is_ok() {
+            return Ok(());
         }
         // Fall back to sysfs
         self.query_amd_sysfs()

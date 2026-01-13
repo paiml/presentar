@@ -1773,8 +1773,8 @@ pub fn read_gpu_info() -> Option<GpuInfo> {
 
 /// F006: GPU Panel - shows GPU utilization, VRAM, temperature
 /// Format GPU panel title based on detail level.
-fn format_gpu_title(gpu: &Option<GpuInfo>, detail_level: DetailLevel) -> String {
-    gpu.as_ref().map(|g| {
+fn format_gpu_title(gpu: Option<&GpuInfo>, detail_level: DetailLevel) -> String {
+    gpu.map(|g| {
         if detail_level == DetailLevel::Minimal { g.name.clone() }
         else {
             let temp_str = g.temperature.map(|t| format!(" │ {t}°C")).unwrap_or_default();
@@ -1844,7 +1844,7 @@ fn draw_gpu_procs(app: &App, canvas: &mut DirectTerminalCanvas<'_>, inner: Rect,
 fn draw_gpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
     let detail_level = DetailLevel::for_height(bounds.height as u16);
     let gpu = app.gpu_info.clone();
-    let title = format_gpu_title(&gpu, detail_level);
+    let title = format_gpu_title(gpu.as_ref(), detail_level);
 
     let is_focused = app.is_panel_focused(PanelType::Gpu);
     let mut border = create_panel_border(&title, GPU_COLOR, is_focused);

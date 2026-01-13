@@ -348,7 +348,7 @@ impl SwapAnalyzer {
     /// Check if ZRAM is available.
     #[must_use]
     pub fn has_zram(&self) -> bool {
-        self.zram.as_ref().map_or(false, |z| z.is_active())
+        self.zram.as_ref().is_some_and(|z| z.is_active())
     }
 
     /// Get ZRAM compression ratio.
