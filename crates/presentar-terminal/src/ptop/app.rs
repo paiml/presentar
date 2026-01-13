@@ -778,6 +778,9 @@ pub struct App {
     pub selected_column: usize,
     /// Files panel view mode (PMAT-GAP-034 - ttop parity)
     pub files_view_mode: FilesViewMode,
+    /// Last focused panel before collapse (PMAT-GAP-035 - ttop parity)
+    /// Used to restore focus when panel is shown again
+    pub collapse_memory: Option<PanelType>,
 
     // Configuration (SPEC-024 v5.0 Feature A)
     pub config: PtopConfig,
@@ -989,6 +992,7 @@ impl App {
             exploded_panel: None,
             selected_column: 0, // Start with first column (PID)
             files_view_mode: FilesViewMode::default(), // PMAT-GAP-034: size view default
+            collapse_memory: None, // PMAT-GAP-035: no collapsed focused panel
             config,
             frame_id: 0,
             avg_frame_time_us: 0,
@@ -1541,16 +1545,16 @@ impl App {
             KeyCode::Char('?') | KeyCode::F(1) => self.show_help = !self.show_help,
             KeyCode::Char('h') => self.show_help = !self.show_help,
 
-            // Panel toggles (matches ttop keys)
-            KeyCode::Char('1') => self.panels.cpu = !self.panels.cpu,
-            KeyCode::Char('2') => self.panels.memory = !self.panels.memory,
-            KeyCode::Char('3') => self.panels.disk = !self.panels.disk,
-            KeyCode::Char('4') => self.panels.network = !self.panels.network,
-            KeyCode::Char('5') => self.panels.process = !self.panels.process,
-            KeyCode::Char('6') => self.panels.gpu = !self.panels.gpu,
-            KeyCode::Char('7') => self.panels.sensors = !self.panels.sensors,
-            KeyCode::Char('8') => self.panels.connections = !self.panels.connections,
-            KeyCode::Char('9') => self.panels.psi = !self.panels.psi,
+            // Panel toggles with collapse memory (PMAT-GAP-035 - ttop parity)
+            KeyCode::Char('1') => self.toggle_panel(PanelType::Cpu),
+            KeyCode::Char('2') => self.toggle_panel(PanelType::Memory),
+            KeyCode::Char('3') => self.toggle_panel(PanelType::Disk),
+            KeyCode::Char('4') => self.toggle_panel(PanelType::Network),
+            KeyCode::Char('5') => self.toggle_panel(PanelType::Process),
+            KeyCode::Char('6') => self.toggle_panel(PanelType::Gpu),
+            KeyCode::Char('7') => self.toggle_panel(PanelType::Sensors),
+            KeyCode::Char('8') => self.toggle_panel(PanelType::Connections),
+            KeyCode::Char('9') => self.toggle_panel(PanelType::Psi),
 
             // Files view mode toggle (PMAT-GAP-034 - ttop parity)
             // 'v' cycles: Size -> Tree -> Flat -> Size (when Files panel focused)
@@ -1810,6 +1814,77 @@ impl App {
     /// 'v' key cycles: Size -> Tree -> Flat -> Size
     pub fn cycle_files_view_mode(&mut self) {
         self.files_view_mode = self.files_view_mode.next();
+    }
+
+    /// Toggle a panel's visibility with collapse memory (PMAT-GAP-035 - ttop parity)
+    ///
+    /// When hiding a focused panel:
+    /// 1. Store it in collapse_memory
+    /// 2. Move focus to first visible panel
+    ///
+    /// When showing a panel that was previously focused (in collapse_memory):
+    /// 1. Restore focus to that panel
+    /// 2. Clear collapse_memory
+    pub fn toggle_panel(&mut self, panel: PanelType) {
+        let is_visible = self.is_panel_visible(panel);
+
+        if is_visible {
+            // Hiding the panel
+            if self.focused_panel == Some(panel) {
+                // Store in collapse_memory
+                self.collapse_memory = Some(panel);
+                // Move focus to first visible (excluding this one)
+                self.set_panel_visible(panel, false);
+                let visible = self.visible_panels();
+                self.focused_panel = visible.first().copied();
+            } else {
+                self.set_panel_visible(panel, false);
+            }
+        } else {
+            // Showing the panel
+            self.set_panel_visible(panel, true);
+            // If this panel was stored in collapse_memory, restore focus
+            if self.collapse_memory == Some(panel) {
+                self.focused_panel = Some(panel);
+                self.collapse_memory = None;
+            }
+        }
+    }
+
+    /// Check if a panel is currently visible
+    fn is_panel_visible(&self, panel: PanelType) -> bool {
+        match panel {
+            PanelType::Cpu => self.panels.cpu,
+            PanelType::Memory => self.panels.memory,
+            PanelType::Disk => self.panels.disk,
+            PanelType::Network => self.panels.network,
+            PanelType::Process => self.panels.process,
+            PanelType::Gpu => self.panels.gpu,
+            PanelType::Sensors => self.panels.sensors,
+            PanelType::Connections => self.panels.connections,
+            PanelType::Psi => self.panels.psi,
+            PanelType::Battery => self.panels.battery,
+            PanelType::Files => self.panels.files,
+            PanelType::Containers => false, // Not implemented
+        }
+    }
+
+    /// Set a panel's visibility
+    fn set_panel_visible(&mut self, panel: PanelType, visible: bool) {
+        match panel {
+            PanelType::Cpu => self.panels.cpu = visible,
+            PanelType::Memory => self.panels.memory = visible,
+            PanelType::Disk => self.panels.disk = visible,
+            PanelType::Network => self.panels.network = visible,
+            PanelType::Process => self.panels.process = visible,
+            PanelType::Gpu => self.panels.gpu = visible,
+            PanelType::Sensors => self.panels.sensors = visible,
+            PanelType::Connections => self.panels.connections = visible,
+            PanelType::Psi => self.panels.psi = visible,
+            PanelType::Battery => self.panels.battery = visible,
+            PanelType::Files => self.panels.files = visible,
+            PanelType::Containers => {} // Not implemented
+        }
     }
 
     /// Send a signal to a process using the system `kill` command
@@ -3626,5 +3701,112 @@ mod tests {
         assert_eq!(app.files_view_mode, FilesViewMode::Size);
         app.handle_key(KeyCode::Char('v'), KeyModifiers::empty());
         assert_eq!(app.files_view_mode, FilesViewMode::Size); // Unchanged
+    }
+
+    // =========================================================================
+    // PMAT-GAP-035: Panel collapse memory tests (ttop parity)
+    // =========================================================================
+
+    #[test]
+    fn test_collapse_memory_field_exists() {
+        let app = App::new(true);
+        // Field must exist and default to None
+        assert!(app.collapse_memory.is_none());
+    }
+
+    #[test]
+    fn test_toggle_panel_hides_focused_stores_memory() {
+        let mut app = App::new(true);
+        app.focused_panel = Some(PanelType::Cpu);
+        app.panels.cpu = true;
+        app.panels.memory = true;
+
+        // Toggle off CPU while focused
+        app.toggle_panel(PanelType::Cpu);
+
+        // CPU should be hidden
+        assert!(!app.panels.cpu);
+        // Focus should move to first visible (Memory)
+        assert_eq!(app.focused_panel, Some(PanelType::Memory));
+        // Collapse memory should store CPU
+        assert_eq!(app.collapse_memory, Some(PanelType::Cpu));
+    }
+
+    #[test]
+    fn test_toggle_panel_restore_focus_from_memory() {
+        let mut app = App::new(true);
+        app.focused_panel = Some(PanelType::Cpu);
+        app.panels.cpu = true;
+        app.panels.memory = true;
+
+        // Hide CPU (stores in memory)
+        app.toggle_panel(PanelType::Cpu);
+        assert_eq!(app.collapse_memory, Some(PanelType::Cpu));
+        assert_eq!(app.focused_panel, Some(PanelType::Memory));
+
+        // Show CPU again (should restore focus)
+        app.toggle_panel(PanelType::Cpu);
+        assert!(app.panels.cpu);
+        assert_eq!(app.focused_panel, Some(PanelType::Cpu));
+        assert!(app.collapse_memory.is_none()); // Memory cleared
+    }
+
+    #[test]
+    fn test_toggle_panel_no_memory_when_not_focused() {
+        let mut app = App::new(true);
+        app.focused_panel = Some(PanelType::Cpu);
+        app.panels.cpu = true;
+        app.panels.memory = true;
+
+        // Toggle off Memory (not focused)
+        app.toggle_panel(PanelType::Memory);
+
+        // Memory should be hidden
+        assert!(!app.panels.memory);
+        // Focus should stay on CPU
+        assert_eq!(app.focused_panel, Some(PanelType::Cpu));
+        // Collapse memory should be empty (Memory wasn't focused)
+        assert!(app.collapse_memory.is_none());
+    }
+
+    #[test]
+    fn test_toggle_panel_key_binding_with_memory() {
+        let mut app = App::new(true);
+        app.focused_panel = Some(PanelType::Cpu);
+        app.panels.cpu = true;
+        app.panels.memory = true;
+
+        // Press '1' to hide CPU
+        app.handle_key(KeyCode::Char('1'), KeyModifiers::empty());
+        assert!(!app.panels.cpu);
+        assert_eq!(app.collapse_memory, Some(PanelType::Cpu));
+
+        // Press '1' again to show CPU and restore focus
+        app.handle_key(KeyCode::Char('1'), KeyModifiers::empty());
+        assert!(app.panels.cpu);
+        assert_eq!(app.focused_panel, Some(PanelType::Cpu));
+        assert!(app.collapse_memory.is_none());
+    }
+
+    #[test]
+    fn test_is_panel_visible() {
+        let mut app = App::new(true);
+        app.panels.cpu = true;
+        app.panels.memory = false;
+
+        assert!(app.is_panel_visible(PanelType::Cpu));
+        assert!(!app.is_panel_visible(PanelType::Memory));
+    }
+
+    #[test]
+    fn test_set_panel_visible() {
+        let mut app = App::new(true);
+        app.panels.cpu = true;
+
+        app.set_panel_visible(PanelType::Cpu, false);
+        assert!(!app.panels.cpu);
+
+        app.set_panel_visible(PanelType::Cpu, true);
+        assert!(app.panels.cpu);
     }
 }
