@@ -764,8 +764,8 @@ pub struct App {
     // Signal handling (SPEC-024 Appendix G.6 P0 - ttop parity)
     /// Pending signal confirmation: (pid, process_name, signal_type)
     pub pending_signal: Option<(u32, String, SignalType)>,
-    /// Last signal result message (displayed briefly after signal sent)
-    pub signal_result: Option<String>,
+    /// Last signal result: (success, message, timestamp) - auto-clears after 3s (PMAT-GAP-033)
+    pub signal_result: Option<(bool, String, std::time::Instant)>,
 
     // Panel navigation and explode (SPEC-024 v5.0 Features D, E)
     /// Currently focused panel (receives keyboard input)
@@ -1742,8 +1742,8 @@ impl App {
     /// Confirm and send the pending signal
     pub fn confirm_signal(&mut self) {
         if let Some((pid, _name, signal)) = self.pending_signal.take() {
-            let result = self.send_signal(pid, signal);
-            self.signal_result = Some(result);
+            let (success, message) = self.send_signal(pid, signal);
+            self.signal_result = Some((success, message, std::time::Instant::now()));
         }
     }
 
@@ -1752,9 +1752,18 @@ impl App {
         self.pending_signal = None;
     }
 
+    /// Clear old signal result after 3 seconds (PMAT-GAP-033 - ttop parity)
+    pub fn clear_old_signal_result(&mut self) {
+        if let Some((_, _, timestamp)) = &self.signal_result {
+            if timestamp.elapsed() > std::time::Duration::from_secs(3) {
+                self.signal_result = None;
+            }
+        }
+    }
+
     /// Send a signal to a process using the system `kill` command
     #[cfg(unix)]
-    fn send_signal(&self, pid: u32, signal: SignalType) -> String {
+    fn send_signal(&self, pid: u32, signal: SignalType) -> (bool, String) {
         use std::process::Command;
 
         // Use the system `kill` command for safe signal sending
@@ -1765,28 +1774,28 @@ impl App {
 
         match output {
             Ok(result) if result.status.success() => {
-                format!("Sent SIG{} to PID {}", signal.name(), pid)
+                (true, format!("Sent SIG{} to PID {}", signal.name(), pid))
             }
             Ok(result) => {
                 let stderr = String::from_utf8_lossy(&result.stderr);
-                format!(
+                (false, format!(
                     "Failed to send SIG{} to {}: {}",
                     signal.name(),
                     pid,
                     stderr.trim()
-                )
+                ))
             }
-            Err(e) => format!("Failed to send SIG{} to {}: {}", signal.name(), pid, e),
+            Err(e) => (false, format!("Failed to send SIG{} to {}: {}", signal.name(), pid, e)),
         }
     }
 
     #[cfg(not(unix))]
-    fn send_signal(&self, pid: u32, signal: SignalType) -> String {
-        format!(
+    fn send_signal(&self, pid: u32, signal: SignalType) -> (bool, String) {
+        (false, format!(
             "Signal {} not supported on this platform (PID {})",
             signal.name(),
             pid
-        )
+        ))
     }
 
     /// Get sorted and filtered processes
@@ -3314,5 +3323,54 @@ mod tests {
 
         assert_eq!(SignalType::Stop.name(), "STOP");
         assert_eq!(SignalType::Stop.number(), 19);
+    }
+
+    // =========================================================================
+    // Signal result auto-clear tests (PMAT-GAP-033)
+    // =========================================================================
+
+    #[test]
+    fn test_clear_old_signal_result_none() {
+        let mut app = App::new(true);
+        app.signal_result = None;
+        app.clear_old_signal_result();
+        assert!(app.signal_result.is_none());
+    }
+
+    #[test]
+    fn test_clear_old_signal_result_recent() {
+        let mut app = App::new(true);
+        app.signal_result = Some((true, "test".to_string(), std::time::Instant::now()));
+        app.clear_old_signal_result();
+        assert!(app.signal_result.is_some()); // Not old enough to clear
+    }
+
+    #[test]
+    fn test_signal_result_tuple_structure() {
+        let mut app = App::new(true);
+        let now = std::time::Instant::now();
+        app.signal_result = Some((true, "Success message".to_string(), now));
+
+        if let Some((success, message, timestamp)) = &app.signal_result {
+            assert!(*success);
+            assert_eq!(message, "Success message");
+            assert!(timestamp.elapsed().as_secs() < 1);
+        } else {
+            panic!("Expected signal_result to be Some");
+        }
+    }
+
+    #[test]
+    fn test_signal_result_failure() {
+        let mut app = App::new(true);
+        let now = std::time::Instant::now();
+        app.signal_result = Some((false, "Failed to send signal".to_string(), now));
+
+        if let Some((success, message, _timestamp)) = &app.signal_result {
+            assert!(!*success);
+            assert!(message.contains("Failed"));
+        } else {
+            panic!("Expected signal_result to be Some");
+        }
     }
 }
