@@ -8334,18 +8334,20 @@ Atoms must implement standard rendering behaviors for non-Ready states:
 
 #### K.2.8 Phase 2 Gap Tickets (Semantic Diff from ttop)
 
-| Ticket | Description | Effort | Files | Dependencies |
-|--------|-------------|--------|-------|--------------|
-| **PMAT-GAP-027** | Swap thrashing detection with severity levels | 2h | `analyzers/swap.rs`, `ui/panels/memory.rs` | PSI data, swap stats |
-| **PMAT-GAP-028** | ZRAM compression ratio display | 1h | `analyzers/swap.rs`, `ui/panels/memory.rs` | /sys/block/zram*/stat |
-| **PMAT-GAP-029** | AMD GPU support (rocm-smi integration) | 4h | `analyzers/gpu_procs.rs` | rocm-smi binary |
-| **PMAT-GAP-030** | Apple GPU support (Metal performance shaders) | 3h | `analyzers/gpu_procs.rs` | macOS IOKit |
-| **PMAT-GAP-031** | Network interface cycling (Tab to switch) | 1h | `ptop/app.rs`, `ui/panels/network.rs` | interface list |
-| **PMAT-GAP-032** | Container badge truncation (12 char max) | 1h | `analyzers/process_extra.rs` | container name |
-| **PMAT-GAP-033** | Signal result auto-clear (3s timeout) | 0.5h | `ptop/app.rs` | Instant tracking |
-| **PMAT-GAP-034** | Files view mode toggle (tree/flat/size) | 2h | `ptop/app.rs`, `ui/panels/files.rs` | treemap analyzer |
-| **PMAT-GAP-035** | Panel collapse memory (persist first visible) | 1h | `ptop/app.rs` | panel state |
-| **PMAT-GAP-036** | Battery live updates (not just UI) | 2h | `analyzers/battery.rs` (new) | sysinfo battery |
+**Status**: 5/10 gaps CLOSED (50% complete)
+
+| Ticket | Description | Effort | Files | Dependencies | Status |
+|--------|-------------|--------|-------|--------------|--------|
+| **PMAT-GAP-027** | Swap thrashing detection with severity levels | 2h | `analyzers/swap.rs`, `ui/panels/memory.rs` | PSI data, swap stats | **DONE** |
+| **PMAT-GAP-028** | ZRAM compression ratio display | 1h | `analyzers/swap.rs`, `ui/panels/memory.rs` | /sys/block/zram*/stat | **DONE** |
+| **PMAT-GAP-029** | AMD GPU support (rocm-smi integration) | 4h | `analyzers/gpu_procs.rs` | rocm-smi binary | TODO |
+| **PMAT-GAP-030** | Apple GPU support (Metal performance shaders) | 3h | `analyzers/gpu_procs.rs` | macOS IOKit | TODO |
+| **PMAT-GAP-031** | Network interface cycling (Tab to switch) | 1h | `ptop/app.rs`, `ui/panels/network.rs` | interface list | **DONE** |
+| **PMAT-GAP-032** | Container badge truncation (12 char max) | 1h | `analyzers/process_extra.rs` | container name | **DONE** |
+| **PMAT-GAP-033** | Signal result auto-clear (3s timeout) | 0.5h | `ptop/app.rs` | Instant tracking | **DONE** |
+| **PMAT-GAP-034** | Files view mode toggle (tree/flat/size) | 2h | `ptop/app.rs`, `ui/panels/files.rs` | treemap analyzer | TODO |
+| **PMAT-GAP-035** | Panel collapse memory (persist first visible) | 1h | `ptop/app.rs` | panel state | TODO |
+| **PMAT-GAP-036** | Battery live updates (not just UI) | 2h | `analyzers/battery.rs` (new) | sysinfo battery | TODO |
 
 ### K.3 Falsification Protocols (F-GAP-*)
 

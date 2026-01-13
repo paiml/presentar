@@ -728,6 +728,8 @@ pub struct App {
     pub net_tx_history: RingBuffer<f64>,
     /// Per-interface network history (bytes/s per interface)
     pub net_iface_history: std::collections::HashMap<String, (RingBuffer<f64>, RingBuffer<f64>)>,
+    /// Selected network interface index for Tab cycling (PMAT-GAP-031 - ttop parity)
+    pub selected_interface_index: usize,
     /// GPU utilization history (0-100%)
     pub gpu_history: RingBuffer<f64>,
     /// VRAM usage history (0-100%)
@@ -950,6 +952,7 @@ impl App {
             net_rx_history: RingBuffer::new(60),
             net_tx_history: RingBuffer::new(60),
             net_iface_history: std::collections::HashMap::new(),
+            selected_interface_index: 0, // PMAT-GAP-031: default to first interface
             gpu_history: RingBuffer::new(60),
             vram_history: RingBuffer::new(60),
             gpu_info: None,
@@ -1509,8 +1512,13 @@ impl App {
             }
 
             // Panel navigation - Tab cycles forward (SPEC-024 v5.0 Feature D)
+            // PMAT-GAP-031: When Network panel is focused, Tab cycles interfaces instead
             KeyCode::Tab if !modifiers.contains(KeyModifiers::SHIFT) => {
-                self.navigate_panel_forward();
+                if self.focused_panel == Some(PanelType::Network) {
+                    self.cycle_interface();
+                } else {
+                    self.navigate_panel_forward();
+                }
             }
 
             // Panel navigation - Shift+Tab cycles backward
@@ -1759,6 +1767,33 @@ impl App {
                 self.signal_result = None;
             }
         }
+    }
+
+    /// Cycle to the next network interface (PMAT-GAP-031 - ttop parity)
+    ///
+    /// Tab key cycles through available interfaces in order.
+    /// Wraps around to 0 when reaching the end.
+    pub fn cycle_interface(&mut self) {
+        let iface_count = self.snapshot_networks.len();
+        if iface_count == 0 {
+            self.selected_interface_index = 0;
+            return;
+        }
+        self.selected_interface_index = (self.selected_interface_index + 1) % iface_count;
+    }
+
+    /// Get the name of the currently selected interface (PMAT-GAP-031)
+    #[must_use]
+    pub fn selected_interface_name(&self) -> Option<&str> {
+        self.snapshot_networks
+            .get(self.selected_interface_index)
+            .map(|info| info.name.as_str())
+    }
+
+    /// Get the data for the currently selected interface (PMAT-GAP-031)
+    #[must_use]
+    pub fn selected_interface_data(&self) -> Option<&NetworkInfo> {
+        self.snapshot_networks.get(self.selected_interface_index)
     }
 
     /// Send a signal to a process using the system `kill` command
@@ -3372,5 +3407,143 @@ mod tests {
         } else {
             panic!("Expected signal_result to be Some");
         }
+    }
+
+    // =========================================================================
+    // PMAT-GAP-031: Network interface cycling tests (ttop parity)
+    // =========================================================================
+
+    #[test]
+    fn test_selected_interface_index_field_exists() {
+        let app = App::new(true);
+        // Field must exist and default to 0
+        assert_eq!(app.selected_interface_index, 0);
+    }
+
+    #[test]
+    fn test_cycle_interface_no_interfaces() {
+        let mut app = App::new(true);
+        // No interfaces available - should stay at 0
+        app.cycle_interface();
+        assert_eq!(app.selected_interface_index, 0);
+    }
+
+    #[test]
+    fn test_cycle_interface_wraps_around() {
+        let mut app = App::new(true);
+        // Simulate 3 interfaces
+        app.snapshot_networks = vec![
+            NetworkInfo {
+                name: "eth0".to_string(),
+                received: 0,
+                transmitted: 0,
+            },
+            NetworkInfo {
+                name: "wlan0".to_string(),
+                received: 0,
+                transmitted: 0,
+            },
+            NetworkInfo {
+                name: "lo".to_string(),
+                received: 0,
+                transmitted: 0,
+            },
+        ];
+
+        assert_eq!(app.selected_interface_index, 0);
+        app.cycle_interface();
+        assert_eq!(app.selected_interface_index, 1);
+        app.cycle_interface();
+        assert_eq!(app.selected_interface_index, 2);
+        app.cycle_interface();
+        assert_eq!(app.selected_interface_index, 0); // Wraps around
+    }
+
+    #[test]
+    fn test_selected_interface_name() {
+        let mut app = App::new(true);
+        app.snapshot_networks = vec![
+            NetworkInfo {
+                name: "eth0".to_string(),
+                received: 100,
+                transmitted: 200,
+            },
+            NetworkInfo {
+                name: "wlan0".to_string(),
+                received: 50,
+                transmitted: 25,
+            },
+        ];
+
+        assert_eq!(app.selected_interface_name(), Some("eth0"));
+        app.selected_interface_index = 1;
+        assert_eq!(app.selected_interface_name(), Some("wlan0"));
+        app.selected_interface_index = 2; // Out of bounds
+        assert_eq!(app.selected_interface_name(), None);
+    }
+
+    #[test]
+    fn test_selected_interface_data() {
+        let mut app = App::new(true);
+        app.snapshot_networks = vec![NetworkInfo {
+            name: "eth0".to_string(),
+            received: 1000,
+            transmitted: 500,
+        }];
+
+        let data = app.selected_interface_data();
+        assert!(data.is_some());
+        let info = data.unwrap();
+        assert_eq!(info.name, "eth0");
+        assert_eq!(info.received, 1000);
+    }
+
+    #[test]
+    fn test_cycle_interface_single_interface() {
+        let mut app = App::new(true);
+        app.snapshot_networks = vec![NetworkInfo {
+            name: "lo".to_string(),
+            received: 0,
+            transmitted: 0,
+        }];
+
+        app.cycle_interface();
+        assert_eq!(app.selected_interface_index, 0); // Stays at 0 (wraps from 1 to 0)
+    }
+
+    #[test]
+    fn test_tab_cycles_interface_when_network_focused() {
+        let mut app = App::new(true);
+        app.snapshot_networks = vec![
+            NetworkInfo {
+                name: "eth0".to_string(),
+                received: 0,
+                transmitted: 0,
+            },
+            NetworkInfo {
+                name: "wlan0".to_string(),
+                received: 0,
+                transmitted: 0,
+            },
+        ];
+        app.focused_panel = Some(PanelType::Network);
+
+        assert_eq!(app.selected_interface_index, 0);
+        app.handle_key(KeyCode::Tab, KeyModifiers::empty());
+        assert_eq!(app.selected_interface_index, 1);
+        app.handle_key(KeyCode::Tab, KeyModifiers::empty());
+        assert_eq!(app.selected_interface_index, 0); // Wraps
+    }
+
+    #[test]
+    fn test_tab_navigates_panels_when_not_network_focused() {
+        let mut app = App::new(true);
+        app.focused_panel = Some(PanelType::Cpu);
+        app.panels.memory = true;
+
+        app.handle_key(KeyCode::Tab, KeyModifiers::empty());
+        // Should navigate to next panel, not cycle interfaces
+        assert_ne!(app.focused_panel, Some(PanelType::Cpu));
+        assert_eq!(app.selected_interface_index, 0); // Unchanged
     }
 }
