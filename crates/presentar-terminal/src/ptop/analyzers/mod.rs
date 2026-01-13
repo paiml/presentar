@@ -19,6 +19,7 @@ mod containers;
 mod disk_entropy;
 mod disk_io;
 mod file_analyzer;
+mod geoip;
 mod gpu_procs;
 mod network_stats;
 mod process_extra;
@@ -35,6 +36,9 @@ pub use containers::{
 pub use disk_entropy::{DiskEntropyAnalyzer, DiskEntropyData, DiskEntropyInfo, EncryptionType};
 pub use disk_io::{DiskIoAnalyzer, DiskIoData, DiskIoRates, DiskIoStats};
 pub use file_analyzer::{FileAnalyzer, FileAnalyzerData, FileCategory, InodeStats, TrackedFile};
+pub use geoip::{
+    format_location, get_country_code, get_country_name, get_flag, lookup, lookup_str, CountryInfo,
+};
 pub use gpu_procs::{GpuInfo, GpuProcess, GpuProcsAnalyzer, GpuProcsData, GpuVendor};
 pub use network_stats::{InterfaceRates, InterfaceStats, NetworkStatsAnalyzer, NetworkStatsData};
 pub use process_extra::{IoPriorityClass, ProcessExtra, ProcessExtraAnalyzer, ProcessExtraData};
