@@ -641,6 +641,163 @@ impl ProcessTable {
             s.chars().take(width).collect()
         }
     }
+
+    /// Get OOM score color based on risk level.
+    fn oom_color(oom: i32) -> Color {
+        if oom > 500 {
+            Color::new(1.0, 0.3, 0.3, 1.0) // Red - high risk
+        } else if oom > 200 {
+            Color::new(1.0, 0.8, 0.2, 1.0) // Yellow - medium risk
+        } else {
+            Color::new(0.5, 0.8, 0.5, 1.0) // Green - low risk
+        }
+    }
+
+    /// Get nice value color based on priority.
+    fn nice_color(ni: i32) -> Color {
+        match ni.cmp(&0) {
+            Ordering::Less => Color::new(0.3, 0.9, 0.9, 1.0),    // Cyan - high priority
+            Ordering::Greater => Color::new(0.6, 0.6, 0.6, 1.0), // Gray - low priority
+            Ordering::Equal => Color::new(0.8, 0.8, 0.8, 1.0),   // White - normal
+        }
+    }
+
+    /// Get thread count color based on count.
+    fn threads_color(th: u32) -> Color {
+        if th > 50 {
+            Color::new(0.3, 0.9, 0.9, 1.0) // Cyan - many threads
+        } else if th > 10 {
+            Color::new(1.0, 0.8, 0.2, 1.0) // Yellow - moderate
+        } else {
+            Color::new(0.8, 0.8, 0.8, 1.0) // White - normal
+        }
+    }
+
+    /// Build header string for the table.
+    fn build_header(&self, cols: &ColumnWidths) -> String {
+        let sep = if self.compact { " " } else { " │ " };
+        let mut header = String::new();
+        let _ = write!(header, "{:>w$}", "PID", w = cols.pid);
+        if self.compact {
+            header.push(' ');
+            let _ = write!(header, "{:>1}", "S");
+        } else {
+            header.push_str(sep);
+            let _ = write!(header, "{:w$}", "USER", w = cols.user);
+        }
+        if self.show_oom { header.push_str(sep); let _ = write!(header, "{:>3}", "OOM"); }
+        if self.show_nice { header.push_str(sep); let _ = write!(header, "{:>3}", "NI"); }
+        if self.show_threads { header.push_str(sep); let _ = write!(header, "{:>3}", "TH"); }
+        header.push_str(sep);
+        let _ = write!(header, "{:>w$}", if self.compact { "C%" } else { "CPU%" }, w = cols.cpu);
+        header.push_str(sep);
+        let _ = write!(header, "{:>w$}", if self.compact { "M%" } else { "MEM%" }, w = cols.mem);
+        header.push_str(sep);
+        let _ = write!(header, "{:w$}", "COMMAND", w = cols.cmd);
+        header
+    }
+
+    /// Draw a single process row.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_row(&self, canvas: &mut dyn Canvas, proc: &ProcessEntry, y: f32, is_selected: bool, cols: &ColumnWidths, default_style: &TextStyle) {
+        let sep = if self.compact { 1.0 } else { 3.0 };
+        let mut x = self.bounds.x;
+        // PID
+        canvas.draw_text(&format!("{:>w$}", proc.pid, w = cols.pid), Point::new(x, y), default_style);
+        x += cols.pid as f32;
+        // State or User
+        if self.compact {
+            x += 1.0;
+            canvas.draw_text(&proc.state.char().to_string(), Point::new(x, y), &TextStyle { color: proc.state.color(), ..Default::default() });
+            x += 1.0;
+        } else {
+            x += sep;
+            canvas.draw_text(&Self::truncate(&proc.user, cols.user), Point::new(x, y), default_style);
+            x += cols.user as f32;
+        }
+        // OOM
+        if self.show_oom {
+            x += sep;
+            let oom = proc.oom_score.unwrap_or(0);
+            canvas.draw_text(&format!("{oom:>3}"), Point::new(x, y), &TextStyle { color: Self::oom_color(oom), ..Default::default() });
+            x += 3.0;
+        }
+        // Nice
+        if self.show_nice {
+            x += sep;
+            let ni = proc.nice.unwrap_or(0);
+            canvas.draw_text(&format!("{ni:>3}"), Point::new(x, y), &TextStyle { color: Self::nice_color(ni), ..Default::default() });
+            x += 3.0;
+        }
+        // Threads
+        if self.show_threads {
+            x += sep;
+            let th = proc.threads.unwrap_or(1);
+            canvas.draw_text(&format!("{th:>3}"), Point::new(x, y), &TextStyle { color: Self::threads_color(th), ..Default::default() });
+            x += 3.0;
+        }
+        // CPU
+        x += sep;
+        canvas.draw_text(&format!("{:>5.1}%", proc.cpu_percent), Point::new(x, y), &TextStyle { color: self.cpu_gradient.for_percent(proc.cpu_percent as f64), ..Default::default() });
+        x += cols.cpu as f32;
+        // Mem
+        x += sep;
+        canvas.draw_text(&format!("{:>5.1}%", proc.mem_percent), Point::new(x, y), &TextStyle { color: self.mem_gradient.for_percent(proc.mem_percent as f64), ..Default::default() });
+        x += cols.mem as f32;
+        // Command
+        x += sep;
+        self.draw_command(canvas, proc, x, y, is_selected, cols.cmd, default_style);
+    }
+
+    /// Draw command column with optional tree prefix.
+    fn draw_command(&self, canvas: &mut dyn Canvas, proc: &ProcessEntry, x: f32, y: f32, is_selected: bool, cmd_w: usize, default_style: &TextStyle) {
+        let cmd = if self.show_cmdline { proc.cmdline.as_deref().unwrap_or(&proc.command) } else { &proc.command };
+        let cmd_style = if is_selected { TextStyle { color: Color::new(1.0, 1.0, 1.0, 1.0), ..Default::default() } } else { default_style.clone() };
+        if self.tree_view && !proc.tree_prefix.is_empty() {
+            let prefix_len = proc.tree_prefix.chars().count();
+            canvas.draw_text(&proc.tree_prefix, Point::new(x, y), &TextStyle { color: Color::new(0.4, 0.5, 0.6, 1.0), ..Default::default() });
+            canvas.draw_text(&Self::truncate(cmd, cmd_w.saturating_sub(prefix_len)), Point::new(x + prefix_len as f32, y), &cmd_style);
+        } else {
+            canvas.draw_text(&Self::truncate(cmd, cmd_w), Point::new(x, y), &cmd_style);
+        }
+    }
+}
+
+/// Column widths for process table layout.
+#[allow(dead_code)]
+struct ColumnWidths {
+    pid: usize,
+    state: usize,
+    oom: usize,
+    nice: usize,
+    threads: usize,
+    user: usize,
+    cpu: usize,
+    mem: usize,
+    sep: usize,
+    cmd: usize,
+    num_seps: usize,
+}
+
+impl ColumnWidths {
+    fn new(table: &ProcessTable, width: usize) -> Self {
+        let pid = 7;
+        let state = if table.compact { 2 } else { 0 };
+        let oom = if table.show_oom { 4 } else { 0 };
+        let nice = if table.show_nice { 4 } else { 0 };
+        let threads = if table.show_threads { 4 } else { 0 };
+        let user = if table.compact { 0 } else { 8 };
+        let cpu = 6;
+        let mem = 6;
+        let sep = if table.compact { 1 } else { 3 };
+        let extra_cols = usize::from(table.show_oom)
+            + usize::from(table.show_nice)
+            + usize::from(table.show_threads);
+        let num_seps = if table.compact { 3 } else { 4 } + extra_cols;
+        let fixed = pid + state + oom + nice + threads + user + cpu + mem + sep * num_seps;
+        let cmd = width.saturating_sub(fixed);
+        Self { pid, state, oom, nice, threads, user, cpu, mem, sep, cmd, num_seps }
+    }
 }
 
 impl Brick for ProcessTable {
@@ -712,305 +869,36 @@ impl Widget for ProcessTable {
         }
     }
 
-    #[allow(clippy::too_many_lines)]
     fn paint(&self, canvas: &mut dyn Canvas) {
         let width = self.bounds.width as usize;
         let height = self.bounds.height as usize;
-        if width == 0 || height == 0 {
-            return;
-        }
+        if width == 0 || height == 0 { return; }
 
-        // Column layout - compact mode: PID S [OOM] [NI] [TH] C% M% COMMAND
-        // PID can be up to 4194304 on Linux (7 digits), use 7 chars
-        let pid_w = 7;
-        let state_w = if self.compact { 2 } else { 0 }; // State column in compact mode
-        let oom_w = if self.show_oom { 4 } else { 0 }; // OOM column (3 digits + space)
-        let nice_w = if self.show_nice { 4 } else { 0 }; // NI column (3 chars + space)
-        let threads_w = if self.show_threads { 4 } else { 0 }; // TH column (3 digits + space)
-        let user_w = if self.compact { 0 } else { 8 };
-        let cpu_w = 6;
-        let mem_w = 6;
-        let sep_w = if self.compact { 1 } else { 3 };
-        let extra_cols = usize::from(self.show_oom)
-            + usize::from(self.show_nice)
-            + usize::from(self.show_threads);
-        let num_seps = if self.compact { 3 } else { 4 } + extra_cols;
-        let fixed_w = pid_w
-            + state_w
-            + oom_w
-            + nice_w
-            + threads_w
-            + user_w
-            + cpu_w
-            + mem_w
-            + sep_w * num_seps;
-        let cmd_w = width.saturating_sub(fixed_w);
+        let cols = ColumnWidths::new(self, width);
 
-        // Header style
-        let header_style = TextStyle {
-            color: Color::new(0.0, 1.0, 1.0, 1.0),
-            weight: presentar_core::FontWeight::Bold,
-            ..Default::default()
-        };
-
-        // Draw header - ttop compact format: PID S [OOM] C% M% COMMAND
-        let mut header = String::new();
-        let _ = write!(header, "{:>pid_w$}", "PID");
-        if self.compact {
-            header.push(' ');
-            let _ = write!(header, "{:>1}", "S");
-        } else {
-            header.push_str(" │ ");
-            let _ = write!(header, "{:user_w$}", "USER");
-        }
-        if self.show_oom {
-            header.push_str(if self.compact { " " } else { " │ " });
-            let _ = write!(header, "{:>3}", "OOM");
-        }
-        if self.show_nice {
-            header.push_str(if self.compact { " " } else { " │ " });
-            let _ = write!(header, "{:>3}", "NI");
-        }
-        if self.show_threads {
-            header.push_str(if self.compact { " " } else { " │ " });
-            let _ = write!(header, "{:>3}", "TH");
-        }
-        header.push_str(if self.compact { " " } else { " │ " });
-        let _ = write!(
-            header,
-            "{:>cpu_w$}",
-            if self.compact { "C%" } else { "CPU%" }
-        );
-        header.push_str(if self.compact { " " } else { " │ " });
-        let _ = write!(
-            header,
-            "{:>mem_w$}",
-            if self.compact { "M%" } else { "MEM%" }
-        );
-        header.push_str(if self.compact { " " } else { " │ " });
-        let _ = write!(header, "{:cmd_w$}", "COMMAND");
-
-        canvas.draw_text(
-            &header,
-            Point::new(self.bounds.x, self.bounds.y),
-            &header_style,
-        );
+        // Draw header
+        let header_style = TextStyle { color: Color::new(0.0, 1.0, 1.0, 1.0), weight: presentar_core::FontWeight::Bold, ..Default::default() };
+        canvas.draw_text(&self.build_header(&cols), Point::new(self.bounds.x, self.bounds.y), &header_style);
 
         // Draw separator
         if height > 1 {
-            let sep: String = "─".repeat(width);
-            canvas.draw_text(
-                &sep,
-                Point::new(self.bounds.x, self.bounds.y + 1.0),
-                &TextStyle {
-                    color: Color::new(0.3, 0.3, 0.4, 1.0),
-                    ..Default::default()
-                },
-            );
+            canvas.draw_text(&"─".repeat(width), Point::new(self.bounds.x, self.bounds.y + 1.0), &TextStyle { color: Color::new(0.3, 0.3, 0.4, 1.0), ..Default::default() });
         }
 
         // Draw rows
+        let default_style = TextStyle { color: Color::new(0.8, 0.8, 0.8, 1.0), ..Default::default() };
         let visible_rows = height.saturating_sub(2);
-        let default_style = TextStyle {
-            color: Color::new(0.8, 0.8, 0.8, 1.0),
-            ..Default::default()
-        };
-
-        for (i, proc_idx) in (self.scroll_offset..self.processes.len())
-            .take(visible_rows)
-            .enumerate()
-        {
+        for (i, proc_idx) in (self.scroll_offset..self.processes.len()).take(visible_rows).enumerate() {
             let proc = &self.processes[proc_idx];
             let y = self.bounds.y + 2.0 + i as f32;
             let is_selected = proc_idx == self.selected;
-
-            // Selection background
-            if is_selected {
-                canvas.fill_rect(
-                    Rect::new(self.bounds.x, y, self.bounds.width, 1.0),
-                    Color::new(0.2, 0.2, 0.4, 0.5),
-                );
-            }
-
-            let mut x = self.bounds.x;
-
-            // PID
-            let pid_str = format!("{:>pid_w$}", proc.pid);
-            canvas.draw_text(&pid_str, Point::new(x, y), &default_style);
-            x += pid_w as f32;
-
-            // State (compact mode) or User (full mode)
-            if self.compact {
-                x += 1.0; // separator
-                let state_char = proc.state.char().to_string();
-                canvas.draw_text(
-                    &state_char,
-                    Point::new(x, y),
-                    &TextStyle {
-                        color: proc.state.color(),
-                        ..Default::default()
-                    },
-                );
-                x += 1.0;
-            } else {
-                x += 3.0; // separator
-                let user_str = Self::truncate(&proc.user, user_w);
-                canvas.draw_text(&user_str, Point::new(x, y), &default_style);
-                x += user_w as f32;
-            }
-
-            // OOM score (if enabled)
-            if self.show_oom {
-                x += if self.compact { 1.0 } else { 3.0 };
-                let oom = proc.oom_score.unwrap_or(0);
-                // Color based on OOM risk: green < 200, yellow 200-500, red > 500
-                let oom_color = if oom > 500 {
-                    Color::new(1.0, 0.3, 0.3, 1.0) // Red - high risk
-                } else if oom > 200 {
-                    Color::new(1.0, 0.8, 0.2, 1.0) // Yellow - medium risk
-                } else {
-                    Color::new(0.5, 0.8, 0.5, 1.0) // Green - low risk
-                };
-                let oom_str = format!("{oom:>3}");
-                canvas.draw_text(
-                    &oom_str,
-                    Point::new(x, y),
-                    &TextStyle {
-                        color: oom_color,
-                        ..Default::default()
-                    },
-                );
-                x += 3.0;
-            }
-
-            // Nice value (if enabled)
-            if self.show_nice {
-                x += if self.compact { 1.0 } else { 3.0 };
-                let ni = proc.nice.unwrap_or(0);
-                // Color: negative nice (high priority) = cyan, positive (low priority) = gray
-                let ni_color = match ni.cmp(&0) {
-                    Ordering::Less => Color::new(0.3, 0.9, 0.9, 1.0), // Cyan - high priority
-                    Ordering::Greater => Color::new(0.6, 0.6, 0.6, 1.0), // Gray - low priority
-                    Ordering::Equal => Color::new(0.8, 0.8, 0.8, 1.0), // White - normal
-                };
-                let ni_str = format!("{ni:>3}");
-                canvas.draw_text(
-                    &ni_str,
-                    Point::new(x, y),
-                    &TextStyle {
-                        color: ni_color,
-                        ..Default::default()
-                    },
-                );
-                x += 3.0;
-            }
-
-            // Thread count (if enabled) - CB-PROC-006
-            if self.show_threads {
-                x += if self.compact { 1.0 } else { 3.0 };
-                let th = proc.threads.unwrap_or(1);
-                // Color: high thread count (>50) = cyan, medium (10-50) = yellow, low = white
-                let th_color = if th > 50 {
-                    Color::new(0.3, 0.9, 0.9, 1.0) // Cyan - many threads
-                } else if th > 10 {
-                    Color::new(1.0, 0.8, 0.2, 1.0) // Yellow - moderate
-                } else {
-                    Color::new(0.8, 0.8, 0.8, 1.0) // White - normal
-                };
-                let th_str = format!("{th:>3}");
-                canvas.draw_text(
-                    &th_str,
-                    Point::new(x, y),
-                    &TextStyle {
-                        color: th_color,
-                        ..Default::default()
-                    },
-                );
-                x += 3.0;
-            }
-
-            // CPU
-            x += if self.compact { 1.0 } else { 3.0 };
-            let cpu_color = self.cpu_gradient.for_percent(proc.cpu_percent as f64);
-            let cpu_str = format!("{:>5.1}%", proc.cpu_percent);
-            canvas.draw_text(
-                &cpu_str,
-                Point::new(x, y),
-                &TextStyle {
-                    color: cpu_color,
-                    ..Default::default()
-                },
-            );
-            x += cpu_w as f32;
-
-            // Memory
-            x += if self.compact { 1.0 } else { 3.0 };
-            let mem_color = self.mem_gradient.for_percent(proc.mem_percent as f64);
-            let mem_str = format!("{:>5.1}%", proc.mem_percent);
-            canvas.draw_text(
-                &mem_str,
-                Point::new(x, y),
-                &TextStyle {
-                    color: mem_color,
-                    ..Default::default()
-                },
-            );
-            x += mem_w as f32;
-
-            // Command (with tree prefix if enabled - CB-PROC-001)
-            x += if self.compact { 1.0 } else { 3.0 };
-            let cmd = if self.show_cmdline {
-                proc.cmdline.as_deref().unwrap_or(&proc.command)
-            } else {
-                &proc.command
-            };
-
-            // Draw tree prefix in dim color, then command
-            if self.tree_view && !proc.tree_prefix.is_empty() {
-                let prefix_len = proc.tree_prefix.chars().count();
-                let tree_style = TextStyle {
-                    color: Color::new(0.4, 0.5, 0.6, 1.0),
-                    ..Default::default()
-                };
-                canvas.draw_text(&proc.tree_prefix, Point::new(x, y), &tree_style);
-                x += prefix_len as f32;
-
-                // Truncate command to remaining space
-                let remaining_w = cmd_w.saturating_sub(prefix_len);
-                let cmd_str = Self::truncate(cmd, remaining_w);
-                let cmd_style = if is_selected {
-                    TextStyle {
-                        color: Color::new(1.0, 1.0, 1.0, 1.0),
-                        ..Default::default()
-                    }
-                } else {
-                    default_style.clone()
-                };
-                canvas.draw_text(&cmd_str, Point::new(x, y), &cmd_style);
-            } else {
-                let cmd_str = Self::truncate(cmd, cmd_w);
-                let cmd_style = if is_selected {
-                    TextStyle {
-                        color: Color::new(1.0, 1.0, 1.0, 1.0),
-                        ..Default::default()
-                    }
-                } else {
-                    default_style.clone()
-                };
-                canvas.draw_text(&cmd_str, Point::new(x, y), &cmd_style);
-            }
+            if is_selected { canvas.fill_rect(Rect::new(self.bounds.x, y, self.bounds.width, 1.0), Color::new(0.2, 0.2, 0.4, 0.5)); }
+            self.draw_row(canvas, proc, y, is_selected, &cols, &default_style);
         }
 
-        // Show count in empty state
+        // Empty state
         if self.processes.is_empty() && height > 2 {
-            canvas.draw_text(
-                "No processes",
-                Point::new(self.bounds.x + 1.0, self.bounds.y + 2.0),
-                &TextStyle {
-                    color: Color::new(0.5, 0.5, 0.5, 1.0),
-                    ..Default::default()
-                },
-            );
+            canvas.draw_text("No processes", Point::new(self.bounds.x + 1.0, self.bounds.y + 2.0), &TextStyle { color: Color::new(0.5, 0.5, 0.5, 1.0), ..Default::default() });
         }
     }
 

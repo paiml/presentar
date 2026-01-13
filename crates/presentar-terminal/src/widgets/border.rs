@@ -166,6 +166,94 @@ impl Border {
             )
         }
     }
+
+    /// Smart truncation: prefer section boundaries (│) to avoid mid-word cuts.
+    fn truncate_title_smart(title: &str, max_len: usize) -> std::borrow::Cow<'_, str> {
+        let title_len = title.chars().count();
+        if title_len <= max_len { return std::borrow::Cow::Borrowed(title); }
+        let truncate_to = max_len.saturating_sub(1);
+        let chars_vec: Vec<char> = title.chars().collect();
+        // Find section boundaries (│)
+        let mut section_ends: Vec<usize> = vec![0];
+        for (i, &ch) in chars_vec.iter().enumerate() {
+            if ch == '│' {
+                let mut end = i;
+                while end > 0 && chars_vec[end - 1] == ' ' { end -= 1; }
+                if end > 0 { section_ends.push(end); }
+            }
+        }
+        // Find best split point
+        let mut best_split = truncate_to;
+        for &end in section_ends.iter().rev() {
+            if end <= truncate_to && end > 0 { best_split = end; break; }
+        }
+        // Fall back to word boundary
+        if best_split == truncate_to || best_split == 0 {
+            let search_start = truncate_to.saturating_sub(truncate_to / 3);
+            for i in (search_start..truncate_to).rev() {
+                if i < chars_vec.len() && chars_vec[i] == ' ' { best_split = i; break; }
+            }
+        }
+        let truncated: String = chars_vec.iter().take(best_split).collect();
+        std::borrow::Cow::Owned(format!("{}…", truncated.trim_end()))
+    }
+
+    /// Draw top border with optional title.
+    fn draw_top_border(&self, canvas: &mut dyn Canvas, width: usize, chars: (char, char, char, char, char, char, char, char), style: &TextStyle) {
+        let (tl, top, tr, _, _, _, _, _) = chars;
+        let mut top_line = String::with_capacity(width);
+        top_line.push(tl);
+
+        if let Some(ref title) = self.title {
+            let ttop_available = width.saturating_sub(3);
+            let display_title = Self::truncate_title_smart(title, ttop_available);
+            let display_len = display_title.chars().count();
+            if display_len > 0 && ttop_available > 0 {
+                let title_style = TextStyle { color: self.title_color, ..Default::default() };
+                if self.title_left_aligned {
+                    self.draw_left_aligned_title(canvas, &display_title, display_len, width, top, tr, style, &title_style);
+                } else {
+                    self.draw_centered_title(canvas, &display_title, display_len, width, top, tr, style, &title_style);
+                }
+                return;
+            }
+        }
+        // No title or too small
+        for _ in 0..(width - 2) { top_line.push(top); }
+        top_line.push(tr);
+        canvas.draw_text(&top_line, Point::new(self.bounds.x, self.bounds.y), style);
+    }
+
+    /// Draw left-aligned title.
+    fn draw_left_aligned_title(&self, canvas: &mut dyn Canvas, title: &str, title_len: usize, width: usize, top: char, tr: char, style: &TextStyle, title_style: &TextStyle) {
+        let (tl, _, _, _, _, _, _, _) = self.style.chars();
+        canvas.draw_text(&tl.to_string(), Point::new(self.bounds.x, self.bounds.y), style);
+        canvas.draw_text(&format!(" {title}"), Point::new(self.bounds.x + 1.0, self.bounds.y), title_style);
+        let after_title = 1 + title_len + 1;
+        let remaining = width.saturating_sub(after_title + 1);
+        let mut rest = String::new();
+        for _ in 0..remaining { rest.push(top); }
+        rest.push(tr);
+        canvas.draw_text(&rest, Point::new(self.bounds.x + after_title as f32, self.bounds.y), style);
+    }
+
+    /// Draw centered title.
+    fn draw_centered_title(&self, canvas: &mut dyn Canvas, title: &str, title_len: usize, width: usize, top: char, tr: char, style: &TextStyle, title_style: &TextStyle) {
+        let (tl, _, _, _, _, _, _, _) = self.style.chars();
+        let available = width.saturating_sub(4);
+        let padding = (available.saturating_sub(title_len)) / 2;
+        let mut top_line = String::new();
+        top_line.push(tl);
+        for _ in 0..padding { top_line.push(top); }
+        canvas.draw_text(&top_line, Point::new(self.bounds.x, self.bounds.y), style);
+        canvas.draw_text(&format!(" {title} "), Point::new(self.bounds.x + 1.0 + padding as f32, self.bounds.y), title_style);
+        let after_title = padding + title_len + 2;
+        let remaining = width.saturating_sub(after_title + 1);
+        let mut rest = String::new();
+        for _ in 0..remaining { rest.push(top); }
+        rest.push(tr);
+        canvas.draw_text(&rest, Point::new(self.bounds.x + after_title as f32, self.bounds.y), style);
+    }
 }
 
 impl Brick for Border {
@@ -225,201 +313,36 @@ impl Widget for Border {
         }
     }
 
-    #[allow(clippy::too_many_lines)]
     fn paint(&self, canvas: &mut dyn Canvas) {
         let width = self.bounds.width as usize;
         let height = self.bounds.height as usize;
-
-        if width < 2 || height < 2 {
-            return;
-        }
+        if width < 2 || height < 2 { return; }
 
         // Fill background if enabled
-        if self.fill {
-            canvas.fill_rect(self.bounds, self.background);
-        }
+        if self.fill { canvas.fill_rect(self.bounds, self.background); }
+        if matches!(self.style, BorderStyle::None) { return; }
 
-        if matches!(self.style, BorderStyle::None) {
-            return;
-        }
+        let chars = self.style.chars();
+        let (_, _, _, left, right, bl, bottom, br) = chars;
+        let style = TextStyle { color: self.color, ..Default::default() };
 
-        let (tl, top, tr, left, right, bl, bottom, br) = self.style.chars();
-        let style = TextStyle {
-            color: self.color,
-            ..Default::default()
-        };
-
-        // Top line with optional title
-        let mut top_line = String::with_capacity(width);
-        top_line.push(tl);
-
-        if let Some(ref title) = self.title {
-            let title_len = title.chars().count();
-            let available = width.saturating_sub(4); // 2 for corners, 2 for spacing
-
-            // ttop-style: no trailing space, just leading space
-            // Available calculation: width - 3 (corner + leading space + corner)
-            let ttop_available = width.saturating_sub(3);
-
-            // Truncate title if too long (don't hide it entirely)
-            // Smart truncation (D005): prefer truncating at │ boundaries to avoid mid-word cuts
-            // Goal: "CPU 21% │ 48 cores │ ..." → "CPU 21%…" not "CPU 21% │ 48 cor…"
-            let display_title: std::borrow::Cow<'_, str> = if title_len > ttop_available {
-                let truncate_to = ttop_available.saturating_sub(1); // Reserve 1 for "…"
-                let chars_vec: Vec<char> = title.chars().collect();
-
-                // Strategy: Find the last COMPLETE section that fits
-                // Sections are separated by │
-                let mut section_ends: Vec<usize> = vec![0]; // Start of first section
-                for (i, &ch) in chars_vec.iter().enumerate() {
-                    if ch == '│' {
-                        // End of previous section is at i-1 (before the │)
-                        // But we want the position AFTER the section text, before │
-                        // Look back for the last non-space char
-                        let mut end = i;
-                        while end > 0 && chars_vec[end - 1] == ' ' {
-                            end -= 1;
-                        }
-                        if end > 0 {
-                            section_ends.push(end);
-                        }
-                    }
-                }
-
-                // Find the last section end that fits
-                let mut best_split = truncate_to;
-                for &end in section_ends.iter().rev() {
-                    if end <= truncate_to && end > 0 {
-                        best_split = end;
-                        break;
-                    }
-                }
-
-                // If no section boundary found within range, fall back to word boundary
-                if best_split == truncate_to || best_split == 0 {
-                    // Look for space to truncate at word boundary
-                    let search_start = truncate_to.saturating_sub(truncate_to / 3);
-                    for i in (search_start..truncate_to).rev() {
-                        if i < chars_vec.len() && chars_vec[i] == ' ' {
-                            best_split = i;
-                            break;
-                        }
-                    }
-                }
-
-                let truncated: String = chars_vec.iter().take(best_split).collect();
-                let trimmed = truncated.trim_end();
-                std::borrow::Cow::Owned(format!("{trimmed}…"))
-            } else {
-                std::borrow::Cow::Borrowed(title)
-            };
-            let display_len = display_title.chars().count();
-
-            if display_len > 0 && ttop_available > 0 {
-                let title_style = TextStyle {
-                    color: self.title_color,
-                    ..Default::default()
-                };
-
-                if self.title_left_aligned {
-                    // ttop-style: left-aligned title, right-padded with dashes
-                    // Format: ╭ title────────╮ (no trailing space before dashes)
-                    canvas.draw_text(&top_line, Point::new(self.bounds.x, self.bounds.y), &style);
-
-                    canvas.draw_text(
-                        &format!(" {display_title}"),
-                        Point::new(self.bounds.x + 1.0, self.bounds.y),
-                        &title_style,
-                    );
-
-                    // Right padding with dashes
-                    let after_title = 1 + display_len + 1; // corner + space + title
-                    let remaining = width.saturating_sub(after_title + 1);
-                    let mut rest = String::new();
-                    for _ in 0..remaining {
-                        rest.push(top);
-                    }
-                    rest.push(tr);
-                    canvas.draw_text(
-                        &rest,
-                        Point::new(self.bounds.x + after_title as f32, self.bounds.y),
-                        &style,
-                    );
-                } else {
-                    // Centered title with padding on both sides
-                    let padding = (available.saturating_sub(display_len)) / 2;
-                    for _ in 0..padding {
-                        top_line.push(top);
-                    }
-
-                    // Draw title with different color
-                    canvas.draw_text(&top_line, Point::new(self.bounds.x, self.bounds.y), &style);
-
-                    canvas.draw_text(
-                        &format!(" {display_title} "),
-                        Point::new(self.bounds.x + 1.0 + padding as f32, self.bounds.y),
-                        &title_style,
-                    );
-
-                    // Rest of top line
-                    let after_title = padding + display_len + 2;
-                    let remaining = width.saturating_sub(after_title + 1);
-                    let mut rest = String::new();
-                    for _ in 0..remaining {
-                        rest.push(top);
-                    }
-                    rest.push(tr);
-                    canvas.draw_text(
-                        &rest,
-                        Point::new(self.bounds.x + after_title as f32, self.bounds.y),
-                        &style,
-                    );
-                }
-            } else {
-                // Width too small for any title, just draw plain border
-                for _ in 0..(width - 2) {
-                    top_line.push(top);
-                }
-                top_line.push(tr);
-                canvas.draw_text(&top_line, Point::new(self.bounds.x, self.bounds.y), &style);
-            }
-        } else {
-            // No title, plain top border
-            for _ in 0..(width - 2) {
-                top_line.push(top);
-            }
-            top_line.push(tr);
-            canvas.draw_text(&top_line, Point::new(self.bounds.x, self.bounds.y), &style);
-        }
+        // Top border with title
+        self.draw_top_border(canvas, width, chars, &style);
 
         // Side borders
         for y in 1..(height - 1) {
-            canvas.draw_text(
-                &left.to_string(),
-                Point::new(self.bounds.x, self.bounds.y + y as f32),
-                &style,
-            );
-            canvas.draw_text(
-                &right.to_string(),
-                Point::new(self.bounds.x + (width - 1) as f32, self.bounds.y + y as f32),
-                &style,
-            );
+            canvas.draw_text(&left.to_string(), Point::new(self.bounds.x, self.bounds.y + y as f32), &style);
+            canvas.draw_text(&right.to_string(), Point::new(self.bounds.x + (width - 1) as f32, self.bounds.y + y as f32), &style);
         }
 
         // Bottom border
         let mut bottom_line = String::with_capacity(width);
         bottom_line.push(bl);
-        for _ in 0..(width - 2) {
-            bottom_line.push(bottom);
-        }
+        for _ in 0..(width - 2) { bottom_line.push(bottom); }
         bottom_line.push(br);
-        canvas.draw_text(
-            &bottom_line,
-            Point::new(self.bounds.x, self.bounds.y + (height - 1) as f32),
-            &style,
-        );
+        canvas.draw_text(&bottom_line, Point::new(self.bounds.x, self.bounds.y + (height - 1) as f32), &style);
 
-        // Paint child widget inside border
+        // Paint child widget
         if let Some(ref child) = self.child {
             let inner = self.inner_rect();
             canvas.push_clip(inner);

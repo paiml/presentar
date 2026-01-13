@@ -420,42 +420,18 @@ fn read_zram_stats() -> Option<ZramStats> {
 }
 
 /// Main draw function - called each frame
-pub fn draw(app: &App, buffer: &mut CellBuffer) {
-    let w = buffer.width() as f32;
-    let h = buffer.height() as f32;
-
-    if w < 10.0 || h < 5.0 {
-        return;
-    }
-
-    let mut canvas = DirectTerminalCanvas::new(buffer);
-
-    // =========================================================================
-    // TITLE BAR: App name + search (SPEC-024 Section 27.8 - Grammar of Graphics)
-    // Every TUI MUST have a title bar with app name and search
-    // Keybinds change in exploded mode to show DataFrame controls
-    // =========================================================================
-    let title_bar_height = 1.0_f32;
-    let title_bar_rect = Rect::new(0.0, 0.0, w, title_bar_height);
-
-    let keybinds: &[(&str, &str)] = if app.exploded_panel.is_some() {
-        // DataFrame navigation mode
-        &[
-            ("←→", "Column"),
-            ("↵", "Sort"),
-            ("↑↓", "Row"),
-            ("Esc", "Exit"),
-        ]
+/// Get keybinds based on current mode.
+fn get_keybinds(exploded: bool) -> &'static [(&'static str, &'static str)] {
+    if exploded {
+        &[("←→", "Column"), ("↵", "Sort"), ("↑↓", "Row"), ("Esc", "Exit")]
     } else {
-        // Normal navigation mode
-        &[
-            ("q", "Quit"),
-            ("?", "Help"),
-            ("/", "Filter"),
-            ("Tab", "Nav"),
-        ]
-    };
+        &[("q", "Quit"), ("?", "Help"), ("/", "Filter"), ("Tab", "Nav")]
+    }
+}
 
+/// Draw title bar with app name and search.
+fn draw_title_bar(app: &App, canvas: &mut DirectTerminalCanvas<'_>, w: f32) {
+    let keybinds = get_keybinds(app.exploded_panel.is_some());
     let mut title_bar = TitleBar::new("ptop")
         .with_version(env!("CARGO_PKG_VERSION"))
         .with_search_placeholder("Filter processes...")
@@ -463,111 +439,61 @@ pub fn draw(app: &App, buffer: &mut CellBuffer) {
         .with_search_active(app.show_filter_input)
         .with_keybinds(keybinds)
         .with_primary_color(CPU_COLOR);
+    if app.exploded_panel.is_some() { title_bar = title_bar.with_mode_indicator("[▣]"); }
+    title_bar.layout(Rect::new(0.0, 0.0, w, 1.0));
+    title_bar.paint(canvas);
+}
 
-    // Add compact fullscreen indicator in exploded mode
-    if app.exploded_panel.is_some() {
-        title_bar = title_bar.with_mode_indicator("[▣]");
-    }
+/// Compute layout heights for top/bottom panels.
+fn compute_panel_layout(content_h: f32, top_count: u32, has_process: bool) -> (f32, f32) {
+    let top_h = if top_count > 0 && has_process { (content_h * 0.45).max(8.0) } else if top_count > 0 { content_h } else { 0.0 };
+    (top_h, content_h - top_h)
+}
 
-    title_bar.layout(title_bar_rect);
-    title_bar.paint(&mut canvas);
+/// Draw bottom row panels (process, connections, files/treemap).
+fn draw_bottom_row(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bottom_y: f32, bottom_h: f32, w: f32) {
+    if !app.panels.process || bottom_h <= 3.0 { return; }
+    let proc_w = (w * 0.4).round();
+    let remaining = w - proc_w;
+    let conn_w = (remaining / 2.0).floor();
+    let files_w = remaining - conn_w;
+    draw_process_panel(app, canvas, Rect::new(0.0, bottom_y, proc_w, bottom_h));
+    if app.panels.connections { draw_connections_panel(app, canvas, Rect::new(proc_w, bottom_y, conn_w, bottom_h)); }
+    if app.panels.files { draw_files_panel(app, canvas, Rect::new(proc_w + conn_w, bottom_y, files_w, bottom_h)); }
+    else if app.panels.treemap { draw_treemap_panel(app, canvas, Rect::new(proc_w + conn_w, bottom_y, files_w, bottom_h)); }
+}
 
-    // Reserve 1 row for status bar at bottom (SPEC-024 v5.5 Section 11.6)
-    let status_bar_height = 1.0_f32;
-    let content_y = title_bar_height;
-    let content_h = h - status_bar_height - title_bar_height;
+/// Draw overlay dialogs (help, signal, filter, fps).
+fn draw_overlays(app: &App, canvas: &mut DirectTerminalCanvas<'_>, w: f32, h: f32) {
+    if app.show_help { draw_help_overlay(canvas, w, h); }
+    if app.pending_signal.is_some() { draw_signal_dialog(app, canvas, w, h); }
+    if app.show_filter_input { draw_filter_overlay(app, canvas, w, h); }
+    if app.show_fps { draw_fps_overlay(app, canvas, w); }
+}
 
-    // EXPLODED MODE: render single panel fullscreen (SPEC-024 v5.0 Feature D)
-    // Reference: ttop/src/ui.rs line 20-50
-    // Note: TitleBar now shows [FULLSCREEN] indicator and DataFrame keybinds
+pub fn draw(app: &App, buffer: &mut CellBuffer) {
+    let w = buffer.width() as f32;
+    let h = buffer.height() as f32;
+    if w < 10.0 || h < 5.0 { return; }
+
+    let mut canvas = DirectTerminalCanvas::new(buffer);
+    draw_title_bar(app, &mut canvas, w);
+
+    let content_y = 1.0_f32;
+    let content_h = h - 2.0; // 1 title + 1 status
+
     if let Some(panel) = app.exploded_panel {
-        draw_exploded_panel(
-            app,
-            &mut canvas,
-            Rect::new(0.0, content_y, w, content_h),
-            panel,
-        );
+        draw_exploded_panel(app, &mut canvas, Rect::new(0.0, content_y, w, content_h), panel);
         draw_status_bar(app, &mut canvas, w, h);
         return;
     }
 
-    // Count visible top panels (like ttop)
-    let top_panel_count = count_top_panels(app);
-    let has_process = app.panels.process;
+    let top_count = count_top_panels(app);
+    let (top_h, bottom_h) = compute_panel_layout(content_h, top_count, app.panels.process);
 
-    // Layout: 45% top panels, 55% bottom row (like ttop)
-    let top_height = if top_panel_count > 0 && has_process {
-        (content_h * 0.45).max(8.0)
-    } else if top_panel_count > 0 {
-        content_h
-    } else {
-        0.0
-    };
-    let bottom_y = content_y + top_height;
-    let bottom_height = content_h - top_height;
-
-    // Draw top panels in grid layout
-    if top_panel_count > 0 {
-        draw_top_panels(app, &mut canvas, Rect::new(0.0, content_y, w, top_height));
-    }
-
-    // Draw bottom row: ttop uses exactly 48 | 36 | 36 for 120-width terminal
-    if has_process && bottom_height > 3.0 {
-        // Calculate widths to match ttop exactly
-        let proc_w = (w * 0.4).round(); // 48 for 120
-        let remaining = w - proc_w; // 72 for 120
-        let conn_w = (remaining / 2.0).floor(); // 36 for 72
-        let files_w = remaining - conn_w; // 36 for 72
-
-        draw_process_panel(
-            app,
-            &mut canvas,
-            Rect::new(0.0, bottom_y, proc_w, bottom_height),
-        );
-
-        if app.panels.connections {
-            draw_connections_panel(
-                app,
-                &mut canvas,
-                Rect::new(proc_w, bottom_y, conn_w, bottom_height),
-            );
-        }
-
-        // Draw Files panel (ttop style) or Treemap if files not enabled
-        if app.panels.files {
-            draw_files_panel(
-                app,
-                &mut canvas,
-                Rect::new(proc_w + conn_w, bottom_y, files_w, bottom_height),
-            );
-        } else if app.panels.treemap {
-            draw_treemap_panel(
-                app,
-                &mut canvas,
-                Rect::new(proc_w + conn_w, bottom_y, files_w, bottom_height),
-            );
-        }
-    }
-
-    // Overlays
-    if app.show_help {
-        draw_help_overlay(&mut canvas, w, h);
-    }
-
-    // Signal confirmation dialog (SPEC-024 Appendix G.6 P0)
-    if app.pending_signal.is_some() {
-        draw_signal_dialog(app, &mut canvas, w, h);
-    }
-
-    if app.show_filter_input {
-        draw_filter_overlay(app, &mut canvas, w, h);
-    }
-
-    if app.show_fps {
-        draw_fps_overlay(app, &mut canvas, w);
-    }
-
-    // Status bar at bottom (SPEC-024 v5.5 Section 11.6)
+    if top_count > 0 { draw_top_panels(app, &mut canvas, Rect::new(0.0, content_y, w, top_h)); }
+    draw_bottom_row(app, &mut canvas, content_y + top_h, bottom_h, w);
+    draw_overlays(app, &mut canvas, w, h);
     draw_status_bar(app, &mut canvas, w, h);
 }
 
@@ -1786,334 +1712,161 @@ pub struct GpuInfo {
 }
 
 /// Read GPU info from nvidia-smi (NVIDIA) or sysfs (AMD/Intel)
+/// Try to read NVIDIA GPU info via nvidia-smi.
+#[cfg(target_os = "linux")]
+fn try_read_nvidia_gpu() -> Option<GpuInfo> {
+    use std::process::Command;
+    let output = Command::new("nvidia-smi")
+        .args(["--query-gpu=name,utilization.gpu,temperature.gpu,power.draw,memory.used,memory.total", "--format=csv,noheader,nounits"])
+        .output().ok()?;
+    if !output.status.success() { return None; }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parts: Vec<&str> = stdout.lines().next()?.split(", ").collect();
+    if parts.len() < 6 { return None; }
+    Some(GpuInfo {
+        name: parts[0].trim().to_string(),
+        utilization: parts[1].trim().parse().ok(),
+        temperature: parts[2].trim().parse().ok(),
+        power_watts: parts[3].trim().parse().ok(),
+        vram_used: parts[4].trim().parse::<u64>().ok().map(|v| v * 1024 * 1024),
+        vram_total: parts[5].trim().parse::<u64>().ok().map(|v| v * 1024 * 1024),
+    })
+}
+
+/// Read AMD GPU info from hwmon directory.
+#[cfg(target_os = "linux")]
+fn read_amd_hwmon(hwmon_dir: &std::path::Path, card_path: &str) -> Option<GpuInfo> {
+    use std::fs;
+    let temp = fs::read_to_string(hwmon_dir.join("temp1_input")).ok().and_then(|s| s.trim().parse::<u32>().ok()).map(|t| t / 1000);
+    let power = fs::read_to_string(hwmon_dir.join("power1_average")).ok().and_then(|s| s.trim().parse::<u64>().ok()).map(|p| p as f32 / 1_000_000.0);
+    if temp.is_none() && power.is_none() { return None; }
+    let name = fs::read_to_string(hwmon_dir.join("name")).ok().map_or_else(|| "AMD GPU".to_string(), |s| s.trim().to_string());
+    let vram_used = fs::read_to_string(format!("{card_path}/mem_info_vram_used")).ok().and_then(|s| s.trim().parse().ok());
+    let vram_total = fs::read_to_string(format!("{card_path}/mem_info_vram_total")).ok().and_then(|s| s.trim().parse().ok());
+    let utilization = fs::read_to_string(format!("{card_path}/gpu_busy_percent")).ok().and_then(|s| s.trim().parse().ok());
+    Some(GpuInfo { name, utilization, temperature: temp, power_watts: power, vram_used, vram_total })
+}
+
+/// Try to read AMD GPU info via sysfs.
+#[cfg(target_os = "linux")]
+fn try_read_amd_gpu() -> Option<GpuInfo> {
+    use std::fs;
+    for card in 0..4 {
+        let card_path = format!("/sys/class/drm/card{card}/device");
+        if !std::path::Path::new(&card_path).exists() { continue; }
+        let hwmon_path = format!("{card_path}/hwmon");
+        if let Ok(entries) = fs::read_dir(&hwmon_path) {
+            for entry in entries.flatten() {
+                if let Some(info) = read_amd_hwmon(&entry.path(), &card_path) { return Some(info); }
+            }
+        }
+    }
+    None
+}
+
 pub fn read_gpu_info() -> Option<GpuInfo> {
-    // Try NVIDIA first (nvidia-smi)
     #[cfg(target_os = "linux")]
-    {
-        use std::process::Command;
-
-        // Try nvidia-smi for NVIDIA GPUs
-        if let Ok(output) = Command::new("nvidia-smi")
-            .args([
-                "--query-gpu=name,utilization.gpu,temperature.gpu,power.draw,memory.used,memory.total",
-                "--format=csv,noheader,nounits"
-            ])
-            .output()
-        {
-            if output.status.success() {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let line = stdout.lines().next().unwrap_or("");
-                let parts: Vec<&str> = line.split(", ").collect();
-
-                if parts.len() >= 6 {
-                    return Some(GpuInfo {
-                        name: parts[0].trim().to_string(),
-                        utilization: parts[1].trim().parse().ok(),
-                        temperature: parts[2].trim().parse().ok(),
-                        power_watts: parts[3].trim().parse().ok(),
-                        vram_used: parts[4].trim().parse::<u64>().ok().map(|v| v * 1024 * 1024), // MiB -> bytes
-                        vram_total: parts[5].trim().parse::<u64>().ok().map(|v| v * 1024 * 1024),
-                    });
-                }
-            }
-        }
-
-        // Try AMD via sysfs
-        use std::fs;
-        use std::path::Path;
-
-        for card in 0..4 {
-            let card_path = format!("/sys/class/drm/card{card}/device");
-            let path = Path::new(&card_path);
-
-            if !path.exists() {
-                continue;
-            }
-
-            // Check for AMD GPU via hwmon interface.
-            let hwmon_path = format!("{card_path}/hwmon");
-            if let Ok(entries) = fs::read_dir(&hwmon_path) {
-                for entry in entries.flatten() {
-                    let hwmon_dir = entry.path();
-
-                    // Read temperature
-                    let temp = fs::read_to_string(hwmon_dir.join("temp1_input"))
-                        .ok()
-                        .and_then(|s| s.trim().parse::<u32>().ok())
-                        .map(|t| t / 1000); // millidegrees -> degrees
-
-                    // Read power
-                    let power = fs::read_to_string(hwmon_dir.join("power1_average"))
-                        .ok()
-                        .and_then(|s| s.trim().parse::<u64>().ok())
-                        .map(|p| p as f32 / 1_000_000.0); // microwatts -> watts
-
-                    // Read GPU name
-                    let name = fs::read_to_string(hwmon_dir.join("name"))
-                        .ok()
-                        .map_or_else(|| "AMD GPU".to_string(), |s| s.trim().to_string());
-
-                    // Read VRAM
-                    let vram_used = fs::read_to_string(format!("{card_path}/mem_info_vram_used"))
-                        .ok()
-                        .and_then(|s| s.trim().parse().ok());
-                    let vram_total = fs::read_to_string(format!("{card_path}/mem_info_vram_total"))
-                        .ok()
-                        .and_then(|s| s.trim().parse().ok());
-
-                    // Read utilization
-                    let utilization = fs::read_to_string(format!("{card_path}/gpu_busy_percent"))
-                        .ok()
-                        .and_then(|s| s.trim().parse().ok());
-
-                    if temp.is_some() || power.is_some() {
-                        return Some(GpuInfo {
-                            name,
-                            utilization,
-                            temperature: temp,
-                            power_watts: power,
-                            vram_used,
-                            vram_total,
-                        });
-                    }
-                }
-            }
-        }
-
-        None
-    }
-
+    { try_read_nvidia_gpu().or_else(try_read_amd_gpu) }
     #[cfg(not(target_os = "linux"))]
-    {
-        None
-    }
+    { None }
 }
 
 /// F006: GPU Panel - shows GPU utilization, VRAM, temperature
+/// Format GPU panel title based on detail level.
+fn format_gpu_title(gpu: &Option<GpuInfo>, detail_level: DetailLevel) -> String {
+    gpu.as_ref().map(|g| {
+        if detail_level == DetailLevel::Minimal { g.name.clone() }
+        else {
+            let temp_str = g.temperature.map(|t| format!(" │ {t}°C")).unwrap_or_default();
+            let power_str = g.power_watts.map(|p| format!(" │ {p:.0}W")).unwrap_or_default();
+            format!("{}{}{}", g.name, temp_str, power_str)
+        }
+    }).unwrap_or_else(|| "GPU".to_string())
+}
+
+/// Draw GPU utilization bar.
+fn draw_gpu_util_bar(canvas: &mut DirectTerminalCanvas<'_>, inner: Rect, y: &mut f32, util: u8) {
+    let bar_width = (inner.width as usize).min(20);
+    let filled = ((util as f32 / 100.0) * bar_width as f32) as usize;
+    let bar: String = "█".repeat(filled) + &"░".repeat(bar_width.saturating_sub(filled));
+    canvas.draw_text(&format!("GPU  {bar} {util:>3}%"), Point::new(inner.x, *y), &TextStyle { color: percent_color(util as f64), ..Default::default() });
+    *y += 1.0;
+}
+
+/// Draw VRAM usage bar.
+fn draw_vram_bar(canvas: &mut DirectTerminalCanvas<'_>, inner: Rect, y: &mut f32, used: u64, total: u64) {
+    if total == 0 || *y >= inner.y + inner.height { return; }
+    let pct = (used as f64 / total as f64) * 100.0;
+    let bar_width = (inner.width as usize).min(20);
+    let filled = ((pct / 100.0) * bar_width as f64) as usize;
+    let bar: String = "█".repeat(filled) + &"░".repeat(bar_width.saturating_sub(filled));
+    canvas.draw_text(&format!("VRAM {bar} {}M/{}M", used / 1024 / 1024, total / 1024 / 1024), Point::new(inner.x, *y), &TextStyle { color: percent_color(pct), ..Default::default() });
+    *y += 1.0;
+}
+
+/// Draw GPU history graphs in exploded mode.
+fn draw_gpu_history_graphs(app: &App, canvas: &mut DirectTerminalCanvas<'_>, inner: Rect, y: &mut f32) {
+    let gpu_history: Vec<f64> = app.gpu_history.as_slice().to_vec();
+    if !gpu_history.is_empty() {
+        let mut graph = BrailleGraph::new(gpu_history).with_color(GPU_COLOR).with_label("GPU History").with_range(0.0, 100.0);
+        graph.layout(Rect::new(inner.x, *y, inner.width, 6.0));
+        graph.paint(canvas);
+        *y += 7.0;
+    }
+    let vram_history: Vec<f64> = app.vram_history.as_slice().to_vec();
+    if !vram_history.is_empty() {
+        let mut graph = BrailleGraph::new(vram_history).with_color(VRAM_GRAPH_COLOR).with_label("VRAM History").with_range(0.0, 100.0);
+        graph.layout(Rect::new(inner.x, *y, inner.width, 6.0));
+        graph.paint(canvas);
+        *y += 7.0;
+    }
+}
+
+/// Draw GPU processes list.
+fn draw_gpu_procs(app: &App, canvas: &mut DirectTerminalCanvas<'_>, inner: Rect, y: &mut f32) {
+    let Some(gpu_data) = app.analyzers.gpu_procs_data() else { return; };
+    if gpu_data.processes.is_empty() { return; }
+    *y += 1.0;
+    canvas.draw_text("TY  PID   SM%  MEM%  CMD", Point::new(inner.x, *y), &TextStyle { color: HEADER_COLOR, ..Default::default() });
+    *y += 1.0;
+    for proc in gpu_data.processes.iter().take(3) {
+        if *y >= inner.y + inner.height { break; }
+        let (type_badge, badge_color) = gpu_proc_badge(proc.proc_type.as_str());
+        canvas.draw_text(type_badge, Point::new(inner.x, *y), &TextStyle { color: badge_color, ..Default::default() });
+        let sm_str = format_proc_util(proc.gpu_util());
+        let mem_str = format_proc_util(if proc.mem_util > 0 { Some(proc.mem_util as f32) } else { None });
+        let proc_info = format!(" {:>5} {}%  {}%  {}", proc.pid, sm_str, mem_str, truncate_name(&proc.name, 12));
+        canvas.draw_text(&proc_info, Point::new(inner.x + 1.0, *y), &TextStyle { color: PROC_INFO_COLOR, ..Default::default() });
+        *y += 1.0;
+    }
+}
+
 fn draw_gpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
-    // Determine detail level based on available height (SPEC-024 v5.0 Feature E)
     let detail_level = DetailLevel::for_height(bounds.height as u16);
-
-    // Use cached GPU info from app (updated in App::update())
     let gpu = app.gpu_info.clone();
+    let title = format_gpu_title(&gpu, detail_level);
 
-    // ttop-style title (Border adds outer spaces)
-    // Deterministic: just "GPU" with no info
-    // At Minimal detail level, only show name
-    let title = gpu
-        .as_ref()
-        .map(|g| {
-            if detail_level == DetailLevel::Minimal {
-                g.name.clone()
-            } else {
-                let temp_str = g
-                    .temperature
-                    .map(|t| format!(" │ {t}°C"))
-                    .unwrap_or_default();
-                let power_str = g
-                    .power_watts
-                    .map(|p| format!(" │ {p:.0}W"))
-                    .unwrap_or_default();
-                format!("{}{}{}", g.name, temp_str, power_str)
-            }
-        })
-        .unwrap_or_else(|| "GPU".to_string());
-
-    // Check if this panel is focused (SPEC-024 v5.0 Feature D)
     let is_focused = app.is_panel_focused(PanelType::Gpu);
     let mut border = create_panel_border(&title, GPU_COLOR, is_focused);
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
+    if inner.height < 1.0 { return; }
 
-    if inner.height < 1.0 {
-        return;
-    }
-
-    // FRAMEWORK: Push clip to constrain all content to panel bounds
     canvas.push_clip(inner);
 
     if let Some(g) = gpu {
         let mut y = inner.y;
-
-        // GPU utilization bar
-        if let Some(util) = g.utilization {
-            let bar_width = (inner.width as usize).min(20);
-            let filled = ((util as f32 / 100.0) * bar_width as f32) as usize;
-            let bar: String = "█".repeat(filled) + &"░".repeat(bar_width.saturating_sub(filled));
-            let color = percent_color(util as f64);
-
-            let text = format!("GPU  {bar} {util:>3}%");
-            canvas.draw_text(
-                &text,
-                Point::new(inner.x, y),
-                &TextStyle {
-                    color,
-                    ..Default::default()
-                },
-            );
-            y += 1.0;
-        }
-
-        // VRAM usage bar
-        if let (Some(used), Some(total)) = (g.vram_used, g.vram_total) {
-            if y < inner.y + inner.height && total > 0 {
-                let pct = (used as f64 / total as f64) * 100.0;
-                let bar_width = (inner.width as usize).min(20);
-                let filled = ((pct / 100.0) * bar_width as f64) as usize;
-                let bar: String =
-                    "█".repeat(filled) + &"░".repeat(bar_width.saturating_sub(filled));
-                let color = percent_color(pct);
-
-                let used_mb = used / 1024 / 1024;
-                let total_mb = total / 1024 / 1024;
-                let text = format!("VRAM {bar} {used_mb}M/{total_mb}M");
-                canvas.draw_text(
-                    &text,
-                    Point::new(inner.x, y),
-                    &TextStyle {
-                        color,
-                        ..Default::default()
-                    },
-                );
-                y += 1.0;
-            }
-        }
-
-        // Temperature row
-        if let Some(temp) = g.temperature {
-            if y < inner.y + inner.height {
-                let color = gpu_temp_color(temp);
-                canvas.draw_text(
-                    &format!("Temp {temp}°C"),
-                    Point::new(inner.x, y),
-                    &TextStyle {
-                        color,
-                        ..Default::default()
-                    },
-                );
-                y += 1.0;
-            }
-        }
-
-        // Power row
-        if let Some(power) = g.power_watts {
-            if y < inner.y + inner.height {
-                canvas.draw_text(
-                    &format!("Power {power:.0}W"),
-                    Point::new(inner.x, y),
-                    &TextStyle {
-                        color: POWER_COLOR,
-                        ..Default::default()
-                    },
-                );
-                y += 1.0;
-            }
-        }
-
-        // GPU Utilization History Graph (SPEC-024 v5.2.0 Exploded mode, D012 fix)
-        // Only render in exploded mode (height >= 40)
-        if detail_level == DetailLevel::Exploded && y < inner.y + inner.height - 10.0 {
-            // Draw GPU utilization history graph using real data from app.gpu_history
-            let gpu_history: Vec<f64> = app.gpu_history.as_slice().to_vec();
-            if !gpu_history.is_empty() {
-                let graph_height = 6.0_f32;
-                let mut graph = BrailleGraph::new(gpu_history)
-                    .with_color(GPU_COLOR)
-                    .with_label("GPU History")
-                    .with_range(0.0, 100.0);
-                graph.layout(Rect::new(inner.x, y, inner.width, graph_height));
-                graph.paint(canvas);
-                y += graph_height + 1.0;
-            }
-
-            // Draw VRAM history graph using real data from app.vram_history
-            let vram_history: Vec<f64> = app.vram_history.as_slice().to_vec();
-            if !vram_history.is_empty() {
-                let graph_height = 6.0_f32;
-                let mut graph = BrailleGraph::new(vram_history)
-                    .with_color(VRAM_GRAPH_COLOR)
-                    .with_label("VRAM History")
-                    .with_range(0.0, 100.0);
-                graph.layout(Rect::new(inner.x, y, inner.width, graph_height));
-                graph.paint(canvas);
-                y += graph_height + 1.0;
-            }
-        }
-
-        // GPU Processes with G/C badges (SPEC-024 v5.0 Feature E)
-        // Only show at DetailLevel::Expanded or higher
-        // Reference: ttop/src/panels.rs lines 1497-1989, ttop/src/analyzers/gpu_procs.rs
-        if detail_level >= DetailLevel::Expanded && y < inner.y + inner.height - 3.0 {
-            if let Some(gpu_data) = app.analyzers.gpu_procs_data() {
-                if !gpu_data.processes.is_empty() {
-                    // Header
-                    y += 1.0;
-                    canvas.draw_text(
-                        "TY  PID   SM%  MEM%  CMD",
-                        Point::new(inner.x, y),
-                        &TextStyle {
-                            color: HEADER_COLOR,
-                            ..Default::default()
-                        },
-                    );
-                    y += 1.0;
-
-                    // Show top 3 GPU processes with G/C type badge
-                    let max_procs = 3.min(gpu_data.processes.len());
-                    for proc in gpu_data.processes.iter().take(max_procs) {
-                        if y >= inner.y + inner.height {
-                            break;
-                        }
-
-                        // Type badge using helper (PMAT-GAP-041: GpuProcType enum)
-                        let (type_badge, badge_color) = gpu_proc_badge(proc.proc_type.as_str());
-
-                        // Draw type badge
-                        canvas.draw_text(
-                            type_badge,
-                            Point::new(inner.x, y),
-                            &TextStyle {
-                                color: badge_color,
-                                ..Default::default()
-                            },
-                        );
-
-                        // Draw process info using helpers (PMAT-GAP-038: sm_util as u8)
-                        let sm_str = format_proc_util(proc.gpu_util());
-                        let mem_str = format_proc_util(if proc.mem_util > 0 { Some(proc.mem_util as f32) } else { None });
-                        let cmd = truncate_name(&proc.name, 12);
-
-                        let proc_info =
-                            format!(" {:>5} {}%  {}%  {}", proc.pid, sm_str, mem_str, cmd);
-                        canvas.draw_text(
-                            &proc_info,
-                            Point::new(inner.x + 1.0, y),
-                            &TextStyle {
-                                color: PROC_INFO_COLOR,
-                                ..Default::default()
-                            },
-                        );
-                        y += 1.0;
-                    }
-                }
-            }
-        }
+        if let Some(util) = g.utilization { draw_gpu_util_bar(canvas, inner, &mut y, util); }
+        if let (Some(used), Some(total)) = (g.vram_used, g.vram_total) { draw_vram_bar(canvas, inner, &mut y, used, total); }
+        if let Some(temp) = g.temperature { if y < inner.y + inner.height { canvas.draw_text(&format!("Temp {temp}°C"), Point::new(inner.x, y), &TextStyle { color: gpu_temp_color(temp), ..Default::default() }); y += 1.0; } }
+        if let Some(power) = g.power_watts { if y < inner.y + inner.height { canvas.draw_text(&format!("Power {power:.0}W"), Point::new(inner.x, y), &TextStyle { color: POWER_COLOR, ..Default::default() }); y += 1.0; } }
+        if detail_level == DetailLevel::Exploded && y < inner.y + inner.height - 10.0 { draw_gpu_history_graphs(app, canvas, inner, &mut y); }
+        if detail_level >= DetailLevel::Expanded && y < inner.y + inner.height - 3.0 { draw_gpu_procs(app, canvas, inner, &mut y); }
     } else if !app.deterministic {
-        // Only show "No GPU" message in non-deterministic mode
-        // In deterministic mode, ttop shows empty GPU panel
-        canvas.draw_text(
-            "No GPU detected or nvidia-smi not available",
-            Point::new(inner.x, inner.y),
-            &TextStyle {
-                color: HEADER_COLOR,
-                ..Default::default()
-            },
-        );
+        canvas.draw_text("No GPU detected or nvidia-smi not available", Point::new(inner.x, inner.y), &TextStyle { color: HEADER_COLOR, ..Default::default() });
     }
-    // In deterministic mode with no GPU, leave panel interior empty (like ttop)
 
-    // FRAMEWORK: Pop clip to restore previous clip region
     canvas.pop_clip();
 }
 
