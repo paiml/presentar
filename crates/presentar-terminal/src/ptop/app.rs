@@ -1218,6 +1218,28 @@ impl App {
 
         // Collect analyzer data (PSI, etc.)
         self.analyzers.collect_all();
+
+        // Copy analyzer data to snapshot fields for render access (sync mode parity with async mode)
+        // This ensures render code can use the same snapshot_* fields in both modes.
+        self.snapshot_psi = self.analyzers.psi.as_ref().map(|p| p.data().clone());
+        self.snapshot_connections = self.analyzers.connections.as_ref().map(|c| c.data().clone());
+        self.snapshot_treemap = self.analyzers.treemap.as_ref().map(|t| t.data().clone());
+        self.snapshot_sensor_health = self
+            .analyzers
+            .sensor_health
+            .as_ref()
+            .map(|s| s.data().clone());
+        self.snapshot_disk_io = self.analyzers.disk_io.as_ref().map(|d| d.data().clone());
+        self.snapshot_disk_entropy = self
+            .analyzers
+            .disk_entropy
+            .as_ref()
+            .map(|d| d.data().clone());
+        self.snapshot_file_analyzer = self
+            .analyzers
+            .file_analyzer
+            .as_ref()
+            .map(|f| f.data().clone());
     }
 
     /// Update frame timing stats
