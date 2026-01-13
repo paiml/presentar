@@ -359,6 +359,11 @@ impl Widget for CpuGrid {
             let x = self.bounds.x + col as f32 * cell_width;
             let y = self.bounds.y + row as f32;
 
+            // Skip drawing if row exceeds bounds (clip to panel)
+            if y >= self.bounds.y + self.bounds.height {
+                break;
+            }
+
             let usage_clamped = usage.clamp(0.0, 100.0);
             let color = self.gradient.for_percent(usage_clamped);
 
