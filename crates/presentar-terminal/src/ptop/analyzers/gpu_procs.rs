@@ -548,31 +548,6 @@ impl GpuProcsAnalyzer {
         processes
     }
 
-    /// Parse a line of nvidia-smi process output (legacy fallback)
-    fn parse_nvidia_process_line(&self, line: &str) -> Option<GpuProcess> {
-        let parts: Vec<&str> = line.split(", ").collect();
-        if parts.len() < 4 {
-            return None;
-        }
-
-        let pid: u32 = parts[0].parse().ok()?;
-        let name = parts[1].to_string();
-        let gpu_index: u32 = parts[2].parse().ok()?;
-        let used_memory: u64 = parts[3].parse::<u64>().ok()? * 1024 * 1024; // MiB to bytes
-
-        Some(GpuProcess {
-            pid,
-            name,
-            gpu_index,
-            used_memory,
-            proc_type: GpuProcType::Unknown,
-            sm_util: 0,
-            mem_util: 0,
-            enc_util: 0,
-            dec_util: 0,
-        })
-    }
-
     /// Query AMD GPU using rocm-smi (PMAT-GAP-029 - ttop parity)
     ///
     /// rocm-smi provides more detailed AMD GPU stats including per-process memory,
