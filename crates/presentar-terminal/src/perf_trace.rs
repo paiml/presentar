@@ -22520,3 +22520,856 @@ mod context_switch_tests {
         assert_eq!(cs.total, cloned.total);
     }
 }
+
+// ============================================================================
+// HeapFragmentationTracker - O(1) heap fragmentation tracking
+// ============================================================================
+
+/// O(1) heap fragmentation tracking.
+///
+/// Tracks heap allocations and fragmentation patterns.
+#[derive(Debug, Clone)]
+pub struct HeapFragmentationTracker {
+    /// Total allocated bytes
+    pub allocated: u64,
+    /// Total freed bytes
+    pub freed: u64,
+    /// Allocation count
+    pub allocations: u64,
+    /// Free count
+    pub frees: u64,
+    /// Peak allocated
+    pub peak_allocated: u64,
+    /// Fragmentation events
+    pub fragmentation_events: u64,
+}
+
+impl Default for HeapFragmentationTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl HeapFragmentationTracker {
+    /// Create new heap fragmentation tracker.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            allocated: 0,
+            freed: 0,
+            allocations: 0,
+            frees: 0,
+            peak_allocated: 0,
+            fragmentation_events: 0,
+        }
+    }
+
+    /// Factory for jemalloc tracking.
+    #[must_use]
+    pub fn for_jemalloc() -> Self {
+        Self::new()
+    }
+
+    /// Factory for system allocator tracking.
+    #[must_use]
+    pub fn for_system() -> Self {
+        Self::new()
+    }
+
+    /// Record allocation.
+    pub fn allocate(&mut self, bytes: u64) {
+        self.allocated += bytes;
+        self.allocations += 1;
+        let current = self.allocated.saturating_sub(self.freed);
+        if current > self.peak_allocated {
+            self.peak_allocated = current;
+        }
+    }
+
+    /// Record free.
+    pub fn free(&mut self, bytes: u64) {
+        self.freed += bytes;
+        self.frees += 1;
+    }
+
+    /// Record fragmentation event.
+    pub fn fragment(&mut self) {
+        self.fragmentation_events += 1;
+    }
+
+    /// Get current memory in use.
+    #[must_use]
+    pub fn in_use(&self) -> u64 {
+        self.allocated.saturating_sub(self.freed)
+    }
+
+    /// Get fragmentation rate.
+    #[must_use]
+    pub fn fragmentation_rate(&self) -> f64 {
+        if self.allocations == 0 {
+            return 0.0;
+        }
+        (self.fragmentation_events as f64 / self.allocations as f64) * 100.0
+    }
+
+    /// Check if fragmentation is excessive (>5%).
+    #[must_use]
+    pub fn is_fragmented(&self) -> bool {
+        self.fragmentation_rate() > 5.0
+    }
+
+    /// Reset counters.
+    pub fn reset(&mut self) {
+        self.allocated = 0;
+        self.freed = 0;
+        self.allocations = 0;
+        self.frees = 0;
+        self.peak_allocated = 0;
+        self.fragmentation_events = 0;
+    }
+}
+
+#[cfg(test)]
+mod heap_frag_tests {
+    use super::*;
+
+    /// F-HEAP-001: New tracker is empty
+    #[test]
+    fn f_heap_001_new() {
+        let hf = HeapFragmentationTracker::new();
+        assert_eq!(hf.in_use(), 0);
+    }
+
+    /// F-HEAP-002: Default is empty
+    #[test]
+    fn f_heap_002_default() {
+        let hf = HeapFragmentationTracker::default();
+        assert_eq!(hf.in_use(), 0);
+    }
+
+    /// F-HEAP-003: Allocate increases bytes
+    #[test]
+    fn f_heap_003_allocate() {
+        let mut hf = HeapFragmentationTracker::new();
+        hf.allocate(1024);
+        assert_eq!(hf.allocated, 1024);
+        assert_eq!(hf.allocations, 1);
+    }
+
+    /// F-HEAP-004: Free tracks bytes
+    #[test]
+    fn f_heap_004_free() {
+        let mut hf = HeapFragmentationTracker::new();
+        hf.allocate(1024);
+        hf.free(512);
+        assert_eq!(hf.in_use(), 512);
+    }
+
+    /// F-HEAP-005: Peak tracked
+    #[test]
+    fn f_heap_005_peak() {
+        let mut hf = HeapFragmentationTracker::new();
+        hf.allocate(1024);
+        hf.free(512);
+        hf.allocate(256);
+        assert_eq!(hf.peak_allocated, 1024);
+    }
+
+    /// F-HEAP-006: Fragmentation tracked
+    #[test]
+    fn f_heap_006_fragment() {
+        let mut hf = HeapFragmentationTracker::new();
+        hf.fragment();
+        assert_eq!(hf.fragmentation_events, 1);
+    }
+
+    /// F-HEAP-007: Factory for_jemalloc
+    #[test]
+    fn f_heap_007_for_jemalloc() {
+        let hf = HeapFragmentationTracker::for_jemalloc();
+        assert_eq!(hf.in_use(), 0);
+    }
+
+    /// F-HEAP-008: Factory for_system
+    #[test]
+    fn f_heap_008_for_system() {
+        let hf = HeapFragmentationTracker::for_system();
+        assert_eq!(hf.in_use(), 0);
+    }
+
+    /// F-HEAP-009: Fragmentation rate calculated
+    #[test]
+    fn f_heap_009_frag_rate() {
+        let mut hf = HeapFragmentationTracker::new();
+        hf.allocations = 100;
+        hf.fragmentation_events = 10;
+        assert!((hf.fragmentation_rate() - 10.0).abs() < 0.01);
+    }
+
+    /// F-HEAP-010: Is fragmented check
+    #[test]
+    fn f_heap_010_is_fragmented() {
+        let mut hf = HeapFragmentationTracker::new();
+        hf.allocations = 100;
+        hf.fragmentation_events = 10;
+        assert!(hf.is_fragmented());
+    }
+
+    /// F-HEAP-011: Reset clears state
+    #[test]
+    fn f_heap_011_reset() {
+        let mut hf = HeapFragmentationTracker::new();
+        hf.allocate(1024);
+        hf.reset();
+        assert_eq!(hf.in_use(), 0);
+    }
+
+    /// F-HEAP-012: Clone preserves state
+    #[test]
+    fn f_heap_012_clone() {
+        let mut hf = HeapFragmentationTracker::new();
+        hf.allocate(1024);
+        let cloned = hf.clone();
+        assert_eq!(hf.allocated, cloned.allocated);
+    }
+}
+
+// ============================================================================
+// StackDepthTracker - O(1) stack depth tracking
+// ============================================================================
+
+/// O(1) stack depth tracking.
+///
+/// Tracks call stack depth for recursion analysis.
+#[derive(Debug, Clone)]
+pub struct StackDepthTracker {
+    /// Current depth
+    pub depth: u32,
+    /// Peak depth
+    pub peak_depth: u32,
+    /// Total calls
+    pub calls: u64,
+    /// Stack overflow warnings
+    pub warnings: u64,
+    /// Warning threshold
+    pub threshold: u32,
+}
+
+impl Default for StackDepthTracker {
+    fn default() -> Self {
+        Self::for_default()
+    }
+}
+
+impl StackDepthTracker {
+    /// Create new stack depth tracker with threshold.
+    #[must_use]
+    pub fn new(threshold: u32) -> Self {
+        Self {
+            depth: 0,
+            peak_depth: 0,
+            calls: 0,
+            warnings: 0,
+            threshold,
+        }
+    }
+
+    /// Factory for default tracking (100 depth).
+    #[must_use]
+    pub fn for_default() -> Self {
+        Self::new(100)
+    }
+
+    /// Factory for deep recursion tracking (1000 depth).
+    #[must_use]
+    pub fn for_deep() -> Self {
+        Self::new(1000)
+    }
+
+    /// Record function entry.
+    pub fn enter(&mut self) {
+        self.depth += 1;
+        self.calls += 1;
+        if self.depth > self.peak_depth {
+            self.peak_depth = self.depth;
+        }
+        if self.depth > self.threshold {
+            self.warnings += 1;
+        }
+    }
+
+    /// Record function exit.
+    pub fn exit(&mut self) {
+        self.depth = self.depth.saturating_sub(1);
+    }
+
+    /// Get current depth.
+    #[must_use]
+    pub fn current(&self) -> u32 {
+        self.depth
+    }
+
+    /// Get depth utilization percentage.
+    #[must_use]
+    pub fn utilization(&self) -> f64 {
+        if self.threshold == 0 {
+            return 0.0;
+        }
+        (self.depth as f64 / self.threshold as f64) * 100.0
+    }
+
+    /// Check if approaching threshold.
+    #[must_use]
+    pub fn is_at_risk(&self) -> bool {
+        self.utilization() > 80.0
+    }
+
+    /// Reset counters.
+    pub fn reset(&mut self) {
+        self.depth = 0;
+        self.peak_depth = 0;
+        self.calls = 0;
+        self.warnings = 0;
+    }
+}
+
+#[cfg(test)]
+mod stack_depth_tests {
+    use super::*;
+
+    /// F-STACK-001: New tracker has threshold
+    #[test]
+    fn f_stack_001_new() {
+        let sd = StackDepthTracker::new(100);
+        assert_eq!(sd.threshold, 100);
+    }
+
+    /// F-STACK-002: Default uses 100
+    #[test]
+    fn f_stack_002_default() {
+        let sd = StackDepthTracker::default();
+        assert_eq!(sd.threshold, 100);
+    }
+
+    /// F-STACK-003: Enter increases depth
+    #[test]
+    fn f_stack_003_enter() {
+        let mut sd = StackDepthTracker::new(100);
+        sd.enter();
+        assert_eq!(sd.depth, 1);
+        assert_eq!(sd.calls, 1);
+    }
+
+    /// F-STACK-004: Exit decreases depth
+    #[test]
+    fn f_stack_004_exit() {
+        let mut sd = StackDepthTracker::new(100);
+        sd.enter();
+        sd.exit();
+        assert_eq!(sd.depth, 0);
+    }
+
+    /// F-STACK-005: Peak tracked
+    #[test]
+    fn f_stack_005_peak() {
+        let mut sd = StackDepthTracker::new(100);
+        sd.enter();
+        sd.enter();
+        sd.exit();
+        assert_eq!(sd.peak_depth, 2);
+    }
+
+    /// F-STACK-006: Warning on threshold
+    #[test]
+    fn f_stack_006_warning() {
+        let mut sd = StackDepthTracker::new(2);
+        sd.enter();
+        sd.enter();
+        sd.enter();
+        assert_eq!(sd.warnings, 1);
+    }
+
+    /// F-STACK-007: Factory for_default
+    #[test]
+    fn f_stack_007_for_default() {
+        let sd = StackDepthTracker::for_default();
+        assert_eq!(sd.threshold, 100);
+    }
+
+    /// F-STACK-008: Factory for_deep
+    #[test]
+    fn f_stack_008_for_deep() {
+        let sd = StackDepthTracker::for_deep();
+        assert_eq!(sd.threshold, 1000);
+    }
+
+    /// F-STACK-009: Utilization calculated
+    #[test]
+    fn f_stack_009_utilization() {
+        let mut sd = StackDepthTracker::new(100);
+        for _ in 0..50 {
+            sd.enter();
+        }
+        assert!((sd.utilization() - 50.0).abs() < 0.01);
+    }
+
+    /// F-STACK-010: Is at risk check
+    #[test]
+    fn f_stack_010_at_risk() {
+        let mut sd = StackDepthTracker::new(100);
+        for _ in 0..85 {
+            sd.enter();
+        }
+        assert!(sd.is_at_risk());
+    }
+
+    /// F-STACK-011: Reset clears state
+    #[test]
+    fn f_stack_011_reset() {
+        let mut sd = StackDepthTracker::new(100);
+        sd.enter();
+        sd.reset();
+        assert_eq!(sd.depth, 0);
+    }
+
+    /// F-STACK-012: Clone preserves state
+    #[test]
+    fn f_stack_012_clone() {
+        let mut sd = StackDepthTracker::new(100);
+        sd.enter();
+        let cloned = sd.clone();
+        assert_eq!(sd.depth, cloned.depth);
+    }
+}
+
+// ============================================================================
+// SyscallTracker - O(1) syscall tracking
+// ============================================================================
+
+/// O(1) syscall frequency tracking.
+///
+/// Tracks syscall counts and latency.
+#[derive(Debug, Clone)]
+pub struct SyscallTracker {
+    /// Total syscalls
+    pub total: u64,
+    /// Read syscalls
+    pub reads: u64,
+    /// Write syscalls
+    pub writes: u64,
+    /// Other syscalls
+    pub other: u64,
+    /// Total latency microseconds
+    pub total_latency_us: u64,
+    /// Errors
+    pub errors: u64,
+}
+
+impl Default for SyscallTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SyscallTracker {
+    /// Create new syscall tracker.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            total: 0,
+            reads: 0,
+            writes: 0,
+            other: 0,
+            total_latency_us: 0,
+            errors: 0,
+        }
+    }
+
+    /// Factory for IO-heavy tracking.
+    #[must_use]
+    pub fn for_io() -> Self {
+        Self::new()
+    }
+
+    /// Factory for general tracking.
+    #[must_use]
+    pub fn for_general() -> Self {
+        Self::new()
+    }
+
+    /// Record read syscall.
+    pub fn read(&mut self, latency_us: u64) {
+        self.total += 1;
+        self.reads += 1;
+        self.total_latency_us += latency_us;
+    }
+
+    /// Record write syscall.
+    pub fn write(&mut self, latency_us: u64) {
+        self.total += 1;
+        self.writes += 1;
+        self.total_latency_us += latency_us;
+    }
+
+    /// Record other syscall.
+    pub fn other(&mut self, latency_us: u64) {
+        self.total += 1;
+        self.other += 1;
+        self.total_latency_us += latency_us;
+    }
+
+    /// Record syscall error.
+    pub fn error(&mut self) {
+        self.errors += 1;
+    }
+
+    /// Get average latency in microseconds.
+    #[must_use]
+    pub fn avg_latency_us(&self) -> u64 {
+        if self.total == 0 {
+            return 0;
+        }
+        self.total_latency_us / self.total
+    }
+
+    /// Get IO percentage (reads + writes).
+    #[must_use]
+    pub fn io_percentage(&self) -> f64 {
+        if self.total == 0 {
+            return 0.0;
+        }
+        ((self.reads + self.writes) as f64 / self.total as f64) * 100.0
+    }
+
+    /// Get error rate.
+    #[must_use]
+    pub fn error_rate(&self) -> f64 {
+        if self.total == 0 {
+            return 0.0;
+        }
+        (self.errors as f64 / self.total as f64) * 100.0
+    }
+
+    /// Reset counters.
+    pub fn reset(&mut self) {
+        self.total = 0;
+        self.reads = 0;
+        self.writes = 0;
+        self.other = 0;
+        self.total_latency_us = 0;
+        self.errors = 0;
+    }
+}
+
+#[cfg(test)]
+mod syscall_tests {
+    use super::*;
+
+    /// F-SYSCALL-001: New tracker is empty
+    #[test]
+    fn f_syscall_001_new() {
+        let sc = SyscallTracker::new();
+        assert_eq!(sc.total, 0);
+    }
+
+    /// F-SYSCALL-002: Default is empty
+    #[test]
+    fn f_syscall_002_default() {
+        let sc = SyscallTracker::default();
+        assert_eq!(sc.total, 0);
+    }
+
+    /// F-SYSCALL-003: Read tracked
+    #[test]
+    fn f_syscall_003_read() {
+        let mut sc = SyscallTracker::new();
+        sc.read(100);
+        assert_eq!(sc.reads, 1);
+        assert_eq!(sc.total, 1);
+    }
+
+    /// F-SYSCALL-004: Write tracked
+    #[test]
+    fn f_syscall_004_write() {
+        let mut sc = SyscallTracker::new();
+        sc.write(100);
+        assert_eq!(sc.writes, 1);
+        assert_eq!(sc.total, 1);
+    }
+
+    /// F-SYSCALL-005: Other tracked
+    #[test]
+    fn f_syscall_005_other() {
+        let mut sc = SyscallTracker::new();
+        sc.other(100);
+        assert_eq!(sc.other, 1);
+        assert_eq!(sc.total, 1);
+    }
+
+    /// F-SYSCALL-006: Average latency calculated
+    #[test]
+    fn f_syscall_006_avg_latency() {
+        let mut sc = SyscallTracker::new();
+        sc.read(100);
+        sc.write(200);
+        assert_eq!(sc.avg_latency_us(), 150);
+    }
+
+    /// F-SYSCALL-007: Factory for_io
+    #[test]
+    fn f_syscall_007_for_io() {
+        let sc = SyscallTracker::for_io();
+        assert_eq!(sc.total, 0);
+    }
+
+    /// F-SYSCALL-008: Factory for_general
+    #[test]
+    fn f_syscall_008_for_general() {
+        let sc = SyscallTracker::for_general();
+        assert_eq!(sc.total, 0);
+    }
+
+    /// F-SYSCALL-009: IO percentage calculated
+    #[test]
+    fn f_syscall_009_io_percentage() {
+        let mut sc = SyscallTracker::new();
+        sc.read(100);
+        sc.write(100);
+        sc.other(100);
+        sc.other(100);
+        assert!((sc.io_percentage() - 50.0).abs() < 0.01);
+    }
+
+    /// F-SYSCALL-010: Error tracked
+    #[test]
+    fn f_syscall_010_error() {
+        let mut sc = SyscallTracker::new();
+        sc.error();
+        assert_eq!(sc.errors, 1);
+    }
+
+    /// F-SYSCALL-011: Reset clears state
+    #[test]
+    fn f_syscall_011_reset() {
+        let mut sc = SyscallTracker::new();
+        sc.read(100);
+        sc.reset();
+        assert_eq!(sc.total, 0);
+    }
+
+    /// F-SYSCALL-012: Clone preserves state
+    #[test]
+    fn f_syscall_012_clone() {
+        let mut sc = SyscallTracker::new();
+        sc.read(100);
+        let cloned = sc.clone();
+        assert_eq!(sc.total, cloned.total);
+    }
+}
+
+// ============================================================================
+// SignalTracker - O(1) signal tracking
+// ============================================================================
+
+/// O(1) signal delivery tracking.
+///
+/// Tracks signal counts and handling.
+#[derive(Debug, Clone)]
+pub struct SignalTracker {
+    /// Total signals received
+    pub received: u64,
+    /// Signals handled
+    pub handled: u64,
+    /// Signals ignored
+    pub ignored: u64,
+    /// Fatal signals (SIGKILL, SIGSEGV, etc.)
+    pub fatal: u64,
+    /// Last signal number
+    pub last_signal: u32,
+}
+
+impl Default for SignalTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SignalTracker {
+    /// Create new signal tracker.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            received: 0,
+            handled: 0,
+            ignored: 0,
+            fatal: 0,
+            last_signal: 0,
+        }
+    }
+
+    /// Factory for process tracking.
+    #[must_use]
+    pub fn for_process() -> Self {
+        Self::new()
+    }
+
+    /// Factory for daemon tracking.
+    #[must_use]
+    pub fn for_daemon() -> Self {
+        Self::new()
+    }
+
+    /// Record signal received and handled.
+    pub fn handle(&mut self, signal: u32) {
+        self.received += 1;
+        self.handled += 1;
+        self.last_signal = signal;
+    }
+
+    /// Record signal ignored.
+    pub fn ignore(&mut self, signal: u32) {
+        self.received += 1;
+        self.ignored += 1;
+        self.last_signal = signal;
+    }
+
+    /// Record fatal signal.
+    pub fn fatal(&mut self, signal: u32) {
+        self.received += 1;
+        self.fatal += 1;
+        self.last_signal = signal;
+    }
+
+    /// Get handling rate percentage.
+    #[must_use]
+    pub fn handling_rate(&self) -> f64 {
+        if self.received == 0 {
+            return 0.0;
+        }
+        (self.handled as f64 / self.received as f64) * 100.0
+    }
+
+    /// Check if process received fatal signal.
+    #[must_use]
+    pub fn has_fatal(&self) -> bool {
+        self.fatal > 0
+    }
+
+    /// Get total signals.
+    #[must_use]
+    pub fn total(&self) -> u64 {
+        self.received
+    }
+
+    /// Reset counters.
+    pub fn reset(&mut self) {
+        self.received = 0;
+        self.handled = 0;
+        self.ignored = 0;
+        self.fatal = 0;
+        self.last_signal = 0;
+    }
+}
+
+#[cfg(test)]
+mod signal_tests {
+    use super::*;
+
+    /// F-SIGNAL-001: New tracker is empty
+    #[test]
+    fn f_signal_001_new() {
+        let sig = SignalTracker::new();
+        assert_eq!(sig.total(), 0);
+    }
+
+    /// F-SIGNAL-002: Default is empty
+    #[test]
+    fn f_signal_002_default() {
+        let sig = SignalTracker::default();
+        assert_eq!(sig.total(), 0);
+    }
+
+    /// F-SIGNAL-003: Handle tracked
+    #[test]
+    fn f_signal_003_handle() {
+        let mut sig = SignalTracker::new();
+        sig.handle(15); // SIGTERM
+        assert_eq!(sig.handled, 1);
+        assert_eq!(sig.received, 1);
+    }
+
+    /// F-SIGNAL-004: Ignore tracked
+    #[test]
+    fn f_signal_004_ignore() {
+        let mut sig = SignalTracker::new();
+        sig.ignore(1); // SIGHUP
+        assert_eq!(sig.ignored, 1);
+        assert_eq!(sig.received, 1);
+    }
+
+    /// F-SIGNAL-005: Fatal tracked
+    #[test]
+    fn f_signal_005_fatal() {
+        let mut sig = SignalTracker::new();
+        sig.fatal(9); // SIGKILL
+        assert_eq!(sig.fatal, 1);
+        assert!(sig.has_fatal());
+    }
+
+    /// F-SIGNAL-006: Handling rate calculated
+    #[test]
+    fn f_signal_006_handling_rate() {
+        let mut sig = SignalTracker::new();
+        sig.handle(15);
+        sig.ignore(1);
+        assert!((sig.handling_rate() - 50.0).abs() < 0.01);
+    }
+
+    /// F-SIGNAL-007: Factory for_process
+    #[test]
+    fn f_signal_007_for_process() {
+        let sig = SignalTracker::for_process();
+        assert_eq!(sig.total(), 0);
+    }
+
+    /// F-SIGNAL-008: Factory for_daemon
+    #[test]
+    fn f_signal_008_for_daemon() {
+        let sig = SignalTracker::for_daemon();
+        assert_eq!(sig.total(), 0);
+    }
+
+    /// F-SIGNAL-009: Last signal tracked
+    #[test]
+    fn f_signal_009_last_signal() {
+        let mut sig = SignalTracker::new();
+        sig.handle(15);
+        assert_eq!(sig.last_signal, 15);
+    }
+
+    /// F-SIGNAL-010: Has fatal check
+    #[test]
+    fn f_signal_010_has_fatal() {
+        let mut sig = SignalTracker::new();
+        sig.handle(15);
+        assert!(!sig.has_fatal());
+    }
+
+    /// F-SIGNAL-011: Reset clears state
+    #[test]
+    fn f_signal_011_reset() {
+        let mut sig = SignalTracker::new();
+        sig.handle(15);
+        sig.reset();
+        assert_eq!(sig.total(), 0);
+    }
+
+    /// F-SIGNAL-012: Clone preserves state
+    #[test]
+    fn f_signal_012_clone() {
+        let mut sig = SignalTracker::new();
+        sig.handle(15);
+        let cloned = sig.clone();
+        assert_eq!(sig.received, cloned.received);
+    }
+}
