@@ -2625,8 +2625,8 @@ fn draw_gpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
                             break;
                         }
 
-                        // Type badge using helper
-                        let (type_badge, badge_color) = gpu_proc_badge(&proc.process_type);
+                        // Type badge using helper (PMAT-GAP-041: GpuProcType enum)
+                        let (type_badge, badge_color) = gpu_proc_badge(proc.proc_type.as_str());
 
                         // Draw type badge
                         canvas.draw_text(
@@ -2638,9 +2638,9 @@ fn draw_gpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
                             },
                         );
 
-                        // Draw process info using helpers
-                        let sm_str = format_proc_util(proc.gpu_util);
-                        let mem_str = format_proc_util(proc.mem_util);
+                        // Draw process info using helpers (PMAT-GAP-038: sm_util as u8)
+                        let sm_str = format_proc_util(proc.gpu_util());
+                        let mem_str = format_proc_util(if proc.mem_util > 0 { Some(proc.mem_util as f32) } else { None });
                         let cmd = truncate_name(&proc.name, 12);
 
                         let proc_info =

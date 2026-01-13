@@ -92,23 +92,90 @@ impl GpuInfo {
     }
 }
 
-/// A process using GPU resources
+/// GPU process type (PMAT-GAP-041 - ttop parity)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GpuProcType {
+    /// Compute process (CUDA/OpenCL kernels)
+    Compute,
+    /// Graphics process (OpenGL/Vulkan contexts)
+    Graphics,
+    /// Unknown process type
+    #[default]
+    Unknown,
+}
+
+impl GpuProcType {
+    /// Parse from pmon output character
+    pub fn from_pmon(s: &str) -> Self {
+        match s.trim() {
+            "C" => Self::Compute,
+            "G" => Self::Graphics,
+            _ => Self::Unknown,
+        }
+    }
+
+    /// Get display character
+    pub fn as_char(&self) -> char {
+        match self {
+            Self::Compute => 'C',
+            Self::Graphics => 'G',
+            Self::Unknown => '?',
+        }
+    }
+
+    /// Get display string
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Compute => "Compute",
+            Self::Graphics => "Graphics",
+            Self::Unknown => "Unknown",
+        }
+    }
+}
+
+impl std::fmt::Display for GpuProcType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_char())
+    }
+}
+
+/// A process using GPU resources (PMAT-GAP-037-042 - ttop pmon parity)
 #[derive(Debug, Clone)]
 pub struct GpuProcess {
     /// Process ID
     pub pid: u32,
-    /// Process name
+    /// Process name / command
     pub name: String,
     /// GPU index
     pub gpu_index: u32,
     /// Used VRAM in bytes
     pub used_memory: u64,
-    /// GPU utilization percentage (if available)
-    pub gpu_util: Option<f32>,
-    /// Memory utilization percentage (if available)
-    pub mem_util: Option<f32>,
-    /// Process type (Compute, Graphics, etc.)
-    pub process_type: String,
+    /// Process type: Compute or Graphics (PMAT-GAP-041)
+    pub proc_type: GpuProcType,
+    /// SM (shader) utilization percentage 0-100 (PMAT-GAP-038)
+    pub sm_util: u8,
+    /// Memory utilization percentage 0-100
+    pub mem_util: u8,
+    /// Encoder (NVENC) utilization percentage 0-100 (PMAT-GAP-039)
+    pub enc_util: u8,
+    /// Decoder (NVDEC) utilization percentage 0-100 (PMAT-GAP-040)
+    pub dec_util: u8,
+}
+
+impl Default for GpuProcess {
+    fn default() -> Self {
+        Self {
+            pid: 0,
+            name: String::new(),
+            gpu_index: 0,
+            used_memory: 0,
+            proc_type: GpuProcType::Unknown,
+            sm_util: 0,
+            mem_util: 0,
+            enc_util: 0,
+            dec_util: 0,
+        }
+    }
 }
 
 impl GpuProcess {
@@ -116,6 +183,15 @@ impl GpuProcess {
     pub fn display_memory(&self) -> String {
         let mb = self.used_memory / (1024 * 1024);
         format!("{} MB", mb)
+    }
+
+    /// Get GPU utilization as Option<f32> for compatibility
+    pub fn gpu_util(&self) -> Option<f32> {
+        if self.sm_util > 0 {
+            Some(self.sm_util as f32)
+        } else {
+            None
+        }
     }
 }
 
@@ -317,46 +393,12 @@ impl GpuProcsAnalyzer {
             }
         }
 
-        // Query per-process memory usage
-        let proc_output = Command::new(nvidia_smi)
-            .args([
-                "--query-compute-apps=pid,process_name,gpu_index,used_memory",
-                "--format=csv,noheader,nounits",
-            ])
-            .output()
-            .map_err(|e| {
-                AnalyzerError::IoError(format!("nvidia-smi process query failed: {}", e))
-            })?;
+        // Query per-process GPU metrics using pmon (PMAT-GAP-037 - ttop parity)
+        // pmon provides SM/enc/dec utilization per process, which --query-compute-apps lacks
+        let mut processes = self.query_nvidia_pmon(nvidia_smi);
 
-        let mut processes = Vec::new();
-        let proc_stdout = String::from_utf8_lossy(&proc_output.stdout);
-
-        for line in proc_stdout.lines() {
-            if let Some(proc) = self.parse_nvidia_process_line(line) {
-                processes.push(proc);
-            }
-        }
-
-        // Also query graphics processes
-        let graphics_output = Command::new(nvidia_smi)
-            .args([
-                "--query-graphics-apps=pid,process_name,gpu_index,used_memory",
-                "--format=csv,noheader,nounits",
-            ])
-            .output();
-
-        if let Ok(gfx_output) = graphics_output {
-            let gfx_stdout = String::from_utf8_lossy(&gfx_output.stdout);
-            for line in gfx_stdout.lines() {
-                if let Some(mut proc) = self.parse_nvidia_process_line(line) {
-                    proc.process_type = "Graphics".to_string();
-                    // Avoid duplicates
-                    if !processes.iter().any(|p| p.pid == proc.pid) {
-                        processes.push(proc);
-                    }
-                }
-            }
-        }
+        // Sort by SM utilization descending (PMAT-GAP-042)
+        processes.sort_by(|a, b| b.sm_util.cmp(&a.sm_util));
 
         // Calculate aggregates
         let total_vram = gpus.iter().map(|g| g.total_memory).sum();
@@ -431,7 +473,82 @@ impl GpuProcsAnalyzer {
         })
     }
 
-    /// Parse a line of nvidia-smi process output
+    /// Query NVIDIA GPU processes using pmon (PMAT-GAP-037 - ttop parity)
+    ///
+    /// pmon provides per-process SM/enc/dec utilization which --query-compute-apps lacks.
+    /// Format: gpu pid type sm mem enc dec jpg ofa command
+    fn query_nvidia_pmon(&self, nvidia_smi: &str) -> Vec<GpuProcess> {
+        // Run nvidia-smi pmon with single sample (-c 1)
+        let output = match Command::new(nvidia_smi)
+            .args(["pmon", "-c", "1"])
+            .output()
+        {
+            Ok(o) if o.status.success() => o,
+            _ => return Vec::new(),
+        };
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        Self::parse_pmon_output(&stdout)
+    }
+
+    /// Parse nvidia-smi pmon output (PMAT-GAP-037)
+    ///
+    /// Format: gpu pid type sm mem enc dec jpg ofa command
+    /// Header lines start with '#'
+    pub fn parse_pmon_output(output: &str) -> Vec<GpuProcess> {
+        let mut processes = Vec::new();
+
+        for line in output.lines() {
+            // Skip header lines (start with #) and empty lines
+            if line.starts_with('#') || line.trim().is_empty() {
+                continue;
+            }
+
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() < 10 {
+                continue;
+            }
+
+            // Parse fields: gpu pid type sm mem enc dec jpg ofa command
+            let gpu_index = match parts[0].parse::<u32>() {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+
+            let pid = match parts[1].parse::<u32>() {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+
+            let proc_type = GpuProcType::from_pmon(parts[2]);
+
+            // SM and mem utilization (may be "-" if not available)
+            let sm_util = parts[3].parse::<u8>().unwrap_or(0);
+            let mem_util = parts[4].parse::<u8>().unwrap_or(0);
+            // Encoder and decoder utilization (may be "-")
+            let enc_util = parts[5].parse::<u8>().unwrap_or(0);
+            let dec_util = parts[6].parse::<u8>().unwrap_or(0);
+
+            // Command is the last field (index 9)
+            let name = parts[9].to_string();
+
+            processes.push(GpuProcess {
+                pid,
+                name,
+                gpu_index,
+                used_memory: 0, // pmon doesn't provide memory bytes
+                proc_type,
+                sm_util,
+                mem_util,
+                enc_util,
+                dec_util,
+            });
+        }
+
+        processes
+    }
+
+    /// Parse a line of nvidia-smi process output (legacy fallback)
     fn parse_nvidia_process_line(&self, line: &str) -> Option<GpuProcess> {
         let parts: Vec<&str> = line.split(", ").collect();
         if parts.len() < 4 {
@@ -448,9 +565,11 @@ impl GpuProcsAnalyzer {
             name,
             gpu_index,
             used_memory,
-            gpu_util: None,
-            mem_util: None,
-            process_type: "Compute".to_string(),
+            proc_type: GpuProcType::Unknown,
+            sm_util: 0,
+            mem_util: 0,
+            enc_util: 0,
+            dec_util: 0,
         })
     }
 
@@ -584,9 +703,11 @@ impl GpuProcsAnalyzer {
                                     name,
                                     gpu_index,
                                     used_memory,
-                                    gpu_util: None,
-                                    mem_util: None,
-                                    process_type: "Compute".to_string(),
+                                    proc_type: GpuProcType::Compute,
+                                    sm_util: 0,
+                                    mem_util: 0,
+                                    enc_util: 0,
+                                    dec_util: 0,
                                 });
                             }
                         }
@@ -1123,9 +1244,11 @@ mod tests {
             name: "python".to_string(),
             gpu_index: 0,
             used_memory: 2048 * 1024 * 1024, // 2 GB
-            gpu_util: Some(80.0),
-            mem_util: Some(25.0),
-            process_type: "Compute".to_string(),
+            proc_type: GpuProcType::Compute,
+            sm_util: 80,
+            mem_util: 25,
+            enc_util: 0,
+            dec_util: 0,
         };
 
         assert_eq!(proc.display_memory(), "2048 MB");
@@ -1138,9 +1261,11 @@ mod tests {
             name: "desktop".to_string(),
             gpu_index: 0,
             used_memory: 512 * 1024, // 512 KB
-            gpu_util: None,
-            mem_util: None,
-            process_type: "Graphics".to_string(),
+            proc_type: GpuProcType::Graphics,
+            sm_util: 0,
+            mem_util: 0,
+            enc_util: 0,
+            dec_util: 0,
         };
 
         assert_eq!(proc.display_memory(), "0 MB"); // Less than 1 MB
@@ -1195,9 +1320,11 @@ mod tests {
                 name: "test".to_string(),
                 gpu_index: 0,
                 used_memory: 1024 * 1024 * 1024,
-                gpu_util: Some(50.0),
-                mem_util: Some(12.5),
-                process_type: "Compute".to_string(),
+                proc_type: GpuProcType::Compute,
+                sm_util: 50,
+                mem_util: 12,
+                enc_util: 0,
+                dec_util: 0,
             }],
             vendor: Some(GpuVendor::Nvidia),
             total_vram_used: 6 * 1024 * 1024 * 1024,
@@ -1312,7 +1439,7 @@ mod tests {
         assert_eq!(proc.name, "python3");
         assert_eq!(proc.gpu_index, 0);
         assert_eq!(proc.used_memory, 2048 * 1024 * 1024);
-        assert_eq!(proc.process_type, "Compute");
+        assert_eq!(proc.proc_type, GpuProcType::Unknown); // Legacy parser doesn't know type
     }
 
     #[test]
@@ -1561,9 +1688,11 @@ mod tests {
             name: "test".to_string(),
             gpu_index: 0,
             used_memory: 0,
-            gpu_util: None,
-            mem_util: None,
-            process_type: "Compute".to_string(),
+            proc_type: GpuProcType::Compute,
+            sm_util: 0,
+            mem_util: 0,
+            enc_util: 0,
+            dec_util: 0,
         };
         let debug = format!("{:?}", proc);
         assert!(debug.contains("GpuProcess"));
@@ -1576,9 +1705,11 @@ mod tests {
             name: "clone_test".to_string(),
             gpu_index: 1,
             used_memory: 2048,
-            gpu_util: Some(50.0),
-            mem_util: Some(25.0),
-            process_type: "Graphics".to_string(),
+            proc_type: GpuProcType::Graphics,
+            sm_util: 50,
+            mem_util: 25,
+            enc_util: 10,
+            dec_util: 5,
         };
         let cloned = proc.clone();
         assert_eq!(cloned.pid, 1234);
@@ -1728,5 +1859,138 @@ mod tests {
 
         // May succeed or fail depending on system hardware
         let _ = analyzer.query_amd_sysfs();
+    }
+
+    // PMAT-GAP-037-042 pmon tests
+    #[test]
+    fn test_gpu_proc_type_from_pmon() {
+        assert_eq!(GpuProcType::from_pmon("C"), GpuProcType::Compute);
+        assert_eq!(GpuProcType::from_pmon("G"), GpuProcType::Graphics);
+        assert_eq!(GpuProcType::from_pmon("X"), GpuProcType::Unknown);
+        assert_eq!(GpuProcType::from_pmon(""), GpuProcType::Unknown);
+    }
+
+    #[test]
+    fn test_gpu_proc_type_as_char() {
+        assert_eq!(GpuProcType::Compute.as_char(), 'C');
+        assert_eq!(GpuProcType::Graphics.as_char(), 'G');
+        assert_eq!(GpuProcType::Unknown.as_char(), '?');
+    }
+
+    #[test]
+    fn test_gpu_proc_type_as_str() {
+        assert_eq!(GpuProcType::Compute.as_str(), "Compute");
+        assert_eq!(GpuProcType::Graphics.as_str(), "Graphics");
+        assert_eq!(GpuProcType::Unknown.as_str(), "Unknown");
+    }
+
+    #[test]
+    fn test_gpu_proc_type_display() {
+        assert_eq!(format!("{}", GpuProcType::Compute), "C");
+        assert_eq!(format!("{}", GpuProcType::Graphics), "G");
+        assert_eq!(format!("{}", GpuProcType::Unknown), "?");
+    }
+
+    #[test]
+    fn test_parse_pmon_output_empty() {
+        let output = "";
+        let procs = GpuProcsAnalyzer::parse_pmon_output(output);
+        assert!(procs.is_empty());
+    }
+
+    #[test]
+    fn test_parse_pmon_output_headers_only() {
+        let output = r#"# gpu         pid   type     sm    mem    enc    dec    jpg    ofa    command
+# Idx           #    C/G      %      %      %      %      %      %    name
+"#;
+        let procs = GpuProcsAnalyzer::parse_pmon_output(output);
+        assert!(procs.is_empty());
+    }
+
+    #[test]
+    fn test_parse_pmon_output_single_process() {
+        let output = r#"# gpu         pid   type     sm    mem    enc    dec    jpg    ofa    command
+# Idx           #    C/G      %      %      %      %      %      %    name
+    0        1234      C     50     25     10      5      -      -    python3
+"#;
+        let procs = GpuProcsAnalyzer::parse_pmon_output(output);
+        assert_eq!(procs.len(), 1);
+        assert_eq!(procs[0].pid, 1234);
+        assert_eq!(procs[0].gpu_index, 0);
+        assert_eq!(procs[0].proc_type, GpuProcType::Compute);
+        assert_eq!(procs[0].sm_util, 50);
+        assert_eq!(procs[0].mem_util, 25);
+        assert_eq!(procs[0].enc_util, 10);
+        assert_eq!(procs[0].dec_util, 5);
+        assert_eq!(procs[0].name, "python3");
+    }
+
+    #[test]
+    fn test_parse_pmon_output_graphics_process() {
+        let output = "    0        5678      G     30     15      0      0      -      -    Xorg\n";
+        let procs = GpuProcsAnalyzer::parse_pmon_output(output);
+        assert_eq!(procs.len(), 1);
+        assert_eq!(procs[0].proc_type, GpuProcType::Graphics);
+    }
+
+    #[test]
+    fn test_parse_pmon_output_multiple_processes() {
+        let output = r#"    0        1234      C     50     25      0      0      -      -    python3
+    0        5678      G     30     15      0      0      -      -    Xorg
+    1        9999      C     80     40     20     10      -      -    cuda_app
+"#;
+        let procs = GpuProcsAnalyzer::parse_pmon_output(output);
+        assert_eq!(procs.len(), 3);
+        assert_eq!(procs[0].sm_util, 50);
+        assert_eq!(procs[1].sm_util, 30);
+        assert_eq!(procs[2].sm_util, 80);
+        assert_eq!(procs[2].gpu_index, 1);
+    }
+
+    #[test]
+    fn test_parse_pmon_output_dash_values() {
+        let output = "    0        1234      C      -      -      -      -      -      -    app\n";
+        let procs = GpuProcsAnalyzer::parse_pmon_output(output);
+        assert_eq!(procs.len(), 1);
+        assert_eq!(procs[0].sm_util, 0);
+        assert_eq!(procs[0].mem_util, 0);
+        assert_eq!(procs[0].enc_util, 0);
+        assert_eq!(procs[0].dec_util, 0);
+    }
+
+    #[test]
+    fn test_parse_pmon_sort_by_sm_util() {
+        // Verify processes sorted by SM util descending (PMAT-GAP-042)
+        let output = r#"    0        1111      C     10      5      0      0      -      -    low
+    0        2222      C     80     40      0      0      -      -    high
+    0        3333      C     50     25      0      0      -      -    mid
+"#;
+        let mut procs = GpuProcsAnalyzer::parse_pmon_output(output);
+        procs.sort_by(|a, b| b.sm_util.cmp(&a.sm_util));
+        assert_eq!(procs[0].sm_util, 80);
+        assert_eq!(procs[1].sm_util, 50);
+        assert_eq!(procs[2].sm_util, 10);
+    }
+
+    #[test]
+    fn test_gpu_process_gpu_util_compat() {
+        let proc = GpuProcess {
+            sm_util: 75,
+            ..Default::default()
+        };
+        assert_eq!(proc.gpu_util(), Some(75.0));
+
+        let proc_zero = GpuProcess::default();
+        assert_eq!(proc_zero.gpu_util(), None);
+    }
+
+    #[test]
+    fn test_gpu_process_default() {
+        let proc = GpuProcess::default();
+        assert_eq!(proc.pid, 0);
+        assert_eq!(proc.proc_type, GpuProcType::Unknown);
+        assert_eq!(proc.sm_util, 0);
+        assert_eq!(proc.enc_util, 0);
+        assert_eq!(proc.dec_util, 0);
     }
 }
