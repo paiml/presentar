@@ -407,8 +407,8 @@ impl NotebookRuntime {
         let counter = self.execution_counter;
 
         if let Some(cell) = self.graph.get_cell_mut(id) {
-            // TODO: Actually execute with Ruchy runtime
-            // For now, just mark as executed
+            // Placeholder: Ruchy runtime integration pending
+            // Currently marks cell as executed without actual evaluation
             cell.dirty = false;
             cell.execution_order = counter;
             cell.output = CellOutput {

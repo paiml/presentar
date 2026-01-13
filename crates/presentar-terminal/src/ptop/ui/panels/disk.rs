@@ -174,6 +174,38 @@ pub fn create_disk_segments(used_pct: f64, free_pct: f64) -> Vec<DiskBarSegment>
 // MOUNT POINT UTILITIES
 // =============================================================================
 
+/// Try to shorten /home/user/path to ~/path format.
+fn try_home_shortening(path: &str, max_width: usize) -> Option<String> {
+    let short = path.replacen("/home/", "~/", 1);
+    let rest = short.strip_prefix("~/")?;
+    let idx = rest.find('/')?;
+    let shortened = format!("~{}", &rest[idx..]);
+    if shortened.chars().count() <= max_width {
+        Some(shortened)
+    } else {
+        None
+    }
+}
+
+/// Try to shorten path by showing last components with ellipsis.
+fn try_component_shortening(parts: &[&str], max_width: usize) -> Option<String> {
+    // Try last 2 components
+    if parts.len() >= 2 {
+        let last_two = format!(".../{}/{}", parts[parts.len() - 2], parts[parts.len() - 1]);
+        if last_two.chars().count() <= max_width {
+            return Some(last_two);
+        }
+    }
+
+    // Just last component
+    let last = format!(".../{}", parts.last().unwrap_or(&""));
+    if last.chars().count() <= max_width {
+        Some(last)
+    } else {
+        None
+    }
+}
+
 /// Shorten mount point path for display.
 ///
 /// "/home/user/data" -> "/home/user/data" (if fits)
@@ -187,14 +219,8 @@ pub fn shorten_mount_point(path: &str, max_width: usize) -> String {
 
     // Try to shorten /home/user to ~
     if path.starts_with("/home/") {
-        let short = path.replacen("/home/", "~/", 1);
-        if let Some(rest) = short.strip_prefix("~/") {
-            if let Some(idx) = rest.find('/') {
-                let shortened = format!("~{}", &rest[idx..]);
-                if shortened.chars().count() <= max_width {
-                    return shortened;
-                }
-            }
+        if let Some(shortened) = try_home_shortening(path, max_width) {
+            return shortened;
         }
     }
 
@@ -204,19 +230,7 @@ pub fn shorten_mount_point(path: &str, max_width: usize) -> String {
         return truncate_path(path, max_width);
     }
 
-    // Try last 2 components
-    let last_two = format!(".../{}/{}", parts[parts.len() - 2], parts[parts.len() - 1]);
-    if last_two.chars().count() <= max_width {
-        return last_two;
-    }
-
-    // Just last component
-    let last = format!(".../{}", parts.last().unwrap_or(&""));
-    if last.chars().count() <= max_width {
-        return last;
-    }
-
-    truncate_path(path, max_width)
+    try_component_shortening(&parts, max_width).unwrap_or_else(|| truncate_path(path, max_width))
 }
 
 /// Simple path truncation with ellipsis.

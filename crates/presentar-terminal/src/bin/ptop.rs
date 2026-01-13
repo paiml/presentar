@@ -307,6 +307,28 @@ fn check_mode_change(app: &App, was_exploded: &mut bool) -> bool {
     changed
 }
 
+/// Record input timing if QA mode enabled.
+#[inline]
+fn record_qa_input(qa_timing: bool, qa_state: &mut QaTimingState, elapsed: Duration) {
+    if qa_timing {
+        qa_state.record_input(elapsed);
+    }
+}
+
+/// Record render timing and maybe report if QA mode enabled.
+#[inline]
+fn record_qa_render(
+    qa_timing: bool,
+    qa_state: &mut QaTimingState,
+    render_elapsed: Duration,
+    collect_time_us: u64,
+) {
+    if qa_timing {
+        qa_state.record_render(render_elapsed);
+        qa_state.maybe_report(collect_time_us);
+    }
+}
+
 fn run_app(
     stdout: &mut io::Stdout,
     mut app: App,
@@ -331,7 +353,7 @@ fn run_app(
             bg_running.store(false, Ordering::Relaxed);
             return Ok(());
         }
-        if qa_timing { qa_state.record_input(input_start.elapsed()); }
+        record_qa_input(qa_timing, &mut qa_state, input_start.elapsed());
 
         apply_pending_snapshots(&rx, &mut app);
 
@@ -353,10 +375,7 @@ fn run_app(
         track_frame_time(&mut frame_times, render_start.elapsed());
         app.update_frame_stats(&frame_times);
 
-        if qa_timing {
-            qa_state.record_render(render_start.elapsed());
-            qa_state.maybe_report(collect_time_us.load(Ordering::Relaxed));
-        }
+        record_qa_render(qa_timing, &mut qa_state, render_start.elapsed(), collect_time_us.load(Ordering::Relaxed));
     }
 
     Ok(())

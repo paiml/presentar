@@ -13,26 +13,32 @@ use sysinfo::{
 use super::config::{DetailLevel, FilesViewMode, PanelType, PtopConfig, SignalType};
 use super::ui::{read_gpu_info, GpuInfo};
 
+/// Parse a single meminfo line to extract value in bytes.
+/// Format: "Label:          1234567 kB"
+#[cfg(target_os = "linux")]
+fn parse_meminfo_line(line: &str) -> Option<u64> {
+    let parts: Vec<&str> = line.split_whitespace().collect();
+    parts.get(1).and_then(|s| s.parse::<u64>().ok()).map(|kb| kb * 1024)
+}
+
+/// Check if line is the Cached memory line (not SwapCached).
+#[cfg(target_os = "linux")]
+fn is_cached_line(line: &str) -> bool {
+    line.starts_with("Cached:") && !line.starts_with("CachedSwap")
+}
+
 /// Read cached memory from /proc/meminfo (Linux only).
 /// Returns bytes, or 0 if unavailable.
 #[cfg(target_os = "linux")]
 fn read_cached_memory() -> u64 {
-    use std::fs;
-    if let Ok(contents) = fs::read_to_string("/proc/meminfo") {
-        for line in contents.lines() {
-            // Look for "Cached:" line (not "SwapCached:")
-            if line.starts_with("Cached:") && !line.starts_with("CachedSwap") {
-                // Format: "Cached:          1234567 kB"
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() >= 2 {
-                    if let Ok(kb) = parts[1].parse::<u64>() {
-                        return kb * 1024; // Convert kB to bytes
-                    }
-                }
-            }
-        }
-    }
-    0
+    std::fs::read_to_string("/proc/meminfo")
+        .ok()
+        .and_then(|contents| {
+            contents.lines()
+                .find(|line| is_cached_line(line))
+                .and_then(parse_meminfo_line)
+        })
+        .unwrap_or(0)
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -2196,7 +2202,11 @@ mod tests {
     }
 
     #[test]
-    fn test_app_filter_processes() {
+    fn test_app_filter_field_assignment() {
+        // NOTE: This only tests the filter FIELD, not actual process filtering.
+        // For actual filtering tests, see falsification_tests.rs:
+        // - falsify_filter_does_not_reduce_count
+        // - falsify_filter_does_not_match_known_process
         let mut app = App::new(true);
         assert!(app.filter.is_empty());
 
@@ -2225,7 +2235,10 @@ mod tests {
     }
 
     #[test]
-    fn test_app_request_signal() {
+    fn test_app_request_signal_deterministic_noop() {
+        // NOTE: This test only verifies no-op behavior in deterministic mode (no processes).
+        // For actual signal request testing, see falsification_tests.rs:
+        // - falsify_request_signal_sets_pending
         let mut app = App::new(true);
         // Deterministic mode has no processes, so this should be a no-op
         app.request_signal(SignalType::Term);
@@ -2439,17 +2452,47 @@ mod tests {
     }
 
     #[test]
-    fn test_metrics_collector_psi_check() {
+    fn test_metrics_collector_has_psi_returns_bool() {
+        // NOTE: has_psi() returns true if /proc/pressure/cpu exists on host.
+        // Deterministic mode still detects real system capabilities.
+        // For actual PSI falsification, see falsification_tests.rs.
         let collector = MetricsCollector::new(true);
-        // Just verify the method exists and doesn't panic
-        let _has_psi = collector.has_psi();
+        let has_psi: bool = collector.has_psi();
+        // Just verify it returns a bool and doesn't panic
+        let _: bool = has_psi; // type check
     }
 
     #[test]
-    fn test_metrics_collector_gpu_check() {
+    fn test_metrics_collector_has_gpu_returns_bool() {
+        // NOTE: has_gpu() returns true if GPU detected on host.
+        // For actual GPU falsification, see falsification_tests.rs.
         let collector = MetricsCollector::new(true);
-        // Just verify the method exists and doesn't panic
-        let _has_gpu = collector.has_gpu();
+        let has_gpu: bool = collector.has_gpu();
+        let _: bool = has_gpu; // type check
+    }
+
+    #[test]
+    fn test_metrics_collector_has_sensors_returns_bool() {
+        // NOTE: has_sensors() returns true if hwmon detected on host.
+        let collector = MetricsCollector::new(true);
+        let has_sensors: bool = collector.has_sensors();
+        let _: bool = has_sensors; // type check
+    }
+
+    #[test]
+    fn test_metrics_collector_has_connections_returns_bool() {
+        // NOTE: has_connections() returns true if /proc/net/tcp readable.
+        let collector = MetricsCollector::new(true);
+        let has_connections: bool = collector.has_connections();
+        let _: bool = has_connections; // type check
+    }
+
+    #[test]
+    fn test_metrics_collector_has_treemap_returns_bool() {
+        // NOTE: has_treemap() returns true if treemap analyzer available.
+        let collector = MetricsCollector::new(true);
+        let has_treemap: bool = collector.has_treemap();
+        let _: bool = has_treemap; // type check
     }
 
     // =========================================================================
@@ -3063,7 +3106,10 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_key_signal_request() {
+    fn test_handle_key_signal_request_deterministic_noop() {
+        // NOTE: This test only verifies no-op behavior in deterministic mode (no processes).
+        // For actual 'x' key signal request testing, see falsification_tests.rs:
+        // - falsify_x_key_creates_pending_signal
         let mut app = App::new(true);
 
         // In deterministic mode, no selected process, so request does nothing

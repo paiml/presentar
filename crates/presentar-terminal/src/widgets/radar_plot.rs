@@ -114,6 +114,17 @@ impl RadarPlot {
         }
         max.max(1.0)
     }
+
+    /// Check if point is within bounds.
+    fn in_bounds(&self, x: f32, y: f32) -> bool {
+        x >= self.bounds.x && x < self.bounds.x + self.bounds.width
+            && y >= self.bounds.y && y < self.bounds.y + self.bounds.height
+    }
+
+    /// Draw a point if in bounds.
+    fn draw_point(&self, canvas: &mut dyn Canvas, x: f32, y: f32, ch: &str, style: &TextStyle) {
+        if self.in_bounds(x, y) { canvas.draw_text(ch, Point::new(x, y), style); }
+    }
 }
 
 impl Default for RadarPlot {
@@ -170,13 +181,7 @@ impl Widget for RadarPlot {
                     let angle = 2.0 * PI * (i as f64) / (n_axes * 4) as f64 - PI / 2.0;
                     let x = center_x + (r * angle.cos() as f32);
                     let y = center_y + (r * angle.sin() as f32);
-                    if x >= self.bounds.x
-                        && x < self.bounds.x + self.bounds.width
-                        && y >= self.bounds.y
-                        && y < self.bounds.y + self.bounds.height
-                    {
-                        canvas.draw_text("·", Point::new(x, y), &grid_style);
-                    }
+                    self.draw_point(canvas, x, y, "·", &grid_style);
                 }
             }
         }
@@ -193,13 +198,7 @@ impl Widget for RadarPlot {
                 let t = step as f32 / steps as f32;
                 let x = center_x + t * (end_x - center_x);
                 let y = center_y + t * (end_y - center_y);
-                if x >= self.bounds.x
-                    && x < self.bounds.x + self.bounds.width
-                    && y >= self.bounds.y
-                    && y < self.bounds.y + self.bounds.height
-                {
-                    canvas.draw_text("·", Point::new(x, y), &grid_style);
-                }
+                self.draw_point(canvas, x, y, "·", &grid_style);
             }
 
             // Draw label
@@ -209,13 +208,7 @@ impl Widget for RadarPlot {
                 let label_y = center_y + (label_r * angle.sin() as f32);
 
                 let label: String = self.axes[i].chars().take(6).collect();
-                if label_x >= self.bounds.x
-                    && label_x < self.bounds.x + self.bounds.width
-                    && label_y >= self.bounds.y
-                    && label_y < self.bounds.y + self.bounds.height
-                {
-                    canvas.draw_text(&label, Point::new(label_x, label_y), &label_style);
-                }
+                self.draw_point(canvas, label_x, label_y, &label, &label_style);
             }
         }
 
@@ -256,25 +249,13 @@ impl Widget for RadarPlot {
                     let t = step as f32 / steps as f32;
                     let x = x1 + t * dx;
                     let y = y1 + t * dy;
-                    if x >= self.bounds.x
-                        && x < self.bounds.x + self.bounds.width
-                        && y >= self.bounds.y
-                        && y < self.bounds.y + self.bounds.height
-                    {
-                        canvas.draw_text("●", Point::new(x, y), &style);
-                    }
+                    self.draw_point(canvas, x, y, "●", &style);
                 }
             }
 
             // Mark vertices
             for &(x, y) in &points {
-                if x >= self.bounds.x
-                    && x < self.bounds.x + self.bounds.width
-                    && y >= self.bounds.y
-                    && y < self.bounds.y + self.bounds.height
-                {
-                    canvas.draw_text("◆", Point::new(x, y), &style);
-                }
+                self.draw_point(canvas, x, y, "◆", &style);
             }
         }
 

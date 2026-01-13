@@ -226,6 +226,50 @@ impl ScatterPlot {
             (0.0, 1.0)
         }
     }
+
+    /// Draw Y-axis labels.
+    fn draw_y_axis(&self, canvas: &mut dyn Canvas, y_min: f64, y_max: f64, plot_y: f32, plot_height: f32, label_style: &TextStyle) {
+        for i in 0..=self.y_axis.ticks {
+            let t = i as f64 / self.y_axis.ticks as f64;
+            let y_val = y_min + (y_max - y_min) * (1.0 - t);
+            let y_pos = plot_y + plot_height * t as f32;
+
+            if y_pos >= plot_y && y_pos < plot_y + plot_height {
+                let label = format!("{y_val:>5.0}");
+                canvas.draw_text(&label, Point::new(self.bounds.x, y_pos), label_style);
+            }
+        }
+    }
+
+    /// Draw X-axis labels.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_x_axis(&self, canvas: &mut dyn Canvas, x_min: f64, x_max: f64, plot_x: f32, plot_y: f32, plot_width: f32, plot_height: f32, label_style: &TextStyle) {
+        for i in 0..=self.x_axis.ticks.min(plot_width as usize / 8) {
+            let t = i as f64 / self.x_axis.ticks as f64;
+            let x_val = x_min + (x_max - x_min) * t;
+            let x_pos = plot_x + plot_width * t as f32;
+
+            if x_pos >= plot_x && x_pos < plot_x + plot_width - 4.0 {
+                let label = format!("{x_val:.0}");
+                canvas.draw_text(&label, Point::new(x_pos, plot_y + plot_height), label_style);
+            }
+        }
+    }
+
+    /// Get color for a point at given index.
+    fn point_color(&self, i: usize, c_min: f64, c_max: f64) -> Color {
+        if let (Some(ref values), Some(ref gradient)) = (&self.color_by, &self.gradient) {
+            if i < values.len() {
+                let c_norm = if c_max > c_min {
+                    (values[i] - c_min) / (c_max - c_min)
+                } else {
+                    0.5
+                };
+                return gradient.sample(c_norm);
+            }
+        }
+        self.color
+    }
 }
 
 impl Default for ScatterPlot {
@@ -281,34 +325,10 @@ impl Widget for ScatterPlot {
             ..Default::default()
         };
 
-        // Draw Y axis labels
+        // Draw axis labels
         if self.show_axes {
-            for i in 0..=self.y_axis.ticks {
-                let t = i as f64 / self.y_axis.ticks as f64;
-                let y_val = y_min + (y_max - y_min) * (1.0 - t);
-                let y_pos = plot_y + plot_height * t as f32;
-
-                if y_pos >= plot_y && y_pos < plot_y + plot_height {
-                    let label = format!("{y_val:>5.0}");
-                    canvas.draw_text(&label, Point::new(self.bounds.x, y_pos), &label_style);
-                }
-            }
-
-            // Draw X axis labels
-            for i in 0..=self.x_axis.ticks.min(plot_width as usize / 8) {
-                let t = i as f64 / self.x_axis.ticks as f64;
-                let x_val = x_min + (x_max - x_min) * t;
-                let x_pos = plot_x + plot_width * t as f32;
-
-                if x_pos >= plot_x && x_pos < plot_x + plot_width - 4.0 {
-                    let label = format!("{x_val:.0}");
-                    canvas.draw_text(
-                        &label,
-                        Point::new(x_pos, plot_y + plot_height),
-                        &label_style,
-                    );
-                }
-            }
+            self.draw_y_axis(canvas, y_min, y_max, plot_y, plot_height, &label_style);
+            self.draw_x_axis(canvas, x_min, x_max, plot_x, plot_y, plot_width, plot_height, &label_style);
         }
 
         // Draw points
@@ -344,25 +364,8 @@ impl Widget for ScatterPlot {
                 continue;
             }
 
-            // Determine color
-            let color =
-                if let (Some(ref values), Some(ref gradient)) = (&self.color_by, &self.gradient) {
-                    if i < values.len() {
-                        let c_norm = if c_max > c_min {
-                            (values[i] - c_min) / (c_max - c_min)
-                        } else {
-                            0.5
-                        };
-                        gradient.sample(c_norm)
-                    } else {
-                        self.color
-                    }
-                } else {
-                    self.color
-                };
-
             let style = TextStyle {
-                color,
+                color: self.point_color(i, c_min, c_max),
                 ..Default::default()
             };
 

@@ -1,6 +1,7 @@
 //! Pixel comparison tests for ptop.
 //!
 //! These tests verify pixel-perfect rendering against baseline snapshots.
+#![cfg(feature = "ptop")]
 
 use presentar_terminal::direct::CellBuffer;
 use presentar_terminal::ptop::App;

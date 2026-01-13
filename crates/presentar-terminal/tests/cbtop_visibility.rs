@@ -8,12 +8,24 @@ use presentar_terminal::{
     ProcessTable,
 };
 
-/// Test that ProcessTable renders with proper colors.
-#[test]
-fn test_process_table_renders_visible_text() {
-    // Create a process table with test data
-    let mut table = ProcessTable::new();
-    table.add_process(ProcessEntry {
+/// Check if a color is visible (not too dark).
+fn is_visible_color(c: &Color) -> bool {
+    c.r > 0.1 || c.g > 0.1 || c.b > 0.1
+}
+
+/// Check if symbol contains a PID digit from "1234".
+fn contains_pid_digit(sym: &str) -> bool {
+    sym.contains('1') || sym.contains('2') || sym.contains('3') || sym.contains('4')
+}
+
+/// Check if symbol could be part of username.
+fn is_username_char(sym: &str) -> bool {
+    sym == "t" || sym == "e" || sym == "s"
+}
+
+/// Create a test process entry for visibility tests.
+fn create_test_process() -> ProcessEntry {
+    ProcessEntry {
         pid: 1234,
         user: "testuser".to_string(),
         cpu_percent: 25.0,
@@ -29,47 +41,33 @@ fn test_process_table_renders_visible_text() {
         tree_depth: 0,
         is_last_child: false,
         tree_prefix: String::new(),
-    });
+    }
+}
 
-    // Create a canvas to render to
+/// Test that ProcessTable renders with proper colors.
+#[test]
+fn test_process_table_renders_visible_text() {
+    use presentar_core::Widget;
+
+    let mut table = ProcessTable::new();
+    table.add_process(create_test_process());
+
     let mut buffer = CellBuffer::new(80, 10);
     let mut canvas = DirectTerminalCanvas::new(&mut buffer);
 
-    // Layout and paint
-    use presentar_core::Widget;
     table.layout(Rect::new(0.0, 0.0, 80.0, 10.0));
     table.paint(&mut canvas);
 
-    // Check that cells contain our test data
     let cells = buffer.cells();
     let mut found_pid = false;
-    let mut found_user = false;
-    let mut found_cmd = false;
 
     for cell in cells {
-        let sym = &cell.symbol;
-        if sym.contains('1') || sym.contains('2') || sym.contains('3') || sym.contains('4') {
-            // Check foreground is not black
-            let fg = cell.fg;
-            assert!(
-                fg.r > 0.1 || fg.g > 0.1 || fg.b > 0.1,
-                "PID digit should not be black, got: ({}, {}, {})",
-                fg.r,
-                fg.g,
-                fg.b
-            );
+        if contains_pid_digit(&cell.symbol) {
+            assert!(is_visible_color(&cell.fg), "PID digit should not be black, got: ({}, {}, {})", cell.fg.r, cell.fg.g, cell.fg.b);
             found_pid = true;
-        }
-        if sym == "t" || sym == "e" || sym == "s" {
-            // Part of testuser or test_cmd
-            let fg = cell.fg;
-            if fg.r > 0.1 || fg.g > 0.1 || fg.b > 0.1 {
-                found_user = true;
-            }
         }
     }
 
-    // We should find visible (non-black) text for PID
     assert!(found_pid, "Should find PID digits in rendered output");
 }
 

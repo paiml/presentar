@@ -6,6 +6,7 @@
 //! - SSIM (Structural Similarity): Layout similarity
 
 use std::collections::HashMap;
+use std::fmt::Write;
 
 use presentar_core::Color;
 
@@ -90,6 +91,59 @@ pub struct TuiComparisonResult {
     pub color_diff_count: usize,
 }
 
+/// Compute color delta-E between two color values.
+#[inline]
+fn compute_color_delta(ref_fg: Rgb, tgt_fg: Rgb) -> f64 {
+    let ref_lab = rgb_to_lab(ref_fg);
+    let tgt_lab = rgb_to_lab(tgt_fg);
+    ciede2000(ref_lab, tgt_lab)
+}
+
+/// Cell comparison result (used internally).
+struct CellComparison {
+    char_differs: bool,
+    color_differs: bool,
+    delta_e: f64,
+    ref_fg: Rgb,
+    tgt_fg: Rgb,
+}
+
+/// Compare two cells and return comparison result.
+#[inline]
+fn compare_cells(ref_cell: &crate::direct::Cell, tgt_cell: &crate::direct::Cell) -> CellComparison {
+    let ref_fg = color_to_rgb(&ref_cell.fg);
+    let tgt_fg = color_to_rgb(&tgt_cell.fg);
+    let delta_e = compute_color_delta(ref_fg, tgt_fg);
+    CellComparison {
+        char_differs: ref_cell.symbol != tgt_cell.symbol,
+        color_differs: delta_e > 2.0,
+        delta_e,
+        ref_fg,
+        tgt_fg,
+    }
+}
+
+/// Compute CLD and average delta-E metrics.
+#[inline]
+fn compute_comparison_metrics(
+    char_diff_count: usize,
+    total_delta_e: f64,
+    total_cells: usize,
+) -> (f64, f64) {
+    if total_cells == 0 {
+        return (0.0, 0.0);
+    }
+    let cld = char_diff_count as f64 / total_cells as f64;
+    let avg_delta_e = total_delta_e / total_cells as f64;
+    (cld, avg_delta_e)
+}
+
+/// Check if result passes the configured thresholds.
+#[inline]
+fn check_thresholds(cld: f64, avg_delta_e: f64, ssim: f64, config: &TuiComparisonConfig) -> bool {
+    cld < config.cld_threshold && avg_delta_e < config.delta_e_threshold && ssim > config.ssim_threshold
+}
+
 /// Compare two TUI cell buffers
 pub fn compare_tui(
     reference: &CellBuffer,
@@ -115,61 +169,31 @@ pub fn compare_tui(
                 continue;
             };
 
-            // Extract foreground colors
-            let ref_fg = color_to_rgb(&ref_cell.fg);
-            let tgt_fg = color_to_rgb(&tgt_cell.fg);
-
-            // Calculate color difference
-            let ref_lab = rgb_to_lab(ref_fg);
-            let tgt_lab = rgb_to_lab(tgt_fg);
-            let delta_e = ciede2000(ref_lab, tgt_lab);
-            total_delta_e += delta_e;
-
-            // Check character difference
-            let char_differs = ref_cell.symbol != tgt_cell.symbol;
-            if char_differs {
-                char_diff_count += 1;
-            }
-
-            // Check significant color difference
-            if delta_e > 2.0 {
-                color_diff_count += 1;
-            }
+            // Compare cells using helper
+            let cmp = compare_cells(ref_cell, tgt_cell);
+            total_delta_e += cmp.delta_e;
+            char_diff_count += cmp.char_differs as usize;
+            color_diff_count += cmp.color_differs as usize;
 
             // Record differing cells
-            if char_differs || delta_e > 2.0 {
+            if cmp.char_differs || cmp.color_differs {
                 diff_cells.push(DiffCell {
                     x,
                     y,
                     reference_char: ref_cell.symbol.chars().next().unwrap_or(' '),
                     target_char: tgt_cell.symbol.chars().next().unwrap_or(' '),
-                    reference_fg: ref_fg,
-                    target_fg: tgt_fg,
-                    delta_e,
+                    reference_fg: cmp.ref_fg,
+                    target_fg: cmp.tgt_fg,
+                    delta_e: cmp.delta_e,
                 });
             }
         }
     }
 
-    // Calculate metrics
-    let cld = if total_cells > 0 {
-        char_diff_count as f64 / total_cells as f64
-    } else {
-        0.0
-    };
-
-    let avg_delta_e = if total_cells > 0 {
-        total_delta_e / total_cells as f64
-    } else {
-        0.0
-    };
-
+    // Calculate metrics using helpers
+    let (cld, avg_delta_e) = compute_comparison_metrics(char_diff_count, total_delta_e, total_cells);
     let ssim = calculate_ssim(reference, target);
-
-    // Determine pass/fail
-    let passed = cld < config.cld_threshold
-        && avg_delta_e < config.delta_e_threshold
-        && ssim > config.ssim_threshold;
+    let passed = check_thresholds(cld, avg_delta_e, ssim, config);
 
     TuiComparisonResult {
         passed,
@@ -363,10 +387,11 @@ pub fn generate_report(result: &TuiComparisonResult, config: &TuiComparisonConfi
     } else {
         "✗ FAIL"
     };
-    report.push_str(&format!(
-        "║  Character Diff (CLD)      {:<15.4} < {:<15.2} {}             ║\n",
+    let _ = writeln!(
+        report,
+        "║  Character Diff (CLD)      {:<15.4} < {:<15.2} {}             ║",
         result.cld, config.cld_threshold, cld_status
-    ));
+    );
 
     // ΔE00
     let de_status = if result.delta_e < config.delta_e_threshold {
@@ -374,10 +399,11 @@ pub fn generate_report(result: &TuiComparisonResult, config: &TuiComparisonConfi
     } else {
         "✗ FAIL"
     };
-    report.push_str(&format!(
-        "║  Color Diff (ΔE00)         {:<15.2} < {:<15.2} {}             ║\n",
+    let _ = writeln!(
+        report,
+        "║  Color Diff (ΔE00)         {:<15.2} < {:<15.2} {}             ║",
         result.delta_e, config.delta_e_threshold, de_status
-    ));
+    );
 
     // SSIM
     let ssim_status = if result.ssim > config.ssim_threshold {
@@ -385,10 +411,11 @@ pub fn generate_report(result: &TuiComparisonResult, config: &TuiComparisonConfi
     } else {
         "✗ FAIL"
     };
-    report.push_str(&format!(
-        "║  Structural (SSIM)         {:<15.3} > {:<15.2} {}             ║\n",
+    let _ = writeln!(
+        report,
+        "║  Structural (SSIM)         {:<15.3} > {:<15.2} {}             ║",
         result.ssim, config.ssim_threshold, ssim_status
-    ));
+    );
 
     report.push_str(
         "║                                                                               ║\n",
@@ -396,10 +423,11 @@ pub fn generate_report(result: &TuiComparisonResult, config: &TuiComparisonConfi
     report.push_str(
         "║  ─────────────────────────────────────────────────────────────────────────── ║\n",
     );
-    report.push_str(&format!(
-        "║  Total cells: {}    Char diffs: {}    Color diffs: {}                ║\n",
+    let _ = writeln!(
+        report,
+        "║  Total cells: {}    Char diffs: {}    Color diffs: {}                ║",
         result.total_cells, result.char_diff_count, result.color_diff_count
-    ));
+    );
     report.push_str(
         "║                                                                               ║\n",
     );

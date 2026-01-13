@@ -11,17 +11,8 @@ import random
 RANDOM_SEED = int(os.environ.get("RANDOM_SEED", "42"))
 
 
-def set_all_seeds(seed: int = RANDOM_SEED) -> None:
-    """Set all random seeds for complete reproducibility.
-
-    Args:
-        seed: Random seed value (default: 42)
-    """
-    # Python random
-    random.seed(seed)
-    os.environ["PYTHONHASHSEED"] = str(seed)
-
-    # NumPy
+def _set_numpy_seed(seed: int) -> None:
+    """Set NumPy random seed."""
     try:
         import numpy as np
         np.random.seed(seed)
@@ -29,7 +20,9 @@ def set_all_seeds(seed: int = RANDOM_SEED) -> None:
     except ImportError:
         pass
 
-    # PyTorch
+
+def _set_pytorch_seed(seed: int) -> None:
+    """Set PyTorch random seeds (CPU and CUDA)."""
     try:
         import torch
         torch.manual_seed(seed)
@@ -42,7 +35,9 @@ def set_all_seeds(seed: int = RANDOM_SEED) -> None:
     except ImportError:
         pass
 
-    # TensorFlow
+
+def _set_tensorflow_seed(seed: int) -> None:
+    """Set TensorFlow random seed."""
     try:
         import tensorflow as tf
         tf.random.set_seed(seed)
@@ -50,14 +45,28 @@ def set_all_seeds(seed: int = RANDOM_SEED) -> None:
     except ImportError:
         pass
 
-    # JAX
+
+def _set_jax_seed(seed: int) -> None:
+    """Document JAX PRNGKey pattern."""
     try:
         import jax
-        # JAX uses explicit PRNGKeys, document the pattern
         print(f"JAX: Use jax.random.PRNGKey({seed})")
     except ImportError:
         pass
 
+
+def set_all_seeds(seed: int = RANDOM_SEED) -> None:
+    """Set all random seeds for complete reproducibility.
+
+    Args:
+        seed: Random seed value (default: 42)
+    """
+    random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    _set_numpy_seed(seed)
+    _set_pytorch_seed(seed)
+    _set_tensorflow_seed(seed)
+    _set_jax_seed(seed)
     print(f"All seeds set to {seed}")
 
 

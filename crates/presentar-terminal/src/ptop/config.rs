@@ -384,25 +384,50 @@ impl Default for ThemeConfig {
 }
 
 /// Keybinding configuration
+/// SPEC-024: All fields documented in YAML must be present
 #[derive(Debug, Clone)]
 pub struct KeybindingConfig {
+    /// Key to quit (default: q)
+    pub quit: String,
+    /// Key to show help (default: ?)
+    pub help: String,
+    /// Key to toggle FPS display (default: f)
+    pub toggle_fps: String,
+    /// Key to enter filter mode (default: /)
+    pub filter: String,
+    /// Key to sort by CPU (default: c)
+    pub sort_cpu: String,
+    /// Key to sort by memory (default: m)
+    pub sort_mem: String,
+    /// Key to sort by PID (default: p)
+    pub sort_pid: String,
+    /// Key to kill/signal process (default: k)
+    pub kill_process: String,
+    /// Key to explode panel (default: Enter)
+    pub explode: String,
+    /// Key to collapse panel (default: Escape)
+    pub collapse: String,
+    /// Key for panel navigation (default: Tab)
+    pub navigate: String,
     /// Keys to toggle panels (default: 1-9)
     pub toggle_panel: String,
-    /// Keys to explode/collapse panel
-    pub explode_panel: Vec<String>,
-    /// Keys for navigation
-    pub navigate: Vec<String>,
-    /// Keys to quit
-    pub quit: Vec<String>,
 }
 
 impl Default for KeybindingConfig {
     fn default() -> Self {
         Self {
+            quit: "q".into(),
+            help: "?".into(),
+            toggle_fps: "f".into(),
+            filter: "/".into(),
+            sort_cpu: "c".into(),
+            sort_mem: "m".into(),
+            sort_pid: "p".into(),
+            kill_process: "k".into(),
+            explode: "Enter".into(),
+            collapse: "Escape".into(),
+            navigate: "Tab".into(),
             toggle_panel: "1-9".into(),
-            explode_panel: vec!["Enter".into(), "z".into()],
-            navigate: vec!["Tab".into(), "Shift+Tab".into(), "hjkl".into()],
-            quit: vec!["q".into(), "Ctrl+c".into()],
         }
     }
 }
@@ -710,7 +735,69 @@ keybindings:
                         }
                     }
 
-                    // Nested sections (skip silently, not yet implemented)
+                    // Keybinding settings (SPEC-024: all documented fields parsed)
+                    "quit" => {
+                        if !value.is_empty() {
+                            config.keybindings.quit = value.to_string();
+                        }
+                    }
+                    "help" => {
+                        if !value.is_empty() {
+                            config.keybindings.help = value.trim_matches('"').to_string();
+                        }
+                    }
+                    "toggle_fps" => {
+                        if !value.is_empty() {
+                            config.keybindings.toggle_fps = value.to_string();
+                        }
+                    }
+                    "filter" => {
+                        if !value.is_empty() {
+                            config.keybindings.filter = value.trim_matches('"').to_string();
+                        }
+                    }
+                    "sort_cpu" => {
+                        if !value.is_empty() {
+                            config.keybindings.sort_cpu = value.to_string();
+                        }
+                    }
+                    "sort_mem" => {
+                        if !value.is_empty() {
+                            config.keybindings.sort_mem = value.to_string();
+                        }
+                    }
+                    "sort_pid" => {
+                        if !value.is_empty() {
+                            config.keybindings.sort_pid = value.to_string();
+                        }
+                    }
+                    "kill_process" => {
+                        if !value.is_empty() {
+                            config.keybindings.kill_process = value.to_string();
+                        }
+                    }
+                    "explode" => {
+                        if !value.is_empty() {
+                            config.keybindings.explode = value.to_string();
+                        }
+                    }
+                    "collapse" => {
+                        if !value.is_empty() {
+                            config.keybindings.collapse = value.to_string();
+                        }
+                    }
+                    "navigate" => {
+                        if !value.is_empty() {
+                            config.keybindings.navigate = value.to_string();
+                        }
+                    }
+                    "toggle_panel" => {
+                        if !value.is_empty() {
+                            config.keybindings.toggle_panel = value.to_string();
+                        }
+                    }
+
+                    // Nested sections (skip silently - structure headers only)
                     "layout" | "panels" | "keybindings" | "theme" | "version" => {}
 
                     // Unknown field warning
@@ -1271,7 +1358,7 @@ min_panel_width: 30
     fn test_keybinding_config_default() {
         let config = KeybindingConfig::default();
         assert_eq!(config.toggle_panel, "1-9");
-        assert!(config.quit.contains(&"q".to_string()));
+        assert_eq!(config.quit, "q");
     }
 
     #[test]
@@ -1279,6 +1366,86 @@ min_panel_width: 30
         let config = KeybindingConfig::default();
         let debug = format!("{:?}", config);
         assert!(debug.contains("KeybindingConfig"));
+    }
+
+    // SPEC-024: KeybindingConfig field tests (TDD - interface-defining)
+    // These tests define the required keybinding fields documented in YAML
+
+    #[test]
+    fn test_keybinding_has_help_field() {
+        let config = KeybindingConfig::default();
+        // YAML documents: help: "?"
+        assert_eq!(config.help, "?");
+    }
+
+    #[test]
+    fn test_keybinding_has_toggle_fps_field() {
+        let config = KeybindingConfig::default();
+        // YAML documents: toggle_fps: f
+        assert_eq!(config.toggle_fps, "f");
+    }
+
+    #[test]
+    fn test_keybinding_has_filter_field() {
+        let config = KeybindingConfig::default();
+        // YAML documents: filter: "/"
+        assert_eq!(config.filter, "/");
+    }
+
+    #[test]
+    fn test_keybinding_has_sort_cpu_field() {
+        let config = KeybindingConfig::default();
+        // YAML documents: sort_cpu: c
+        assert_eq!(config.sort_cpu, "c");
+    }
+
+    #[test]
+    fn test_keybinding_has_sort_mem_field() {
+        let config = KeybindingConfig::default();
+        // YAML documents: sort_mem: m
+        assert_eq!(config.sort_mem, "m");
+    }
+
+    #[test]
+    fn test_keybinding_has_sort_pid_field() {
+        let config = KeybindingConfig::default();
+        // YAML documents: sort_pid: p
+        assert_eq!(config.sort_pid, "p");
+    }
+
+    #[test]
+    fn test_keybinding_has_kill_process_field() {
+        let config = KeybindingConfig::default();
+        // YAML documents: kill_process: k
+        assert_eq!(config.kill_process, "k");
+    }
+
+    #[test]
+    fn test_keybinding_has_explode_field() {
+        let config = KeybindingConfig::default();
+        // YAML documents: explode: Enter
+        assert_eq!(config.explode, "Enter");
+    }
+
+    #[test]
+    fn test_keybinding_has_collapse_field() {
+        let config = KeybindingConfig::default();
+        // YAML documents: collapse: Escape
+        assert_eq!(config.collapse, "Escape");
+    }
+
+    #[test]
+    fn test_keybinding_yaml_parsing() {
+        let yaml = r#"
+keybindings:
+  quit: Q
+  help: F1
+  filter: s
+"#;
+        let config = PtopConfig::parse_yaml(yaml).unwrap();
+        assert_eq!(config.keybindings.quit, "Q");
+        assert_eq!(config.keybindings.help, "F1");
+        assert_eq!(config.keybindings.filter, "s");
     }
 
     // PtopConfig tests

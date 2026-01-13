@@ -138,60 +138,42 @@ fn format_scene_error(e: &SceneError) -> String {
     }
 }
 
-#[allow(clippy::too_many_lines)]
-fn print_scene_info(scene: &Scene) {
+fn print_scene_metadata(scene: &Scene) {
     println!();
     println!("  \x1b[1mScene Information\x1b[0m");
     println!("  ─────────────────");
     println!("  Version:     {}", scene.prs_version);
     println!("  Name:        {}", scene.metadata.name);
+    if let Some(title) = &scene.metadata.title { println!("  Title:       {title}"); }
+    if let Some(author) = &scene.metadata.author { println!("  Author:      {author}"); }
+    if let Some(license) = &scene.metadata.license { println!("  License:     {license}"); }
+    if !scene.metadata.tags.is_empty() { println!("  Tags:        {}", scene.metadata.tags.join(", ")); }
+}
 
-    if let Some(title) = &scene.metadata.title {
-        println!("  Title:       {title}");
-    }
-
-    if let Some(author) = &scene.metadata.author {
-        println!("  Author:      {author}");
-    }
-
-    if let Some(license) = &scene.metadata.license {
-        println!("  License:     {license}");
-    }
-
-    if !scene.metadata.tags.is_empty() {
-        println!("  Tags:        {}", scene.metadata.tags.join(", "));
-    }
-
+fn print_scene_layout(scene: &Scene) {
     println!();
     println!("  \x1b[1mLayout\x1b[0m");
     println!("  ──────");
     println!("  Type:        {:?}", scene.layout.layout_type);
-    if let Some(cols) = scene.layout.columns {
-        println!("  Columns:     {cols}");
-    }
-    if let Some(rows) = scene.layout.rows {
-        println!("  Rows:        {rows}");
-    }
+    if let Some(cols) = scene.layout.columns { println!("  Columns:     {cols}"); }
+    if let Some(rows) = scene.layout.rows { println!("  Rows:        {rows}"); }
     println!("  Gap:         {}px", scene.layout.gap);
+}
 
+fn print_scene_widgets(scene: &Scene) {
     println!();
     println!("  \x1b[1mWidgets ({} total)\x1b[0m", scene.widgets.len());
     println!("  ─────────────────");
     for widget in &scene.widgets {
-        let pos = widget
-            .position
-            .as_ref()
-            .map(|p| format!(" @ ({}, {})", p.row, p.col))
-            .unwrap_or_default();
+        let pos = widget.position.as_ref().map(|p| format!(" @ ({}, {})", p.row, p.col)).unwrap_or_default();
         println!("  • {} ({:?}){}", widget.id, widget.widget_type, pos);
     }
+}
 
+fn print_scene_resources(scene: &Scene) {
     if !scene.resources.models.is_empty() {
         println!();
-        println!(
-            "  \x1b[1mModels ({} total)\x1b[0m",
-            scene.resources.models.len()
-        );
+        println!("  \x1b[1mModels ({} total)\x1b[0m", scene.resources.models.len());
         println!("  ─────────────────");
         for (name, model) in &scene.resources.models {
             let hash_status = if model.hash.is_some() { "✓" } else { "○" };
@@ -199,13 +181,9 @@ fn print_scene_info(scene: &Scene) {
             println!("    Source: {}", model.source.primary());
         }
     }
-
     if !scene.resources.datasets.is_empty() {
         println!();
-        println!(
-            "  \x1b[1mDatasets ({} total)\x1b[0m",
-            scene.resources.datasets.len()
-        );
+        println!("  \x1b[1mDatasets ({} total)\x1b[0m", scene.resources.datasets.len());
         println!("  ───────────────────");
         for (name, dataset) in &scene.resources.datasets {
             let hash_status = if dataset.hash.is_some() { "✓" } else { "○" };
@@ -213,63 +191,51 @@ fn print_scene_info(scene: &Scene) {
             println!("    Source: {}", dataset.source.primary());
         }
     }
+}
 
-    if !scene.bindings.is_empty() {
-        println!();
-        println!("  \x1b[1mBindings ({} total)\x1b[0m", scene.bindings.len());
-        println!("  ──────────────────");
-        for binding in &scene.bindings {
-            let debounce = binding
-                .debounce_ms
-                .map(|ms| format!(" (debounce: {ms}ms)"))
-                .unwrap_or_default();
-            println!("  • {}{debounce}", binding.trigger);
-            for action in &binding.actions {
-                let act = action.action.as_deref().unwrap_or("update");
-                println!("    → {} [{}]", action.target, act);
-            }
+fn print_scene_bindings(scene: &Scene) {
+    if scene.bindings.is_empty() { return; }
+    println!();
+    println!("  \x1b[1mBindings ({} total)\x1b[0m", scene.bindings.len());
+    println!("  ──────────────────");
+    for binding in &scene.bindings {
+        let debounce = binding.debounce_ms.map(|ms| format!(" (debounce: {ms}ms)")).unwrap_or_default();
+        println!("  • {}{debounce}", binding.trigger);
+        for action in &binding.actions {
+            let act = action.action.as_deref().unwrap_or("update");
+            println!("    → {} [{}]", action.target, act);
         }
     }
+}
 
-    if let Some(theme) = &scene.theme {
-        println!();
-        println!("  \x1b[1mTheme\x1b[0m");
-        println!("  ─────");
-        if let Some(preset) = &theme.preset {
-            println!("  Preset:      {preset}");
-        }
-        if !theme.custom.is_empty() {
-            println!("  Custom:      {} properties", theme.custom.len());
-        }
-    }
+fn print_scene_theme(scene: &Scene) {
+    let Some(theme) = &scene.theme else { return; };
+    println!();
+    println!("  \x1b[1mTheme\x1b[0m");
+    println!("  ─────");
+    if let Some(preset) = &theme.preset { println!("  Preset:      {preset}"); }
+    if !theme.custom.is_empty() { println!("  Custom:      {} properties", theme.custom.len()); }
+}
 
-    if !scene.permissions.network.is_empty()
-        || !scene.permissions.filesystem.is_empty()
-        || scene.permissions.clipboard
-        || scene.permissions.camera
-    {
-        println!();
-        println!("  \x1b[1mPermissions\x1b[0m");
-        println!("  ───────────");
-        if !scene.permissions.network.is_empty() {
-            println!(
-                "  Network:     {} pattern(s)",
-                scene.permissions.network.len()
-            );
-        }
-        if !scene.permissions.filesystem.is_empty() {
-            println!(
-                "  Filesystem:  {} pattern(s)",
-                scene.permissions.filesystem.len()
-            );
-        }
-        if scene.permissions.clipboard {
-            println!("  Clipboard:   allowed");
-        }
-        if scene.permissions.camera {
-            println!("  Camera:      allowed");
-        }
-    }
+fn print_scene_permissions(scene: &Scene) {
+    let p = &scene.permissions;
+    if p.network.is_empty() && p.filesystem.is_empty() && !p.clipboard && !p.camera { return; }
+    println!();
+    println!("  \x1b[1mPermissions\x1b[0m");
+    println!("  ───────────");
+    if !p.network.is_empty() { println!("  Network:     {} pattern(s)", p.network.len()); }
+    if !p.filesystem.is_empty() { println!("  Filesystem:  {} pattern(s)", p.filesystem.len()); }
+    if p.clipboard { println!("  Clipboard:   allowed"); }
+    if p.camera { println!("  Camera:      allowed"); }
+}
 
+fn print_scene_info(scene: &Scene) {
+    print_scene_metadata(scene);
+    print_scene_layout(scene);
+    print_scene_widgets(scene);
+    print_scene_resources(scene);
+    print_scene_bindings(scene);
+    print_scene_theme(scene);
+    print_scene_permissions(scene);
     println!();
 }

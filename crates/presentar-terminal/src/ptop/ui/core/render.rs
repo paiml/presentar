@@ -1349,151 +1349,91 @@ fn draw_network_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
     }
 }
 
-fn draw_process_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
-    // ttop uses "CPU%" not "CPU" for percentage-based columns
-    let sort_name = match app.sort_column {
+/// Get display name for sort column
+fn sort_column_name(col: ProcessSortColumn) -> &'static str {
+    match col {
         ProcessSortColumn::Cpu => "CPU%",
         ProcessSortColumn::Mem => "MEM%",
         ProcessSortColumn::Pid => "PID",
         ProcessSortColumn::User => "USER",
         ProcessSortColumn::Command => "CMD",
-    };
-    let arrow = if app.sort_descending { "▼" } else { "▲" };
-    let filter_str = if app.filter.is_empty() {
-        String::new()
+    }
+}
+
+/// Convert sysinfo process status to ProcessState
+fn convert_process_status(status: sysinfo::ProcessStatus) -> ProcessState {
+    match status {
+        sysinfo::ProcessStatus::Run => ProcessState::Running,
+        sysinfo::ProcessStatus::Sleep => ProcessState::Sleeping,
+        sysinfo::ProcessStatus::Idle => ProcessState::Idle,
+        sysinfo::ProcessStatus::Zombie => ProcessState::Zombie,
+        sysinfo::ProcessStatus::Stop => ProcessState::Stopped,
+        sysinfo::ProcessStatus::UninterruptibleDiskSleep => ProcessState::DiskWait,
+        _ => ProcessState::Sleeping,
+    }
+}
+
+/// Get process command string (either name or full cmdline in exploded mode)
+fn get_process_command(p: &sysinfo::Process, is_exploded: bool, max_len: usize) -> String {
+    if is_exploded {
+        let cmdline: Vec<String> = p.cmd().iter().map(|s| s.to_string_lossy().to_string()).collect();
+        if cmdline.is_empty() {
+            p.name().to_string_lossy().chars().take(max_len).collect()
+        } else {
+            cmdline.join(" ").chars().take(max_len).collect()
+        }
     } else {
-        format!(" │ Filter: \"{}\"", app.filter)
-    };
+        p.name().to_string_lossy().chars().take(max_len).collect()
+    }
+}
 
-    // ttop-style title (Border adds outer spaces)
-    // Deterministic: "Processes (0) │ Sort: CPU% ▼"
-    let title = format!(
-        "Processes ({}) │ Sort: {} {}{}",
-        app.process_count(),
-        sort_name,
-        arrow,
-        filter_str
-    );
+fn draw_process_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
+    let sort_name = sort_column_name(app.sort_column);
+    let arrow = if app.sort_descending { "▼" } else { "▲" };
+    let filter_str = if app.filter.is_empty() { String::new() } else { format!(" │ Filter: \"{}\"", app.filter) };
+    let title = format!("Processes ({}) │ Sort: {} {}{}", app.process_count(), sort_name, arrow, filter_str);
 
-    // Check if this panel is focused (SPEC-024 v5.0 Feature D)
     let is_focused = app.is_panel_focused(PanelType::Process);
     let mut border = create_panel_border(&title, PROCESS_COLOR, is_focused);
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
 
-    if inner.height < 2.0 {
-        return;
-    }
+    if inner.height < 2.0 { return; }
 
-    // In deterministic mode, show ttop-style header and empty list
     if app.deterministic {
-        // ttop header: "PID    S  C%   M%   COMMAND"
-        let header = "PID    S  C%   M%   COMMAND";
-        canvas.draw_text(
-            header,
-            Point::new(inner.x, inner.y),
-            &TextStyle {
-                color: PROCESS_COLOR,
-                ..Default::default()
-            },
-        );
-        // Empty process list (no separator, no "No processes" message)
+        canvas.draw_text("PID    S  C%   M%   COMMAND", Point::new(inner.x, inner.y), &TextStyle { color: PROCESS_COLOR, ..Default::default() });
         return;
     }
 
-    // Get sorted processes
     let procs = app.sorted_processes();
     let total_mem = app.mem_total as f64;
-
-    // Get extended process info from analyzer
     let process_extra_data = app.analyzers.process_extra_data();
-
-    // Detect exploded mode: when panel is large (fullscreen), show more detail
-    // User request: show full command path when exploded so "rustc...which project?" is answered
     let is_exploded = inner.height > 30.0 || inner.width > 100.0;
     let max_cmd_len = if is_exploded { 200 } else { 40 };
 
-    // Convert to ProcessEntry with state and extended info
     let entries: Vec<ProcessEntry> = procs
         .iter()
         .take(if is_exploded { 500 } else { 100 })
         .map(|p| {
             let pid = p.pid().as_u32();
-            let mem_pct = if total_mem > 0.0 {
-                (p.memory() as f64 / total_mem) * 100.0
-            } else {
-                0.0
-            };
-            // Resolve UID to username using Users lookup table
-            let user = p
-                .user_id()
-                .and_then(|uid| app.users.get_user_by_id(uid))
-                .map(|u| u.name().to_string())
-                .unwrap_or_else(|| "-".to_string());
+            let mem_pct = if total_mem > 0.0 { (p.memory() as f64 / total_mem) * 100.0 } else { 0.0 };
+            let user = p.user_id().and_then(|uid| app.users.get_user_by_id(uid)).map(|u| u.name().to_string()).unwrap_or_else(|| "-".to_string());
             let user_short: String = user.chars().take(8).collect();
+            let cmd = get_process_command(p, is_exploded, max_cmd_len);
+            let state = convert_process_status(p.status());
 
-            // In exploded mode, show full command line with path
-            let cmd: String = if is_exploded {
-                // Try to get full command line
-                let cmdline: Vec<String> = p
-                    .cmd()
-                    .iter()
-                    .map(|s| s.to_string_lossy().to_string())
-                    .collect();
-                if cmdline.is_empty() {
-                    p.name()
-                        .to_string_lossy()
-                        .chars()
-                        .take(max_cmd_len)
-                        .collect()
-                } else {
-                    cmdline.join(" ").chars().take(max_cmd_len).collect()
-                }
-            } else {
-                p.name()
-                    .to_string_lossy()
-                    .chars()
-                    .take(max_cmd_len)
-                    .collect()
-            };
-
-            // Convert sysinfo status to ProcessState
-            let state = match p.status() {
-                sysinfo::ProcessStatus::Run => ProcessState::Running,
-                sysinfo::ProcessStatus::Sleep => ProcessState::Sleeping,
-                sysinfo::ProcessStatus::Idle => ProcessState::Idle,
-                sysinfo::ProcessStatus::Zombie => ProcessState::Zombie,
-                sysinfo::ProcessStatus::Stop => ProcessState::Stopped,
-                sysinfo::ProcessStatus::UninterruptibleDiskSleep => ProcessState::DiskWait,
-                _ => ProcessState::Sleeping,
-            };
-
-            let mut entry =
-                ProcessEntry::new(pid, &user_short, p.cpu_usage(), mem_pct as f32, &cmd)
-                    .with_state(state);
-
-            // Add extended process info if available
+            let mut entry = ProcessEntry::new(pid, &user_short, p.cpu_usage(), mem_pct as f32, &cmd).with_state(state);
             if let Some(extra_data) = process_extra_data {
                 if let Some(extra) = extra_data.get(pid) {
-                    entry = entry
-                        .with_oom_score(extra.oom_score)
-                        .with_cgroup(extra.cgroup_short())
-                        .with_nice(extra.nice)
-                        .with_threads(extra.num_threads);
+                    entry = entry.with_oom_score(extra.oom_score).with_cgroup(extra.cgroup_short()).with_nice(extra.nice).with_threads(extra.num_threads);
                 }
             }
-
             entry
         })
         .collect();
 
-    // In exploded mode, use full table with cmdline; otherwise compact with threads
-    let mut table = if is_exploded {
-        ProcessTable::new().with_cmdline().with_threads_column()
-    } else {
-        ProcessTable::new().compact().with_threads_column()
-    };
+    let mut table = if is_exploded { ProcessTable::new().with_cmdline().with_threads_column() } else { ProcessTable::new().compact().with_threads_column() };
     table.set_processes(entries);
     table.select(app.process_selected);
     table.layout(inner);
@@ -1841,6 +1781,31 @@ fn draw_gpu_procs(app: &App, canvas: &mut DirectTerminalCanvas<'_>, inner: Rect,
     }
 }
 
+/// Draw GPU temperature if available and within bounds.
+fn draw_gpu_temp(canvas: &mut DirectTerminalCanvas<'_>, inner: Rect, y: &mut f32, temp: u32) {
+    if *y >= inner.y + inner.height { return; }
+    canvas.draw_text(&format!("Temp {temp}°C"), Point::new(inner.x, *y), &TextStyle { color: gpu_temp_color(temp), ..Default::default() });
+    *y += 1.0;
+}
+
+/// Draw GPU power if available and within bounds.
+fn draw_gpu_power(canvas: &mut DirectTerminalCanvas<'_>, inner: Rect, y: &mut f32, power: f32) {
+    if *y >= inner.y + inner.height { return; }
+    canvas.draw_text(&format!("Power {power:.0}W"), Point::new(inner.x, *y), &TextStyle { color: POWER_COLOR, ..Default::default() });
+    *y += 1.0;
+}
+
+/// Draw GPU panel content when GPU is present.
+fn draw_gpu_content(app: &App, canvas: &mut DirectTerminalCanvas<'_>, inner: Rect, gpu: &GpuInfo, detail_level: DetailLevel) {
+    let mut y = inner.y;
+    if let Some(util) = gpu.utilization { draw_gpu_util_bar(canvas, inner, &mut y, util); }
+    if let (Some(used), Some(total)) = (gpu.vram_used, gpu.vram_total) { draw_vram_bar(canvas, inner, &mut y, used, total); }
+    if let Some(temp) = gpu.temperature { draw_gpu_temp(canvas, inner, &mut y, temp); }
+    if let Some(power) = gpu.power_watts { draw_gpu_power(canvas, inner, &mut y, power); }
+    if detail_level == DetailLevel::Exploded && y < inner.y + inner.height - 10.0 { draw_gpu_history_graphs(app, canvas, inner, &mut y); }
+    if detail_level >= DetailLevel::Expanded && y < inner.y + inner.height - 3.0 { draw_gpu_procs(app, canvas, inner, &mut y); }
+}
+
 fn draw_gpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
     let detail_level = DetailLevel::for_height(bounds.height as u16);
     let gpu = app.gpu_info.clone();
@@ -1855,14 +1820,8 @@ fn draw_gpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
 
     canvas.push_clip(inner);
 
-    if let Some(g) = gpu {
-        let mut y = inner.y;
-        if let Some(util) = g.utilization { draw_gpu_util_bar(canvas, inner, &mut y, util); }
-        if let (Some(used), Some(total)) = (g.vram_used, g.vram_total) { draw_vram_bar(canvas, inner, &mut y, used, total); }
-        if let Some(temp) = g.temperature { if y < inner.y + inner.height { canvas.draw_text(&format!("Temp {temp}°C"), Point::new(inner.x, y), &TextStyle { color: gpu_temp_color(temp), ..Default::default() }); y += 1.0; } }
-        if let Some(power) = g.power_watts { if y < inner.y + inner.height { canvas.draw_text(&format!("Power {power:.0}W"), Point::new(inner.x, y), &TextStyle { color: POWER_COLOR, ..Default::default() }); y += 1.0; } }
-        if detail_level == DetailLevel::Exploded && y < inner.y + inner.height - 10.0 { draw_gpu_history_graphs(app, canvas, inner, &mut y); }
-        if detail_level >= DetailLevel::Expanded && y < inner.y + inner.height - 3.0 { draw_gpu_procs(app, canvas, inner, &mut y); }
+    if let Some(ref g) = gpu {
+        draw_gpu_content(app, canvas, inner, g, detail_level);
     } else if !app.deterministic {
         canvas.draw_text("No GPU detected or nvidia-smi not available", Point::new(inner.x, inner.y), &TextStyle { color: HEADER_COLOR, ..Default::default() });
     }
@@ -2063,48 +2022,103 @@ fn draw_battery_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
     }
 }
 
-/// F008: Sensors Panel - shows temperature sensors with health indicators
-fn draw_sensors_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
-    use crate::ptop::analyzers::{SensorStatus, SensorType};
-    use sysinfo::{Component, Components};
+/// Get temperature indicator and color based on threshold.
+fn temp_indicator_color(temp: f32) -> (&'static str, Color) {
+    if temp > 85.0 {
+        ("✗", Color { r: 1.0, g: 0.3, b: 0.3, a: 1.0 })
+    } else if temp > 70.0 {
+        ("⚠", Color { r: 1.0, g: 0.8, b: 0.2, a: 1.0 })
+    } else {
+        ("✓", Color { r: 0.3, g: 0.9, b: 0.3, a: 1.0 })
+    }
+}
 
-    // In deterministic mode, show 0°C like ttop
-    let (components, max_temp) = if app.deterministic {
+/// Get sensor status indicator and color.
+fn sensor_status_indicator(status: crate::ptop::analyzers::SensorStatus, is_fan: bool) -> (&'static str, Color) {
+    use crate::ptop::analyzers::SensorStatus;
+    match status {
+        SensorStatus::Critical | SensorStatus::Fault => ("✗", Color { r: 1.0, g: 0.3, b: 0.3, a: 1.0 }),
+        SensorStatus::Warning | SensorStatus::Low => ("⚠", Color { r: 1.0, g: 0.8, b: 0.2, a: 1.0 }),
+        SensorStatus::Normal => if is_fan {
+            ("✓", Color { r: 0.3, g: 0.8, b: 0.9, a: 1.0 })
+        } else {
+            ("✓", Color { r: 0.9, g: 0.7, b: 0.3, a: 1.0 })
+        },
+    }
+}
+
+/// Draw a sensor row.
+fn draw_sensor_row(canvas: &mut dyn Canvas, x: f32, y: f32, text: &str, color: Color) {
+    canvas.draw_text(text, Point::new(x, y), &TextStyle { color, ..Default::default() });
+}
+
+/// Build sensor title extra info string from health data.
+fn build_sensor_extra_info(health_data: Option<&crate::ptop::analyzers::SensorHealthData>) -> String {
+    use crate::ptop::analyzers::SensorType;
+    let Some(data) = health_data else { return String::new(); };
+    let fan_count = data.type_counts.get(&SensorType::Fan).copied().unwrap_or(0);
+    let volt_count = data.type_counts.get(&SensorType::Voltage).copied().unwrap_or(0);
+    if fan_count > 0 || volt_count > 0 {
+        format!(" │ {fan_count}F {volt_count}V")
+    } else {
+        String::new()
+    }
+}
+
+/// Collect system components if not in deterministic mode.
+fn collect_sensor_components(deterministic: bool) -> (Option<sysinfo::Components>, f32) {
+    use sysinfo::{Component, Components};
+    if deterministic {
         (None, 0.0_f32)
     } else {
         let comps = Components::new_with_refreshed_list();
-        let temp = comps
-            .iter()
-            .filter_map(Component::temperature)
-            .fold(0.0_f32, f32::max);
+        let temp = comps.iter().filter_map(Component::temperature).fold(0.0_f32, f32::max);
         (Some(comps), temp)
-    };
+    }
+}
 
-    // Get additional sensor data from analyzer (fan RPM, voltage, etc.)
+/// Draw temperature sensors from sysinfo Components.
+fn draw_temp_sensors(canvas: &mut dyn Canvas, comps: &sysinfo::Components, inner: Rect, y: &mut f32, rows_used: &mut usize, max_rows: usize) {
+    for component in comps {
+        if *rows_used >= max_rows { break; }
+        let Some(temp) = component.temperature() else { continue; };
+        let label_short: String = component.label().chars().take(12).collect();
+        let (indicator, color) = temp_indicator_color(temp);
+        let text = format!("{indicator} {label_short:<12} {temp:>5.1}°C");
+        draw_sensor_row(canvas, inner.x, *y, &text, color);
+        *y += 1.0;
+        *rows_used += 1;
+    }
+}
+
+/// Draw fan and voltage sensors from health data.
+fn draw_health_sensors(canvas: &mut dyn Canvas, health_data: &crate::ptop::analyzers::SensorHealthData, inner: Rect, y: &mut f32, rows_used: &mut usize, max_rows: usize) {
+    use crate::ptop::analyzers::SensorType;
+    // Fan sensors
+    for fan in health_data.fans() {
+        if *rows_used >= max_rows { break; }
+        let (indicator, color) = sensor_status_indicator(fan.status, true);
+        let text = format!("{indicator} {:<12} {:>5.0} RPM", fan.short_label(), fan.value);
+        draw_sensor_row(canvas, inner.x, *y, &text, color);
+        *y += 1.0;
+        *rows_used += 1;
+    }
+    // Voltage sensors
+    for volt in health_data.by_type(SensorType::Voltage) {
+        if *rows_used >= max_rows { break; }
+        let (indicator, color) = sensor_status_indicator(volt.status, false);
+        let text = format!("{indicator} {:<12} {:>6.2}V", volt.short_label(), volt.value);
+        draw_sensor_row(canvas, inner.x, *y, &text, color);
+        *y += 1.0;
+        *rows_used += 1;
+    }
+}
+
+/// F008: Sensors Panel - shows temperature sensors with health indicators
+fn draw_sensors_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
+    let (components, max_temp) = collect_sensor_components(app.deterministic);
     let sensor_health_data = app.snapshot_sensor_health.as_ref();
-
-    // Build title string with sensor counts.
-    let extra_info = if let Some(health_data) = sensor_health_data {
-        let fan_count = health_data
-            .type_counts
-            .get(&SensorType::Fan)
-            .copied()
-            .unwrap_or(0);
-        let volt_count = health_data
-            .type_counts
-            .get(&SensorType::Voltage)
-            .copied()
-            .unwrap_or(0);
-        if fan_count > 0 || volt_count > 0 {
-            format!(" │ {fan_count}F {volt_count}V")
-        } else {
-            String::new()
-        }
-    } else {
-        String::new()
-    };
-
-    // ttop-style title (Border adds outer spaces)
+    let extra_info = build_sensor_extra_info(sensor_health_data);
     let title = format!("Sensors │ {max_temp:.0}°C{extra_info}");
 
     // Check if this panel is focused (SPEC-024 v5.0 Feature D)
@@ -2114,204 +2128,20 @@ fn draw_sensors_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
     border.paint(canvas);
     let inner = border.inner_rect();
 
-    if inner.height < 1.0 {
-        return;
-    }
-
-    // In deterministic mode, components is None - don't show any sensors
-    let Some(ref comps) = components else {
-        return;
-    };
+    if inner.height < 1.0 { return; }
+    let Some(ref comps) = components else { return; };
 
     let mut y = inner.y;
     let max_rows = inner.height as usize;
     let mut rows_used = 0;
 
-    // First show temperature sensors from sysinfo
-    for component in comps {
-        if rows_used >= max_rows {
-            break;
-        }
-
-        let label = component.label();
-        let label_short: String = label.chars().take(12).collect();
-
-        // Get temperature, skip if not available
-        let Some(temp) = component.temperature() else {
-            continue;
-        };
-
-        // Health indicator based on temperature
-        let (indicator, color) = if temp > 85.0 {
-            (
-                "✗",
-                Color {
-                    r: 1.0,
-                    g: 0.3,
-                    b: 0.3,
-                    a: 1.0,
-                },
-            )
-        } else if temp > 70.0 {
-            (
-                "⚠",
-                Color {
-                    r: 1.0,
-                    g: 0.8,
-                    b: 0.2,
-                    a: 1.0,
-                },
-            )
-        } else {
-            (
-                "✓",
-                Color {
-                    r: 0.3,
-                    g: 0.9,
-                    b: 0.3,
-                    a: 1.0,
-                },
-            )
-        };
-
-        let text = format!("{indicator} {label_short:<12} {temp:>5.1}°C");
-        canvas.draw_text(
-            &text,
-            Point::new(inner.x, y),
-            &TextStyle {
-                color,
-                ..Default::default()
-            },
-        );
-        y += 1.0;
-        rows_used += 1;
-    }
-
-    // Then show fan and voltage sensors from sensor_health analyzer
+    draw_temp_sensors(canvas, comps, inner, &mut y, &mut rows_used, max_rows);
     if let Some(health_data) = sensor_health_data {
-        // Fan sensors
-        for fan in health_data.fans() {
-            if rows_used >= max_rows {
-                break;
-            }
-
-            let (indicator, color) = match fan.status {
-                SensorStatus::Critical | SensorStatus::Fault => (
-                    "✗",
-                    Color {
-                        r: 1.0,
-                        g: 0.3,
-                        b: 0.3,
-                        a: 1.0,
-                    },
-                ),
-                SensorStatus::Warning | SensorStatus::Low => (
-                    "⚠",
-                    Color {
-                        r: 1.0,
-                        g: 0.8,
-                        b: 0.2,
-                        a: 1.0,
-                    },
-                ),
-                SensorStatus::Normal => (
-                    "✓",
-                    Color {
-                        r: 0.3,
-                        g: 0.8,
-                        b: 0.9,
-                        a: 1.0,
-                    },
-                ),
-            };
-
-            let text = format!(
-                "{indicator} {:<12} {:>5.0} RPM",
-                fan.short_label(),
-                fan.value
-            );
-            canvas.draw_text(
-                &text,
-                Point::new(inner.x, y),
-                &TextStyle {
-                    color,
-                    ..Default::default()
-                },
-            );
-            y += 1.0;
-            rows_used += 1;
-        }
-
-        // Voltage sensors
-        for volt in health_data.by_type(SensorType::Voltage) {
-            if rows_used >= max_rows {
-                break;
-            }
-
-            let (indicator, color) = match volt.status {
-                SensorStatus::Critical | SensorStatus::Fault => (
-                    "✗",
-                    Color {
-                        r: 1.0,
-                        g: 0.3,
-                        b: 0.3,
-                        a: 1.0,
-                    },
-                ),
-                SensorStatus::Warning | SensorStatus::Low => (
-                    "⚠",
-                    Color {
-                        r: 1.0,
-                        g: 0.8,
-                        b: 0.2,
-                        a: 1.0,
-                    },
-                ),
-                SensorStatus::Normal => (
-                    "✓",
-                    Color {
-                        r: 0.9,
-                        g: 0.7,
-                        b: 0.3,
-                        a: 1.0,
-                    },
-                ),
-            };
-
-            let text = format!(
-                "{indicator} {:<12} {:>6.2}V",
-                volt.short_label(),
-                volt.value
-            );
-            canvas.draw_text(
-                &text,
-                Point::new(inner.x, y),
-                &TextStyle {
-                    color,
-                    ..Default::default()
-                },
-            );
-            y += 1.0;
-            rows_used += 1;
-        }
+        draw_health_sensors(canvas, health_data, inner, &mut y, &mut rows_used, max_rows);
     }
 
-    // Note: In deterministic mode, we already returned early above
-    // This check is for non-deterministic mode when no sensors are detected
     if comps.is_empty() && sensor_health_data.is_none() {
-        canvas.draw_text(
-            "No sensors detected",
-            Point::new(inner.x, inner.y),
-            &TextStyle {
-                color: Color {
-                    r: 0.5,
-                    g: 0.5,
-                    b: 0.5,
-                    a: 1.0,
-                },
-                ..Default::default()
-            },
-        );
+        draw_sensor_row(canvas, inner.x, inner.y, "No sensors detected", Color { r: 0.5, g: 0.5, b: 0.5, a: 1.0 });
     }
 }
 
@@ -2582,24 +2412,86 @@ fn port_to_service(port: u16) -> &'static str {
 }
 
 /// F012: Connections Panel - shows active network connections
+/// Get connection counts from snapshot data.
+fn get_connection_counts(conn_data: Option<&crate::ptop::analyzers::ConnectionsData>) -> (usize, usize) {
+    let Some(data) = conn_data else { return (0, 0); };
+    let listen = data.connections.iter().filter(|c| c.state == TcpState::Listen).count();
+    let active = data.connections.iter().filter(|c| c.state == TcpState::Established).count();
+    (listen, active)
+}
+
+/// Get state display color.
+fn state_display_color(state: TcpState) -> Color {
+    match state {
+        TcpState::Established => ACTIVE_COLOR,
+        TcpState::Listen => LISTEN_COLOR,
+        _ => CONN_DIM_COLOR,
+    }
+}
+
+/// Get state short code.
+fn state_short_code(state: TcpState) -> &'static str {
+    match state {
+        TcpState::Established => "E",
+        TcpState::Listen => "L",
+        TcpState::TimeWait => "T",
+        TcpState::CloseWait => "C",
+        TcpState::SynSent => "S",
+        _ => "?",
+    }
+}
+
+/// Check if address is local (loopback, private, or link-local).
+fn is_local_address(addr: &std::net::IpAddr) -> bool {
+    match addr {
+        std::net::IpAddr::V4(ip) => ip.is_loopback() || ip.is_private() || ip.is_link_local(),
+        std::net::IpAddr::V6(ip) => ip.is_loopback(),
+    }
+}
+
+/// Format remote address for display.
+fn format_remote_addr(conn: &crate::ptop::analyzers::TcpConnection) -> String {
+    if conn.state == TcpState::Listen {
+        "*".to_string()
+    } else {
+        let addr_str = format!("{}:{}", conn.remote_addr, conn.remote_port);
+        if addr_str.len() > 17 { format!("{}…", &addr_str[..16]) } else { addr_str }
+    }
+}
+
+/// Format process name for display.
+fn format_process_name(conn: &crate::ptop::analyzers::TcpConnection) -> String {
+    conn.process_name.as_ref()
+        .map(|s| if s.len() > 10 { format!("{}…", &s[..9]) } else { s.clone() })
+        .or_else(|| conn.pid.map(|p| p.to_string()))
+        .unwrap_or_else(|| "-".to_string())
+}
+
+/// Get hot indicator color.
+fn hot_indicator_color(indicator: &str) -> Color {
+    if indicator == "●" { Color { r: 1.0, g: 0.4, b: 0.2, a: 1.0 } } // Orange
+    else { Color { r: 1.0, g: 0.7, b: 0.3, a: 1.0 } } // Yellow
+}
+
+/// Get geo indicator (L=local, R=remote, -=listen).
+fn get_geo_indicator(state: TcpState, addr: &std::net::IpAddr) -> &'static str {
+    if state == TcpState::Listen { "-" } else if is_local_address(addr) { "L" } else { "R" }
+}
+
+/// Sort order for TCP state (LISTEN first, then ESTABLISHED, then others).
+fn tcp_state_order(state: TcpState) -> u8 {
+    match state { TcpState::Listen => 0, TcpState::Established => 1, _ => 2 }
+}
+
+/// Draw deterministic mode header for connections panel.
+fn draw_connections_deterministic(canvas: &mut dyn Canvas, inner: Rect) {
+    let header = "SVC   LOCA REMOT GE ST AGE   PROC";
+    canvas.draw_text(header, Point::new(inner.x, inner.y), &TextStyle { color: CONNECTIONS_COLOR, ..Default::default() });
+}
+
 fn draw_connections_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
-    // Get connection data from snapshot (CB-INPUT-006: async pattern)
-    let (listen_count, active_count, connections) =
-        if let Some(ref conn_data) = app.snapshot_connections {
-            let listen = conn_data
-                .connections
-                .iter()
-                .filter(|c| c.state == TcpState::Listen)
-                .count();
-            let active = conn_data
-                .connections
-                .iter()
-                .filter(|c| c.state == TcpState::Established)
-                .count();
-            (listen, active, Some(&conn_data.connections))
-        } else {
-            (0, 0, None)
-        };
+    let (listen_count, active_count) = get_connection_counts(app.snapshot_connections.as_ref());
+    let connections = app.snapshot_connections.as_ref().map(|c| &c.connections);
 
     // Generate sparkline for connection history (CB-CONN-007) using helper
     let sparkline_str = app
@@ -2619,61 +2511,15 @@ fn draw_connections_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, boun
     border.paint(canvas);
     let inner = border.inner_rect();
 
-    if inner.height < 1.0 {
-        return;
-    }
+    if inner.height < 1.0 { return; }
+    if app.deterministic { draw_connections_deterministic(canvas, inner); return; }
 
-    // In deterministic mode, use ttop-style header and "No active connections"
-    if app.deterministic {
-        let _dim_color = Color {
-            r: 0.3,
-            g: 0.3,
-            b: 0.3,
-            a: 1.0,
-        };
-
-        // ttop header: "SVC   LOCA REMOT GE ST AGE   PROC"
-        let header = "SVC   LOCA REMOT GE ST AGE   PROC";
-        canvas.draw_text(
-            header,
-            Point::new(inner.x, inner.y),
-            &TextStyle {
-                color: CONNECTIONS_COLOR,
-                ..Default::default()
-            },
-        );
-
-        // No connections in deterministic mode
-        return;
-    }
-
-    // Header for real data mode (ttop style: SVC LOCAL REMOTE GE ST AGE PROC)
-    // GE (geo) simplified: L=local, R=remote
-    // AGE: connection duration (CB-CONN-001)
+    // Header for real data mode
     let header = "SVC   LOCAL        REMOTE            GE ST  AGE   PROC";
-    canvas.draw_text(
-        header,
-        Point::new(inner.x, inner.y),
-        &TextStyle {
-            color: CONNECTIONS_COLOR,
-            ..Default::default()
-        },
-    );
+    canvas.draw_text(header, Point::new(inner.x, inner.y), &TextStyle { color: CONNECTIONS_COLOR, ..Default::default() });
 
     let Some(conns) = connections else {
-        canvas.draw_text(
-            "No data",
-            Point::new(inner.x, inner.y + 1.0),
-            &TextStyle {
-                color: Color {
-                    r: 0.5,
-                    g: 0.5,
-                    b: 0.5,
-                    a: 1.0,
-                },
-                ..Default::default()
-            },
-        );
+        canvas.draw_text("No data", Point::new(inner.x, inner.y + 1.0), &TextStyle { color: CONN_DIM_COLOR, ..Default::default() });
         return;
     };
 
@@ -2681,88 +2527,22 @@ fn draw_connections_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, boun
     use std::net::{IpAddr, Ipv4Addr};
     let loopback_v4: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST);
 
-    let mut display_conns: Vec<_> = conns
-        .iter()
-        .filter(|c| c.remote_addr != loopback_v4 || c.state == TcpState::Listen)
-        .collect();
-
-    // Sort: LISTEN first, then ESTABLISHED, then others
-    display_conns.sort_by(|a, b| {
-        let order = |s: TcpState| match s {
-            TcpState::Listen => 0,
-            TcpState::Established => 1,
-            _ => 2,
-        };
-        order(a.state).cmp(&order(b.state))
-    });
+    let mut display_conns: Vec<_> = conns.iter().filter(|c| c.remote_addr != loopback_v4 || c.state == TcpState::Listen).collect();
+    display_conns.sort_by(|a, b| tcp_state_order(a.state).cmp(&tcp_state_order(b.state)));
 
     let max_rows = (inner.height as usize).saturating_sub(1);
-    // Use imported color constants
-    let dim_color = CONN_DIM_COLOR;
-    let active_color = ACTIVE_COLOR;
-    let listen_color = LISTEN_COLOR;
 
     for (i, conn) in display_conns.iter().take(max_rows).enumerate() {
         let y = inner.y + 1.0 + i as f32;
-        if y >= inner.y + inner.height {
-            break;
-        }
+        if y >= inner.y + inner.height { break; }
 
         let svc = port_to_service(conn.local_port);
         let local = format!(":{}", conn.local_port);
-        let remote = if conn.state == TcpState::Listen {
-            "*".to_string()
-        } else {
-            // Truncate remote address for display
-            let addr_str = format!("{}:{}", conn.remote_addr, conn.remote_port);
-            if addr_str.len() > 17 {
-                format!("{}…", &addr_str[..16])
-            } else {
-                addr_str
-            }
-        };
-
-        // GE (geo): L=local (127.x, 192.168.x, 10.x), R=remote
-        let is_local = match &conn.remote_addr {
-            std::net::IpAddr::V4(ip) => ip.is_loopback() || ip.is_private() || ip.is_link_local(),
-            std::net::IpAddr::V6(ip) => ip.is_loopback(),
-        };
-        let geo = if conn.state == TcpState::Listen {
-            "-"
-        } else if is_local {
-            "L"
-        } else {
-            "R"
-        };
-
-        let state_short = match conn.state {
-            TcpState::Established => "E",
-            TcpState::Listen => "L",
-            TcpState::TimeWait => "T",
-            TcpState::CloseWait => "C",
-            TcpState::SynSent => "S",
-            _ => "?",
-        };
-
-        // PROC: process name or PID
-        let proc_name = conn
-            .process_name
-            .as_ref()
-            .map(|s| {
-                if s.len() > 10 {
-                    format!("{}…", &s[..9])
-                } else {
-                    s.clone()
-                }
-            })
-            .or_else(|| conn.pid.map(|p| p.to_string()))
-            .unwrap_or_else(|| "-".to_string());
-
-        let state_color = match conn.state {
-            TcpState::Established => active_color,
-            TcpState::Listen => listen_color,
-            _ => dim_color,
-        };
+        let remote = format_remote_addr(conn);
+        let geo = get_geo_indicator(conn.state, &conn.remote_addr);
+        let state_short = state_short_code(conn.state);
+        let proc_name = format_process_name(conn);
+        let state_color = state_display_color(conn.state);
 
         // Get connection age (CB-CONN-001)
         let age = conn.age_display();
@@ -2785,47 +2565,60 @@ fn draw_connections_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, boun
 
         // Draw hot indicator after the line (CB-CONN-006)
         if !hot_indicator.is_empty() {
-            let hot_color = if hot_indicator == "●" {
-                Color {
-                    r: 1.0,
-                    g: 0.4,
-                    b: 0.2,
-                    a: 1.0,
-                } // Orange for hot
-            } else {
-                Color {
-                    r: 1.0,
-                    g: 0.7,
-                    b: 0.3,
-                    a: 1.0,
-                } // Yellow for warm
-            };
-            // Draw at the end of the line
             let hot_x = inner.x + 56.0;
             if hot_x < inner.x + inner.width {
-                canvas.draw_text(
-                    hot_indicator,
-                    Point::new(hot_x, y),
-                    &TextStyle {
-                        color: hot_color,
-                        ..Default::default()
-                    },
-                );
+                canvas.draw_text(hot_indicator, Point::new(hot_x, y), &TextStyle { color: hot_indicator_color(hot_indicator), ..Default::default() });
             }
         }
     }
 
     // If no connections, show message
     if display_conns.is_empty() && inner.height > 1.0 {
-        canvas.draw_text(
-            "No active connections",
-            Point::new(inner.x, inner.y + 1.0),
-            &TextStyle {
-                color: dim_color,
-                ..Default::default()
-            },
-        );
+        canvas.draw_text("No active connections", Point::new(inner.x, inner.y + 1.0), &TextStyle { color: CONN_DIM_COLOR, ..Default::default() });
     }
+}
+
+/// Get type character for sensor based on label: C (CPU), G (GPU), D (Disk), F (Fan), M (Mobo)
+fn sensor_type_char(label: &str) -> char {
+    if label.contains("CPU") || label.contains("Core") {
+        'C'
+    } else if label.contains("GPU") {
+        'G'
+    } else if label.contains("nvme") || label.contains("SSD") || label.contains("HDD") {
+        'D'
+    } else if label.contains("fan") || label.contains("Fan") {
+        'F'
+    } else {
+        'M'
+    }
+}
+
+/// Get color for sensor temperature display
+fn sensor_temp_display_color(temp: f32) -> Color {
+    if temp > 85.0 {
+        Color { r: 1.0, g: 0.3, b: 0.3, a: 1.0 }
+    } else if temp > 70.0 {
+        Color { r: 1.0, g: 0.8, b: 0.2, a: 1.0 }
+    } else {
+        Color { r: 0.3, g: 0.9, b: 0.3, a: 1.0 }
+    }
+}
+
+/// Build 4-char dual-color bar for temperature display
+fn build_temp_bar(temp: f32) -> String {
+    let pct = (temp / 100.0).clamp(0.0, 1.0);
+    let filled = (pct * 4.0).round() as usize;
+    (0..4).map(|i| if i < filled { '▄' } else { '░' }).collect()
+}
+
+/// Draw a sensor row in compact view
+fn draw_sensor_compact_row(canvas: &mut dyn Canvas, x: f32, y: f32, label: &str, temp: f32) {
+    let type_char = sensor_type_char(label);
+    let bar = build_temp_bar(temp);
+    let label_short: String = label.chars().take(8).collect();
+    let text = format!("{type_char} {bar} {temp:>4.0}°C {label_short}");
+    let color = sensor_temp_display_color(temp);
+    canvas.draw_text(&text, Point::new(x, y), &TextStyle { color, ..Default::default() });
 }
 
 /// F009: Sensors Compact Panel - compact sensor display with dual-color bars
@@ -2833,10 +2626,7 @@ fn draw_sensors_compact_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>,
     use sysinfo::{Component, Components};
 
     let components = Components::new_with_refreshed_list();
-    let max_temp = components
-        .iter()
-        .filter_map(Component::temperature)
-        .fold(0.0_f32, f32::max);
+    let max_temp = components.iter().filter_map(Component::temperature).fold(0.0_f32, f32::max);
 
     let title = format!("Sensors │ {max_temp:.0}°C");
 
@@ -2856,62 +2646,8 @@ fn draw_sensors_compact_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>,
     let mut y = inner.y;
     for component in components.iter().take(inner.height as usize) {
         let label = component.label();
-        let Some(temp) = component.temperature() else {
-            continue;
-        };
-
-        // Type character: C (CPU), G (GPU), D (Disk), F (Fan), M (Mobo)
-        let type_char = if label.contains("CPU") || label.contains("Core") {
-            'C'
-        } else if label.contains("GPU") {
-            'G'
-        } else if label.contains("nvme") || label.contains("SSD") || label.contains("HDD") {
-            'D'
-        } else if label.contains("fan") || label.contains("Fan") {
-            'F'
-        } else {
-            'M'
-        };
-
-        // 4-char dual-color bar
-        let pct = (temp / 100.0).clamp(0.0, 1.0);
-        let filled = (pct * 4.0).round() as usize;
-        let bar: String = (0..4).map(|i| if i < filled { '▄' } else { '░' }).collect();
-
-        let label_short: String = label.chars().take(8).collect();
-        let text = format!("{type_char} {bar} {temp:>4.0}°C {label_short}");
-
-        let color = if temp > 85.0 {
-            Color {
-                r: 1.0,
-                g: 0.3,
-                b: 0.3,
-                a: 1.0,
-            }
-        } else if temp > 70.0 {
-            Color {
-                r: 1.0,
-                g: 0.8,
-                b: 0.2,
-                a: 1.0,
-            }
-        } else {
-            Color {
-                r: 0.3,
-                g: 0.9,
-                b: 0.3,
-                a: 1.0,
-            }
-        };
-
-        canvas.draw_text(
-            &text,
-            Point::new(inner.x, y),
-            &TextStyle {
-                color,
-                ..Default::default()
-            },
-        );
+        let Some(temp) = component.temperature() else { continue };
+        draw_sensor_compact_row(canvas, inner.x, y, label, temp);
         y += 1.0;
     }
 
@@ -2919,15 +2655,7 @@ fn draw_sensors_compact_panel(_app: &App, canvas: &mut DirectTerminalCanvas<'_>,
         canvas.draw_text(
             "No sensors",
             Point::new(inner.x, inner.y),
-            &TextStyle {
-                color: Color {
-                    r: 0.5,
-                    g: 0.5,
-                    b: 0.5,
-                    a: 1.0,
-                },
-                ..Default::default()
-            },
+            &TextStyle { color: Color { r: 0.5, g: 0.5, b: 0.5, a: 1.0 }, ..Default::default() },
         );
     }
 }
@@ -3016,9 +2744,58 @@ fn draw_system_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: R
     }
 }
 
+/// Get short name and color for a mount point
+fn mount_point_style(mount: &str) -> (&str, Color) {
+    if mount == "/" {
+        ("/", Color::new(0.8, 0.5, 0.3, 1.0)) // Root: orange
+    } else if mount.contains("nvme") || mount.starts_with("/dev/nvme") {
+        ("nvme", Color::new(0.3, 0.8, 0.3, 1.0)) // NVMe: green
+    } else if mount.contains("/home") {
+        ("home", Color::new(0.5, 0.5, 0.9, 1.0)) // Home: blue
+    } else if mount.contains("/tmp") || mount.contains("/var/tmp") {
+        ("tmp", Color::new(0.9, 0.9, 0.3, 1.0)) // Tmp: yellow
+    } else if mount.contains("/boot") {
+        ("boot", Color::new(0.9, 0.3, 0.3, 1.0)) // Boot: red
+    } else {
+        ("other", Color::new(0.6, 0.6, 0.6, 1.0)) // Other: gray
+    }
+}
+
+/// Extract short name from mount point path, max 6 chars
+fn mount_short_name(mount: &str) -> &str {
+    let name = mount.split('/').next_back().unwrap_or("disk");
+    if name.len() > 6 { &name[..6] } else { name }
+}
+
+/// Build treemap node from disk info
+fn build_disk_node(disk: &sysinfo::Disk) -> Option<TreemapNode> {
+    let mount = disk.mount_point().to_string_lossy();
+    let used = disk.total_space() - disk.available_space();
+    let total = disk.total_space();
+
+    if total == 0 {
+        return None;
+    }
+
+    let (known_name, color) = mount_point_style(&mount);
+    let short_name = if known_name == "other" { mount_short_name(&mount) } else { known_name };
+
+    let used_pct = (used as f64 / total as f64) * 100.0;
+    let used_color = percent_color(used_pct);
+    let free_color = Color::new(0.2, 0.3, 0.2, 1.0);
+
+    let children = vec![
+        TreemapNode::leaf_colored("used", used as f64, used_color),
+        TreemapNode::leaf_colored("free", disk.available_space() as f64, free_color),
+    ];
+
+    let mut node = TreemapNode::branch(short_name, children);
+    node.color = Some(color);
+    Some(node)
+}
+
 /// F013: Treemap Panel - file system treemap visualization
 fn draw_treemap_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
-    // Calculate total disk stats for title
     let (total_used, total_space): (u64, u64) = app
         .disks
         .iter()
@@ -3047,67 +2824,18 @@ fn draw_treemap_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
         return;
     }
 
-    // Build treemap nodes from disk data
-    let mut disk_nodes: Vec<TreemapNode> = Vec::new();
-
-    for disk in &app.disks {
-        let mount = disk.mount_point().to_string_lossy();
-        let used = disk.total_space() - disk.available_space();
-        let total = disk.total_space();
-
-        if total == 0 {
-            continue;
-        }
-
-        // Determine mount point short name and color based on type
-        let (short_name, color) = if mount == "/" {
-            ("/", Color::new(0.8, 0.5, 0.3, 1.0)) // Root: orange
-        } else if mount.contains("nvme") || mount.starts_with("/dev/nvme") {
-            ("nvme", Color::new(0.3, 0.8, 0.3, 1.0)) // NVMe: green
-        } else if mount.contains("/home") {
-            ("home", Color::new(0.5, 0.5, 0.9, 1.0)) // Home: blue
-        } else if mount.contains("/tmp") || mount.contains("/var/tmp") {
-            ("tmp", Color::new(0.9, 0.9, 0.3, 1.0)) // Tmp: yellow
-        } else if mount.contains("/boot") {
-            ("boot", Color::new(0.9, 0.3, 0.3, 1.0)) // Boot: red
-        } else {
-            // Use last path component
-            let name = mount.split('/').next_back().unwrap_or("disk");
-            let name = if name.len() > 6 { &name[..6] } else { name };
-            (name, Color::new(0.6, 0.6, 0.6, 1.0)) // Other: gray
-        };
-
-        // Create child nodes for used and free space
-        let used_pct = (used as f64 / total as f64) * 100.0;
-        let used_color = percent_color(used_pct);
-        let free_color = Color::new(0.2, 0.3, 0.2, 1.0); // Dark green for free
-
-        let children = vec![
-            TreemapNode::leaf_colored("used", used as f64, used_color),
-            TreemapNode::leaf_colored("free", disk.available_space() as f64, free_color),
-        ];
-
-        let mut node = TreemapNode::branch(short_name, children);
-        node.color = Some(color);
-        disk_nodes.push(node);
-    }
+    let disk_nodes: Vec<TreemapNode> = app.disks.iter().filter_map(build_disk_node).collect();
 
     if disk_nodes.is_empty() {
         canvas.draw_text(
             "No disks found",
             Point::new(inner.x + 1.0, inner.y),
-            &TextStyle {
-                color: Color::new(0.5, 0.5, 0.5, 1.0),
-                ..Default::default()
-            },
+            &TextStyle { color: Color::new(0.5, 0.5, 0.5, 1.0), ..Default::default() },
         );
         return;
     }
 
-    // Create root node containing all disks
     let root = TreemapNode::branch("Disks", disk_nodes);
-
-    // Create and render treemap
     let mut treemap = Treemap::new()
         .with_root(root)
         .with_max_depth(2)
@@ -3117,78 +2845,126 @@ fn draw_treemap_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
     treemap.paint(canvas);
 }
 
+/// Display item for files panel
+struct FilesDisplayItem {
+    name: String,
+    size: u64,
+    is_dir: bool,
+    ratio: f64,
+}
+
+/// Build display items from file analyzer data
+fn build_file_items_from_analyzer(fd: &crate::ptop::analyzers::FileAnalyzerData, max_rows: usize) -> Vec<FilesDisplayItem> {
+    let max_size = fd.hot_files.iter().map(|f| f.size).max().unwrap_or(1).max(1);
+    fd.hot_files
+        .iter()
+        .take(max_rows)
+        .map(|f| FilesDisplayItem {
+            name: f.path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+            size: f.size,
+            is_dir: f.path.is_dir(),
+            ratio: (f.size as f64 / max_size as f64).min(1.0),
+        })
+        .collect()
+}
+
+/// Build display items from treemap data
+fn build_file_items_from_treemap(td: &crate::ptop::analyzers::TreemapData, max_rows: usize) -> Vec<FilesDisplayItem> {
+    let max_size = td.top_items.first().map_or(1, |i| i.size).max(1);
+    td.top_items
+        .iter()
+        .take(max_rows)
+        .map(|i| FilesDisplayItem {
+            name: i.name.clone(),
+            size: i.size,
+            is_dir: i.is_dir,
+            ratio: (i.size as f64 / max_size as f64).min(1.0),
+        })
+        .collect()
+}
+
+/// Draw a single file row in files panel
+#[allow(clippy::too_many_arguments)]
+fn draw_file_row(
+    canvas: &mut dyn Canvas, x: f32, y: f32, item: &FilesDisplayItem,
+    name_width: usize, bar_width: usize, file_color: Color, dir_color: Color, dim_color: Color,
+) {
+    use crate::widgets::display_rules::{format_column, ColumnAlign, TruncateStrategy};
+
+    let item_color = if item.is_dir { dir_color } else { file_color };
+    let name = format_column(&item.name, name_width, ColumnAlign::Left, TruncateStrategy::Path);
+    let size_str = format_column(&format_bytes(item.size), 7, ColumnAlign::Right, TruncateStrategy::End);
+    let filled = ((bar_width as f64 * item.ratio) as usize).max(1);
+    let bar: String = "█".repeat(filled) + &"░".repeat(bar_width.saturating_sub(filled));
+
+    canvas.draw_text(&name, Point::new(x, y), &TextStyle { color: item_color, ..Default::default() });
+    canvas.draw_text(&size_str, Point::new(x + name_width as f32, y), &TextStyle { color: dim_color, ..Default::default() });
+    let bar_color = Color::new(0.4 + 0.4 * item.ratio as f32, 0.6 - 0.3 * item.ratio as f32, 0.3, 1.0);
+    canvas.draw_text(&format!("  {}", bar), Point::new(x + name_width as f32 + 7.0, y), &TextStyle { color: bar_color, ..Default::default() });
+}
+
+/// Compute total file size and count from app state.
+#[inline]
+fn compute_files_totals(app: &App) -> (u64, u32) {
+    if let Some(t) = app.snapshot_treemap.as_ref() {
+        (t.total_size, t.total_files)
+    } else {
+        let total_size = app.disks.iter().map(sysinfo::Disk::total_space).sum();
+        let file_count = app.snapshot_file_analyzer.as_ref().map_or(0, |f| f.total_open_files as u32);
+        (total_size, file_count)
+    }
+}
+
+/// Build file items from available data sources.
+fn build_files_items(
+    file_data: Option<&crate::ptop::analyzers::FileAnalyzerData>,
+    treemap_data: Option<&crate::ptop::analyzers::TreemapData>,
+    max_rows: usize,
+) -> Vec<FilesDisplayItem> {
+    file_data.map(|fd| build_file_items_from_analyzer(fd, max_rows))
+        .or_else(|| treemap_data.map(|td| build_file_items_from_treemap(td, max_rows)))
+        .unwrap_or_default()
+}
+
+/// Get message for empty files state.
+#[inline]
+fn files_empty_message(has_file_data: bool, has_treemap_data: bool) -> &'static str {
+    if !has_file_data && !has_treemap_data { "Scanning filesystem..." } else { "No files found" }
+}
+
 /// F014: Files Panel - Tufte-style file/directory visualization
-///
-/// SPEC-024 Appendix F: Tufte Data-Ink Ratio
-/// - Every pixel must convey information
-/// - Proportional bars show relative size (no wasted ink)
-/// - Entropy indicators (🔒/🔓) show encryption status
-/// - Column layout uses format_column() to prevent bleeding
 fn draw_files_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
     use crate::widgets::display_rules::{format_column, ColumnAlign, TruncateStrategy};
 
-    // Get data from snapshots (CB-INPUT-006: async pattern).
-    // FileAnalyzer uses /proc; Treemap uses filesystem scan.
     let file_data = app.snapshot_file_analyzer.as_ref();
     let treemap_data = app.snapshot_treemap.as_ref();
     let disk_entropy = app.snapshot_disk_entropy.as_ref();
 
-    // Calculate total size and file count
-    // If we have treemap data, it's more accurate for totals. Otherwise use disk info.
-    let (total_size, file_count): (u64, u32) = if let Some(t) = treemap_data {
-        (t.total_size, t.total_files)
-    } else {
-        (
-            app.disks.iter().map(sysinfo::Disk::total_space).sum(),
-            file_data.map_or(0, |f| f.total_open_files as u32),
-        )
-    };
+    let (total_size, file_count) = compute_files_totals(app);
 
-    // Encryption status from disk_entropy
-    let encrypted_count = disk_entropy.map_or(0, |d| d.encrypted_count);
-    let encryption_indicator = if encrypted_count > 0 { "🔒" } else { "" };
+    let encryption_indicator = if disk_entropy.map_or(0, |d| d.encrypted_count) > 0 { "🔒" } else { "" };
+    let title = format!("Files │ {} {} │ {} files", format_bytes(total_size), encryption_indicator, file_count);
 
-    // ttop-style title
-    let title = format!(
-        "Files │ {} {} │ {} files",
-        format_bytes(total_size),
-        encryption_indicator,
-        file_count
-    );
-
-    // Check if this panel is focused (SPEC-024 v5.0 Feature D)
     let is_focused = app.is_panel_focused(PanelType::Files);
     let mut border = create_panel_border(&title, FILES_COLOR, is_focused);
     border.layout(bounds);
     border.paint(canvas);
     let inner = border.inner_rect();
 
-    if inner.height < 1.0 {
-        return;
-    }
+    if inner.height < 1.0 { return; }
 
     let dim_color = Color::new(0.5, 0.5, 0.5, 1.0);
     let file_color = Color::new(0.7, 0.7, 0.5, 1.0);
     let dir_color = Color::new(0.5, 0.7, 0.9, 1.0);
     let bg_color = Color::new(0.05, 0.05, 0.07, 1.0);
 
-    // CRITICAL: Clear panel area to prevent ghosting from previous frames
     canvas.fill_rect(inner, bg_color);
 
-    // In deterministic mode, ttop shows just "..." and empty lines
     if app.deterministic {
-        canvas.draw_text(
-            "...",
-            Point::new(inner.x, inner.y),
-            &TextStyle {
-                color: dim_color,
-                ..Default::default()
-            },
-        );
+        canvas.draw_text("...", Point::new(inner.x, inner.y), &TextStyle { color: dim_color, ..Default::default() });
         return;
     }
 
-    // Tufte-style header: minimal, functional
     let width = inner.width as usize;
     let bar_width = 12.min(width.saturating_sub(20));
     let name_width = width.saturating_sub(bar_width + 10);
@@ -3198,148 +2974,21 @@ fn draw_files_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Re
         format_column("SIZE", 7, ColumnAlign::Right, TruncateStrategy::End),
         format_column("%", bar_width, ColumnAlign::Left, TruncateStrategy::End)
     );
-    canvas.draw_text(
-        &header,
-        Point::new(inner.x, inner.y),
-        &TextStyle {
-            color: FILES_COLOR,
-            ..Default::default()
-        },
-    );
+    canvas.draw_text(&header, Point::new(inner.x, inner.y), &TextStyle { color: FILES_COLOR, ..Default::default() });
 
-    // Prepare items to display
-    // Mapped to a common structure: (name, size, is_dir, ratio)
-    struct DisplayItem {
-        name: String,
-        size: u64,
-        is_dir: bool,
-        ratio: f64,
-    }
-
-    let items: Vec<DisplayItem> = if let Some(fd) = file_data {
-        // Use "Hot Files" from FileAnalyzer
-        // These are recently accessed files, sorted by access time
-        // We'll show them with ratio based on max size in the list
-        let max_size = fd
-            .hot_files
-            .iter()
-            .map(|f| f.size)
-            .max()
-            .unwrap_or(1)
-            .max(1);
-        fd.hot_files
-            .iter()
-            .take(inner.height as usize)
-            .map(|f| DisplayItem {
-                name: f
-                    .path
-                    .file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .to_string(),
-                size: f.size,
-                is_dir: f.path.is_dir(),
-                ratio: (f.size as f64 / max_size as f64).min(1.0),
-            })
-            .collect()
-    } else if let Some(td) = treemap_data {
-        // Use "Top Items" from TreemapAnalyzer (by size)
-        let max_size = td.top_items.first().map_or(1, |i| i.size).max(1);
-        td.top_items
-            .iter()
-            .take(inner.height as usize)
-            .map(|i| DisplayItem {
-                name: i.name.clone(),
-                size: i.size,
-                is_dir: i.is_dir,
-                ratio: (i.size as f64 / max_size as f64).min(1.0),
-            })
-            .collect()
-    } else {
-        Vec::new()
-    };
+    let max_rows = inner.height as usize;
+    let items = build_files_items(file_data, treemap_data, max_rows);
 
     if items.is_empty() {
-        // No data available yet
-        let msg = if file_data.is_none() && treemap_data.is_none() {
-            "Scanning filesystem..."
-        } else {
-            "No files found"
-        };
-        canvas.draw_text(
-            msg,
-            Point::new(inner.x, inner.y + 1.0),
-            &TextStyle {
-                color: dim_color,
-                ..Default::default()
-            },
-        );
-    } else {
-        let max_rows = (inner.height as usize).saturating_sub(1);
-        for (i, item) in items.iter().take(max_rows).enumerate() {
-            let y = inner.y + 1.0 + i as f32;
-            if y >= inner.y + inner.height {
-                break;
-            }
+        let msg = files_empty_message(file_data.is_some(), treemap_data.is_some());
+        canvas.draw_text(msg, Point::new(inner.x, inner.y + 1.0), &TextStyle { color: dim_color, ..Default::default() });
+        return;
+    }
 
-            // Color based on type
-            let item_color = if item.is_dir { dir_color } else { file_color };
-
-            // Truncate name to fit
-            let name = format_column(
-                &item.name,
-                name_width,
-                ColumnAlign::Left,
-                TruncateStrategy::Path,
-            );
-
-            // Size column
-            let size_str = format_column(
-                &format_bytes(item.size),
-                7,
-                ColumnAlign::Right,
-                TruncateStrategy::End,
-            );
-
-            // Tufte-style proportional bar (data-ink ratio: every char is data)
-            let filled = ((bar_width as f64 * item.ratio) as usize).max(1);
-            let bar: String = "█".repeat(filled) + &"░".repeat(bar_width.saturating_sub(filled));
-
-            // Draw name
-            canvas.draw_text(
-                &name,
-                Point::new(inner.x, y),
-                &TextStyle {
-                    color: item_color,
-                    ..Default::default()
-                },
-            );
-
-            // Draw size
-            canvas.draw_text(
-                &size_str,
-                Point::new(inner.x + name_width as f32, y),
-                &TextStyle {
-                    color: dim_color,
-                    ..Default::default()
-                },
-            );
-
-            // Draw proportional bar
-            canvas.draw_text(
-                &format!("  {}", bar),
-                Point::new(inner.x + name_width as f32 + 7.0, y),
-                &TextStyle {
-                    color: Color::new(
-                        0.4 + 0.4 * item.ratio as f32,
-                        0.6 - 0.3 * item.ratio as f32,
-                        0.3,
-                        1.0,
-                    ),
-                    ..Default::default()
-                },
-            );
-        }
+    for (i, item) in items.iter().take((inner.height as usize).saturating_sub(1)).enumerate() {
+        let y = inner.y + 1.0 + i as f32;
+        if y >= inner.y + inner.height { break; }
+        draw_file_row(canvas, inner.x, y, item, name_width, bar_width, file_color, dir_color, dim_color);
     }
 }
 
@@ -3362,32 +3011,56 @@ fn draw_files_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Re
 /// - `format_percent()` for CPU/MEM columns
 /// - `TruncateStrategy::Command` for process names
 #[allow(clippy::too_many_lines)]
+/// Get header column text style based on sort/selection state
+fn dataframe_header_style(is_sorted: bool, is_selected: bool, sort_color: Color, dim_color: Color) -> TextStyle {
+    if is_sorted {
+        TextStyle { color: sort_color, ..Default::default() }
+    } else if is_selected {
+        TextStyle { color: Color::WHITE, ..Default::default() }
+    } else {
+        TextStyle { color: dim_color, ..Default::default() }
+    }
+}
+
+/// Get memory percentage display color
+fn mem_display_color(mem_pct: f32, is_selected: bool, text_color: Color) -> Color {
+    if mem_pct > 10.0 {
+        Color::new(0.7, 0.5, 0.9, 1.0)
+    } else if is_selected {
+        Color::WHITE
+    } else {
+        text_color
+    }
+}
+
+/// Draw row background and optional cursor for process dataframe
+fn draw_process_row_bg(canvas: &mut dyn Canvas, x: f32, y: f32, width: f32, is_selected: bool, selected_bg: Color) {
+    if is_selected {
+        canvas.fill_rect(Rect::new(x, y, width, 1.0), selected_bg);
+        canvas.draw_text("▶", Point::new(x - 1.5, y), &TextStyle { color: FOCUS_ACCENT_COLOR, ..Default::default() });
+    } else {
+        canvas.fill_rect(Rect::new(x, y, width, 1.0), Color::new(0.05, 0.05, 0.07, 1.0));
+    }
+}
+
 fn draw_process_dataframe(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect) {
     use crate::ptop::app::ProcessSortColumn;
-    use crate::widgets::display_rules::{
-        format_column, format_percent, ColumnAlign, TruncateStrategy,
-    };
+    use crate::widgets::display_rules::{format_column, format_percent, ColumnAlign, TruncateStrategy};
     use crate::HeatScheme;
 
-    // Column widths: PID(7) USER(10) CPU%(8) MEM%(8) COMMAND(rest)
-    // CRITICAL: All columns MUST use format_column() to prevent bleeding
     let col_widths = [7usize, 10, 8, 8];
     let cmd_width = (area.width as usize).saturating_sub(col_widths.iter().sum::<usize>() + 5);
 
-    // PATTERN 5 HYBRID: Consistent focus/selection colors
     let header_bg = Color::new(0.12, 0.15, 0.22, 1.0);
-    let selected_col_bg = COL_SELECT_BG; // From constants
-    let selected_row_bg = ROW_SELECT_BG; // From constants
-    let sort_color = FOCUS_ACCENT_COLOR; // Bright cyan for sorted column
+    let selected_col_bg = COL_SELECT_BG;
+    let selected_row_bg = ROW_SELECT_BG;
+    let sort_color = FOCUS_ACCENT_COLOR;
     let dim_color = Color::new(0.5, 0.5, 0.5, 1.0);
     let text_color = Color::new(0.9, 0.9, 0.9, 1.0);
 
     let mut y = area.y;
     let x = area.x;
 
-    // =========================================================================
-    // HEADER ROW with column selection highlight
-    // =========================================================================
     let columns = [
         (ProcessSortColumn::Pid, "PID", col_widths[0]),
         (ProcessSortColumn::User, "USER", col_widths[1]),
@@ -3396,256 +3069,80 @@ fn draw_process_dataframe(app: &App, canvas: &mut DirectTerminalCanvas, area: Re
         (ProcessSortColumn::Command, "COMMAND", cmd_width),
     ];
 
-    // Draw header background
     canvas.fill_rect(Rect::new(x, y, area.width, 1.0), header_bg);
 
     let mut col_x = x;
-    // Clamp selected_column to valid range to prevent rendering artifacts
     let valid_selected = app.selected_column.min(columns.len().saturating_sub(1));
     for (i, (col, label, width)) in columns.iter().enumerate() {
         let is_selected = valid_selected == i;
         let is_sorted = app.sort_column == *col;
 
-        // Column selection highlight (width only, no gap overlap)
-        if is_selected {
-            canvas.fill_rect(Rect::new(col_x, y, *width as f32, 1.0), selected_col_bg);
-        }
+        if is_selected { canvas.fill_rect(Rect::new(col_x, y, *width as f32, 1.0), selected_col_bg); }
 
-        // Header text with sort indicator (NEVER bleeds)
-        let header_raw = if is_sorted {
-            format!("{}{}", label, if app.sort_descending { "▼" } else { "▲" })
-        } else {
-            (*label).to_string()
-        };
-        let header_text = format_column(
-            &header_raw,
-            *width,
-            ColumnAlign::Left,
-            TruncateStrategy::End,
-        );
-
-        let style = if is_sorted {
-            TextStyle {
-                color: sort_color,
-                ..Default::default()
-            }
-        } else if is_selected {
-            TextStyle {
-                color: Color::WHITE,
-                ..Default::default()
-            }
-        } else {
-            TextStyle {
-                color: dim_color,
-                ..Default::default()
-            }
-        };
-
+        let header_raw = if is_sorted { format!("{}{}", label, if app.sort_descending { "▼" } else { "▲" }) } else { (*label).to_string() };
+        let header_text = format_column(&header_raw, *width, ColumnAlign::Left, TruncateStrategy::End);
+        let style = dataframe_header_style(is_sorted, is_selected, sort_color, dim_color);
         canvas.draw_text(&header_text, Point::new(col_x, y), &style);
         col_x += *width as f32 + 1.0;
     }
     y += 1.0;
 
-    // Separator line
-    let sep = "─".repeat((area.width as usize).min(200));
-    canvas.draw_text(
-        &sep,
-        Point::new(x, y),
-        &TextStyle {
-            color: dim_color,
-            ..Default::default()
-        },
-    );
+    canvas.draw_text(&"─".repeat((area.width as usize).min(200)), Point::new(x, y), &TextStyle { color: dim_color, ..Default::default() });
     y += 1.0;
 
-    // =========================================================================
-    // DATA ROWS - sorted by app.sort_column
-    // =========================================================================
-    let mut processes: Vec<_> = app
-        .system
-        .processes()
-        .iter()
-        .filter(|(_, p)| {
-            let matches_filter = app.filter.is_empty()
-                || p.name()
-                    .to_string_lossy()
-                    .to_lowercase()
-                    .contains(&app.filter.to_lowercase());
-            matches_filter && (p.cpu_usage() > 0.001 || p.memory() > 1024 * 1024)
-        })
-        .collect();
+    let mut processes: Vec<_> = app.system.processes().iter().filter(|(_, p)| {
+        let matches_filter = app.filter.is_empty() || p.name().to_string_lossy().to_lowercase().contains(&app.filter.to_lowercase());
+        matches_filter && (p.cpu_usage() > 0.001 || p.memory() > 1024 * 1024)
+    }).collect();
 
-    // Sort using extracted helper (reduces cyclomatic complexity)
     use crate::ptop::ui::panels::process::sort_processes;
     sort_processes(&mut processes, app.sort_column, app.sort_descending);
 
-    // Render visible rows
     let visible_rows = (area.height as usize).saturating_sub(2);
-    let scroll_offset = app
-        .process_scroll_offset
-        .min(processes.len().saturating_sub(visible_rows));
+    let scroll_offset = app.process_scroll_offset.min(processes.len().saturating_sub(visible_rows));
 
-    for (rel_idx, (pid, proc)) in processes
-        .iter()
-        .skip(scroll_offset)
-        .take(visible_rows)
-        .enumerate()
-    {
+    for (rel_idx, (pid, proc)) in processes.iter().skip(scroll_offset).take(visible_rows).enumerate() {
         let abs_idx = scroll_offset + rel_idx;
         let is_selected = abs_idx == app.process_selected;
 
-        // PATTERN 5 HYBRID: Row selection highlight with gutter cursor
-        // CRITICAL: Always paint row background to clear previous frame artifacts
-        // Terminal buffers retain previous pixels - must explicitly overwrite
-        if is_selected {
-            canvas.fill_rect(Rect::new(x, y, area.width, 1.0), selected_row_bg);
-        } else {
-            // Clear any previous selection artifact with default background
-            canvas.fill_rect(
-                Rect::new(x, y, area.width, 1.0),
-                Color::new(0.05, 0.05, 0.07, 1.0), // Dark terminal background
-            );
-        }
+        draw_process_row_bg(canvas, x, y, area.width, is_selected, selected_row_bg);
 
-        if is_selected {
-            // Draw cursor indicator at start of row (▶ in gutter)
-            canvas.draw_text(
-                "▶",
-                Point::new(x - 1.5, y),
-                &TextStyle {
-                    color: FOCUS_ACCENT_COLOR, // Bright cyan cursor
-                    ..Default::default()
-                },
-            );
-        }
-
-        let row_style = if is_selected {
-            TextStyle {
-                color: Color::WHITE,
-                ..Default::default()
-            }
-        } else {
-            TextStyle {
-                color: text_color,
-                ..Default::default()
-            }
-        };
-
+        let row_style = if is_selected { TextStyle { color: Color::WHITE, ..Default::default() } } else { TextStyle { color: text_color, ..Default::default() } };
         let mut col_x = x;
 
-        // PID - right-aligned number (NEVER bleeds)
-        let pid_str = format_column(
-            &pid.as_u32().to_string(),
-            col_widths[0],
-            ColumnAlign::Right,
-            TruncateStrategy::End,
-        );
+        let pid_str = format_column(&pid.as_u32().to_string(), col_widths[0], ColumnAlign::Right, TruncateStrategy::End);
         canvas.draw_text(&pid_str, Point::new(col_x, y), &row_style);
         col_x += col_widths[0] as f32 + 1.0;
 
-        // USER - left-aligned, truncate if needed (NEVER bleeds)
-        // Resolve UID to username using Users lookup table
-        let user_raw = proc
-            .user_id()
-            .and_then(|uid| app.users.get_user_by_id(uid))
-            .map(|u| u.name().to_string())
-            .unwrap_or_else(|| "-".to_string());
-        let user = format_column(
-            &user_raw,
-            col_widths[1],
-            ColumnAlign::Left,
-            TruncateStrategy::End,
-        );
+        let user_raw = proc.user_id().and_then(|uid| app.users.get_user_by_id(uid)).map(|u| u.name().to_string()).unwrap_or_else(|| "-".to_string());
+        let user = format_column(&user_raw, col_widths[1], ColumnAlign::Left, TruncateStrategy::End);
         canvas.draw_text(&user, Point::new(col_x, y), &row_style);
         col_x += col_widths[1] as f32 + 1.0;
 
-        // CPU% with thermal heat color encoding (Grammar of Graphics)
-        // Consistent with CoreStatsDataFrame and ProcessDataFrame widgets
         let cpu = proc.cpu_usage();
-        let cpu_color = if is_selected {
-            // White text on blue selection background for readability
-            Color::WHITE
-        } else {
-            // Thermal heat scheme: green → yellow → red based on CPU usage
-            HeatScheme::Thermal.color_for_percent(cpu as f64)
-        };
-        let cpu_str = format_column(
-            &format_percent(cpu),
-            col_widths[2],
-            ColumnAlign::Right,
-            TruncateStrategy::End,
-        );
-        canvas.draw_text(
-            &cpu_str,
-            Point::new(col_x, y),
-            &TextStyle {
-                color: cpu_color,
-                ..Default::default()
-            },
-        );
+        let cpu_color = if is_selected { Color::WHITE } else { HeatScheme::Thermal.color_for_percent(cpu as f64) };
+        let cpu_str = format_column(&format_percent(cpu), col_widths[2], ColumnAlign::Right, TruncateStrategy::End);
+        canvas.draw_text(&cpu_str, Point::new(col_x, y), &TextStyle { color: cpu_color, ..Default::default() });
         col_x += col_widths[2] as f32 + 1.0;
 
-        // MEM% - right-aligned (NEVER bleeds)
         let mem_pct = (proc.memory() as f64 / app.mem_total as f64 * 100.0) as f32;
-        let mem_color = if mem_pct > 10.0 {
-            Color::new(0.7, 0.5, 0.9, 1.0)
-        } else if is_selected {
-            Color::WHITE
-        } else {
-            text_color
-        };
-        let mem_str = format_column(
-            &format_percent(mem_pct),
-            col_widths[3],
-            ColumnAlign::Right,
-            TruncateStrategy::End,
-        );
-        canvas.draw_text(
-            &mem_str,
-            Point::new(col_x, y),
-            &TextStyle {
-                color: mem_color,
-                ..Default::default()
-            },
-        );
+        let mem_color = mem_display_color(mem_pct, is_selected, text_color);
+        let mem_str = format_column(&format_percent(mem_pct), col_widths[3], ColumnAlign::Right, TruncateStrategy::End);
+        canvas.draw_text(&mem_str, Point::new(col_x, y), &TextStyle { color: mem_color, ..Default::default() });
         col_x += col_widths[3] as f32 + 1.0;
 
-        // COMMAND - full command line with args, ellipsis truncation (NEVER bleeds)
-        // Use proc.cmd() for full command line, fallback to name() if empty
         let cmd_parts = proc.cmd();
-        let cmd_full = if cmd_parts.is_empty() {
-            proc.name().to_string_lossy().to_string()
-        } else {
-            cmd_parts
-                .iter()
-                .map(|s| s.to_string_lossy())
-                .collect::<Vec<_>>()
-                .join(" ")
-        };
-        let cmd_display = format_column(
-            &cmd_full,
-            cmd_width,
-            ColumnAlign::Left,
-            TruncateStrategy::Command,
-        );
+        let cmd_full = if cmd_parts.is_empty() { proc.name().to_string_lossy().to_string() } else { cmd_parts.iter().map(|s| s.to_string_lossy()).collect::<Vec<_>>().join(" ") };
+        let cmd_display = format_column(&cmd_full, cmd_width, ColumnAlign::Left, TruncateStrategy::Command);
         canvas.draw_text(&cmd_display, Point::new(col_x, y), &row_style);
 
         y += 1.0;
     }
 
-    // Scrollbar indicator if needed
     if processes.len() > visible_rows {
         let scroll_pct = scroll_offset as f32 / (processes.len() - visible_rows) as f32;
-        let bar_y =
-            area.y + 2.0 + (scroll_pct * (visible_rows - 1) as f32).min((visible_rows - 1) as f32);
-        canvas.draw_text(
-            "█",
-            Point::new(area.x + area.width - 1.0, bar_y),
-            &TextStyle {
-                color: dim_color,
-                ..Default::default()
-            },
-        );
+        let bar_y = area.y + 2.0 + (scroll_pct * (visible_rows - 1) as f32).min((visible_rows - 1) as f32);
+        canvas.draw_text("█", Point::new(area.x + area.width - 1.0, bar_y), &TextStyle { color: dim_color, ..Default::default() });
     }
 }
 
@@ -4402,331 +3899,162 @@ fn draw_memory_exploded(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect
     }
 }
 
+/// Get color for I/O rate display (read or write)
+fn io_rate_color(rate: f64, is_read: bool) -> Color {
+    if rate > 10_000_000.0 {
+        if is_read { Color::new(0.3, 0.9, 0.5, 1.0) } else { Color::new(0.9, 0.6, 0.3, 1.0) }
+    } else {
+        Color::new(0.7, 0.7, 0.7, 1.0)
+    }
+}
+
+/// Draw disk I/O section for exploded view
+fn draw_disk_io_section(
+    canvas: &mut dyn Canvas, io: &crate::ptop::analyzers::DiskIoData,
+    inner: Rect, mut y: f32, io_section_height: usize, header_bg: Color, border_color: Color,
+) {
+    use crate::widgets::display_rules::{format_column, ColumnAlign, TruncateStrategy};
+    use crate::widgets::selection::DIMMED_BG;
+
+    canvas.draw_text("I/O RATES BY DEVICE", Point::new(inner.x, y), &TextStyle { color: border_color, ..Default::default() });
+    y += 1.0;
+
+    let io_col_dev = 12; let io_col_read = 12; let io_col_write = 12; let io_col_iops = 10;
+    canvas.fill_rect(Rect::new(inner.x, y, inner.width, 1.0), header_bg);
+    let io_headers = ["DEVICE", "READ/s", "WRITE/s", "IOPS"];
+    let io_widths = [io_col_dev, io_col_read, io_col_write, io_col_iops];
+    let mut ihx = inner.x;
+    for (h, w) in io_headers.iter().zip(io_widths.iter()) {
+        canvas.draw_text(&format_column(h, *w, ColumnAlign::Left, TruncateStrategy::End), Point::new(ihx, y), &TextStyle { color: border_color, ..Default::default() });
+        ihx += *w as f32 + 1.0;
+    }
+    y += 1.0;
+
+    let mut devices: Vec<_> = io.physical_disks().collect();
+    devices.sort_by(|a, b| a.0.cmp(b.0));
+
+    for (dev_name, _stats) in devices.iter().take(io_section_height.saturating_sub(2)) {
+        let rates = io.rates.get(*dev_name);
+        let read_rate = rates.map_or(0.0, |r| r.read_bytes_per_sec);
+        let write_rate = rates.map_or(0.0, |r| r.write_bytes_per_sec);
+        let iops = rates.map_or(0.0, |r| r.reads_per_sec + r.writes_per_sec);
+
+        canvas.fill_rect(Rect::new(inner.x, y, inner.width, 1.0), DIMMED_BG);
+        let mut col_x = inner.x;
+
+        canvas.draw_text(&format_column(dev_name, io_col_dev, ColumnAlign::Left, TruncateStrategy::End), Point::new(col_x, y), &TextStyle { color: Color::new(0.85, 0.85, 0.85, 1.0), ..Default::default() });
+        col_x += io_col_dev as f32 + 1.0;
+
+        canvas.draw_text(&format_column(&format_bytes_rate(read_rate), io_col_read, ColumnAlign::Right, TruncateStrategy::End), Point::new(col_x, y), &TextStyle { color: io_rate_color(read_rate, true), ..Default::default() });
+        col_x += io_col_read as f32 + 1.0;
+
+        canvas.draw_text(&format_column(&format_bytes_rate(write_rate), io_col_write, ColumnAlign::Right, TruncateStrategy::End), Point::new(col_x, y), &TextStyle { color: io_rate_color(write_rate, false), ..Default::default() });
+        col_x += io_col_write as f32 + 1.0;
+
+        canvas.draw_text(&format_column(&format!("{:.0}", iops), io_col_iops, ColumnAlign::Right, TruncateStrategy::End), Point::new(col_x, y), &TextStyle { color: Color::new(0.7, 0.7, 0.7, 1.0), ..Default::default() });
+
+        y += 1.0;
+    }
+}
+
 /// FULL SCREEN disk exploded view
-/// SPEC-024 Section 30: Exploded views fill the screen
 fn draw_disk_exploded(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect) {
-    use crate::widgets::display_rules::{
-        format_bytes_si, format_column, format_percent, ColumnAlign, TruncateStrategy,
-    };
-    use crate::widgets::selection::{RowHighlight, DIMMED_BG};
+    use crate::widgets::display_rules::{format_bytes_si, format_column, format_percent, ColumnAlign, TruncateStrategy};
+    use crate::widgets::selection::RowHighlight;
     use crate::HeatScheme;
 
-    // Header: DISK EXPLODED - with border
     let border_color = DISK_COLOR;
     let disk_io = app.disk_io_data();
+    let (total_read, total_write) = disk_io.map_or((0.0, 0.0), |io| (io.total_read_bytes_per_sec, io.total_write_bytes_per_sec));
 
-    let (total_read, total_write) = disk_io.map_or((0.0, 0.0), |io| {
-        (io.total_read_bytes_per_sec, io.total_write_bytes_per_sec)
-    });
-
-    let title = format!(
-        "▼ DISK │ R: {} │ W: {} │ {} Volumes",
-        format_bytes_rate(total_read),
-        format_bytes_rate(total_write),
-        app.disks.len()
-    );
+    let title = format!("▼ DISK │ R: {} │ W: {} │ {} Volumes", format_bytes_rate(total_read), format_bytes_rate(total_write), app.disks.len());
 
     let mut border = create_panel_border(&title, border_color, true);
     border.layout(area);
     border.paint(canvas);
     let inner = border.inner_rect();
 
-    if inner.height < 1.0 {
-        return;
-    }
+    if inner.height < 1.0 { return; }
 
-    // Calculate layout: disk list at top, I/O details at bottom
     let disk_count = app.disks.len();
     let disk_section_height = (disk_count.min(inner.height as usize / 2)).max(4);
     let io_section_height = (inner.height as usize).saturating_sub(disk_section_height + 2);
 
-    let dim_style = TextStyle {
-        color: Color::new(0.5, 0.5, 0.5, 1.0),
-        ..Default::default()
-    };
-
-    // =========================================================================
-    // SECTION 1: DISK VOLUMES (full list with usage bars)
-    // =========================================================================
-    let mut y = inner.y;
-
-    // Column widths
-    let col_mount = 25.min(inner.width as usize / 4);
-    let col_fs = 10;
-    let col_used = 10;
-    let col_total = 10;
-    let col_pct = 8;
-    let col_bar = (inner.width as usize)
-        .saturating_sub(col_mount + col_fs + col_used + col_total + col_pct + 8);
-
-    // Header
+    let dim_style = TextStyle { color: Color::new(0.5, 0.5, 0.5, 1.0), ..Default::default() };
     let header_bg = Color::new(0.12, 0.15, 0.22, 1.0);
-    canvas.fill_rect(Rect::new(inner.x, y, inner.width, 1.0), header_bg);
 
+    let mut y = inner.y;
+    let col_mount = 25.min(inner.width as usize / 4);
+    let col_fs = 10; let col_used = 10; let col_total = 10; let col_pct = 8;
+    let col_bar = (inner.width as usize).saturating_sub(col_mount + col_fs + col_used + col_total + col_pct + 8);
+
+    canvas.fill_rect(Rect::new(inner.x, y, inner.width, 1.0), header_bg);
     let headers = ["MOUNT", "FS", "USED", "TOTAL", "USE%", ""];
     let widths = [col_mount, col_fs, col_used, col_total, col_pct, col_bar];
     let mut hx = inner.x;
     for (header, width) in headers.iter().zip(widths.iter()) {
-        canvas.draw_text(
-            &format_column(header, *width, ColumnAlign::Left, TruncateStrategy::End),
-            Point::new(hx, y),
-            &TextStyle {
-                color: border_color,
-                ..Default::default()
-            },
-        );
+        canvas.draw_text(&format_column(header, *width, ColumnAlign::Left, TruncateStrategy::End), Point::new(hx, y), &TextStyle { color: border_color, ..Default::default() });
         hx += *width as f32 + 1.0;
     }
     y += 1.0;
 
-    // Disk rows
     for (i, disk) in app.disks.iter().enumerate() {
-        if (y - inner.y) as usize >= disk_section_height {
-            break;
-        }
+        if (y - inner.y) as usize >= disk_section_height { break; }
 
-        let row_rect = Rect::new(inner.x, y, inner.width, 1.0);
-        // Row selection: first row highlighted by default (future: support keyboard navigation)
-        let is_selected = i == 0;
-
-        // Paint row background with RowHighlight
-        let row_hl = RowHighlight::new(row_rect, is_selected);
+        let row_hl = RowHighlight::new(Rect::new(inner.x, y, inner.width, 1.0), i == 0);
         row_hl.paint(canvas);
         let text_style = row_hl.text_style();
 
         let mount = disk.mount_point().to_string_lossy().to_string();
         let fs_type = disk.file_system().to_string_lossy().to_string();
         let total = disk.total_space();
-        let available = disk.available_space();
-        let used = total.saturating_sub(available);
-        let use_pct = if total > 0 {
-            (used as f64 / total as f64) * 100.0
-        } else {
-            0.0
-        };
+        let used = total.saturating_sub(disk.available_space());
+        let use_pct = if total > 0 { (used as f64 / total as f64) * 100.0 } else { 0.0 };
 
         let mut col_x = inner.x;
-
-        // MOUNT
-        canvas.draw_text(
-            &format_column(
-                &mount,
-                col_mount,
-                ColumnAlign::Left,
-                TruncateStrategy::Command,
-            ),
-            Point::new(col_x, y),
-            &text_style,
-        );
+        canvas.draw_text(&format_column(&mount, col_mount, ColumnAlign::Left, TruncateStrategy::Command), Point::new(col_x, y), &text_style);
         col_x += col_mount as f32 + 1.0;
-
-        // FS
-        canvas.draw_text(
-            &format_column(&fs_type, col_fs, ColumnAlign::Left, TruncateStrategy::End),
-            Point::new(col_x, y),
-            &text_style,
-        );
+        canvas.draw_text(&format_column(&fs_type, col_fs, ColumnAlign::Left, TruncateStrategy::End), Point::new(col_x, y), &text_style);
         col_x += col_fs as f32 + 1.0;
-
-        // USED
-        canvas.draw_text(
-            &format_column(
-                &format_bytes_si(used),
-                col_used,
-                ColumnAlign::Right,
-                TruncateStrategy::End,
-            ),
-            Point::new(col_x, y),
-            &text_style,
-        );
+        canvas.draw_text(&format_column(&format_bytes_si(used), col_used, ColumnAlign::Right, TruncateStrategy::End), Point::new(col_x, y), &text_style);
         col_x += col_used as f32 + 1.0;
-
-        // TOTAL
-        canvas.draw_text(
-            &format_column(
-                &format_bytes_si(total),
-                col_total,
-                ColumnAlign::Right,
-                TruncateStrategy::End,
-            ),
-            Point::new(col_x, y),
-            &text_style,
-        );
+        canvas.draw_text(&format_column(&format_bytes_si(total), col_total, ColumnAlign::Right, TruncateStrategy::End), Point::new(col_x, y), &text_style);
         col_x += col_total as f32 + 1.0;
 
-        // USE%
         let pct_color = HeatScheme::Warm.color_for_percent(use_pct);
-        canvas.draw_text(
-            &format_column(
-                &format_percent(use_pct as f32),
-                col_pct,
-                ColumnAlign::Right,
-                TruncateStrategy::End,
-            ),
-            Point::new(col_x, y),
-            &TextStyle {
-                color: if is_selected { Color::WHITE } else { pct_color },
-                ..Default::default()
-            },
-        );
+        canvas.draw_text(&format_column(&format_percent(use_pct as f32), col_pct, ColumnAlign::Right, TruncateStrategy::End), Point::new(col_x, y), &TextStyle { color: if i == 0 { Color::WHITE } else { pct_color }, ..Default::default() });
         col_x += col_pct as f32 + 1.0;
 
-        // Usage bar
         if col_bar >= 3 {
             let filled = ((use_pct / 100.0) * col_bar as f64) as usize;
-            let bar_color = HeatScheme::Warm.color_for_percent(use_pct);
             let bar_str: String = "█".repeat(filled) + &"░".repeat(col_bar.saturating_sub(filled));
-            canvas.draw_text(
-                &bar_str,
-                Point::new(col_x, y),
-                &TextStyle {
-                    color: bar_color,
-                    ..Default::default()
-                },
-            );
+            canvas.draw_text(&bar_str, Point::new(col_x, y), &TextStyle { color: HeatScheme::Warm.color_for_percent(use_pct), ..Default::default() });
         }
-
         y += 1.0;
     }
 
-    // Separator
     y += 0.5;
-    canvas.draw_text(
-        &"─".repeat(inner.width as usize),
-        Point::new(inner.x, y),
-        &dim_style,
-    );
+    canvas.draw_text(&"─".repeat(inner.width as usize), Point::new(inner.x, y), &dim_style);
     y += 1.0;
 
-    // =========================================================================
-    // SECTION 2: I/O RATES BY DEVICE
-    // =========================================================================
     if let Some(io) = disk_io {
-        let io_header = "I/O RATES BY DEVICE";
-        canvas.draw_text(
-            io_header,
-            Point::new(inner.x, y),
-            &TextStyle {
-                color: border_color,
-                ..Default::default()
-            },
-        );
-        y += 1.0;
+        draw_disk_io_section(canvas, io, inner, y, io_section_height, header_bg, border_color);
+    }
+}
 
-        // I/O column widths
-        let io_col_dev = 12;
-        let io_col_read = 12;
-        let io_col_write = 12;
-        let io_col_iops = 10;
-
-        // Header
-        canvas.fill_rect(Rect::new(inner.x, y, inner.width, 1.0), header_bg);
-        let io_headers = ["DEVICE", "READ/s", "WRITE/s", "IOPS"];
-        let io_widths = [io_col_dev, io_col_read, io_col_write, io_col_iops];
-        let mut ihx = inner.x;
-        for (h, w) in io_headers.iter().zip(io_widths.iter()) {
-            canvas.draw_text(
-                &format_column(h, *w, ColumnAlign::Left, TruncateStrategy::End),
-                Point::new(ihx, y),
-                &TextStyle {
-                    color: border_color,
-                    ..Default::default()
-                },
-            );
-            ihx += *w as f32 + 1.0;
+/// Get color for network rate display (high rate = highlighted color).
+#[inline]
+fn network_rate_color(rate: u64, is_rx: bool, is_selected: bool) -> Color {
+    if rate > 1_000_000 {
+        if is_rx {
+            Color::new(0.3, 0.9, 0.5, 1.0) // Green for RX
+        } else {
+            Color::new(0.9, 0.6, 0.3, 1.0) // Orange for TX
         }
-        y += 1.0;
-
-        // List physical disks with I/O
-        let mut devices: Vec<_> = io.physical_disks().collect();
-        devices.sort_by(|a, b| a.0.cmp(b.0));
-
-        for (dev_name, _stats) in devices.iter().take(io_section_height.saturating_sub(2)) {
-            let rates = io.rates.get(*dev_name);
-            let read_rate = rates.map_or(0.0, |r| r.read_bytes_per_sec);
-            let write_rate = rates.map_or(0.0, |r| r.write_bytes_per_sec);
-            let iops = rates.map_or(0.0, |r| r.reads_per_sec + r.writes_per_sec);
-
-            let row_rect = Rect::new(inner.x, y, inner.width, 1.0);
-            canvas.fill_rect(row_rect, DIMMED_BG);
-
-            let mut col_x = inner.x;
-
-            // Device name
-            canvas.draw_text(
-                &format_column(
-                    dev_name,
-                    io_col_dev,
-                    ColumnAlign::Left,
-                    TruncateStrategy::End,
-                ),
-                Point::new(col_x, y),
-                &TextStyle {
-                    color: Color::new(0.85, 0.85, 0.85, 1.0),
-                    ..Default::default()
-                },
-            );
-            col_x += io_col_dev as f32 + 1.0;
-
-            // Read rate
-            let read_color = if read_rate > 10_000_000.0 {
-                Color::new(0.3, 0.9, 0.5, 1.0)
-            } else {
-                Color::new(0.7, 0.7, 0.7, 1.0)
-            };
-            canvas.draw_text(
-                &format_column(
-                    &format_bytes_rate(read_rate),
-                    io_col_read,
-                    ColumnAlign::Right,
-                    TruncateStrategy::End,
-                ),
-                Point::new(col_x, y),
-                &TextStyle {
-                    color: read_color,
-                    ..Default::default()
-                },
-            );
-            col_x += io_col_read as f32 + 1.0;
-
-            // Write rate
-            let write_color = if write_rate > 10_000_000.0 {
-                Color::new(0.9, 0.6, 0.3, 1.0)
-            } else {
-                Color::new(0.7, 0.7, 0.7, 1.0)
-            };
-            canvas.draw_text(
-                &format_column(
-                    &format_bytes_rate(write_rate),
-                    io_col_write,
-                    ColumnAlign::Right,
-                    TruncateStrategy::End,
-                ),
-                Point::new(col_x, y),
-                &TextStyle {
-                    color: write_color,
-                    ..Default::default()
-                },
-            );
-            col_x += io_col_write as f32 + 1.0;
-
-            // IOPS
-            canvas.draw_text(
-                &format_column(
-                    &format!("{:.0}", iops),
-                    io_col_iops,
-                    ColumnAlign::Right,
-                    TruncateStrategy::End,
-                ),
-                Point::new(col_x, y),
-                &TextStyle {
-                    color: Color::new(0.7, 0.7, 0.7, 1.0),
-                    ..Default::default()
-                },
-            );
-
-            y += 1.0;
-        }
+    } else if is_selected {
+        Color::WHITE
+    } else {
+        Color::new(0.7, 0.7, 0.7, 1.0)
     }
 }
 
@@ -4841,13 +4169,6 @@ fn draw_network_exploded(app: &App, canvas: &mut DirectTerminalCanvas, area: Rec
         col_x += col_iface as f32 + 1.0;
 
         // RX rate
-        let rx_color = if rx_rate > 1_000_000 {
-            Color::new(0.3, 0.9, 0.5, 1.0)
-        } else if is_selected {
-            Color::WHITE
-        } else {
-            Color::new(0.7, 0.7, 0.7, 1.0)
-        };
         canvas.draw_text(
             &format_column(
                 &format_bytes_rate(rx_rate as f64),
@@ -4857,20 +4178,13 @@ fn draw_network_exploded(app: &App, canvas: &mut DirectTerminalCanvas, area: Rec
             ),
             Point::new(col_x, y),
             &TextStyle {
-                color: rx_color,
+                color: network_rate_color(rx_rate, true, is_selected),
                 ..Default::default()
             },
         );
         col_x += col_rx as f32 + 1.0;
 
         // TX rate
-        let tx_color = if tx_rate > 1_000_000 {
-            Color::new(0.9, 0.6, 0.3, 1.0)
-        } else if is_selected {
-            Color::WHITE
-        } else {
-            Color::new(0.7, 0.7, 0.7, 1.0)
-        };
         canvas.draw_text(
             &format_column(
                 &format_bytes_rate(tx_rate as f64),
@@ -4880,7 +4194,7 @@ fn draw_network_exploded(app: &App, canvas: &mut DirectTerminalCanvas, area: Rec
             ),
             Point::new(col_x, y),
             &TextStyle {
-                color: tx_color,
+                color: network_rate_color(tx_rate, false, is_selected),
                 ..Default::default()
             },
         );
@@ -5090,12 +4404,36 @@ fn draw_gpu_exploded(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect) {
     }
 }
 
+/// Get color for sensor value based on type.
+#[inline]
+fn sensor_value_display_color(sensor_type: SensorType, value: f64, is_selected: bool) -> Color {
+    use crate::HeatScheme;
+    match sensor_type {
+        SensorType::Temperature => HeatScheme::Thermal.color_for_percent(value),
+        SensorType::Fan => Color::new(0.3, 0.7, 0.9, 1.0),
+        _ => {
+            if is_selected { Color::WHITE } else { Color::new(0.8, 0.8, 0.8, 1.0) }
+        }
+    }
+}
+
+/// Get color for sensor status.
+#[inline]
+fn sensor_status_display_color(status: SensorStatus) -> Color {
+    match status {
+        SensorStatus::Normal => Color::new(0.3, 0.9, 0.3, 1.0),
+        SensorStatus::Warning => Color::new(0.9, 0.7, 0.2, 1.0),
+        SensorStatus::Critical => Color::new(0.9, 0.2, 0.2, 1.0),
+        SensorStatus::Low => Color::new(0.3, 0.5, 0.9, 1.0),
+        SensorStatus::Fault => Color::new(0.5, 0.5, 0.5, 1.0),
+    }
+}
+
 /// FULL SCREEN sensors exploded view
 /// SPEC-024 Section 30: Exploded views fill the screen
 fn draw_sensors_exploded(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect) {
     use crate::widgets::display_rules::{format_column, ColumnAlign, TruncateStrategy};
     use crate::widgets::selection::RowHighlight;
-    use crate::HeatScheme;
 
     let border_color = SENSORS_COLOR;
 
@@ -5171,19 +4509,7 @@ fn draw_sensors_exploded(app: &App, canvas: &mut DirectTerminalCanvas, area: Rec
             col_x += col_name as f32 + 1.0;
 
             // Value with thermal coloring (includes unit from value_display)
-            let value_color = match reading.sensor_type {
-                SensorType::Temperature => {
-                    HeatScheme::Thermal.color_for_percent(reading.value)
-                }
-                SensorType::Fan => Color::new(0.3, 0.7, 0.9, 1.0),
-                _ => {
-                    if is_selected {
-                        Color::WHITE
-                    } else {
-                        Color::new(0.8, 0.8, 0.8, 1.0)
-                    }
-                }
-            };
+            let value_color = sensor_value_display_color(reading.sensor_type, reading.value, is_selected);
             canvas.draw_text(
                 &format_column(
                     &reading.value_display(),
@@ -5200,28 +4526,21 @@ fn draw_sensors_exploded(app: &App, canvas: &mut DirectTerminalCanvas, area: Rec
             col_x += col_value as f32 + 1.0;
 
             // Status
-            let status_str = reading.status.as_str();
-            let status_color = match reading.status {
-                SensorStatus::Normal => Color::new(0.3, 0.9, 0.3, 1.0),
-                SensorStatus::Warning => Color::new(0.9, 0.7, 0.2, 1.0),
-                SensorStatus::Critical => Color::new(0.9, 0.2, 0.2, 1.0),
-                SensorStatus::Low => Color::new(0.3, 0.5, 0.9, 1.0),
-                SensorStatus::Fault => Color::new(0.5, 0.5, 0.5, 1.0),
+            let status_color = if is_selected {
+                Color::WHITE
+            } else {
+                sensor_status_display_color(reading.status)
             };
             canvas.draw_text(
                 &format_column(
-                    status_str,
+                    reading.status.as_str(),
                     col_status,
                     ColumnAlign::Left,
                     TruncateStrategy::End,
                 ),
                 Point::new(col_x, y),
                 &TextStyle {
-                    color: if is_selected {
-                        Color::WHITE
-                    } else {
-                        status_color
-                    },
+                    color: status_color,
                     ..Default::default()
                 },
             );

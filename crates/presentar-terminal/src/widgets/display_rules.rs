@@ -369,6 +369,46 @@ fn build_suffix_from_key_args(key_args: &[&str], max_width: usize) -> String {
     suffix
 }
 
+/// Simple end truncation with ellipsis.
+#[inline]
+fn simple_truncate(s: &str, width: usize) -> String {
+    let truncated: String = s.chars().take(width - 1).collect();
+    format!("{truncated}…")
+}
+
+/// Build truncated command from components.
+fn build_command_with_args(basename: &str, first_arg: &str, key_args: &[&str], width: usize) -> String {
+    let ellipsis = " … ";
+    let base_len = basename.chars().count();
+
+    let mut result = basename.to_string();
+    let mut current_len = base_len;
+
+    // Add first arg if space
+    if !first_arg.is_empty() && current_len + 1 + first_arg.chars().count() + 4 < width {
+        result.push(' ');
+        result.push_str(first_arg);
+        current_len = result.chars().count();
+    }
+
+    // Add key args suffix if space
+    let space_for_keys = width.saturating_sub(current_len + ellipsis.chars().count());
+    if !key_args.is_empty() && space_for_keys > 5 {
+        let suffix = build_suffix_from_key_args(key_args, space_for_keys);
+        if !suffix.is_empty() {
+            result.push_str(ellipsis);
+            result.push_str(&suffix);
+        }
+    }
+
+    // Final safety: ensure we don't exceed width
+    if result.chars().count() > width {
+        simple_truncate(&result, width)
+    } else {
+        result
+    }
+}
+
 /// Command-aware truncation using Basename + Key Args pattern (htop-style)
 ///
 /// Strategy:
@@ -382,9 +422,7 @@ fn build_suffix_from_key_args(key_args: &[&str], max_width: usize) -> String {
 /// - `python /home/user/scripts/long/path/script.py --port=8080`
 ///   → `python script.py --port=8080` (width=30)
 fn truncate_command(cmd: &str, width: usize) -> Cow<'_, str> {
-    let char_count = cmd.chars().count();
-
-    if char_count <= width {
+    if cmd.chars().count() <= width {
         return Cow::Borrowed(cmd);
     }
 
@@ -392,11 +430,8 @@ fn truncate_command(cmd: &str, width: usize) -> Cow<'_, str> {
         return Cow::Owned("…".repeat(width.min(1)));
     }
 
-    // For very short widths, just do end truncation
     if width < 12 {
-        let take = width - 1;
-        let truncated: String = cmd.chars().take(take).collect();
-        return Cow::Owned(format!("{truncated}…"));
+        return Cow::Owned(simple_truncate(cmd, width));
     }
 
     // Parse command into parts
@@ -406,59 +441,22 @@ fn truncate_command(cmd: &str, width: usize) -> Cow<'_, str> {
     }
 
     // Extract basename from first part (executable)
-    let exe = parts[0];
-    let basename = exe.rsplit('/').next().unwrap_or(exe);
+    let basename = parts[0].rsplit('/').next().unwrap_or(parts[0]);
 
-    // If just the command with no args
+    // Handle single-part command
     if parts.len() == 1 {
-        if basename.len() <= width {
-            return Cow::Owned(basename.to_string());
-        }
-        let take = width - 1;
-        let truncated: String = basename.chars().take(take).collect();
-        return Cow::Owned(format!("{truncated}…"));
+        return if basename.len() <= width {
+            Cow::Owned(basename.to_string())
+        } else {
+            Cow::Owned(simple_truncate(basename, width))
+        };
     }
 
-    // Extract key arguments using helper (IDs, ports, paths)
+    // Build with args using helper
     let args = &parts[1..];
     let key_args = extract_key_args(args);
-
-    // Build result: basename + first arg + … + key args from end
-    let first_arg = args.first().map(|s| *s).unwrap_or("");
-
-    // Calculate available space
-    let ellipsis = " … ";
-    let base_len = basename.chars().count();
-
-    // Try: basename + first_arg + … + last key args
-    let mut result = basename.to_string();
-    let mut current_len = base_len;
-
-    // Add first arg if space
-    if !first_arg.is_empty() && current_len + 1 + first_arg.chars().count() + 4 < width {
-        result.push(' ');
-        result.push_str(first_arg);
-        current_len = result.chars().count();
-    }
-
-    // Calculate how much space we have for key args and build suffix using helper
-    let space_for_keys = width.saturating_sub(current_len + ellipsis.chars().count());
-    if !key_args.is_empty() && space_for_keys > 5 {
-        let suffix = build_suffix_from_key_args(&key_args, space_for_keys);
-        if !suffix.is_empty() {
-            result.push_str(ellipsis);
-            result.push_str(&suffix);
-        }
-    }
-
-    // Final safety: ensure we don't exceed width
-    let final_len = result.chars().count();
-    if final_len > width {
-        let truncated: String = result.chars().take(width - 1).collect();
-        return Cow::Owned(format!("{truncated}…"));
-    }
-
-    Cow::Owned(result)
+    let first_arg = args.first().copied().unwrap_or("");
+    Cow::Owned(build_command_with_args(basename, first_arg, &key_args, width))
 }
 
 // =============================================================================

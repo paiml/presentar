@@ -70,6 +70,7 @@ panels:
     enabled: auto         # Docker/Podman
 
 # Keybindings (default values shown)
+# All keybinding fields are now fully supported (SPEC-024 compliant)
 keybindings:
   quit: q
   help: "?"
@@ -82,6 +83,7 @@ keybindings:
   explode: Enter
   collapse: Escape
   navigate: Tab
+  toggle_panel: 1-9
 
 # Theme (future - not yet implemented)
 # theme:

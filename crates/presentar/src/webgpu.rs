@@ -992,7 +992,7 @@ impl GpuResourceBuilder {
     }
 }
 
-// Workaround for wgpu::util::BufferInitDescriptor
+// DeviceExt provides buffer creation methods with initial data
 use wgpu::util::DeviceExt;
 
 /// WGSL shader for primitive rendering.

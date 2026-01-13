@@ -502,6 +502,44 @@ impl std::error::Error for CompositorError {}
 // INTRINSIC LAYOUT COMPUTATION
 // ============================================================================
 
+/// Compute width allocation for a single constraint.
+/// Returns the allocated width (0 for Fill which is handled in phase 2).
+#[inline]
+fn compute_constraint_width(hint: &SizeHint, constraint: FlexConstraint, available_width: u16) -> u16 {
+    match constraint {
+        FlexConstraint::Fixed(size) => size,
+        FlexConstraint::Min(size) => size.max(hint.min.width),
+        FlexConstraint::Max(size) => size.min(hint.preferred.width),
+        FlexConstraint::Percentage(pct) => (available_width as u32 * pct as u32 / 100) as u16,
+        FlexConstraint::Ratio(num, den) if den > 0 => (available_width as u32 * num as u32 / den as u32) as u16,
+        FlexConstraint::Ratio(_, _) => 0,
+        FlexConstraint::Content => hint.preferred.width,
+        FlexConstraint::Fill(_) => 0, // Handle in phase 2
+    }
+}
+
+/// Distribute remaining space among Fill constraints.
+fn distribute_fill_space(
+    allocated: &mut [Size],
+    hints: &[SizeHint],
+    constraints: &[FlexConstraint],
+    remaining_width: u16,
+    count: usize,
+) {
+    let fill_total: u16 = constraints.iter().take(count)
+        .filter_map(|c| if let FlexConstraint::Fill(w) = c { Some(*w) } else { None })
+        .sum();
+
+    if fill_total == 0 || remaining_width == 0 { return; }
+
+    for (i, constraint) in constraints.iter().enumerate().take(count) {
+        if let FlexConstraint::Fill(weight) = constraint {
+            let share = (remaining_width as u32 * *weight as u32 / fill_total as u32) as u16;
+            allocated[i].width = hints[i].max.map_or(share, |max| share.min(max.width));
+        }
+    }
+}
+
 /// Compute layout respecting intrinsic sizes.
 ///
 /// This implements a flexbox-like algorithm:
@@ -524,65 +562,18 @@ pub fn compute_intrinsic_layout(
 
     // Phase 1: Allocate fixed and min sizes
     for (i, (hint, constraint)) in hints.iter().zip(constraints).enumerate().take(count) {
-        match constraint {
-            FlexConstraint::Fixed(size) => {
-                allocated[i].width = *size;
-                remaining_width = remaining_width.saturating_sub(*size);
+        let width = compute_constraint_width(hint, *constraint, available.width);
+        if !matches!(constraint, FlexConstraint::Fill(_)) {
+            allocated[i].width = width;
+            if matches!(constraint, FlexConstraint::Content) {
+                allocated[i].height = hint.preferred.height;
             }
-            FlexConstraint::Min(size) => {
-                let width = (*size).max(hint.min.width);
-                allocated[i].width = width;
-                remaining_width = remaining_width.saturating_sub(width);
-            }
-            FlexConstraint::Max(size) => {
-                let width = (*size).min(hint.preferred.width);
-                allocated[i].width = width;
-                remaining_width = remaining_width.saturating_sub(width);
-            }
-            FlexConstraint::Percentage(pct) => {
-                let width = (available.width as u32 * *pct as u32 / 100) as u16;
-                allocated[i].width = width;
-                remaining_width = remaining_width.saturating_sub(width);
-            }
-            FlexConstraint::Ratio(num, den) => {
-                if *den > 0 {
-                    let width = (available.width as u32 * *num as u32 / *den as u32) as u16;
-                    allocated[i].width = width;
-                    remaining_width = remaining_width.saturating_sub(width);
-                }
-            }
-            FlexConstraint::Content => {
-                allocated[i] = hint.preferred;
-                remaining_width = remaining_width.saturating_sub(hint.preferred.width);
-            }
-            FlexConstraint::Fill(_) => {
-                // Handle in phase 2
-            }
+            remaining_width = remaining_width.saturating_sub(width);
         }
     }
 
     // Phase 2: Distribute Fill constraints
-    let fill_total: u16 = constraints
-        .iter()
-        .take(count)
-        .filter_map(|c| match c {
-            FlexConstraint::Fill(weight) => Some(*weight),
-            _ => None,
-        })
-        .sum();
-
-    if fill_total > 0 && remaining_width > 0 {
-        for (i, constraint) in constraints.iter().enumerate().take(count) {
-            if let FlexConstraint::Fill(weight) = constraint {
-                let share = (remaining_width as u32 * *weight as u32 / fill_total as u32) as u16;
-                // Respect max size if specified
-                allocated[i].width = match hints[i].max {
-                    Some(max) => share.min(max.width),
-                    None => share,
-                };
-            }
-        }
-    }
+    distribute_fill_space(&mut allocated, hints, constraints, remaining_width, count);
 
     // Phase 3: Convert to Rects
     let mut x = 0u16;

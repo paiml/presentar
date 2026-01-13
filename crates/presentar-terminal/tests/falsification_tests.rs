@@ -20,6 +20,38 @@ use std::collections::HashMap;
 // SECTION 1: CPU TEMPERATURE FALSIFICATION
 // =============================================================================
 
+/// Find k10temp hwmon device path.
+fn find_k10temp_hwmon_path() -> Option<std::path::PathBuf> {
+    let entries = std::fs::read_dir("/sys/class/hwmon").ok()?;
+    for entry in entries.flatten() {
+        let name_path = entry.path().join("name");
+        if let Ok(name) = std::fs::read_to_string(&name_path) {
+            if name.trim() == "k10temp" {
+                return Some(entry.path());
+            }
+        }
+    }
+    None
+}
+
+/// Print available temp sensors for debugging.
+fn print_available_temps(hwmon_path: &std::path::Path) {
+    println!("Available temps:");
+    for i in 1..=10 {
+        let path = hwmon_path.join(format!("temp{}_input", i));
+        if path.exists() {
+            let label_path = hwmon_path.join(format!("temp{}_label", i));
+            let label = std::fs::read_to_string(&label_path).unwrap_or_default();
+            println!("  temp{}_input exists (label: {})", i, label.trim());
+        }
+    }
+}
+
+/// Count cores with zero temperature.
+fn count_zero_temps(temps: &[f32]) -> usize {
+    temps.iter().filter(|&&t| t == 0.0).count()
+}
+
 /// FALSIFICATION TEST [S4]: AMD k10temp driver has no temp2_input
 ///
 /// CLAIM: "All CPU cores display temperatures"
@@ -34,21 +66,7 @@ use std::collections::HashMap;
 /// - temp6_input = Tccd4
 #[test]
 fn falsify_temp_amd_k10temp_no_temp2() {
-    // Find k10temp hwmon device
-    let mut k10temp_path = None;
-    if let Ok(entries) = std::fs::read_dir("/sys/class/hwmon") {
-        for entry in entries.flatten() {
-            let name_path = entry.path().join("name");
-            if let Ok(name) = std::fs::read_to_string(&name_path) {
-                if name.trim() == "k10temp" {
-                    k10temp_path = Some(entry.path());
-                    break;
-                }
-            }
-        }
-    }
-
-    let Some(hwmon_path) = k10temp_path else {
+    let Some(hwmon_path) = find_k10temp_hwmon_path() else {
         println!("SKIP: Not an AMD k10temp system");
         return;
     };
@@ -59,15 +77,7 @@ fn falsify_temp_amd_k10temp_no_temp2() {
     // FALSIFICATION: If temp2 doesn't exist, our code better handle it
     if !temp2_exists {
         println!("CONFIRMED: temp2_input does NOT exist (k10temp layout)");
-        println!("Available temps:");
-        for i in 1..=10 {
-            let path = hwmon_path.join(format!("temp{}_input", i));
-            if path.exists() {
-                let label_path = hwmon_path.join(format!("temp{}_label", i));
-                let label = std::fs::read_to_string(&label_path).unwrap_or_default();
-                println!("  temp{}_input exists (label: {})", i, label.trim());
-            }
-        }
+        print_available_temps(&hwmon_path);
 
         // Now test our code
         let app = App::with_config(false, Default::default());
@@ -83,16 +93,7 @@ fn falsify_temp_amd_k10temp_no_temp2() {
         );
 
         // FALSIFICATION ATTEMPT: All cores should have temperatures
-        let mut zeros = 0;
-        for (i, &temp) in app.per_core_temp.iter().enumerate() {
-            if temp == 0.0 {
-                zeros += 1;
-                if zeros <= 5 {
-                    println!("Core {} has no temperature", i);
-                }
-            }
-        }
-
+        let zeros = count_zero_temps(&app.per_core_temp);
         let zero_ratio = zeros as f32 / app.per_core_temp.len() as f32;
         assert!(
             zero_ratio < 0.1,
@@ -599,6 +600,437 @@ fn falsify_deterministic_not_zero() {
 }
 
 // =============================================================================
+// SECTION 10: FILTER FUNCTIONALITY FALSIFICATION
+// =============================================================================
+
+/// FALSIFICATION TEST [S4]: Filter test actually tests filtering
+///
+/// CLAIM: "test_app_filter_processes tests process filtering"
+/// FALSIFIED BY: Test only verifies string assignment, not actual filtering
+///
+/// The existing test in app.rs is FRAUDULENT:
+/// ```
+/// fn test_app_filter_processes() {
+///     let mut app = App::new(true);
+///     assert!(app.filter.is_empty());      // Only checks empty
+///     app.filter = "test".to_string();
+///     assert_eq!(app.filter, "test");      // Only checks string assignment
+/// }
+/// ```
+/// This tests NOTHING about actual process filtering behavior.
+#[test]
+fn falsify_filter_test_is_fraudulent() {
+    // The existing test in app.rs CLAIMS to test "filter processes"
+    // But it only tests string assignment - ZERO filtering verification
+    //
+    // This meta-test documents this fraud. The real test is below.
+    println!("WARNING: test_app_filter_processes in app.rs is FRAUDULENT");
+    println!("It tests string assignment, NOT process filtering.");
+}
+
+/// FALSIFICATION TEST [S4]: Filter actually filters process count
+///
+/// CLAIM: "process_count() returns filtered count"
+/// FALSIFIED BY: Count unchanged when filter is set
+#[test]
+fn falsify_filter_does_not_reduce_count() {
+    use presentar_terminal::ptop::App;
+
+    // Non-deterministic mode to get real processes
+    let mut app = App::with_config(false, Default::default());
+
+    // Get baseline count (no filter)
+    let total_processes = app.system.processes().len();
+    if total_processes < 10 {
+        println!("SKIP: Too few processes to test filtering");
+        return;
+    }
+
+    // Set a filter that should exclude most processes
+    // "XYZNONEXISTENT" should match zero processes
+    app.filter = "XYZNONEXISTENT".to_string();
+    let filtered_count = app.process_count();
+
+    // The filter should reduce the count
+    assert!(
+        filtered_count < total_processes,
+        "FALSIFIED: Filter '{}' did not reduce process count.\n\
+         Total: {}, Filtered: {}\n\
+         The filter field is stored but NOT USED for filtering.",
+        app.filter,
+        total_processes,
+        filtered_count
+    );
+
+    // With impossible filter, count should be 0 or very small
+    assert!(
+        filtered_count <= 5,
+        "FALSIFIED: Filter 'XYZNONEXISTENT' still returns {} processes.\n\
+         Expected: 0-5 (in case of coincidental match).",
+        filtered_count
+    );
+}
+
+/// FALSIFICATION TEST [S4]: Filter matches process names correctly
+///
+/// CLAIM: "Filter matches process names case-insensitively"
+/// FALSIFIED BY: Filter does not match known process
+#[test]
+fn falsify_filter_does_not_match_known_process() {
+    use presentar_terminal::ptop::App;
+
+    let mut app = App::with_config(false, Default::default());
+
+    // Find a process that definitely exists
+    let known_process = app
+        .system
+        .processes()
+        .values()
+        .find(|p| {
+            let name = p.name().to_string_lossy().to_lowercase();
+            name.len() > 3 && !name.contains(' ')
+        });
+
+    let Some(proc) = known_process else {
+        println!("SKIP: Could not find suitable process for testing");
+        return;
+    };
+
+    let proc_name = proc.name().to_string_lossy().to_string();
+    let search_term = proc_name.chars().take(4).collect::<String>().to_lowercase();
+
+    println!("Testing filter with known process: {} (searching for '{}')", proc_name, search_term);
+
+    // Set filter to match this process
+    app.filter = search_term.clone();
+    let filtered_count = app.process_count();
+
+    // Should find at least 1 match
+    assert!(
+        filtered_count >= 1,
+        "FALSIFIED: Filter '{}' found 0 matches.\n\
+         Process '{}' should have matched.\n\
+         Filter is NOT being applied correctly.",
+        search_term,
+        proc_name
+    );
+}
+
+/// FALSIFICATION TEST [S4]: Autocomplete feature exists
+///
+/// CLAIM: "ptop has autocomplete"
+/// FALSIFIED BY: No autocomplete code found
+#[test]
+fn falsify_autocomplete_exists() {
+    // Search for autocomplete-related fields/methods would be done at compile time
+    // This test documents that NO AUTOCOMPLETE EXISTS
+    //
+    // Grep results:
+    // - "autocomplete" -> 0 matches
+    // - "auto_complete" -> 0 matches
+    // - "auto-complete" -> 0 matches
+    //
+    // VERDICT: If anyone claims ptop has autocomplete, it is FRAUD
+
+    println!("DOCUMENTED: No autocomplete feature exists in ptop.");
+    println!("Grep for 'autocomplete|auto_complete|auto-complete' returns 0 matches.");
+    println!("If autocomplete was advertised, it is FALSE ADVERTISING.");
+}
+
+/// FALSIFICATION TEST [S4]: Filter is visible in UI
+///
+/// CLAIM: "Filter text is displayed in UI"
+/// FALSIFIED BY: Filter not visible in rendered output
+#[test]
+fn falsify_filter_not_visible_in_ui() {
+    use presentar_terminal::direct::CellBuffer;
+    use presentar_terminal::ptop::{ui, App};
+
+    let mut app = App::with_config(true, Default::default()); // deterministic
+    app.filter = "testfilter".to_string();
+    app.show_filter_input = true;
+
+    let mut buffer = CellBuffer::new(140, 45);
+    ui::draw(&app, &mut buffer);
+
+    let mut output = String::new();
+    for y in 0..45 {
+        for x in 0..140 {
+            if let Some(cell) = buffer.get(x, y) {
+                output.push(cell.symbol.chars().next().unwrap_or(' '));
+            }
+        }
+        output.push('\n');
+    }
+
+    // The filter text should appear somewhere in the UI
+    assert!(
+        output.contains("testfilter") || output.contains("Filter"),
+        "FALSIFIED: Filter text not visible in UI.\n\
+         Filter value: '{}'\n\
+         show_filter_input: true\n\
+         The filter overlay is NOT being rendered.",
+        app.filter
+    );
+}
+
+// =============================================================================
+// SECTION 11: SIGNAL FUNCTIONALITY FALSIFICATION
+// =============================================================================
+
+/// FALSIFICATION TEST [S4]: request_signal sets pending_signal for real process
+///
+/// CLAIM: "request_signal() sets pending_signal tuple"
+/// FALSIFIED BY: pending_signal is None after request
+#[test]
+fn falsify_request_signal_sets_pending() {
+    use crossterm::event::KeyCode;
+    use presentar_terminal::ptop::App;
+
+    let mut app = App::with_config(false, Default::default());
+
+    // First, navigate to process panel and select a process
+    app.focused_panel = Some(PanelType::Process);
+
+    // Get count of processes
+    let processes: Vec<_> = app.system.processes().iter().collect();
+    if processes.is_empty() {
+        println!("SKIP: No processes available for testing");
+        return;
+    }
+
+    // Select first process
+    app.process_selected = 0;
+
+    // Request TERM signal via 'x' key
+    app.handle_key(KeyCode::Char('x'), crossterm::event::KeyModifiers::empty());
+
+    // pending_signal should be set now
+    assert!(
+        app.pending_signal.is_some(),
+        "FALSIFIED: request_signal did not set pending_signal.\n\
+         After pressing 'x' with a selected process, pending_signal should be Some.\n\
+         Current: {:?}",
+        app.pending_signal
+    );
+
+    // Verify the tuple structure
+    if let Some((pid, name, signal_type)) = &app.pending_signal {
+        assert!(*pid > 0, "PID should be positive");
+        assert!(!name.is_empty(), "Process name should not be empty");
+        println!("Signal request created: PID={}, name={}, signal={:?}", pid, name, signal_type);
+    }
+}
+
+/// FALSIFICATION TEST [S4]: Signal keys ('x', 'k', 'X', 'K') work
+///
+/// CLAIM: "Signal hotkeys create pending signals"
+/// FALSIFIED BY: No pending signal after pressing signal keys
+#[test]
+fn falsify_signal_hotkeys_work() {
+    use crossterm::event::{KeyCode, KeyModifiers};
+    use presentar_terminal::ptop::App;
+    use presentar_terminal::ptop::config::SignalType;
+
+    let mut app = App::with_config(false, Default::default());
+    app.focused_panel = Some(PanelType::Process);
+
+    let processes: Vec<_> = app.system.processes().iter().collect();
+    if processes.is_empty() {
+        println!("SKIP: No processes available for testing");
+        return;
+    }
+
+    app.process_selected = 0;
+
+    // Test 'x' key -> TERM
+    app.handle_key(KeyCode::Char('x'), KeyModifiers::empty());
+    if let Some((_, _, signal)) = &app.pending_signal {
+        assert!(
+            matches!(signal, SignalType::Term),
+            "FALSIFIED: 'x' should request TERM, got {:?}",
+            signal
+        );
+    }
+    app.cancel_signal();
+
+    // Test 'k' key -> KILL
+    app.handle_key(KeyCode::Char('k'), KeyModifiers::empty());
+    if let Some((_, _, signal)) = &app.pending_signal {
+        assert!(
+            matches!(signal, SignalType::Kill),
+            "FALSIFIED: 'k' should request KILL, got {:?}",
+            signal
+        );
+    }
+}
+
+/// FALSIFICATION TEST [S4]: Signal confirmation dialog prevents accidental kills
+///
+/// CLAIM: "Signals require Y/Enter confirmation"
+/// FALSIFIED BY: Signal sent without confirmation
+#[test]
+fn falsify_signal_requires_confirmation() {
+    use crossterm::event::{KeyCode, KeyModifiers};
+    use presentar_terminal::ptop::App;
+
+    let mut app = App::with_config(false, Default::default());
+    app.focused_panel = Some(PanelType::Process);
+
+    let processes: Vec<_> = app.system.processes().iter().collect();
+    if processes.is_empty() {
+        println!("SKIP: No processes available for testing");
+        return;
+    }
+
+    app.process_selected = 0;
+
+    // Request signal
+    app.handle_key(KeyCode::Char('x'), KeyModifiers::empty());
+
+    // Before confirmation, signal_result should be None
+    assert!(
+        app.signal_result.is_none(),
+        "FALSIFIED: Signal was sent without confirmation!"
+    );
+
+    // 'n' should cancel
+    app.handle_key(KeyCode::Char('n'), KeyModifiers::empty());
+    assert!(
+        app.pending_signal.is_none(),
+        "FALSIFIED: 'n' did not cancel pending signal"
+    );
+
+    // Re-request
+    app.handle_key(KeyCode::Char('x'), KeyModifiers::empty());
+
+    // Esc should also cancel
+    app.handle_key(KeyCode::Esc, KeyModifiers::empty());
+    // Note: Esc in normal mode quits, but in signal confirmation it should cancel
+    // This depends on state machine - verify pending is cleared
+}
+
+/// FALSIFICATION TEST [S4]: sorted_processes applies filter
+///
+/// CLAIM: "sorted_processes() returns filtered results"
+/// FALSIFIED BY: Filter has no effect on sorted_processes output
+#[test]
+fn falsify_sorted_processes_ignores_filter() {
+    use presentar_terminal::ptop::App;
+
+    let mut app = App::with_config(false, Default::default());
+
+    // Get baseline count
+    let total = app.sorted_processes().len();
+    if total < 10 {
+        println!("SKIP: Too few processes to test filtering");
+        return;
+    }
+
+    // Set filter to something that shouldn't match most processes
+    app.filter = "XYZNONEXISTENT".to_string();
+    let filtered = app.sorted_processes().len();
+
+    assert!(
+        filtered < total,
+        "FALSIFIED: sorted_processes() does not apply filter.\n\
+         Total: {}, After filter '{}': {}\n\
+         Filter is ignored by sorted_processes().",
+        total,
+        app.filter,
+        filtered
+    );
+}
+
+// =============================================================================
+// SECTION 12: ANALYZER AVAILABILITY FALSIFICATION
+// =============================================================================
+
+/// FALSIFICATION TEST [S3]: PSI detection on Linux
+///
+/// CLAIM: "has_psi() correctly detects PSI availability"
+/// FALSIFIED BY: has_psi returns wrong value vs /proc/pressure existence
+#[test]
+fn falsify_psi_detection() {
+    use presentar_terminal::ptop::App;
+
+    let app = App::with_config(false, Default::default());
+
+    // Check if /proc/pressure/cpu exists (Linux PSI support)
+    let psi_available = std::path::Path::new("/proc/pressure/cpu").exists();
+
+    // Note: App.data_availability() should reflect PSI status
+    let data_avail = app.data_availability();
+
+    if psi_available {
+        // If kernel supports PSI, we should detect it (unless disabled)
+        println!("System has PSI support (/proc/pressure/cpu exists)");
+        // Can't assert data_avail.psi is true because it might be None due to read errors
+    } else {
+        // No PSI support - verify we don't claim to have it
+        assert!(
+            !data_avail.psi_available,
+            "FALSIFIED: has_psi() returns true but /proc/pressure/cpu doesn't exist"
+        );
+    }
+}
+
+/// FALSIFICATION TEST [S3]: Sensor detection
+///
+/// CLAIM: "has_sensors() correctly detects sensor availability"
+/// FALSIFIED BY: has_sensors returns wrong value vs /sys/class/hwmon existence
+#[test]
+fn falsify_sensor_detection() {
+    use presentar_terminal::ptop::App;
+
+    let app = App::with_config(false, Default::default());
+
+    // Check if any hwmon devices exist
+    let hwmon_exists = std::path::Path::new("/sys/class/hwmon")
+        .read_dir()
+        .map(|mut d| d.next().is_some())
+        .unwrap_or(false);
+
+    let data_avail = app.data_availability();
+
+    if !hwmon_exists {
+        // No hwmon - should not claim sensors
+        assert!(
+            !data_avail.sensors_available,
+            "FALSIFIED: has_sensors() returns true but no hwmon devices exist"
+        );
+    } else {
+        println!("System has hwmon devices, sensor detection should work");
+    }
+}
+
+/// FALSIFICATION TEST [S3]: Connection tracking detection
+///
+/// CLAIM: "has_connections() correctly detects /proc/net/tcp availability"
+/// FALSIFIED BY: has_connections returns wrong value
+#[test]
+fn falsify_connections_detection() {
+    use presentar_terminal::ptop::App;
+
+    let app = App::with_config(false, Default::default());
+
+    // Check if /proc/net/tcp exists
+    let tcp_available = std::path::Path::new("/proc/net/tcp").exists();
+
+    let data_avail = app.data_availability();
+
+    if tcp_available {
+        println!("System has /proc/net/tcp, connection tracking should work");
+        // Connection tracking should be available on any Linux system with /proc/net/tcp
+    } else {
+        assert!(
+            !data_avail.connections_available,
+            "FALSIFIED: has_connections() returns true but /proc/net/tcp doesn't exist"
+        );
+    }
+}
+
+// =============================================================================
 // SEVERITY REPORT
 // =============================================================================
 
@@ -620,7 +1052,19 @@ fn report_test_severities() {
     println!("falsify_memory_math                   : S3");
     println!("falsify_placeholder_text_in_output    : S4");
     println!("falsify_deterministic_not_zero        : S4");
+    println!("falsify_filter_test_is_fraudulent     : S4");
+    println!("falsify_filter_does_not_reduce_count  : S4");
+    println!("falsify_filter_does_not_match_known   : S4");
+    println!("falsify_autocomplete_exists           : S4");
+    println!("falsify_filter_not_visible_in_ui      : S4");
+    println!("falsify_request_signal_sets_pending   : S4");
+    println!("falsify_signal_hotkeys_work           : S4");
+    println!("falsify_signal_requires_confirmation  : S4");
+    println!("falsify_sorted_processes_ignores_flt  : S4");
+    println!("falsify_psi_detection                 : S3");
+    println!("falsify_sensor_detection              : S3");
+    println!("falsify_connections_detection         : S3");
     println!("==========================================");
-    println!("Total: 15 falsification tests");
-    println!("S4: 13, S3: 2");
+    println!("Total: 27 falsification tests");
+    println!("S4: 22, S3: 5");
 }

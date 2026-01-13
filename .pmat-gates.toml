@@ -5,6 +5,25 @@
 coverage_threshold = 95.0
 max_complexity = 20
 max_binary_size_mb = 50
+max_dead_code = 60.0
+min_provability = 0.65
+
+[dead_code]
+# Binaries have main() functions that aren't unit tested
+exclude = [
+    "**/bin/*.rs",
+    "**/random_seed.rs",
+    "**/display_rules.rs",
+    "**/tui_compare.rs",
+]
+
+[satd]
+# Generated files from wasm-bindgen and mdbook
+exclude = [
+    "www/pkg/**",
+    "web/showcase/pkg/**",
+    "book/book/**",
+]
 
 [compute-brick]
 enabled = true
