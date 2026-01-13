@@ -5,7 +5,7 @@
 **Date**: 2026-01-13
 **Version**: 9.47.0
 **Score**: **A+ (97.0%)** - Rust Project Score 131/134, Popper 77/100 (Grade B+, +20 from baseline)
-**Tests**: **6626 tests** (307 falsification + 1871 perf_trace + 55 panel_cpu + 67 connections + 30 gpu + 70 pixel), 0 failures, clippy clean
+**Tests**: **6764 tests** (307 falsification + 1871 perf_trace + 55 panel_cpu + 67 connections + 54 gpu + 70 pixel), 0 failures, clippy clean
 **UI Modules**: 20 files (6 ui/, 9 ui/panels/, 8 ui/core/) with 1050+ TDD tests
 **Coverage Target**: **95%** via file explosion strategy + pixel testing
 **trueno-viz Parity**: Layered architecture, TimingGuard, SimdStats, BrickProfiler, RingBuffer, LatencyHistogram, EmaTracker, RateLimiter, ThresholdDetector, SampleCounter, BudgetTracker, MinMaxTracker, MovingWindow, PercentileTracker, StateTracker, ChangeDetector, Accumulator, EventCounter, TrendDetector, AnomalyDetector, ThroughputTracker, JitterTracker, DerivativeTracker, IntegralTracker, CorrelationTracker, CircuitBreaker, ExponentialBackoff, SlidingMedian, HysteresisFilter, SpikeFilter, GaugeTracker, CounterPair, HealthScore, BatchProcessor, PipelineStage, WorkQueue, LeakyBucket, SlidingWindowRate, ResourcePool, Histogram2D, ReservoirSampler, ExponentialHistogram, CacheStats, BloomFilter, LoadBalancer, BurstTracker, TopKTracker, QuotaTracker, FrequencyCounter, MovingRange, TimeoutTracker, RetryTracker, ScheduleSlot, CooldownTimer, BackpressureMonitor, CapacityPlanner, DriftTracker, SemaphoreTracker, GCTracker, CompactionTracker, FlushTracker, WatermarkTracker, SnapshotTracker, VersionTracker, TokenBucketShaper, LeaderElection, CheckpointTracker, ReplicationLag, QuorumTracker, PartitionTracker, ConnectionPool, RequestTracker, SessionTracker, TransactionTracker, EventEmitter, QueueDepth, TaskScheduler, DeadletterQueue, StreamProcessor, BatchAggregator, WindowTracker, PriorityQueueTracker, MetricRegistry, AlertManager, IndexBuilder, CompactionPolicy, WriteAmplification, ReadAmplification, LockManager, MemoryPressure, FileDescriptorTracker, SocketTracker, ThreadPoolTracker, IoCostTracker, PageCacheTracker, BufferPoolTracker, AsyncTaskTracker, ContextSwitchTracker, HeapFragmentationTracker, StackDepthTracker, SyscallTracker, SignalTracker, FutexTracker, EpollTracker, MmapTracker, CgroupTracker, NetfilterTracker, BpfTracker, PerfEventTracker, KprobeTracker, IoUringTracker, NumaTracker, HugepageTracker, TlbTracker, SchedTracker, IrqTracker, SoftirqTracker, WorkqueueTracker, RcuTracker, SlabTracker, VmstatTracker, ZoneTracker, BlockLayerTracker, NvmeTracker, ScsiTracker, MdTracker, VfsTracker, InodeTracker, DentryTracker, ExtentTracker, TcpTracker, UdpTracker, SkbTracker, NetDevTracker, TimerTracker, HrTimerTracker, ClockTracker, TimeKeepingTracker, AioTracker, DirectIoTracker, BufferedIoTracker, SpliceTracker, TaskAccountingTracker, IoAccountingTracker, SchedAccountingTracker, MemAccountingTracker, PidTracker, UidTracker, NamespaceTracker, SeccompTracker, CapabilitiesTracker, LsmTracker, AuditTracker, IntegrityTracker (154 O(1) helpers), ~200-700 LOC per file
@@ -8334,14 +8334,14 @@ Atoms must implement standard rendering behaviors for non-Ready states:
 
 #### K.2.8 Phase 2 Gap Tickets (Semantic Diff from ttop)
 
-**Status**: 8/10 gaps CLOSED (80% complete)
+**Status**: 10/10 gaps CLOSED (100% complete)
 
 | Ticket | Description | Effort | Files | Dependencies | Status |
 |--------|-------------|--------|-------|--------------|--------|
 | **PMAT-GAP-027** | Swap thrashing detection with severity levels | 2h | `analyzers/swap.rs`, `ui/panels/memory.rs` | PSI data, swap stats | **DONE** |
 | **PMAT-GAP-028** | ZRAM compression ratio display | 1h | `analyzers/swap.rs`, `ui/panels/memory.rs` | /sys/block/zram*/stat | **DONE** |
-| **PMAT-GAP-029** | AMD GPU support (rocm-smi integration) | 4h | `analyzers/gpu_procs.rs` | rocm-smi binary | TODO |
-| **PMAT-GAP-030** | Apple GPU support (Metal performance shaders) | 3h | `analyzers/gpu_procs.rs` | macOS IOKit | TODO |
+| **PMAT-GAP-029** | AMD GPU support (rocm-smi integration) | 4h | `analyzers/gpu_procs.rs` | rocm-smi binary | **DONE** |
+| **PMAT-GAP-030** | Apple GPU support (Metal performance shaders) | 3h | `analyzers/gpu_procs.rs` | macOS IOKit | **DONE** |
 | **PMAT-GAP-031** | Network interface cycling (Tab to switch) | 1h | `ptop/app.rs`, `ui/panels/network.rs` | interface list | **DONE** |
 | **PMAT-GAP-032** | Container badge truncation (12 char max) | 1h | `analyzers/process_extra.rs` | container name | **DONE** |
 | **PMAT-GAP-033** | Signal result auto-clear (3s timeout) | 0.5h | `ptop/app.rs` | Instant tracking | **DONE** |
