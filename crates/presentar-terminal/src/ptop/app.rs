@@ -41,11 +41,103 @@ fn read_cached_memory() -> u64 {
     0
 }
 
+/// Map CCD temperatures to core array (AMD processors).
+///
+/// AMD Threadripper/EPYC: cores are distributed across CCDs.
+/// Each CCD gets an equal share of cores.
+#[cfg(target_os = "linux")]
+fn map_ccd_temps_to_cores(
+    ccd_temps: &std::collections::HashMap<String, f32>,
+    temps: &mut [f32],
+) {
+    let core_count = temps.len();
+    let cores_per_ccd = core_count / 4;
+
+    // Map each CCD's temp to its cores
+    for (ccd_idx, label) in ["Tccd1", "Tccd2", "Tccd3", "Tccd4"].iter().enumerate() {
+        if let Some(&temp) = ccd_temps.get(*label) {
+            let start = cores_per_ccd * ccd_idx;
+            let end = if ccd_idx == 3 {
+                core_count
+            } else {
+                (cores_per_ccd * (ccd_idx + 1)).min(core_count)
+            };
+            for i in start..end {
+                temps[i] = temp;
+            }
+        }
+    }
+
+    // Fallback to Tctl if no CCD temps found
+    if temps.iter().all(|&t| t == 0.0) {
+        if let Some(&tctl) = ccd_temps.get("Tctl") {
+            temps.fill(tctl);
+        }
+    }
+}
+
+/// Read AMD k10temp/zenpower temperatures from hwmon path.
+#[cfg(target_os = "linux")]
+fn read_amd_temps(path: &std::path::Path, temps: &mut [f32]) -> bool {
+    use std::collections::HashMap;
+    use std::fs;
+
+    let mut ccd_temps: HashMap<String, f32> = HashMap::new();
+
+    // Discover all temp sensors by reading labels
+    for i in 1..=10 {
+        let label_path = path.join(format!("temp{i}_label"));
+        let input_path = path.join(format!("temp{i}_input"));
+
+        if let (Ok(label), Ok(input)) = (fs::read_to_string(&label_path), fs::read_to_string(&input_path)) {
+            let label = label.trim().to_string();
+            if let Ok(millidegrees) = input.trim().parse::<i64>() {
+                ccd_temps.insert(label, millidegrees as f32 / 1000.0);
+            }
+        }
+    }
+
+    if ccd_temps.is_empty() {
+        return false;
+    }
+
+    map_ccd_temps_to_cores(&ccd_temps, temps);
+    true
+}
+
+/// Read Intel coretemp temperatures from hwmon path.
+#[cfg(target_os = "linux")]
+fn read_intel_temps(path: &std::path::Path, temps: &mut [f32]) -> bool {
+    use std::fs;
+
+    // Intel: temp2_input = Core 0, temp3_input = Core 1, etc.
+    for (i, temp) in temps.iter_mut().enumerate() {
+        let temp_file = path.join(format!("temp{}_input", i + 2));
+        if let Ok(temp_str) = fs::read_to_string(&temp_file) {
+            if let Ok(millidegrees) = temp_str.trim().parse::<i64>() {
+                *temp = millidegrees as f32 / 1000.0;
+            }
+        }
+    }
+
+    // Fallback to package temp if no per-core temps
+    if temps.iter().all(|&t| t == 0.0) {
+        let temp_file = path.join("temp1_input");
+        if let Ok(temp_str) = fs::read_to_string(&temp_file) {
+            if let Ok(millidegrees) = temp_str.trim().parse::<i64>() {
+                temps.fill(millidegrees as f32 / 1000.0);
+                return true;
+            }
+        }
+        return false;
+    }
+    true
+}
+
 /// Read per-core CPU temperatures from /sys/class/hwmon (Linux only).
 /// Returns temperatures in °C, or zeros if unavailable.
 #[cfg(target_os = "linux")]
 fn read_core_temperatures(core_count: usize) -> Vec<f32> {
-    use std::collections::HashMap;
     use std::fs;
     use std::path::Path;
 
@@ -56,7 +148,6 @@ fn read_core_temperatures(core_count: usize) -> Vec<f32> {
         return temps;
     }
 
-    // Find CPU temperature hwmon device
     let Ok(entries) = fs::read_dir(hwmon_dir) else {
         return temps;
     };
@@ -69,83 +160,17 @@ fn read_core_temperatures(core_count: usize) -> Vec<f32> {
         };
         let name = name.trim();
 
+        // AMD processors: k10temp or zenpower drivers
         if name == "k10temp" || name == "zenpower" {
-            // AMD: Read by label (Tccd1-4), map to core groups
-            // k10temp layout: temp1=Tctl, temp3=Tccd1, temp4=Tccd2, temp5=Tccd3, temp6=Tccd4
-            // NOTE: temp2 does NOT exist on k10temp!
-            let mut ccd_temps: HashMap<String, f32> = HashMap::new();
-
-            // Discover all temp sensors by reading labels
-            for i in 1..=10 {
-                let label_path = path.join(format!("temp{i}_label"));
-                let input_path = path.join(format!("temp{i}_input"));
-
-                if let (Ok(label), Ok(input)) = (
-                    fs::read_to_string(&label_path),
-                    fs::read_to_string(&input_path),
-                ) {
-                    let label = label.trim().to_string();
-                    if let Ok(millidegrees) = input.trim().parse::<i64>() {
-                        ccd_temps.insert(label, millidegrees as f32 / 1000.0);
-                    }
-                }
+            if read_amd_temps(&path, &mut temps) {
+                return temps;
             }
-
-            // Map CCD temperatures to cores
-            // AMD Threadripper 7960X: 24 cores, 4 CCDs, 6 cores per CCD (but 48 threads)
-            // Tccd1 → cores 0-11, Tccd2 → cores 12-23, Tccd3 → cores 24-35, Tccd4 → cores 36-47
-            let cores_per_ccd = core_count / 4;
-            if let Some(&tccd1) = ccd_temps.get("Tccd1") {
-                for i in 0..cores_per_ccd.min(core_count) {
-                    temps[i] = tccd1;
-                }
+        }
+        // Intel processors: coretemp driver
+        else if name == "coretemp" {
+            if read_intel_temps(&path, &mut temps) {
+                return temps;
             }
-            if let Some(&tccd2) = ccd_temps.get("Tccd2") {
-                for i in cores_per_ccd..(cores_per_ccd * 2).min(core_count) {
-                    temps[i] = tccd2;
-                }
-            }
-            if let Some(&tccd3) = ccd_temps.get("Tccd3") {
-                for i in (cores_per_ccd * 2)..(cores_per_ccd * 3).min(core_count) {
-                    temps[i] = tccd3;
-                }
-            }
-            if let Some(&tccd4) = ccd_temps.get("Tccd4") {
-                for i in (cores_per_ccd * 3)..core_count {
-                    temps[i] = tccd4;
-                }
-            }
-
-            // Fallback to Tctl if no CCD temps found
-            if temps.iter().all(|&t| t == 0.0) {
-                if let Some(&tctl) = ccd_temps.get("Tctl") {
-                    temps.fill(tctl);
-                }
-            }
-
-            return temps;
-        } else if name == "coretemp" {
-            // Intel: temp2_input = Core 0, temp3_input = Core 1, etc.
-            for i in 0..core_count {
-                let temp_file = path.join(format!("temp{}_input", i + 2));
-                if let Ok(temp_str) = fs::read_to_string(&temp_file) {
-                    if let Ok(millidegrees) = temp_str.trim().parse::<i64>() {
-                        temps[i] = millidegrees as f32 / 1000.0;
-                    }
-                }
-            }
-
-            // Fallback to package temp
-            if temps.iter().all(|&t| t == 0.0) {
-                let temp_file = path.join("temp1_input");
-                if let Ok(temp_str) = fs::read_to_string(&temp_file) {
-                    if let Ok(millidegrees) = temp_str.trim().parse::<i64>() {
-                        temps.fill(millidegrees as f32 / 1000.0);
-                    }
-                }
-            }
-
-            return temps;
         }
     }
 

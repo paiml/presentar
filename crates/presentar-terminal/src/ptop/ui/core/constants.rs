@@ -2,6 +2,8 @@
 //!
 //! Exact RGB values matching ttop/trueno-viz theme.rs.
 
+#![allow(dead_code)]
+
 use presentar_core::Color;
 
 /// CPU panel border color - #64C8FF (100,200,255)

@@ -33,6 +33,38 @@ pub fn build_network_title_compact(rx_rate: u64, tx_rate: u64) -> String {
     format!("Net │ ↓{} ↑{}", rx_str, tx_str)
 }
 
+/// Build network panel title with connection count (GAP-NET-002).
+///
+/// Format: "Network │ eth0 │ ↓1.5MB/s ↑500KB/s │ 42 conn"
+#[must_use]
+pub fn build_network_title_with_conns(
+    interface: &str,
+    rx_rate: u64,
+    tx_rate: u64,
+    connection_count: usize,
+) -> String {
+    let rx_str = format_traffic_rate(rx_rate);
+    let tx_str = format_traffic_rate(tx_rate);
+    format!(
+        "Network │ {} │ ↓{} ↑{} │ {} conn",
+        interface, rx_str, tx_str, connection_count
+    )
+}
+
+/// Build compact network title with connection count.
+///
+/// Format: "Net │ ↓1.5M ↑500K │ 42"
+#[must_use]
+pub fn build_network_title_compact_with_conns(
+    rx_rate: u64,
+    tx_rate: u64,
+    connection_count: usize,
+) -> String {
+    let rx_str = format_traffic_rate_short(rx_rate);
+    let tx_str = format_traffic_rate_short(tx_rate);
+    format!("Net │ ↓{} ↑{} │ {}", rx_str, tx_str, connection_count)
+}
+
 // =============================================================================
 // TRAFFIC FORMATTING
 // =============================================================================
@@ -329,6 +361,44 @@ mod tests {
     fn test_build_network_title_compact_short() {
         let title = build_network_title_compact(0, 0);
         assert!(title.chars().count() < 20);
+    }
+
+    // =========================================================================
+    // build_network_title_with_conns tests (GAP-NET-002)
+    // =========================================================================
+
+    #[test]
+    fn test_build_network_title_with_conns_basic() {
+        let title = build_network_title_with_conns("eth0", 1024 * 1024, 512 * 1024, 42);
+        assert!(title.contains("Network"));
+        assert!(title.contains("eth0"));
+        assert!(title.contains("42 conn"));
+    }
+
+    #[test]
+    fn test_build_network_title_with_conns_zero() {
+        let title = build_network_title_with_conns("lo", 0, 0, 0);
+        assert!(title.contains("0 conn"));
+    }
+
+    #[test]
+    fn test_build_network_title_with_conns_high_count() {
+        let title = build_network_title_with_conns("eth0", 1024, 1024, 1000);
+        assert!(title.contains("1000 conn"));
+    }
+
+    #[test]
+    fn test_build_network_title_compact_with_conns_basic() {
+        let title = build_network_title_compact_with_conns(1024 * 1024, 512 * 1024, 42);
+        assert!(title.contains("Net"));
+        assert!(title.contains("42"));
+        assert!(!title.contains("conn")); // Compact doesn't say "conn"
+    }
+
+    #[test]
+    fn test_build_network_title_compact_with_conns_zero() {
+        let title = build_network_title_compact_with_conns(0, 0, 0);
+        assert!(title.contains("│ 0"));
     }
 
     // =========================================================================

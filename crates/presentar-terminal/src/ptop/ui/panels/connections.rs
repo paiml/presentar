@@ -267,7 +267,7 @@ impl Protocol {
 // =============================================================================
 
 /// Column widths for connection display.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConnectionColumnWidths {
     /// Protocol column width
     pub proto: usize,
@@ -313,6 +313,350 @@ impl Default for ConnectionColumnWidths {
     fn default() -> Self {
         Self::calculate(80)
     }
+}
+
+// =============================================================================
+// CONNECTION DISPLAY COLORS
+// =============================================================================
+
+/// Dim color for muted labels.
+pub const DIM_COLOR: Color = Color {
+    r: 0.5,
+    g: 0.5,
+    b: 0.5,
+    a: 1.0,
+};
+
+/// Active connection color (green).
+pub const ACTIVE_COLOR: Color = Color {
+    r: 0.3,
+    g: 0.9,
+    b: 0.3,
+    a: 1.0,
+};
+
+/// Listen state color (blue).
+pub const LISTEN_COLOR: Color = Color {
+    r: 0.3,
+    g: 0.7,
+    b: 1.0,
+    a: 1.0,
+};
+
+// =============================================================================
+// SPARKLINE HELPERS
+// =============================================================================
+
+/// Build sparkline string from normalized values (0.0-1.0).
+///
+/// Uses braille-style characters: ▁▂▃▄▅▆▇█
+#[must_use]
+pub fn build_sparkline(values: &[f64], max_chars: usize) -> String {
+    const CHARS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+
+    if values.len() < 3 {
+        return String::new();
+    }
+
+    let chars: String = values
+        .iter()
+        .rev()
+        .take(max_chars)
+        .rev()
+        .map(|&v| {
+            let idx = ((v * 7.0).round() as usize).min(7);
+            CHARS[idx]
+        })
+        .collect();
+
+    if chars.is_empty() {
+        String::new()
+    } else {
+        format!(" {chars}")
+    }
+}
+
+/// Check if connection data has enough history for sparkline.
+#[must_use]
+pub fn has_sparkline_data(history_len: usize) -> bool {
+    history_len >= 3
+}
+
+// =============================================================================
+// STATE ABBREVIATIONS (extracted to reduce draw_connections_panel complexity)
+// =============================================================================
+
+/// Single-character state abbreviation for compact display.
+///
+/// # Arguments
+/// * `state` - TCP connection state
+///
+/// # Returns
+/// Single character: E=Established, L=Listen, T=TimeWait, C=CloseWait, S=SynSent, ?=Other
+#[must_use]
+pub fn state_abbreviation(state: TcpConnectionState) -> &'static str {
+    match state {
+        TcpConnectionState::Established => "E",
+        TcpConnectionState::Listen => "L",
+        TcpConnectionState::TimeWait => "T",
+        TcpConnectionState::CloseWait => "C",
+        TcpConnectionState::SynSent => "S",
+        TcpConnectionState::SynRecv => "R",
+        TcpConnectionState::FinWait1 => "F",
+        TcpConnectionState::FinWait2 => "f",
+        TcpConnectionState::Closing => "X",
+        TcpConnectionState::LastAck => "A",
+        TcpConnectionState::Closed => "-",
+    }
+}
+
+/// Geo indicator for connection locality.
+///
+/// # Arguments
+/// * `is_listening` - Whether connection is in LISTEN state
+/// * `is_private` - Whether remote IP is private/local (127.x, 192.168.x, 10.x, etc.)
+///
+/// # Returns
+/// "-" for listen, "L" for local/private, "R" for remote/public
+#[must_use]
+pub fn geo_indicator(is_listening: bool, is_private: bool) -> &'static str {
+    if is_listening {
+        "-"
+    } else if is_private {
+        "L"
+    } else {
+        "R"
+    }
+}
+
+/// Determine if an IP address is private/local.
+///
+/// Private ranges: 127.x.x.x, 10.x.x.x, 172.16-31.x.x, 192.168.x.x, link-local, IPv6 loopback
+#[must_use]
+pub fn is_private_ip(ip: &std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(ipv4) => {
+            ipv4.is_loopback() || ipv4.is_private() || ipv4.is_link_local()
+        }
+        std::net::IpAddr::V6(ipv6) => ipv6.is_loopback(),
+    }
+}
+
+// =============================================================================
+// HOT INDICATOR COLORS (extracted to reduce draw_connections_panel complexity)
+// =============================================================================
+
+/// Hot indicator color based on activity level.
+///
+/// # Arguments
+/// * `indicator` - Hot indicator string ("●" for hot, "◐" for warm, etc.)
+///
+/// # Returns
+/// Orange for hot (●), yellow for warm, dim for inactive
+#[must_use]
+pub fn hot_indicator_color(indicator: &str) -> Color {
+    if indicator == "●" {
+        // Hot - orange
+        Color {
+            r: 1.0,
+            g: 0.4,
+            b: 0.2,
+            a: 1.0,
+        }
+    } else if indicator == "◐" || indicator == "○" {
+        // Warm - yellow
+        Color {
+            r: 1.0,
+            g: 0.7,
+            b: 0.3,
+            a: 1.0,
+        }
+    } else {
+        // Inactive - dim
+        DIM_COLOR
+    }
+}
+
+/// Truncate process name for display in connection table.
+///
+/// # Arguments
+/// * `name` - Process name
+/// * `max_len` - Maximum length (includes ellipsis if truncated)
+#[must_use]
+pub fn truncate_process_name(name: &str, max_len: usize) -> String {
+    if name.len() <= max_len {
+        name.to_string()
+    } else if max_len > 1 {
+        format!("{}…", &name[..max_len - 1])
+    } else {
+        name.chars().take(max_len).collect()
+    }
+}
+
+// =============================================================================
+// SERVICE AUTO-DETECTION (GAP-CONN-003)
+// =============================================================================
+
+/// Port-to-service name mapping (GAP-CONN-003).
+///
+/// Maps well-known ports to service names for quick identification.
+/// Based on IANA port assignments and common conventions.
+#[must_use]
+pub fn port_to_service(port: u16) -> Option<&'static str> {
+    match port {
+        // System services
+        20 => Some("ftp-data"),
+        21 => Some("ftp"),
+        22 => Some("ssh"),
+        23 => Some("telnet"),
+        25 => Some("smtp"),
+        53 => Some("dns"),
+        67 => Some("dhcp"),
+        68 => Some("dhcp"),
+        69 => Some("tftp"),
+        80 => Some("http"),
+        110 => Some("pop3"),
+        119 => Some("nntp"),
+        123 => Some("ntp"),
+        143 => Some("imap"),
+        161 => Some("snmp"),
+        162 => Some("snmptrap"),
+        179 => Some("bgp"),
+        194 => Some("irc"),
+        443 => Some("https"),
+        445 => Some("smb"),
+        465 => Some("smtps"),
+        514 => Some("syslog"),
+        587 => Some("submission"),
+        636 => Some("ldaps"),
+        873 => Some("rsync"),
+        993 => Some("imaps"),
+        995 => Some("pop3s"),
+        // Database services
+        1433 => Some("mssql"),
+        1521 => Some("oracle"),
+        3306 => Some("mysql"),
+        5432 => Some("postgres"),
+        6379 => Some("redis"),
+        9042 => Some("cassandra"),
+        27017 => Some("mongodb"),
+        // Message queues
+        1883 => Some("mqtt"),
+        5672 => Some("amqp"),
+        9092 => Some("kafka"),
+        // Container/orchestration
+        2375 => Some("docker"),
+        2376 => Some("docker-tls"),
+        6443 => Some("k8s-api"),
+        10250 => Some("kubelet"),
+        // Development
+        3000 => Some("dev-http"),
+        4000 => Some("dev-http"),
+        5000 => Some("dev-http"),
+        8000 => Some("dev-http"),
+        8080 => Some("http-alt"),
+        8443 => Some("https-alt"),
+        9000 => Some("dev-http"),
+        // Monitoring
+        9090 => Some("prometheus"),
+        9100 => Some("node-exp"),
+        3100 => Some("loki"),
+        9200 => Some("elastic"),
+        5601 => Some("kibana"),
+        // Other common
+        1080 => Some("socks"),
+        3389 => Some("rdp"),
+        5900 => Some("vnc"),
+        6000..=6063 => Some("x11"),
+        _ => None,
+    }
+}
+
+/// Get service name with fallback to port number.
+#[must_use]
+pub fn service_name_or_port(port: u16) -> String {
+    port_to_service(port)
+        .map(String::from)
+        .unwrap_or_else(|| port.to_string())
+}
+
+/// Service category for color coding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ServiceCategory {
+    /// Web services (HTTP, HTTPS)
+    Web,
+    /// Database services (MySQL, PostgreSQL, etc.)
+    Database,
+    /// Security-sensitive (SSH, RDP, VNC)
+    Secure,
+    /// System services (DNS, NTP, etc.)
+    System,
+    /// Development/local services
+    Dev,
+    /// Unknown/other
+    Other,
+}
+
+impl ServiceCategory {
+    /// Categorize a port.
+    #[must_use]
+    pub fn from_port(port: u16) -> Self {
+        match port {
+            80 | 443 | 8080 | 8443 => Self::Web,
+            1433 | 1521 | 3306 | 5432 | 6379 | 9042 | 27017 => Self::Database,
+            22 | 23 | 3389 | 5900..=5999 => Self::Secure,
+            20..=25 | 53 | 67 | 68 | 123 | 161 | 162 | 514 => Self::System,
+            3000 | 4000 | 5000 | 8000 | 9000 => Self::Dev,
+            _ => Self::Other,
+        }
+    }
+
+    /// Get display color for category.
+    #[must_use]
+    pub fn color(&self) -> Color {
+        match self {
+            Self::Web => Color::new(0.4, 0.8, 1.0, 1.0),      // Cyan
+            Self::Database => Color::new(1.0, 0.6, 0.2, 1.0), // Orange
+            Self::Secure => Color::new(1.0, 0.3, 0.3, 1.0),   // Red
+            Self::System => Color::new(0.6, 0.6, 0.6, 1.0),   // Gray
+            Self::Dev => Color::new(0.5, 1.0, 0.5, 1.0),      // Green
+            Self::Other => Color::new(0.8, 0.8, 0.8, 1.0),    // Light gray
+        }
+    }
+
+    /// Get short label for category.
+    #[must_use]
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Web => "WEB",
+            Self::Database => "DB",
+            Self::Secure => "SEC",
+            Self::System => "SYS",
+            Self::Dev => "DEV",
+            Self::Other => "-",
+        }
+    }
+}
+
+/// Format connection for display in table row.
+///
+/// # Returns
+/// Formatted line for connection display
+#[must_use]
+pub fn format_connection_row(
+    service: &str,
+    local_port: u16,
+    remote: &str,
+    geo: &str,
+    state_short: &str,
+    age: &str,
+    proc_name: &str,
+) -> String {
+    let local = format!(":{}", local_port);
+    format!(
+        "{:<5} {:<12} {:<17} {:<2} {:<3} {:<5} {}",
+        service, local, remote, geo, state_short, age, proc_name
+    )
 }
 
 // =============================================================================
@@ -587,5 +931,397 @@ mod tests {
         let widths = ConnectionColumnWidths::calculate(100);
         let cloned = widths.clone();
         assert_eq!(widths, cloned);
+    }
+
+    // =========================================================================
+    // Color constant tests
+    // =========================================================================
+
+    #[test]
+    fn test_dim_color() {
+        assert!((DIM_COLOR.r - 0.5).abs() < 0.01);
+        assert!((DIM_COLOR.g - 0.5).abs() < 0.01);
+        assert!((DIM_COLOR.b - 0.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_active_color_is_green() {
+        assert!(ACTIVE_COLOR.g > 0.8);
+        assert!(ACTIVE_COLOR.r < 0.5);
+    }
+
+    #[test]
+    fn test_listen_color_is_blue() {
+        assert!(LISTEN_COLOR.b > 0.9);
+    }
+
+    // =========================================================================
+    // Sparkline tests
+    // =========================================================================
+
+    #[test]
+    fn test_sparkline_basic() {
+        let values = vec![0.0, 0.25, 0.5, 0.75, 1.0];
+        let sparkline = build_sparkline(&values, 12);
+        assert!(!sparkline.is_empty());
+        assert!(sparkline.starts_with(' '));
+    }
+
+    #[test]
+    fn test_sparkline_empty_short_input() {
+        let values = vec![0.5, 0.5]; // Less than 3 values
+        let sparkline = build_sparkline(&values, 12);
+        assert!(sparkline.is_empty());
+    }
+
+    #[test]
+    fn test_sparkline_contains_chars() {
+        let values = vec![0.0, 0.0, 0.0];
+        let sparkline = build_sparkline(&values, 12);
+        assert!(sparkline.contains('▁')); // Low value char
+    }
+
+    #[test]
+    fn test_sparkline_max_chars() {
+        let values: Vec<f64> = (0..20).map(|i| i as f64 / 20.0).collect();
+        let sparkline = build_sparkline(&values, 5);
+        // Should be limited to max 5 chars plus space prefix
+        assert!(sparkline.chars().count() <= 6);
+    }
+
+    #[test]
+    fn test_has_sparkline_data_true() {
+        assert!(has_sparkline_data(3));
+        assert!(has_sparkline_data(10));
+    }
+
+    #[test]
+    fn test_has_sparkline_data_false() {
+        assert!(!has_sparkline_data(0));
+        assert!(!has_sparkline_data(2));
+    }
+
+    #[test]
+    fn test_sparkline_high_values() {
+        let values = vec![1.0, 1.0, 1.0, 1.0];
+        let sparkline = build_sparkline(&values, 12);
+        assert!(sparkline.contains('█')); // High value char
+    }
+
+    // =========================================================================
+    // state_abbreviation tests
+    // =========================================================================
+
+    #[test]
+    fn f_conn_state_001_established() {
+        assert_eq!(state_abbreviation(TcpConnectionState::Established), "E");
+    }
+
+    #[test]
+    fn f_conn_state_002_listen() {
+        assert_eq!(state_abbreviation(TcpConnectionState::Listen), "L");
+    }
+
+    #[test]
+    fn f_conn_state_003_time_wait() {
+        assert_eq!(state_abbreviation(TcpConnectionState::TimeWait), "T");
+    }
+
+    #[test]
+    fn f_conn_state_004_close_wait() {
+        assert_eq!(state_abbreviation(TcpConnectionState::CloseWait), "C");
+    }
+
+    #[test]
+    fn f_conn_state_005_syn_sent() {
+        assert_eq!(state_abbreviation(TcpConnectionState::SynSent), "S");
+    }
+
+    #[test]
+    fn f_conn_state_006_all_states_single_char() {
+        // All state abbreviations should be single character
+        for state in [
+            TcpConnectionState::Established,
+            TcpConnectionState::Listen,
+            TcpConnectionState::TimeWait,
+            TcpConnectionState::CloseWait,
+            TcpConnectionState::SynSent,
+            TcpConnectionState::SynRecv,
+            TcpConnectionState::FinWait1,
+            TcpConnectionState::FinWait2,
+            TcpConnectionState::Closing,
+            TcpConnectionState::LastAck,
+            TcpConnectionState::Closed,
+        ] {
+            assert_eq!(
+                state_abbreviation(state).chars().count(),
+                1,
+                "State {:?} should have single-char abbreviation",
+                state
+            );
+        }
+    }
+
+    // =========================================================================
+    // geo_indicator tests
+    // =========================================================================
+
+    #[test]
+    fn f_conn_geo_001_listen() {
+        assert_eq!(geo_indicator(true, false), "-");
+        assert_eq!(geo_indicator(true, true), "-");
+    }
+
+    #[test]
+    fn f_conn_geo_002_local() {
+        assert_eq!(geo_indicator(false, true), "L");
+    }
+
+    #[test]
+    fn f_conn_geo_003_remote() {
+        assert_eq!(geo_indicator(false, false), "R");
+    }
+
+    // =========================================================================
+    // port_to_service tests (GAP-CONN-003)
+    // =========================================================================
+
+    #[test]
+    fn f_conn_svc_001_ssh() {
+        assert_eq!(port_to_service(22), Some("ssh"));
+    }
+
+    #[test]
+    fn f_conn_svc_002_http() {
+        assert_eq!(port_to_service(80), Some("http"));
+    }
+
+    #[test]
+    fn f_conn_svc_003_https() {
+        assert_eq!(port_to_service(443), Some("https"));
+    }
+
+    #[test]
+    fn f_conn_svc_004_mysql() {
+        assert_eq!(port_to_service(3306), Some("mysql"));
+    }
+
+    #[test]
+    fn f_conn_svc_005_postgres() {
+        assert_eq!(port_to_service(5432), Some("postgres"));
+    }
+
+    #[test]
+    fn f_conn_svc_006_redis() {
+        assert_eq!(port_to_service(6379), Some("redis"));
+    }
+
+    #[test]
+    fn f_conn_svc_007_unknown() {
+        assert_eq!(port_to_service(12345), None);
+    }
+
+    #[test]
+    fn f_conn_svc_008_x11_range() {
+        assert_eq!(port_to_service(6000), Some("x11"));
+        assert_eq!(port_to_service(6010), Some("x11"));
+        assert_eq!(port_to_service(6063), Some("x11"));
+    }
+
+    #[test]
+    fn f_conn_svc_009_service_name_or_port_known() {
+        assert_eq!(service_name_or_port(22), "ssh");
+        assert_eq!(service_name_or_port(80), "http");
+    }
+
+    #[test]
+    fn f_conn_svc_010_service_name_or_port_unknown() {
+        assert_eq!(service_name_or_port(12345), "12345");
+    }
+
+    // =========================================================================
+    // ServiceCategory tests (GAP-CONN-003)
+    // =========================================================================
+
+    #[test]
+    fn f_conn_cat_001_web() {
+        assert_eq!(ServiceCategory::from_port(80), ServiceCategory::Web);
+        assert_eq!(ServiceCategory::from_port(443), ServiceCategory::Web);
+        assert_eq!(ServiceCategory::from_port(8080), ServiceCategory::Web);
+    }
+
+    #[test]
+    fn f_conn_cat_002_database() {
+        assert_eq!(ServiceCategory::from_port(3306), ServiceCategory::Database);
+        assert_eq!(ServiceCategory::from_port(5432), ServiceCategory::Database);
+        assert_eq!(ServiceCategory::from_port(6379), ServiceCategory::Database);
+    }
+
+    #[test]
+    fn f_conn_cat_003_secure() {
+        assert_eq!(ServiceCategory::from_port(22), ServiceCategory::Secure);
+        assert_eq!(ServiceCategory::from_port(3389), ServiceCategory::Secure);
+        assert_eq!(ServiceCategory::from_port(5900), ServiceCategory::Secure);
+    }
+
+    #[test]
+    fn f_conn_cat_004_system() {
+        assert_eq!(ServiceCategory::from_port(53), ServiceCategory::System);
+        assert_eq!(ServiceCategory::from_port(123), ServiceCategory::System);
+    }
+
+    #[test]
+    fn f_conn_cat_005_dev() {
+        assert_eq!(ServiceCategory::from_port(3000), ServiceCategory::Dev);
+        assert_eq!(ServiceCategory::from_port(8000), ServiceCategory::Dev);
+    }
+
+    #[test]
+    fn f_conn_cat_006_other() {
+        assert_eq!(ServiceCategory::from_port(12345), ServiceCategory::Other);
+    }
+
+    #[test]
+    fn f_conn_cat_007_label() {
+        assert_eq!(ServiceCategory::Web.label(), "WEB");
+        assert_eq!(ServiceCategory::Database.label(), "DB");
+        assert_eq!(ServiceCategory::Secure.label(), "SEC");
+    }
+
+    #[test]
+    fn f_conn_cat_008_color_web_is_cyan() {
+        let color = ServiceCategory::Web.color();
+        assert!(color.b > 0.9, "Web category should be cyan");
+    }
+
+    #[test]
+    fn f_conn_cat_009_color_secure_is_red() {
+        let color = ServiceCategory::Secure.color();
+        assert!(color.r > 0.9 && color.g < 0.5, "Secure category should be red");
+    }
+
+    #[test]
+    fn f_conn_cat_010_derive_debug() {
+        let cat = ServiceCategory::Web;
+        let debug = format!("{:?}", cat);
+        assert!(debug.contains("Web"));
+    }
+
+    // =========================================================================
+    // is_private_ip tests
+    // =========================================================================
+
+    #[test]
+    fn f_conn_ip_001_loopback_v4() {
+        use std::net::{IpAddr, Ipv4Addr};
+        let ip = IpAddr::V4(Ipv4Addr::LOCALHOST);
+        assert!(is_private_ip(&ip));
+    }
+
+    #[test]
+    fn f_conn_ip_002_loopback_v6() {
+        use std::net::{IpAddr, Ipv6Addr};
+        let ip = IpAddr::V6(Ipv6Addr::LOCALHOST);
+        assert!(is_private_ip(&ip));
+    }
+
+    #[test]
+    fn f_conn_ip_003_private_192() {
+        use std::net::{IpAddr, Ipv4Addr};
+        let ip = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1));
+        assert!(is_private_ip(&ip));
+    }
+
+    #[test]
+    fn f_conn_ip_004_private_10() {
+        use std::net::{IpAddr, Ipv4Addr};
+        let ip = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1));
+        assert!(is_private_ip(&ip));
+    }
+
+    #[test]
+    fn f_conn_ip_005_public() {
+        use std::net::{IpAddr, Ipv4Addr};
+        let ip = IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8));
+        assert!(!is_private_ip(&ip));
+    }
+
+    // =========================================================================
+    // hot_indicator_color tests
+    // =========================================================================
+
+    #[test]
+    fn f_conn_hot_001_hot_is_orange() {
+        let color = hot_indicator_color("●");
+        assert!(color.r > 0.9, "Hot should have high red");
+        assert!(color.g < 0.5, "Hot should have low green");
+    }
+
+    #[test]
+    fn f_conn_hot_002_warm_is_yellow() {
+        let color = hot_indicator_color("◐");
+        assert!(color.r > 0.9, "Warm should have high red");
+        assert!(color.g > 0.6, "Warm should have medium green");
+    }
+
+    #[test]
+    fn f_conn_hot_003_inactive_is_dim() {
+        let color = hot_indicator_color("");
+        assert!(color.r < 0.6, "Inactive should be dim");
+        assert!(color.g < 0.6, "Inactive should be dim");
+    }
+
+    // =========================================================================
+    // truncate_process_name tests
+    // =========================================================================
+
+    #[test]
+    fn f_conn_proc_001_short_name() {
+        assert_eq!(truncate_process_name("chrome", 10), "chrome");
+    }
+
+    #[test]
+    fn f_conn_proc_002_exact_length() {
+        assert_eq!(truncate_process_name("0123456789", 10), "0123456789");
+    }
+
+    #[test]
+    fn f_conn_proc_003_truncate_long() {
+        let result = truncate_process_name("very_long_process", 10);
+        assert_eq!(result.chars().count(), 10);
+        assert!(result.ends_with('…'));
+    }
+
+    #[test]
+    fn f_conn_proc_004_truncate_to_one() {
+        let result = truncate_process_name("test", 1);
+        assert_eq!(result, "t");
+    }
+
+    // =========================================================================
+    // format_connection_row tests
+    // =========================================================================
+
+    #[test]
+    fn f_conn_row_001_basic_format() {
+        let row = format_connection_row("SSH", 22, "*", "-", "L", "1h", "sshd");
+        assert!(row.contains("SSH"));
+        assert!(row.contains(":22"));
+        assert!(row.contains("sshd"));
+    }
+
+    #[test]
+    fn f_conn_row_002_established() {
+        let row = format_connection_row("HTTPS", 443, "1.2.3.4:8080", "R", "E", "5m", "chrome");
+        assert!(row.contains("HTTPS"));
+        assert!(row.contains("1.2.3.4:8080"));
+        assert!(row.contains("chrome"));
+    }
+
+    #[test]
+    fn f_conn_row_003_alignment() {
+        let row = format_connection_row("SSH", 22, "*", "-", "L", "1h", "sshd");
+        // Check that fixed-width columns create consistent spacing
+        assert!(row.len() > 30, "Row should be reasonable width");
     }
 }

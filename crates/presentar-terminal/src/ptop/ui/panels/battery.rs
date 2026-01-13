@@ -179,7 +179,7 @@ pub fn battery_state_color(state: BatteryState) -> Color {
 // =============================================================================
 
 /// Battery icon segment for visual display.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BatteryIcon {
     /// Number of filled segments (0-4)
     pub filled: u8,

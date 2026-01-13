@@ -18,6 +18,25 @@ use presentar_core::{Canvas, Color, Point, Rect, TextStyle, Widget};
 use crate::ptop::analyzers::{ContainerState, SensorStatus, SensorType, TcpState};
 use crate::ptop::app::{App, ProcessSortColumn};
 use crate::ptop::config::{calculate_grid_layout, snap_to_grid, DetailLevel, PanelType};
+use crate::ptop::ui::core::panel_cpu::{
+    build_cpu_title, build_cpu_title_compact, consumer_cpu_color, load_color, load_trend_arrow,
+    build_load_bar, CpuMeterLayout, DIM_LABEL_COLOR, PROCESS_NAME_COLOR,
+};
+use crate::ptop::ui::core::panel_memory::{
+    swap_color, MemoryStats as MemStats, psi_memory_indicator, thrashing_indicator,
+    has_swap_activity, ZramDisplay, ZRAM_COLOR, RATIO_COLOR,
+    CACHED_COLOR, DIM_COLOR, FREE_COLOR,
+};
+#[allow(unused_imports)]
+use crate::ptop::ui::core::panel_gpu::{
+    gpu_temp_color, gpu_proc_badge, build_gpu_bar, build_gpu_title,
+    format_proc_util, truncate_name, POWER_COLOR, HEADER_COLOR, PROC_INFO_COLOR,
+    VRAM_GRAPH_COLOR,
+};
+use crate::ptop::ui::panels::connections::{
+    build_sparkline, DIM_COLOR as CONN_DIM_COLOR, ACTIVE_COLOR, LISTEN_COLOR,
+};
+use crate::ptop::ui::core::layout::push_if_visible;
 // Atomic widget helpers (available for incremental adoption)
 #[allow(unused_imports)]
 use crate::ptop::ui_atoms::{draw_colored_text, severity_color, usage_color};
@@ -224,20 +243,7 @@ fn format_bytes_rate(bytes_per_sec: f64) -> String {
     }
 }
 
-/// Format uptime seconds to human-readable string
-fn format_uptime(secs: u64) -> String {
-    let days = secs / 86400;
-    let hours = (secs % 86400) / 3600;
-    let mins = (secs % 3600) / 60;
-
-    if days > 0 {
-        format!("{days}d {hours}h")
-    } else if hours > 0 {
-        format!("{hours}h {mins}m")
-    } else {
-        format!("{mins}m")
-    }
-}
+// Note: format_uptime moved to format.rs
 
 /// Create a border with PATTERN 5 HYBRID focus indication
 /// Focus indicators (WCAG AAA compliant):
@@ -752,49 +758,15 @@ fn draw_top_panels(app: &App, canvas: &mut DirectTerminalCanvas<'_>, area: Rect)
         if app.panels.network {
             panels.push(draw_network_panel);
         }
-        // GPU: use display rules (SPEC-024 Appendix F)
-        if app.panels.gpu {
-            use crate::widgets::DisplayAction;
-            match app.evaluate_panel_display(PanelType::Gpu) {
-                DisplayAction::Show | DisplayAction::Expand => panels.push(draw_gpu_panel),
-                DisplayAction::Hide => {}
-                DisplayAction::Compact | DisplayAction::ShowPlaceholder(_) => {
-                    panels.push(draw_gpu_panel)
-                }
-            }
-        }
-        // Sensors: use display rules (SPEC-024 Appendix F)
-        if app.panels.sensors {
-            use crate::widgets::DisplayAction;
-            match app.evaluate_panel_display(PanelType::Sensors) {
-                DisplayAction::Show | DisplayAction::Expand => panels.push(draw_sensors_panel),
-                DisplayAction::Hide => {}
-                DisplayAction::Compact => panels.push(draw_sensors_compact_panel),
-                DisplayAction::ShowPlaceholder(_) => panels.push(draw_sensors_panel),
-            }
-        }
-        // PSI: use display rules - hide if not available (SPEC-024 Appendix F)
-        if app.panels.psi {
-            use crate::widgets::DisplayAction;
-            match app.evaluate_panel_display(PanelType::Psi) {
-                DisplayAction::Show | DisplayAction::Expand => panels.push(draw_psi_panel),
-                DisplayAction::Hide => {} // Desktop without PSI: don't show
-                DisplayAction::Compact | DisplayAction::ShowPlaceholder(_) => {
-                    panels.push(draw_psi_panel)
-                }
-            }
-        }
-        // Battery: use display rules - hide on desktop (SPEC-024 Appendix F)
-        if app.panels.battery {
-            use crate::widgets::DisplayAction;
-            match app.evaluate_panel_display(PanelType::Battery) {
-                DisplayAction::Show | DisplayAction::Expand => panels.push(draw_battery_panel),
-                DisplayAction::Hide => {} // Desktop without battery: don't show
-                DisplayAction::Compact | DisplayAction::ShowPlaceholder(_) => {
-                    panels.push(draw_battery_panel)
-                }
-            }
-        }
+        // Use display rules for optional panels (SPEC-024 Appendix F)
+        // GPU: no compact variant
+        push_if_visible(&mut panels, app, app.panels.gpu, PanelType::Gpu, draw_gpu_panel, None);
+        // Sensors: has compact variant
+        push_if_visible(&mut panels, app, app.panels.sensors, PanelType::Sensors, draw_sensors_panel, Some(draw_sensors_compact_panel));
+        // PSI: hide if not available on desktop
+        push_if_visible(&mut panels, app, app.panels.psi, PanelType::Psi, draw_psi_panel, None);
+        // Battery: hide on desktop without battery
+        push_if_visible(&mut panels, app, app.panels.battery, PanelType::Battery, draw_battery_panel, None);
         if app.panels.sensors_compact {
             panels.push(draw_sensors_compact_panel);
         }
@@ -834,79 +806,7 @@ fn draw_top_panels(app: &App, canvas: &mut DirectTerminalCanvas<'_>, area: Rect)
 }
 
 // ============================================================================
-// CPU Panel Helper Functions
-// Extracted to reduce cyclomatic complexity of draw_cpu_panel
-// ============================================================================
-
-/// Build CPU panel title string.
-fn build_cpu_title(
-    cpu_pct: f64,
-    core_count: usize,
-    freq_ghz: f64,
-    is_boosting: bool,
-    uptime: u64,
-    load_one: f64,
-    deterministic: bool,
-) -> String {
-    let boost_icon = if is_boosting { "⚡" } else { "" };
-    if deterministic {
-        format!(
-            "CPU {cpu_pct:.0}% │ {core_count} cores │ {freq_ghz:.1}GHz │ up {} │",
-            format_uptime(uptime)
-        )
-    } else {
-        // Prioritize: CPU% > cores > freq > uptime > LAV
-        // Compact format: "CPU 14% │ 48 cores │ 4.8GHz⚡ │ up 3d 3h │ LAV 30.28"
-        format!(
-            "CPU {cpu_pct:.0}% │ {core_count} cores │ {freq_ghz:.1}GHz{boost_icon} │ up {} │ LAV {load_one:.1}",
-            format_uptime(uptime)
-        )
-    }
-}
-
-/// Build a compact CPU title for narrow panels (prioritizes frequency)
-fn build_cpu_title_compact(
-    cpu_pct: f64,
-    core_count: usize,
-    freq_ghz: f64,
-    is_boosting: bool,
-) -> String {
-    let boost_icon = if is_boosting { "⚡" } else { "" };
-    // Compact: "CPU 14% │ 48c │ 4.8GHz⚡" (~22 chars)
-    format!("CPU {cpu_pct:.0}% │ {core_count}c │ {freq_ghz:.1}GHz{boost_icon}")
-}
-
-/// Calculate CPU meter layout parameters.
-#[allow(dead_code)] // Fields used in calculation, stored for potential future reference
-struct CpuMeterLayout {
-    bar_len: usize,
-    meter_bar_width: f32,
-    cores_per_col: usize,
-    num_meter_cols: usize,
-}
-
-impl CpuMeterLayout {
-    fn calculate(core_count: usize, core_area_height: f32, is_exploded: bool) -> Self {
-        let bar_len: usize = if is_exploded { 8 } else { 6 };
-        let meter_bar_width = (bar_len + 9) as f32;
-
-        let max_cores_per_col = if is_exploded {
-            (core_area_height as usize).min(12)
-        } else {
-            core_area_height as usize
-        };
-        let cores_per_col = max_cores_per_col.max(1);
-        let num_meter_cols = core_count.div_ceil(cores_per_col);
-
-        Self {
-            bar_len,
-            meter_bar_width,
-            cores_per_col,
-            num_meter_cols,
-        }
-    }
-}
-
+// CPU Panel - uses extracted helpers from panel_cpu module
 // ============================================================================
 
 #[allow(clippy::too_many_lines)]
@@ -1031,93 +931,44 @@ fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
     // In deterministic mode with no data, interior is left empty (just like ttop)
 
     // === Bottom Row 1: Load Average Gauge with trend arrows (ttop style) ===
+    // Uses extracted helpers from panel_cpu module
     let load_y = inner.y + core_area_height;
     if load_y < inner.y + inner.height && inner.width > 20.0 {
         let load_normalized = load.one / core_count as f64;
-        let load_color = if load_normalized > 1.0 {
-            Color {
-                r: 1.0,
-                g: 0.3,
-                b: 0.3,
-                a: 1.0,
-            } // Red
-        } else if load_normalized > 0.7 {
-            Color {
-                r: 1.0,
-                g: 0.8,
-                b: 0.2,
-                a: 1.0,
-            } // Yellow
-        } else {
-            Color {
-                r: 0.3,
-                g: 0.9,
-                b: 0.3,
-                a: 1.0,
-            } // Green
-        };
-
-        // Load trend arrows (ttop style)
-        let trend_1_5 = if load.one > load.five {
-            "↑"
-        } else if load.one < load.five {
-            "↓"
-        } else {
-            "→"
-        };
-        let trend_5_15 = if load.five > load.fifteen {
-            "↑"
-        } else if load.five < load.fifteen {
-            "↓"
-        } else {
-            "→"
-        };
-
-        // Load bar (0-2x cores = 100%)
-        let bar_width = 10_usize;
-        let load_pct = (load_normalized / 2.0).min(1.0);
-        let filled = (load_pct * bar_width as f64) as usize;
-        let bar: String =
-            "█".repeat(filled.min(bar_width)) + &"░".repeat(bar_width - filled.min(bar_width));
-
-        // Adaptive Load line format based on available width
-        // Full:    "Load ██████████ 2.15↑ 1.85↓ 1.50→ │ 4.8GHz" (~48 chars)
-        // Medium:  "Load ██████████ 2.15↑ 1.85↓ 1.50→" (~38 chars)
-        // Compact: "Load ██░░ 2.1↑ 1.8↓ 1.5→" (~24 chars)
+        let gauge_color = load_color(load_normalized);
         let available_width = inner.width as usize;
         let freq_ghz = max_freq_mhz as f64 / 1000.0;
 
+        // Use format_load_line helper (but inline for deterministic special case)
+        let trend_1_5 = load_trend_arrow(load.one, load.five);
+        let trend_5_15 = load_trend_arrow(load.five, load.fifteen);
+        let load_pct = (load_normalized / 2.0).min(1.0);
+
         let load_str = if app.deterministic {
+            let bar = build_load_bar(load_pct, 10);
             format!(
                 "Load {bar} {:.2}{trend_1_5} {:.2}{trend_5_15} {:.2} │ Fre",
                 load.one, load.five, load.fifteen
             )
         } else if available_width >= 45 && freq_ghz > 0.0 {
-            // Full format with frequency
+            let bar = build_load_bar(load_pct, 10);
             format!(
                 "Load {bar} {:.2}{trend_1_5} {:.2}{trend_5_15} {:.2}→ │ {freq_ghz:.1}GHz",
                 load.one, load.five, load.fifteen
             )
         } else if available_width >= 35 {
-            // Medium format without frequency
-            format!(
-                "Load {bar} {:.2}{trend_1_5} {:.2}{trend_5_15} {:.2}→",
-                load.one, load.five, load.fifteen
-            )
+            let bar = build_load_bar(load_pct, 10);
+            format!("Load {bar} {:.2}{trend_1_5} {:.2}{trend_5_15} {:.2}→", load.one, load.five, load.fifteen)
         } else {
-            // Compact format for narrow panels
-            let short_bar: String = bar.chars().take(4).collect();
-            format!(
-                "Load {short_bar} {:.1}{trend_1_5} {:.1}{trend_5_15} {:.1}→",
-                load.one, load.five, load.fifteen
-            )
+            let bar = build_load_bar(load_pct, 4);
+            format!("Load {bar} {:.1}{trend_1_5} {:.1}{trend_5_15} {:.1}→", load.one, load.five, load.fifteen)
         };
 
         canvas.draw_text(
             &load_str,
             Point::new(inner.x, load_y),
             &TextStyle {
-                color: load_color,
+                color: gauge_color,
                 ..Default::default()
             },
         );
@@ -1125,6 +976,7 @@ fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
 
     // === Bottom Row 2: Top 3 CPU Consumers (ttop style) ===
     // Skip in deterministic mode (ttop shows empty row)
+    // Uses extracted colors from panel_cpu module
     let consumers_y = inner.y + core_area_height + 1.0;
     if !app.deterministic && consumers_y < inner.y + inner.height && inner.width > 20.0 {
         // Get top 3 processes by CPU
@@ -1142,19 +994,12 @@ fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
 
         // Only show "Top" section if there are processes to display
         if !top_procs.is_empty() {
-            let dim_color = Color {
-                r: 0.4,
-                g: 0.4,
-                b: 0.4,
-                a: 1.0,
-            };
-
             // Draw "Top " prefix
             canvas.draw_text(
                 "Top ",
                 Point::new(inner.x, consumers_y),
                 &TextStyle {
-                    color: dim_color,
+                    color: DIM_LABEL_COLOR,
                     ..Default::default()
                 },
             );
@@ -1164,35 +1009,14 @@ fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
                 let cpu = proc.cpu_usage() as f64;
                 let name: String = proc.name().to_string_lossy().chars().take(12).collect();
 
-                let cpu_color = if cpu > 50.0 {
-                    Color {
-                        r: 1.0,
-                        g: 0.3,
-                        b: 0.3,
-                        a: 1.0,
-                    }
-                } else if cpu > 20.0 {
-                    Color {
-                        r: 1.0,
-                        g: 0.8,
-                        b: 0.2,
-                        a: 1.0,
-                    }
-                } else {
-                    Color {
-                        r: 0.3,
-                        g: 0.9,
-                        b: 0.3,
-                        a: 1.0,
-                    }
-                };
+                let cpu_color = consumer_cpu_color(cpu);
 
                 if i > 0 {
                     canvas.draw_text(
                         " │ ",
                         Point::new(inner.x + x_offset, consumers_y),
                         &TextStyle {
-                            color: dim_color,
+                            color: DIM_LABEL_COLOR,
                             ..Default::default()
                         },
                     );
@@ -1214,12 +1038,7 @@ fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
                     &format!(" {name}"),
                     Point::new(inner.x + x_offset, consumers_y),
                     &TextStyle {
-                        color: Color {
-                            r: 0.9,
-                            g: 0.9,
-                            b: 0.9,
-                            a: 1.0,
-                        },
+                        color: PROCESS_NAME_COLOR,
                         ..Default::default()
                     },
                 );
@@ -1230,11 +1049,11 @@ fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
 }
 
 // ============================================================================
-// Memory Panel Helper Functions
-// Extracted to reduce cyclomatic complexity of draw_memory_panel
+// Memory Panel - uses extracted helpers from panel_memory module
+// Local drawing functions use imported types and colors
 // ============================================================================
 
-/// Memory statistics for deterministic rendering (GB values only).
+/// Memory statistics for deterministic rendering (legacy wrapper).
 struct MemoryStats {
     used_gb: f64,
     cached_gb: f64,
@@ -1243,49 +1062,14 @@ struct MemoryStats {
 
 impl MemoryStats {
     fn from_app(app: &App) -> Self {
-        let gb = |b: u64| b as f64 / 1024.0 / 1024.0 / 1024.0;
+        let stats = MemStats::from_bytes(app.mem_used, app.mem_cached, app.mem_available, app.mem_total);
         Self {
-            used_gb: gb(app.mem_used),
-            cached_gb: gb(app.mem_cached),
-            free_gb: gb(app.mem_available),
+            used_gb: stats.used_gb,
+            cached_gb: stats.cached_gb,
+            free_gb: stats.free_gb,
         }
     }
 }
-
-/// Get color for swap usage percentage.
-fn swap_color(pct: f64) -> Color {
-    if pct > 50.0 {
-        Color::new(1.0, 0.3, 0.3, 1.0) // Red
-    } else if pct > 10.0 {
-        Color::new(1.0, 0.8, 0.2, 1.0) // Yellow
-    } else {
-        Color::new(0.3, 0.9, 0.3, 1.0) // Green
-    }
-}
-
-/// Standard dim color for labels.
-const DIM_COLOR: Color = Color {
-    r: 0.3,
-    g: 0.3,
-    b: 0.3,
-    a: 1.0,
-};
-
-/// Cyan color for cached memory.
-const CACHED_COLOR: Color = Color {
-    r: 0.3,
-    g: 0.8,
-    b: 0.9,
-    a: 1.0,
-};
-
-/// Blue color for free memory.
-const FREE_COLOR: Color = Color {
-    r: 0.4,
-    g: 0.4,
-    b: 0.9,
-    a: 1.0,
-};
 
 /// Draw stacked memory bar (Used|Cached|Free).
 fn draw_memory_stacked_bar(canvas: &mut DirectTerminalCanvas<'_>, inner: Rect, y: f32, app: &App) {
@@ -1549,41 +1333,14 @@ fn draw_memory_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: R
                 // Special handling for ZRAM row (ttop style: "ZRAM 2.5G→1.0G 2.5x lz4")
                 if *label == "ZRAM" {
                     if let Some((orig_gb, compr_gb, ratio, algo)) = &zram_row_data {
-                        let orig_str = if *orig_gb >= 1024.0 {
-                            format!("{:.1}T", orig_gb / 1024.0)
-                        } else {
-                            format!("{orig_gb:.1}G")
-                        };
-                        let compr_str = if *compr_gb >= 1024.0 {
-                            format!("{:.1}T", compr_gb / 1024.0)
-                        } else {
-                            format!("{compr_gb:.1}G")
-                        };
-
-                        let dim_color = Color {
-                            r: 0.5,
-                            g: 0.5,
-                            b: 0.5,
-                            a: 1.0,
-                        };
-                        let magenta = Color {
-                            r: 0.8,
-                            g: 0.4,
-                            b: 1.0,
-                            a: 1.0,
-                        };
-                        let green = Color {
-                            r: 0.3,
-                            g: 0.9,
-                            b: 0.3,
-                            a: 1.0,
-                        };
+                        let orig_str = ZramDisplay::format_size(*orig_gb);
+                        let compr_str = ZramDisplay::format_size(*compr_gb);
 
                         canvas.draw_text(
                             "  ZRAM ",
                             Point::new(inner.x, y),
                             &TextStyle {
-                                color: dim_color,
+                                color: DIM_COLOR,
                                 ..Default::default()
                             },
                         );
@@ -1591,7 +1348,7 @@ fn draw_memory_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: R
                             &format!("{orig_str}→{compr_str} "),
                             Point::new(inner.x + 7.0, y),
                             &TextStyle {
-                                color: magenta,
+                                color: ZRAM_COLOR,
                                 ..Default::default()
                             },
                         );
@@ -1605,7 +1362,7 @@ fn draw_memory_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: R
                             &format!("{ratio:.1}x"),
                             Point::new(ratio_x, y),
                             &TextStyle {
-                                color: green,
+                                color: RATIO_COLOR,
                                 ..Default::default()
                             },
                         );
@@ -1613,7 +1370,7 @@ fn draw_memory_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: R
                             &format!(" {algo}"),
                             Point::new(ratio_x + 4.0, y),
                             &TextStyle {
-                                color: dim_color,
+                                color: DIM_COLOR,
                                 ..Default::default()
                             },
                         );
@@ -1641,51 +1398,8 @@ fn draw_memory_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: R
                 if *label == "Swap" {
                     if let Some(swap_data) = app.analyzers.swap_data() {
                         let (is_thrashing, severity) = swap_data.is_thrashing();
-                        if is_thrashing
-                            || swap_data.swap_in_rate > 0.0
-                            || swap_data.swap_out_rate > 0.0
-                        {
-                            let (indicator, ind_color) = if severity >= 1.0 {
-                                (
-                                    "●",
-                                    Color {
-                                        r: 1.0,
-                                        g: 0.3,
-                                        b: 0.3,
-                                        a: 1.0,
-                                    },
-                                ) // Red - critical
-                            } else if severity >= 0.7 {
-                                (
-                                    "◐",
-                                    Color {
-                                        r: 1.0,
-                                        g: 0.6,
-                                        b: 0.2,
-                                        a: 1.0,
-                                    },
-                                ) // Orange - thrashing
-                            } else if severity >= 0.4 {
-                                (
-                                    "◔",
-                                    Color {
-                                        r: 1.0,
-                                        g: 0.8,
-                                        b: 0.2,
-                                        a: 1.0,
-                                    },
-                                ) // Yellow - swapping
-                            } else {
-                                (
-                                    "○",
-                                    Color {
-                                        r: 0.5,
-                                        g: 0.5,
-                                        b: 0.5,
-                                        a: 1.0,
-                                    },
-                                ) // Gray - idle
-                            };
+                        if has_swap_activity(is_thrashing, swap_data.swap_in_rate, swap_data.swap_out_rate) {
+                            let (indicator, ind_color) = thrashing_indicator(severity);
                             let thrash_x = inner.x + 28.0 + bar_width as f32;
                             let thrash_text = format!(
                                 " {indicator} I:{:.0}/O:{:.0}",
@@ -1712,38 +1426,8 @@ fn draw_memory_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: R
                     let mem_some = psi.memory.some.avg10;
                     let mem_full = psi.memory.full.as_ref().map_or(0.0, |f| f.avg10);
 
-                    // Choose indicator based on pressure level (ttop style)
-                    let (symbol, color) = if mem_some > 20.0 || mem_full > 5.0 {
-                        (
-                            "●",
-                            Color {
-                                r: 1.0,
-                                g: 0.3,
-                                b: 0.3,
-                                a: 1.0,
-                            },
-                        ) // Red - critical
-                    } else if mem_some > 10.0 || mem_full > 1.0 {
-                        (
-                            "◐",
-                            Color {
-                                r: 1.0,
-                                g: 0.8,
-                                b: 0.2,
-                                a: 1.0,
-                            },
-                        ) // Yellow - warning
-                    } else {
-                        (
-                            "○",
-                            Color {
-                                r: 0.3,
-                                g: 0.9,
-                                b: 0.3,
-                                a: 1.0,
-                            },
-                        ) // Green - healthy
-                    };
+                    // Use helper for indicator selection (ttop style)
+                    let (symbol, color) = psi_memory_indicator(mem_some, mem_full);
 
                     let psi_text =
                         format!("   PSI {symbol} {mem_some:>5.1}% some {mem_full:>5.1}% full");
@@ -2858,28 +2542,7 @@ fn draw_gpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
         // Temperature row
         if let Some(temp) = g.temperature {
             if y < inner.y + inner.height {
-                let color = if temp > 85 {
-                    Color {
-                        r: 1.0,
-                        g: 0.3,
-                        b: 0.3,
-                        a: 1.0,
-                    } // Red - hot
-                } else if temp > 70 {
-                    Color {
-                        r: 1.0,
-                        g: 0.8,
-                        b: 0.2,
-                        a: 1.0,
-                    } // Yellow - warm
-                } else {
-                    Color {
-                        r: 0.3,
-                        g: 0.9,
-                        b: 0.3,
-                        a: 1.0,
-                    } // Green - cool
-                };
+                let color = gpu_temp_color(temp);
                 canvas.draw_text(
                     &format!("Temp {temp}°C"),
                     Point::new(inner.x, y),
@@ -2899,12 +2562,7 @@ fn draw_gpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
                     &format!("Power {power:.0}W"),
                     Point::new(inner.x, y),
                     &TextStyle {
-                        color: Color {
-                            r: 0.7,
-                            g: 0.7,
-                            b: 0.7,
-                            a: 1.0,
-                        },
+                        color: POWER_COLOR,
                         ..Default::default()
                     },
                 );
@@ -2933,7 +2591,7 @@ fn draw_gpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
             if !vram_history.is_empty() {
                 let graph_height = 6.0_f32;
                 let mut graph = BrailleGraph::new(vram_history)
-                    .with_color(Color::new(0.6, 0.4, 1.0, 1.0))
+                    .with_color(VRAM_GRAPH_COLOR)
                     .with_label("VRAM History")
                     .with_range(0.0, 100.0);
                 graph.layout(Rect::new(inner.x, y, inner.width, graph_height));
@@ -2950,17 +2608,11 @@ fn draw_gpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
                 if !gpu_data.processes.is_empty() {
                     // Header
                     y += 1.0;
-                    let header_color = Color {
-                        r: 0.5,
-                        g: 0.5,
-                        b: 0.5,
-                        a: 1.0,
-                    };
                     canvas.draw_text(
                         "TY  PID   SM%  MEM%  CMD",
                         Point::new(inner.x, y),
                         &TextStyle {
-                            color: header_color,
+                            color: HEADER_COLOR,
                             ..Default::default()
                         },
                     );
@@ -2973,38 +2625,8 @@ fn draw_gpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
                             break;
                         }
 
-                        // Type badge: C (Cyan) for Compute, G (Magenta) for Graphics
-                        // Reference: ttop/src/analyzers/gpu_procs.rs GpuProcType
-                        let (type_badge, badge_color) =
-                            match proc.process_type.to_uppercase().as_str() {
-                                "C" | "COMPUTE" => (
-                                    "C",
-                                    Color {
-                                        r: 0.0,
-                                        g: 0.8,
-                                        b: 1.0,
-                                        a: 1.0,
-                                    },
-                                ), // Cyan
-                                "G" | "GRAPHICS" => (
-                                    "G",
-                                    Color {
-                                        r: 1.0,
-                                        g: 0.0,
-                                        b: 1.0,
-                                        a: 1.0,
-                                    },
-                                ), // Magenta
-                                _ => (
-                                    "?",
-                                    Color {
-                                        r: 0.5,
-                                        g: 0.5,
-                                        b: 0.5,
-                                        a: 1.0,
-                                    },
-                                ),
-                            };
+                        // Type badge using helper
+                        let (type_badge, badge_color) = gpu_proc_badge(&proc.process_type);
 
                         // Draw type badge
                         canvas.draw_text(
@@ -3016,18 +2638,10 @@ fn draw_gpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
                             },
                         );
 
-                        // Draw process info
-                        let sm_str = proc
-                            .gpu_util
-                            .map_or_else(|| "  -".to_string(), |u| format!("{u:>3.0}"));
-                        let mem_str = proc
-                            .mem_util
-                            .map_or_else(|| "  -".to_string(), |u| format!("{u:>3.0}"));
-                        let cmd = if proc.name.len() > 12 {
-                            &proc.name[..12]
-                        } else {
-                            &proc.name
-                        };
+                        // Draw process info using helpers
+                        let sm_str = format_proc_util(proc.gpu_util);
+                        let mem_str = format_proc_util(proc.mem_util);
+                        let cmd = truncate_name(&proc.name, 12);
 
                         let proc_info =
                             format!(" {:>5} {}%  {}%  {}", proc.pid, sm_str, mem_str, cmd);
@@ -3035,12 +2649,7 @@ fn draw_gpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
                             &proc_info,
                             Point::new(inner.x + 1.0, y),
                             &TextStyle {
-                                color: Color {
-                                    r: 0.8,
-                                    g: 0.8,
-                                    b: 0.8,
-                                    a: 1.0,
-                                },
+                                color: PROC_INFO_COLOR,
                                 ..Default::default()
                             },
                         );
@@ -3056,12 +2665,7 @@ fn draw_gpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
             "No GPU detected or nvidia-smi not available",
             Point::new(inner.x, inner.y),
             &TextStyle {
-                color: Color {
-                    r: 0.5,
-                    g: 0.5,
-                    b: 0.5,
-                    a: 1.0,
-                },
+                color: HEADER_COLOR,
                 ..Default::default()
             },
         );
@@ -3803,28 +3407,12 @@ fn draw_connections_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, boun
             (0, 0, None)
         };
 
-    // Generate sparkline for connection history (CB-CONN-007)
-    let sparkline_str = if let Some(ref conn_data) = app.snapshot_connections {
-        let sparkline_data = conn_data.established_sparkline();
-        if sparkline_data.len() >= 3 {
-            // Use braille-style sparkline characters: ▁▂▃▄▅▆▇█
-            let chars: Vec<char> = sparkline_data
-                .iter()
-                .rev() // Most recent on the right
-                .take(12) // Limit to 12 chars for title space
-                .rev()
-                .map(|&v| {
-                    let idx = ((v * 7.0).round() as usize).min(7);
-                    ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'][idx]
-                })
-                .collect();
-            format!(" {}", chars.iter().collect::<String>())
-        } else {
-            String::new()
-        }
-    } else {
-        String::new()
-    };
+    // Generate sparkline for connection history (CB-CONN-007) using helper
+    let sparkline_str = app
+        .snapshot_connections
+        .as_ref()
+        .map(|conn_data| build_sparkline(&conn_data.established_sparkline(), 12))
+        .unwrap_or_default();
 
     // ttop-style title (Border adds outer spaces)
     let title =
@@ -3915,24 +3503,10 @@ fn draw_connections_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, boun
     });
 
     let max_rows = (inner.height as usize).saturating_sub(1);
-    let dim_color = Color {
-        r: 0.5,
-        g: 0.5,
-        b: 0.5,
-        a: 1.0,
-    };
-    let active_color = Color {
-        r: 0.3,
-        g: 0.9,
-        b: 0.3,
-        a: 1.0,
-    };
-    let listen_color = Color {
-        r: 0.3,
-        g: 0.7,
-        b: 1.0,
-        a: 1.0,
-    };
+    // Use imported color constants
+    let dim_color = CONN_DIM_COLOR;
+    let active_color = ACTIVE_COLOR;
+    let listen_color = LISTEN_COLOR;
 
     for (i, conn) in display_conns.iter().take(max_rows).enumerate() {
         let y = inner.y + 1.0 + i as f32;
@@ -4707,63 +4281,9 @@ fn draw_process_dataframe(app: &App, canvas: &mut DirectTerminalCanvas, area: Re
         })
         .collect();
 
-    // Sort
-    match app.sort_column {
-        ProcessSortColumn::Pid => {
-            processes.sort_by(|a, b| {
-                if app.sort_descending {
-                    b.0.cmp(a.0)
-                } else {
-                    a.0.cmp(b.0)
-                }
-            });
-        }
-        ProcessSortColumn::User => {
-            processes.sort_by(|a, b| {
-                let ua = a.1.user_id().map(|u| u.to_string()).unwrap_or_default();
-                let ub = b.1.user_id().map(|u| u.to_string()).unwrap_or_default();
-                if app.sort_descending {
-                    ub.cmp(&ua)
-                } else {
-                    ua.cmp(&ub)
-                }
-            });
-        }
-        ProcessSortColumn::Cpu => {
-            processes.sort_by(|a, b| {
-                let cmp =
-                    a.1.cpu_usage()
-                        .partial_cmp(&b.1.cpu_usage())
-                        .unwrap_or(std::cmp::Ordering::Equal);
-                if app.sort_descending {
-                    cmp.reverse()
-                } else {
-                    cmp
-                }
-            });
-        }
-        ProcessSortColumn::Mem => {
-            processes.sort_by(|a, b| {
-                let cmp = a.1.memory().cmp(&b.1.memory());
-                if app.sort_descending {
-                    cmp.reverse()
-                } else {
-                    cmp
-                }
-            });
-        }
-        ProcessSortColumn::Command => {
-            processes.sort_by(|a, b| {
-                let na = a.1.name().to_string_lossy();
-                let nb = b.1.name().to_string_lossy();
-                if app.sort_descending {
-                    nb.cmp(&na)
-                } else {
-                    na.cmp(&nb)
-                }
-            });
-        }
-    }
+    // Sort using extracted helper (reduces cyclomatic complexity)
+    use crate::ptop::ui::panels::process::sort_processes;
+    sort_processes(&mut processes, app.sort_column, app.sort_descending);
 
     // Render visible rows
     let visible_rows = (area.height as usize).saturating_sub(2);
@@ -7020,6 +6540,7 @@ mod explode_tests {
 #[cfg(test)]
 mod helper_tests {
     use super::*;
+    use crate::ptop::ui::core::format::format_uptime;
 
     // =========================================================================
     // percent_color TESTS

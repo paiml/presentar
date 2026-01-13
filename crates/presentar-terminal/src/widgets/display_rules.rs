@@ -314,6 +314,61 @@ fn truncate_path(path: &str, width: usize) -> Cow<'_, str> {
     }
 }
 
+/// Extract "key" arguments that contain identifiers (IDs, ports, paths).
+///
+/// Key patterns: contains digits, '=', or is a flag with numeric value following.
+#[inline]
+fn extract_key_args<'a>(args: &[&'a str]) -> Vec<&'a str> {
+    let mut key_args: Vec<&str> = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        let arg = args[i];
+        let is_key = arg.contains('=')
+            || arg.chars().any(|c| c.is_ascii_digit())
+            || (arg.starts_with('-')
+                && i + 1 < args.len()
+                && args[i + 1].chars().any(|c| c.is_ascii_digit()));
+
+        if is_key {
+            if arg.starts_with('-') && !arg.contains('=') && i + 1 < args.len() {
+                key_args.push(arg);
+                key_args.push(args[i + 1]);
+                i += 2;
+            } else {
+                key_args.push(arg);
+                i += 1;
+            }
+        } else {
+            i += 1;
+        }
+    }
+    key_args
+}
+
+/// Build suffix string from key args (most recent first), fitting within max_width.
+#[inline]
+fn build_suffix_from_key_args(key_args: &[&str], max_width: usize) -> String {
+    let mut suffix = String::new();
+    for &arg in key_args.iter().rev() {
+        let arg_len = arg.chars().count();
+        let new_len = if suffix.is_empty() {
+            arg_len
+        } else {
+            suffix.chars().count() + 1 + arg_len
+        };
+        if new_len <= max_width {
+            if suffix.is_empty() {
+                suffix = arg.to_string();
+            } else {
+                suffix = format!("{arg} {suffix}");
+            }
+        } else {
+            break;
+        }
+    }
+    suffix
+}
+
 /// Command-aware truncation using Basename + Key Args pattern (htop-style)
 ///
 /// Strategy:
@@ -364,34 +419,9 @@ fn truncate_command(cmd: &str, width: usize) -> Cow<'_, str> {
         return Cow::Owned(format!("{truncated}…"));
     }
 
-    // Identify key arguments (args with identifiers like IDs, ports, paths)
-    // Key patterns: contains digits, '=', or is a short flag with value after
+    // Extract key arguments using helper (IDs, ports, paths)
     let args = &parts[1..];
-    let mut key_args: Vec<&str> = Vec::new();
-    let mut i = 0;
-    while i < args.len() {
-        let arg = args[i];
-        // Check if this is a "key" argument (has identifier value)
-        let is_key = arg.contains('=')
-            || arg.chars().any(|c| c.is_ascii_digit())
-            || (arg.starts_with('-')
-                && i + 1 < args.len()
-                && args[i + 1].chars().any(|c| c.is_ascii_digit()));
-
-        if is_key {
-            // Include flag and its value if separate
-            if arg.starts_with('-') && !arg.contains('=') && i + 1 < args.len() {
-                key_args.push(arg);
-                key_args.push(args[i + 1]);
-                i += 2;
-            } else {
-                key_args.push(arg);
-                i += 1;
-            }
-        } else {
-            i += 1;
-        }
-    }
+    let key_args = extract_key_args(args);
 
     // Build result: basename + first arg + … + key args from end
     let first_arg = args.first().map(|s| *s).unwrap_or("");
@@ -411,30 +441,10 @@ fn truncate_command(cmd: &str, width: usize) -> Cow<'_, str> {
         current_len = result.chars().count();
     }
 
-    // Calculate how much space we have for key args
+    // Calculate how much space we have for key args and build suffix using helper
     let space_for_keys = width.saturating_sub(current_len + ellipsis.chars().count());
-
-    // Add key args from the END (most recent/important)
     if !key_args.is_empty() && space_for_keys > 5 {
-        let mut suffix = String::new();
-        for &arg in key_args.iter().rev() {
-            let arg_len = arg.chars().count();
-            let new_len = if suffix.is_empty() {
-                arg_len
-            } else {
-                suffix.chars().count() + 1 + arg_len
-            };
-            if new_len <= space_for_keys {
-                if suffix.is_empty() {
-                    suffix = arg.to_string();
-                } else {
-                    suffix = format!("{arg} {suffix}");
-                }
-            } else {
-                break;
-            }
-        }
-
+        let suffix = build_suffix_from_key_args(&key_args, space_for_keys);
         if !suffix.is_empty() {
             result.push_str(ellipsis);
             result.push_str(&suffix);

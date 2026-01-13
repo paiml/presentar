@@ -2,6 +2,8 @@
 //!
 //! Creates visually distinct borders for focused and unfocused panels.
 
+#![allow(dead_code)]
+
 use crate::{Border, BorderStyle};
 use presentar_core::Color;
 

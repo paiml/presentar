@@ -8208,14 +8208,14 @@ Atoms must implement standard rendering behaviors for non-Ready states:
 
 ## Appendix K: ttop Parity Gap Analysis
 
-**Status**: 20/26 gaps CLOSED (77% complete), 6 remaining
+**Status**: 22/26 gaps CLOSED (85% complete), 4 remaining
 **Priority**: P0 (pixel-perfect parity requirement)
-**Remaining**: GAP-NET-002, GAP-CONN-002, GAP-CONN-003, GAP-TREE-001, GAP-WIDG-007
+**Remaining**: GAP-CONN-002, GAP-TREE-001, GAP-WIDG-007
 **Peer Review**: Required for all ComputeBlock implementations
 
 ### K.1 Gap Inventory by Panel
 
-**Implementation Status**: 20/26 gaps closed (77% complete)
+**Implementation Status**: 22/26 gaps closed (85% complete)
 
 | # | Panel | Feature | ttop | ptop | Status | Gap ID |
 |---|-------|---------|------|------|--------|--------|
@@ -8227,14 +8227,14 @@ Atoms must implement standard rendering behaviors for non-Ready states:
 | 6 | Disk | Disk entropy/encryption detection | ✓ | ✓ | **DONE** | GAP-DISK-001 |
 | 7 | Disk | Per-mount I/O rates | ✓ | ✓ | **DONE** | GAP-DISK-002 |
 | 8 | Network | IPv6 support | ✓ | ✓ | **DONE** | GAP-NET-001 |
-| 9 | Network | Connection count in title | ✓ | ✗ | OPEN | GAP-NET-002 |
+| 9 | Network | Connection count in title | ✓ | ✓ | **DONE** | GAP-NET-002 |
 | 10 | GPU | VRAM history graph | ✓ | ✓ | **DONE** | GAP-GPU-001 |
 | 11 | GPU | Process type badges (C/G) | ✓ | ✓ | **DONE** | GAP-GPU-002 |
 | 12 | GPU | Power draw with limit | ✓ | ✓ | **DONE** | GAP-GPU-003 |
 | 13 | GPU | Fan speed percentage | ✓ | ✓ | **DONE** | GAP-GPU-004 |
 | 14 | Connections | Socket state filtering | ✓ | ✓ | **DONE** | GAP-CONN-001 |
 | 15 | Connections | Geo-IP location | ✓ | ✗ | OPEN | GAP-CONN-002 |
-| 16 | Connections | Service auto-detection | ✓ | ✗ | OPEN | GAP-CONN-003 |
+| 16 | Connections | Service auto-detection | ✓ | ✓ | **DONE** | GAP-CONN-003 |
 | 17 | Sensors | Fan RPM display | ✓ | ✓ | **DONE** | GAP-SENS-001 |
 | 18 | Sensors | Battery ETA formatting | ✓ | ✓ | **DONE** | GAP-SENS-002 |
 | 19 | Treemap | Flash on process change | ✓ | ✗ | OPEN | GAP-TREE-001 |

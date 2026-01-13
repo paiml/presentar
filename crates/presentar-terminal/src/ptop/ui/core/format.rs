@@ -2,6 +2,8 @@
 //!
 //! Functions for formatting bytes, rates, uptime, percentages, etc.
 
+#![allow(dead_code)]
+
 use presentar_core::Color;
 
 use super::constants::{CYAN, GREEN, RED, WHITE, YELLOW};
@@ -72,7 +74,7 @@ pub fn format_bytes_rate(bytes_per_sec: f64) -> String {
 /// use presentar_terminal::ptop::ui::core::format::format_uptime;
 ///
 /// assert_eq!(format_uptime(3600), "1h 0m");
-/// assert_eq!(format_uptime(90061), "1d 1h 1m");
+/// assert_eq!(format_uptime(90000), "1d 1h");
 /// ```
 #[must_use]
 pub fn format_uptime(secs: u64) -> String {
@@ -81,7 +83,8 @@ pub fn format_uptime(secs: u64) -> String {
     let mins = (secs % 3600) / 60;
 
     if days > 0 {
-        format!("{days}d {hours}h {mins}m")
+        // At day scale, minutes are too granular
+        format!("{days}d {hours}h")
     } else if hours > 0 {
         format!("{hours}h {mins}m")
     } else {
@@ -337,11 +340,11 @@ mod tests {
         assert_eq!(format_uptime(3660), "1h 1m");
     }
 
-    // F-FORMAT-011: format_uptime days
+    // F-FORMAT-011: format_uptime days (minutes omitted at day scale)
     #[test]
     fn test_format_uptime_days() {
-        assert_eq!(format_uptime(86400), "1d 0h 0m");
-        assert_eq!(format_uptime(90061), "1d 1h 1m");
+        assert_eq!(format_uptime(86400), "1d 0h");
+        assert_eq!(format_uptime(90061), "1d 1h");
     }
 
     // F-FORMAT-012: format_percent no decimals
