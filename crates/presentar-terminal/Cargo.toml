@@ -39,7 +39,7 @@ harness = false
 
 [features]
 default = []
-ptop = ["sysinfo", "clap"]
+ptop = ["sysinfo", "clap", "serde_json"]
 tui-compare = ["clap"]
 bench-tool = ["clap"]
 score = ["clap", "serde", "serde_json", "serde_yaml"]

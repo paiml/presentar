@@ -1,7 +1,14 @@
 //! GPU Process Analyzer
 //!
-//! Queries GPU process VRAM usage from nvidia-smi or AMDGPU.
+//! Queries GPU process VRAM usage from nvidia-smi, rocm-smi (AMD), or Apple IOKit.
 //! Falls back gracefully if no GPU is available.
+//!
+//! ## Platform Support
+//!
+//! - **NVIDIA**: Uses nvidia-smi for detailed GPU/process stats
+//! - **AMD**: Uses rocm-smi (PMAT-GAP-029) with sysfs fallback
+//! - **Apple**: Uses IOKit/Metal for Apple Silicon GPUs (PMAT-GAP-030)
+//! - **Intel**: Basic sysfs support
 
 #![allow(clippy::uninlined_format_args)]
 
@@ -17,6 +24,7 @@ pub enum GpuVendor {
     Nvidia,
     Amd,
     Intel,
+    Apple,
     Unknown,
 }
 
@@ -27,6 +35,7 @@ impl GpuVendor {
             Self::Nvidia => "NVIDIA",
             Self::Amd => "AMD",
             Self::Intel => "Intel",
+            Self::Apple => "Apple",
             Self::Unknown => "Unknown",
         }
     }
@@ -154,6 +163,8 @@ pub struct GpuProcsAnalyzer {
     interval: Duration,
     vendor: Option<GpuVendor>,
     nvidia_smi_path: Option<String>,
+    /// Path to rocm-smi for AMD GPU stats (PMAT-GAP-029)
+    rocm_smi_path: Option<String>,
 }
 
 impl Default for GpuProcsAnalyzer {
@@ -166,13 +177,14 @@ impl GpuProcsAnalyzer {
     /// Create a new GPU processes analyzer
     pub fn new() -> Self {
         // Detect available GPU
-        let (vendor, nvidia_smi_path) = Self::detect_gpu();
+        let (vendor, nvidia_smi_path, rocm_smi_path) = Self::detect_gpu();
 
         Self {
             data: GpuProcsData::default(),
             interval: Duration::from_secs(2),
             vendor,
             nvidia_smi_path,
+            rocm_smi_path,
         }
     }
 
@@ -185,15 +197,20 @@ impl GpuProcsAnalyzer {
     ///
     /// Uses same detection approach as ttop - directly invoke nvidia-smi
     /// rather than searching PATH with `which`.
-    fn detect_gpu() -> (Option<GpuVendor>, Option<String>) {
+    /// Enhanced for AMD with rocm-smi detection (PMAT-GAP-029).
+    /// Enhanced for Apple Silicon GPU detection (PMAT-GAP-030).
+    fn detect_gpu() -> (Option<GpuVendor>, Option<String>, Option<String>) {
         // Check for NVIDIA GPU by directly running nvidia-smi --version
         // This is more reliable than using `which` (matches ttop behavior)
         if let Ok(output) = Command::new("nvidia-smi").arg("--version").output() {
             if output.status.success() {
                 // nvidia-smi is available, use it directly from PATH
-                return (Some(GpuVendor::Nvidia), Some("nvidia-smi".to_string()));
+                return (Some(GpuVendor::Nvidia), Some("nvidia-smi".to_string()), None);
             }
         }
+
+        // Check for AMD GPU with rocm-smi (PMAT-GAP-029)
+        let rocm_smi_path = Self::detect_rocm_smi();
 
         // Check for AMD GPU via sysfs - scan all cards, not just card0
         if let Ok(entries) = std::fs::read_dir("/sys/class/drm") {
@@ -204,7 +221,7 @@ impl GpuProcsAnalyzer {
                     let vendor_path = entry.path().join("device/vendor");
                     if let Ok(vendor) = std::fs::read_to_string(&vendor_path) {
                         if vendor.trim() == "0x1002" {
-                            return (Some(GpuVendor::Amd), None);
+                            return (Some(GpuVendor::Amd), None, rocm_smi_path);
                         }
                     }
                 }
@@ -213,10 +230,60 @@ impl GpuProcsAnalyzer {
 
         // Check for Intel GPU
         if Path::new("/sys/class/drm/card0/gt/gt0").exists() {
-            return (Some(GpuVendor::Intel), None);
+            return (Some(GpuVendor::Intel), None, None);
         }
 
-        (None, None)
+        // Check for Apple GPU (PMAT-GAP-030)
+        #[cfg(target_os = "macos")]
+        {
+            if Self::detect_apple_gpu() {
+                return (Some(GpuVendor::Apple), None, None);
+            }
+        }
+
+        (None, None, None)
+    }
+
+    /// Detect rocm-smi availability (PMAT-GAP-029 - ttop parity)
+    fn detect_rocm_smi() -> Option<String> {
+        // Try rocm-smi directly
+        if let Ok(output) = Command::new("rocm-smi").arg("--version").output() {
+            if output.status.success() {
+                return Some("rocm-smi".to_string());
+            }
+        }
+        // Try common ROCm installation paths
+        let common_paths = [
+            "/opt/rocm/bin/rocm-smi",
+            "/usr/bin/rocm-smi",
+            "/usr/local/bin/rocm-smi",
+        ];
+        for path in common_paths {
+            if Path::new(path).exists() {
+                if let Ok(output) = Command::new(path).arg("--version").output() {
+                    if output.status.success() {
+                        return Some(path.to_string());
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Detect Apple GPU (PMAT-GAP-030 - ttop parity)
+    #[cfg(target_os = "macos")]
+    fn detect_apple_gpu() -> bool {
+        // Check for Apple Silicon by looking at CPU brand
+        if let Ok(output) = Command::new("sysctl")
+            .args(["-n", "machdep.cpu.brand_string"])
+            .output()
+        {
+            if output.status.success() {
+                let brand = String::from_utf8_lossy(&output.stdout);
+                return brand.contains("Apple");
+            }
+        }
+        false
     }
 
     /// Query NVIDIA GPU using nvidia-smi
@@ -387,8 +454,193 @@ impl GpuProcsAnalyzer {
         })
     }
 
-    /// Query AMD GPU via sysfs
+    /// Query AMD GPU using rocm-smi (PMAT-GAP-029 - ttop parity)
+    ///
+    /// rocm-smi provides more detailed AMD GPU stats including per-process memory,
+    /// similar to nvidia-smi for NVIDIA GPUs.
+    fn query_amd_rocm_smi(&mut self) -> Result<(), AnalyzerError> {
+        let rocm_smi = self
+            .rocm_smi_path
+            .as_ref()
+            .ok_or_else(|| AnalyzerError::NotAvailable("rocm-smi not found".to_string()))?;
+
+        // Query GPU info using rocm-smi
+        let output = Command::new(rocm_smi)
+            .args(["--showid", "--showtemp", "--showuse", "--showmemuse", "--showpower", "--showfan", "--json"])
+            .output()
+            .map_err(|e| AnalyzerError::IoError(format!("rocm-smi failed: {}", e)))?;
+
+        if !output.status.success() {
+            // Fall back to sysfs if rocm-smi fails
+            return self.query_amd_sysfs();
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut gpus = Vec::new();
+
+        // Parse JSON output
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
+            if let Some(card_obj) = json.as_object() {
+                for (card_name, card_info) in card_obj {
+                    if !card_name.starts_with("card") {
+                        continue;
+                    }
+
+                    let index: u32 = card_name
+                        .strip_prefix("card")
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(0);
+
+                    let get_f32 = |key: &str| -> f32 {
+                        card_info.get(key)
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| s.trim_end_matches('%').trim_end_matches('W').trim_end_matches('C').parse().ok())
+                            .unwrap_or(0.0)
+                    };
+
+                    let get_u64 = |key: &str| -> u64 {
+                        card_info.get(key)
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| s.parse().ok())
+                            .unwrap_or(0)
+                    };
+
+                    let gpu_name = card_info.get("Card series")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("AMD GPU")
+                        .to_string();
+
+                    let utilization = get_f32("GPU use (%)");
+                    let temperature = card_info.get("Temperature (Sensor junction) (C)")
+                        .or_else(|| card_info.get("Temperature (Sensor edge) (C)"))
+                        .and_then(|v| v.as_str())
+                        .and_then(|s| s.trim_end_matches('C').trim().parse().ok());
+                    let power_draw = card_info.get("Average Graphics Package Power (W)")
+                        .and_then(|v| v.as_str())
+                        .and_then(|s| s.trim_end_matches('W').trim().parse().ok());
+                    let fan_speed = card_info.get("Fan speed (%)")
+                        .and_then(|v| v.as_str())
+                        .and_then(|s| s.trim_end_matches('%').trim().parse().ok());
+
+                    // Memory info
+                    let total_memory = get_u64("VRAM Total Memory (B)");
+                    let used_memory = get_u64("VRAM Total Used Memory (B)");
+                    let free_memory = total_memory.saturating_sub(used_memory);
+                    let memory_utilization = if total_memory > 0 {
+                        (used_memory as f64 / total_memory as f64 * 100.0) as f32
+                    } else {
+                        0.0
+                    };
+
+                    gpus.push(GpuInfo {
+                        index,
+                        name: gpu_name,
+                        vendor: GpuVendor::Amd,
+                        total_memory,
+                        used_memory,
+                        free_memory,
+                        utilization,
+                        memory_utilization,
+                        temperature,
+                        power_draw,
+                        power_limit: None,
+                        fan_speed,
+                        driver_version: None,
+                    });
+                }
+            }
+        }
+
+        // If JSON parsing failed or no GPUs found, fall back to sysfs
+        if gpus.is_empty() {
+            return self.query_amd_sysfs();
+        }
+
+        // Query per-process GPU memory (PMAT-GAP-029)
+        let mut processes = Vec::new();
+        if let Ok(proc_output) = Command::new(rocm_smi)
+            .args(["--showpidgpus", "--json"])
+            .output()
+        {
+            if proc_output.status.success() {
+                let proc_stdout = String::from_utf8_lossy(&proc_output.stdout);
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&proc_stdout) {
+                    if let Some(obj) = json.as_object() {
+                        for (pid_str, pid_info) in obj {
+                            if let Ok(pid) = pid_str.parse::<u32>() {
+                                let gpu_index = pid_info.get("GPU ID")
+                                    .and_then(|v| v.as_u64())
+                                    .unwrap_or(0) as u32;
+                                let name = pid_info.get("Process name")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("unknown")
+                                    .to_string();
+                                let used_memory = pid_info.get("VRAM used")
+                                    .and_then(|v| v.as_u64())
+                                    .unwrap_or(0);
+
+                                processes.push(GpuProcess {
+                                    pid,
+                                    name,
+                                    gpu_index,
+                                    used_memory,
+                                    gpu_util: None,
+                                    mem_util: None,
+                                    process_type: "Compute".to_string(),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Calculate aggregates
+        let total_vram = gpus.iter().map(|g| g.total_memory).sum();
+        let total_vram_used = gpus.iter().map(|g| g.used_memory).sum();
+        let avg_gpu_util = if gpus.is_empty() {
+            0.0
+        } else {
+            gpus.iter().map(|g| g.utilization).sum::<f32>() / gpus.len() as f32
+        };
+        let max_temperature = gpus.iter().filter_map(|g| g.temperature).reduce(f32::max);
+        let total_power = {
+            let powers: Vec<f32> = gpus.iter().filter_map(|g| g.power_draw).collect();
+            if powers.is_empty() {
+                None
+            } else {
+                Some(powers.iter().sum())
+            }
+        };
+
+        self.data = GpuProcsData {
+            gpus,
+            processes,
+            vendor: Some(GpuVendor::Amd),
+            total_vram_used,
+            total_vram,
+            avg_gpu_util,
+            max_temperature,
+            total_power,
+        };
+
+        Ok(())
+    }
+
+    /// Query AMD GPU - tries rocm-smi first, then falls back to sysfs (PMAT-GAP-029)
     fn query_amd(&mut self) -> Result<(), AnalyzerError> {
+        // Try rocm-smi first for more detailed stats
+        if self.rocm_smi_path.is_some() {
+            if let Ok(()) = self.query_amd_rocm_smi() {
+                return Ok(());
+            }
+        }
+        // Fall back to sysfs
+        self.query_amd_sysfs()
+    }
+
+    /// Query AMD GPU via sysfs (fallback when rocm-smi unavailable)
+    fn query_amd_sysfs(&mut self) -> Result<(), AnalyzerError> {
         let mut gpus = Vec::new();
         let processes = Vec::new();
 
@@ -589,6 +841,160 @@ impl GpuProcsAnalyzer {
         }
         None
     }
+
+    /// Query Apple GPU (PMAT-GAP-030 - ttop parity)
+    ///
+    /// Uses system_profiler on macOS to get Apple Silicon GPU information.
+    /// Apple Silicon has unified memory architecture so GPU memory = system RAM.
+    #[cfg(target_os = "macos")]
+    fn query_apple(&mut self) -> Result<(), AnalyzerError> {
+        // Use system_profiler to get GPU info
+        let output = Command::new("system_profiler")
+            .args(["SPDisplaysDataType", "-json"])
+            .output()
+            .map_err(|e| AnalyzerError::IoError(format!("system_profiler failed: {}", e)))?;
+
+        if !output.status.success() {
+            return Err(AnalyzerError::IoError(
+                "system_profiler returned error".to_string(),
+            ));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut gpus = Vec::new();
+
+        // Parse JSON output
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
+            if let Some(displays) = json.get("SPDisplaysDataType").and_then(|v| v.as_array()) {
+                for (index, display) in displays.iter().enumerate() {
+                    let name = display
+                        .get("sppci_model")
+                        .or_else(|| display.get("_name"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Apple GPU")
+                        .to_string();
+
+                    // Apple Silicon uses unified memory - get system RAM
+                    let total_memory = Self::get_apple_memory_size();
+
+                    // GPU utilization via powermetrics requires sudo, use ioreg instead
+                    let utilization = Self::get_apple_gpu_utilization();
+
+                    gpus.push(GpuInfo {
+                        index: index as u32,
+                        name,
+                        vendor: GpuVendor::Apple,
+                        total_memory,
+                        used_memory: 0, // Not directly available without Metal API
+                        free_memory: total_memory,
+                        utilization,
+                        memory_utilization: 0.0,
+                        temperature: Self::get_apple_gpu_temperature(),
+                        power_draw: Self::get_apple_gpu_power(),
+                        power_limit: None,
+                        fan_speed: None, // Apple Silicon typically fanless or uses shared cooling
+                        driver_version: None,
+                    });
+                }
+            }
+        }
+
+        if gpus.is_empty() {
+            return Err(AnalyzerError::NotAvailable(
+                "No Apple GPU found".to_string(),
+            ));
+        }
+
+        // Calculate aggregates
+        let total_vram = gpus.iter().map(|g| g.total_memory).sum();
+        let total_vram_used = gpus.iter().map(|g| g.used_memory).sum();
+        let avg_gpu_util = if gpus.is_empty() {
+            0.0
+        } else {
+            gpus.iter().map(|g| g.utilization).sum::<f32>() / gpus.len() as f32
+        };
+        let max_temperature = gpus.iter().filter_map(|g| g.temperature).reduce(f32::max);
+        let total_power = {
+            let powers: Vec<f32> = gpus.iter().filter_map(|g| g.power_draw).collect();
+            if powers.is_empty() {
+                None
+            } else {
+                Some(powers.iter().sum())
+            }
+        };
+
+        self.data = GpuProcsData {
+            gpus,
+            processes: Vec::new(), // Per-process GPU tracking requires Metal API
+            vendor: Some(GpuVendor::Apple),
+            total_vram_used,
+            total_vram,
+            avg_gpu_util,
+            max_temperature,
+            total_power,
+        };
+
+        Ok(())
+    }
+
+    /// Get Apple system memory size (PMAT-GAP-030)
+    #[cfg(target_os = "macos")]
+    fn get_apple_memory_size() -> u64 {
+        if let Ok(output) = Command::new("sysctl")
+            .args(["-n", "hw.memsize"])
+            .output()
+        {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                return stdout.trim().parse().unwrap_or(0);
+            }
+        }
+        0
+    }
+
+    /// Get Apple GPU utilization via ioreg (PMAT-GAP-030)
+    #[cfg(target_os = "macos")]
+    fn get_apple_gpu_utilization() -> f32 {
+        // Try to get GPU utilization from ioreg
+        if let Ok(output) = Command::new("ioreg")
+            .args(["-r", "-c", "IOAccelerator", "-d", "1"])
+            .output()
+        {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                // Parse GPU utilization from ioreg output
+                for line in stdout.lines() {
+                    if line.contains("\"PerformanceStatistics\"") {
+                        // Found performance stats section
+                        continue;
+                    }
+                    if line.contains("\"Device Utilization %\"") {
+                        if let Some(val) = line.split('=').nth(1) {
+                            if let Ok(util) = val.trim().parse::<f32>() {
+                                return util;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        0.0
+    }
+
+    /// Get Apple GPU temperature (PMAT-GAP-030)
+    #[cfg(target_os = "macos")]
+    fn get_apple_gpu_temperature() -> Option<f32> {
+        // Temperature requires SMC access which typically needs elevated privileges
+        // or third-party tools like osx-cpu-temp
+        None
+    }
+
+    /// Get Apple GPU power draw (PMAT-GAP-030)
+    #[cfg(target_os = "macos")]
+    fn get_apple_gpu_power() -> Option<f32> {
+        // Power metrics require powermetrics tool with sudo
+        None
+    }
 }
 
 impl Analyzer for GpuProcsAnalyzer {
@@ -606,6 +1012,12 @@ impl Analyzer for GpuProcsAnalyzer {
                     "Intel GPU not fully supported".to_string(),
                 ))
             }
+            #[cfg(target_os = "macos")]
+            Some(GpuVendor::Apple) => self.query_apple(),
+            #[cfg(not(target_os = "macos"))]
+            Some(GpuVendor::Apple) => Err(AnalyzerError::NotAvailable(
+                "Apple GPU only supported on macOS".to_string(),
+            )),
             _ => Err(AnalyzerError::NotAvailable("No GPU detected".to_string())),
         }
     }
@@ -947,6 +1359,7 @@ mod tests {
             interval: Duration::from_secs(2),
             vendor: None,
             nvidia_smi_path: None,
+            rocm_smi_path: None,
         };
 
         let result = analyzer.collect();
@@ -963,6 +1376,7 @@ mod tests {
             interval: Duration::from_secs(2),
             vendor: Some(GpuVendor::Intel),
             nvidia_smi_path: None,
+            rocm_smi_path: None,
         };
 
         let result = analyzer.collect();
@@ -979,6 +1393,7 @@ mod tests {
             interval: Duration::from_secs(2),
             vendor: Some(GpuVendor::Nvidia),
             nvidia_smi_path: Some("/usr/bin/nvidia-smi".to_string()),
+            rocm_smi_path: None,
         };
 
         assert!(analyzer.available());
@@ -991,9 +1406,85 @@ mod tests {
             interval: Duration::from_secs(2),
             vendor: None,
             nvidia_smi_path: None,
+            rocm_smi_path: None,
         };
 
         assert!(!analyzer.available());
+    }
+
+    // PMAT-GAP-029 tests - AMD GPU rocm-smi
+    #[test]
+    fn test_analyzer_amd_with_rocm_smi() {
+        let analyzer = GpuProcsAnalyzer {
+            data: GpuProcsData::default(),
+            interval: Duration::from_secs(2),
+            vendor: Some(GpuVendor::Amd),
+            nvidia_smi_path: None,
+            rocm_smi_path: Some("/opt/rocm/bin/rocm-smi".to_string()),
+        };
+
+        assert!(analyzer.available());
+        assert!(analyzer.rocm_smi_path.is_some());
+    }
+
+    #[test]
+    fn test_analyzer_amd_without_rocm_smi() {
+        let analyzer = GpuProcsAnalyzer {
+            data: GpuProcsData::default(),
+            interval: Duration::from_secs(2),
+            vendor: Some(GpuVendor::Amd),
+            nvidia_smi_path: None,
+            rocm_smi_path: None,
+        };
+
+        assert!(analyzer.available());
+        assert!(analyzer.rocm_smi_path.is_none());
+    }
+
+    #[test]
+    fn test_detect_rocm_smi_nonexistent() {
+        // Test that detect_rocm_smi doesn't panic with nonexistent paths
+        let path = GpuProcsAnalyzer::detect_rocm_smi();
+        // Result depends on system - just verify it doesn't panic
+        let _ = path;
+    }
+
+    // PMAT-GAP-030 tests - Apple GPU
+    #[test]
+    fn test_gpu_vendor_apple() {
+        assert_eq!(GpuVendor::Apple.as_str(), "Apple");
+    }
+
+    #[test]
+    fn test_analyzer_apple_vendor() {
+        let analyzer = GpuProcsAnalyzer {
+            data: GpuProcsData::default(),
+            interval: Duration::from_secs(2),
+            vendor: Some(GpuVendor::Apple),
+            nvidia_smi_path: None,
+            rocm_smi_path: None,
+        };
+
+        assert!(analyzer.available());
+    }
+
+    #[test]
+    fn test_analyzer_collect_apple_non_macos() {
+        let mut analyzer = GpuProcsAnalyzer {
+            data: GpuProcsData::default(),
+            interval: Duration::from_secs(2),
+            vendor: Some(GpuVendor::Apple),
+            nvidia_smi_path: None,
+            rocm_smi_path: None,
+        };
+
+        let result = analyzer.collect();
+        // On non-macOS, Apple GPU should return NotAvailable
+        #[cfg(not(target_os = "macos"))]
+        assert!(result.is_err());
+        // On macOS, result depends on actual hardware
+        #[cfg(target_os = "macos")]
+        let _ = result;
     }
 
     // Additional GpuVendor tests
@@ -1173,10 +1664,11 @@ mod tests {
     #[test]
     fn test_detect_gpu() {
         // This just tests that the function runs without panicking
-        let (vendor, path) = GpuProcsAnalyzer::detect_gpu();
+        let (vendor, nvidia_path, rocm_path) = GpuProcsAnalyzer::detect_gpu();
         // Result depends on system hardware - just verify types
         let _ = vendor;
-        let _ = path;
+        let _ = nvidia_path;
+        let _ = rocm_path;
     }
 
     // Test query methods with mock analyzer
@@ -1187,6 +1679,7 @@ mod tests {
             interval: Duration::from_secs(2),
             vendor: Some(GpuVendor::Nvidia),
             nvidia_smi_path: None,
+            rocm_smi_path: None,
         };
 
         let result = analyzer.query_nvidia();
@@ -1201,9 +1694,39 @@ mod tests {
             interval: Duration::from_secs(2),
             vendor: Some(GpuVendor::Amd),
             nvidia_smi_path: None,
+            rocm_smi_path: None,
         };
 
         // This may succeed or fail depending on system
         let _ = analyzer.query_amd();
+    }
+
+    #[test]
+    fn test_query_amd_rocm_smi_not_available() {
+        let mut analyzer = GpuProcsAnalyzer {
+            data: GpuProcsData::default(),
+            interval: Duration::from_secs(2),
+            vendor: Some(GpuVendor::Amd),
+            nvidia_smi_path: None,
+            rocm_smi_path: None,
+        };
+
+        // Without rocm_smi_path, query_amd_rocm_smi should error
+        let result = analyzer.query_amd_rocm_smi();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_query_amd_sysfs() {
+        let mut analyzer = GpuProcsAnalyzer {
+            data: GpuProcsData::default(),
+            interval: Duration::from_secs(2),
+            vendor: Some(GpuVendor::Amd),
+            nvidia_smi_path: None,
+            rocm_smi_path: None,
+        };
+
+        // May succeed or fail depending on system hardware
+        let _ = analyzer.query_amd_sysfs();
     }
 }
