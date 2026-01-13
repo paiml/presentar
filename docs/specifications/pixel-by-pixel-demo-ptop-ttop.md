@@ -8351,29 +8351,29 @@ Atoms must implement standard rendering behaviors for non-Ready states:
 
 #### K.2.9 Phase 3 Gap Tickets (nvidia-smi pmon Parity)
 
-**Status**: 0/6 gaps OPEN (0% complete)
+**Status**: 6/6 gaps CLOSED (100% complete)
 
-**Semantic Diff**: ttop uses `nvidia-smi pmon` for per-process GPU metrics; ptop uses `--query-compute-apps` which lacks utilization data.
+**Semantic Diff**: ~~ttop uses `nvidia-smi pmon`~~ **RESOLVED** - ptop now uses pmon for full parity.
 
 | Ticket | Description | Effort | Files | Dependencies | Status |
 |--------|-------------|--------|-------|--------------|--------|
-| **PMAT-GAP-037** | Replace --query-compute-apps with pmon | 3h | `analyzers/gpu_procs.rs` | nvidia-smi pmon | TODO |
-| **PMAT-GAP-038** | Add sm_util (shader %) per process | 1h | `analyzers/gpu_procs.rs` | PMAT-GAP-037 | TODO |
-| **PMAT-GAP-039** | Add enc_util (NVENC %) per process | 1h | `analyzers/gpu_procs.rs` | PMAT-GAP-037 | TODO |
-| **PMAT-GAP-040** | Add dec_util (NVDEC %) per process | 1h | `analyzers/gpu_procs.rs` | PMAT-GAP-037 | TODO |
-| **PMAT-GAP-041** | GpuProcType enum (C/G) not String | 0.5h | `analyzers/gpu_procs.rs` | PMAT-GAP-037 | TODO |
-| **PMAT-GAP-042** | Sort processes by SM util not memory | 0.5h | `analyzers/gpu_procs.rs` | PMAT-GAP-038 | TODO |
+| **PMAT-GAP-037** | Replace --query-compute-apps with pmon | 3h | `analyzers/gpu_procs.rs` | nvidia-smi pmon | **DONE** |
+| **PMAT-GAP-038** | Add sm_util (shader %) per process | 1h | `analyzers/gpu_procs.rs` | PMAT-GAP-037 | **DONE** |
+| **PMAT-GAP-039** | Add enc_util (NVENC %) per process | 1h | `analyzers/gpu_procs.rs` | PMAT-GAP-037 | **DONE** |
+| **PMAT-GAP-040** | Add dec_util (NVDEC %) per process | 1h | `analyzers/gpu_procs.rs` | PMAT-GAP-037 | **DONE** |
+| **PMAT-GAP-041** | GpuProcType enum (C/G) not String | 0.5h | `analyzers/gpu_procs.rs` | PMAT-GAP-037 | **DONE** |
+| **PMAT-GAP-042** | Sort processes by SM util not memory | 0.5h | `analyzers/gpu_procs.rs` | PMAT-GAP-038 | **DONE** |
 
-**Data Model Diff**:
+**Data Model Diff** (NOW MATCHING):
 ```
 ttop GpuProcess:                    ptop GpuProcess:
 ├─ gpu_idx: u32                     ├─ gpu_index: u32        ✓
 ├─ pid: u32                         ├─ pid: u32              ✓
-├─ proc_type: GpuProcType {C,G}     ├─ process_type: String  ✗ (enum → string)
-├─ sm_util: u8                      ├─ gpu_util: Option<f32> ✗ (missing pmon)
-├─ mem_util: u8                     ├─ mem_util: Option<f32> ✓
-├─ enc_util: u8                     ├─ (missing)             ✗
-├─ dec_util: u8                     ├─ (missing)             ✗
+├─ proc_type: GpuProcType {C,G}     ├─ proc_type: GpuProcType ✓ (PMAT-GAP-041)
+├─ sm_util: u8                      ├─ sm_util: u8           ✓ (PMAT-GAP-038)
+├─ mem_util: u8                     ├─ mem_util: u8          ✓
+├─ enc_util: u8                     ├─ enc_util: u8          ✓ (PMAT-GAP-039)
+├─ dec_util: u8                     ├─ dec_util: u8          ✓ (PMAT-GAP-040)
 └─ command: String                  └─ name: String          ✓
 ```
 
