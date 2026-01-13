@@ -8205,3 +8205,355 @@ Atoms must implement standard rendering behaviors for non-Ready states:
 | **F-ASYNC-004** | Error Recovery | Error state → Success state transition rendered in < 1 frame. |
 
 ---
+
+## Appendix K: ttop Parity Gap Analysis
+
+**Status**: 26 feature gaps identified, 26 pmat tickets created
+**Priority**: P0 (pixel-perfect parity requirement)
+**Peer Review**: Required for all ComputeBlock implementations
+
+### K.1 Gap Inventory by Panel
+
+| # | Panel | Feature | ttop | ptop | Gap ID |
+|---|-------|---------|------|------|--------|
+| 1 | CPU | Boost indicator (⚡ dynamic) | ✓ | ✗ | GAP-CPU-001 |
+| 2 | CPU | Top N consumer processes inline | ✓ | ✗ | GAP-CPU-002 |
+| 3 | CPU | Frequency gauge (arc/circular) | ✓ | ✗ | GAP-CPU-003 |
+| 4 | Memory | ZRAM compression ratio display | ✓ | ✗ | GAP-MEM-001 |
+| 5 | Memory | Pressure indicator (PSI inline) | ✓ | ✗ | GAP-MEM-002 |
+| 6 | Disk | Latency gauge (ms) | ✓ | ✗ | GAP-DISK-001 |
+| 7 | Disk | Workload type classifier | ✓ | ✗ | GAP-DISK-002 |
+| 8 | Disk | IOPS counter | ✓ | ✗ | GAP-DISK-003 |
+| 9 | Network | Protocol breakdown (TCP/UDP/ICMP) | ✓ | ✗ | GAP-NET-001 |
+| 10 | Network | Top consumer processes inline | ✓ | ✗ | GAP-NET-002 |
+| 11 | Network | Connection count in title | ✓ | ✗ | GAP-NET-003 |
+| 12 | GPU | Process type badges (C/G) | ✓ | ✗ | GAP-GPU-001 |
+| 13 | GPU | Clock speed display (core/mem MHz) | ✓ | ✗ | GAP-GPU-002 |
+| 14 | GPU | Power draw history graph | ✓ | ✗ | GAP-GPU-003 |
+| 15 | Connections | Geo-IP location | ✓ | ✗ | GAP-CONN-001 |
+| 16 | Connections | Connection age/duration | ✓ | ✗ | GAP-CONN-002 |
+| 17 | Connections | Service auto-detection | ✓ | ✗ | GAP-CONN-003 |
+| 18 | Sensors | Thermal headroom calculation | ✓ | ✗ | GAP-SENS-001 |
+| 19 | Sensors | Fan RPM display | ✓ | ✗ | GAP-SENS-002 |
+| 20 | Treemap | Duplicate file detection | ✓ | ✗ | GAP-TREE-001 |
+| 21 | Treemap | Wasted space calculation | ✓ | ✗ | GAP-TREE-002 |
+| 22 | Widget | Gauge (arc/circular mode) | ✓ | ✗ | GAP-WIDG-001 |
+| 23 | Widget | Heatmap grid | ✓ | ✗ | GAP-WIDG-002 |
+| 24 | Widget | Graph TTY fallback (░▒█) | ✓ | ✗ | GAP-WIDG-003 |
+| 25 | Widget | Graph block mode (▗▄▖▟▌▙█) | ✓ | ✗ | GAP-WIDG-004 |
+| 26 | Widget | Tree collapse O(1) toggle | ✓ | ✗ | GAP-WIDG-005 |
+
+### K.2 pmat Work Tickets
+
+#### K.2.1 CPU Panel Tickets (GAP-CPU-*)
+
+| Ticket | Description | Effort | Files | Dependencies |
+|--------|-------------|--------|-------|--------------|
+| **PMAT-GAP-001** | Implement CPU boost indicator with dynamic ⚡ glyph | 2h | `ui/panels/cpu.rs`, `ui/core/render.rs` | sysinfo boost detection |
+| **PMAT-GAP-002** | Add top-N CPU consumer inline display | 3h | `ui/panels/cpu.rs`, `analyzers/process_extra.rs` | ProcessCollector |
+| **PMAT-GAP-003** | Implement arc/circular gauge widget for frequency | 4h | `widgets/gauge.rs` (new), `ui/panels/cpu.rs` | GAP-WIDG-001 |
+
+#### K.2.2 Memory Panel Tickets (GAP-MEM-*)
+
+| Ticket | Description | Effort | Files | Dependencies |
+|--------|-------------|--------|-------|--------------|
+| **PMAT-GAP-004** | Display ZRAM compression ratio (compressed/orig) | 2h | `ui/panels/memory.rs`, `analyzers/swap.rs` | /sys/block/zram*/stat |
+| **PMAT-GAP-005** | Inline PSI pressure indicator in memory title | 1h | `ui/panels/memory.rs` | PSI analyzer |
+
+#### K.2.3 Disk Panel Tickets (GAP-DISK-*)
+
+| Ticket | Description | Effort | Files | Dependencies |
+|--------|-------------|--------|-------|--------------|
+| **PMAT-GAP-006** | Implement disk latency gauge (await_ms) | 3h | `ui/panels/disk.rs`, `analyzers/disk_io.rs` | /proc/diskstats |
+| **PMAT-GAP-007** | Add workload type classifier (sequential/random/mixed) | 2h | `analyzers/disk_io.rs` | IO pattern analysis |
+| **PMAT-GAP-008** | Display IOPS counter per device | 1h | `ui/panels/disk.rs` | disk_io analyzer |
+
+#### K.2.4 Network Panel Tickets (GAP-NET-*)
+
+| Ticket | Description | Effort | Files | Dependencies |
+|--------|-------------|--------|-------|--------------|
+| **PMAT-GAP-009** | Protocol breakdown display (TCP/UDP/ICMP counts) | 2h | `ui/panels/network.rs`, `analyzers/network_stats.rs` | /proc/net/snmp |
+| **PMAT-GAP-010** | Top network consumer processes inline | 3h | `ui/panels/network.rs`, `analyzers/network_stats.rs` | netstat/ss parsing |
+| **PMAT-GAP-011** | Connection count in network panel title | 0.5h | `ui/panels/network.rs` | connections analyzer |
+
+#### K.2.5 GPU Panel Tickets (GAP-GPU-*)
+
+| Ticket | Description | Effort | Files | Dependencies |
+|--------|-------------|--------|-------|--------------|
+| **PMAT-GAP-012** | GPU process type badges (C=Compute, G=Graphics) | 2h | `ui/core/panel_gpu.rs`, `analyzers/gpu_procs.rs` | nvidia-smi/rocm-smi |
+| **PMAT-GAP-013** | Display GPU clock speeds (core/mem MHz) | 1h | `ui/core/panel_gpu.rs` | GPU collector |
+| **PMAT-GAP-014** | Power draw history sparkline/graph | 2h | `ui/core/panel_gpu.rs` | RingBuffer history |
+
+#### K.2.6 Connections Panel Tickets (GAP-CONN-*)
+
+| Ticket | Description | Effort | Files | Dependencies |
+|--------|-------------|--------|-------|--------------|
+| **PMAT-GAP-015** | Geo-IP location lookup for remote IPs | 4h | `analyzers/connections.rs`, new `geoip.rs` | maxminddb crate |
+| **PMAT-GAP-016** | Connection age/duration tracking | 2h | `analyzers/connections.rs` | Instant tracking |
+| **PMAT-GAP-017** | Service auto-detection (port→service name) | 2h | `analyzers/connections.rs` | /etc/services or embedded |
+
+#### K.2.7 Sensors Panel Tickets (GAP-SENS-*)
+
+| Ticket | Description | Effort | Files | Dependencies |
+|--------|-------------|--------|-------|--------------|
+| **PMAT-GAP-018** | Thermal headroom calculation (Tjmax - current) | 1h | `ui/panels/sensors.rs`, `analyzers/sensor_health.rs` | CPU Tjmax lookup |
+| **PMAT-GAP-019** | Fan RPM display with speed indicators | 2h | `ui/panels/sensors.rs` | sysinfo fan sensors |
+
+#### K.2.8 Treemap Panel Tickets (GAP-TREE-*)
+
+| Ticket | Description | Effort | Files | Dependencies |
+|--------|-------------|--------|-------|--------------|
+| **PMAT-GAP-020** | Duplicate file detection (hash-based) | 4h | `analyzers/file_analyzer.rs` | blake3 or xxhash |
+| **PMAT-GAP-021** | Wasted space calculation (sparse, unlinked) | 2h | `analyzers/file_analyzer.rs` | stat() analysis |
+
+#### K.2.9 Widget Tickets (GAP-WIDG-*)
+
+| Ticket | Description | Effort | Files | Dependencies |
+|--------|-------------|--------|-------|--------------|
+| **PMAT-GAP-022** | Arc/circular gauge widget | 4h | `widgets/gauge.rs` (new) | Unicode arc chars |
+| **PMAT-GAP-023** | Heatmap grid widget | 3h | `widgets/heatmap.rs` (new) | Color gradient |
+| **PMAT-GAP-024** | Graph TTY fallback mode (░▒█) | 1h | `widgets/graph.rs` | Existing graph |
+| **PMAT-GAP-025** | Graph block mode (▗▄▖▟▌▙█) | 2h | `widgets/graph.rs` | Unicode blocks |
+| **PMAT-GAP-026** | Tree O(1) collapse toggle | 2h | `widgets/tree.rs` or process_table | BitVec state |
+
+### K.3 Falsification Protocols (F-GAP-*)
+
+#### K.3.1 CPU Gap Falsification
+
+| ID | Claim | Test | Pass Criterion |
+|----|-------|------|----------------|
+| **F-GAP-CPU-001** | Boost indicator shows ⚡ when boost active | Mock CPU with boost=true | Glyph U+26A1 present in title |
+| **F-GAP-CPU-002** | Boost indicator absent when boost inactive | Mock CPU with boost=false | No U+26A1 in title |
+| **F-GAP-CPU-003** | Top-N shows exactly N processes | Set N=5, 10 processes | Exactly 5 PIDs rendered |
+| **F-GAP-CPU-004** | Top-N sorted by CPU% descending | 5 procs with known CPU% | Order matches sort |
+| **F-GAP-CPU-005** | Frequency gauge renders arc | Set freq=3600MHz | Arc widget contains "3.6" |
+| **F-GAP-CPU-006** | Frequency gauge scales 0-max | freq=0, max=5000 | Arc at 0% fill |
+
+#### K.3.2 Memory Gap Falsification
+
+| ID | Claim | Test | Pass Criterion |
+|----|-------|------|----------------|
+| **F-GAP-MEM-001** | ZRAM ratio displays X.Xx format | comp=500MB, orig=1GB | "2.0x" in output |
+| **F-GAP-MEM-002** | ZRAM hidden when not present | No /sys/block/zram* | No "ZRAM" string |
+| **F-GAP-MEM-003** | PSI inline shows pressure level | cpu_psi=50% | Sparkline char ≥ ▄ |
+| **F-GAP-MEM-004** | PSI uses correct color threshold | psi>80% | Red color applied |
+
+#### K.3.3 Disk Gap Falsification
+
+| ID | Claim | Test | Pass Criterion |
+|----|-------|------|----------------|
+| **F-GAP-DISK-001** | Latency gauge shows ms value | await=5.2ms | "5.2ms" in output |
+| **F-GAP-DISK-002** | Latency color green <10ms | await=5ms | Green color code |
+| **F-GAP-DISK-003** | Latency color red >50ms | await=100ms | Red color code |
+| **F-GAP-DISK-004** | Workload classifier detects sequential | 90% sequential IO | "SEQ" label |
+| **F-GAP-DISK-005** | Workload classifier detects random | 90% random IO | "RND" label |
+| **F-GAP-DISK-006** | IOPS counter accurate | 1000 ops in 1s | "1000" ±5% |
+
+#### K.3.4 Network Gap Falsification
+
+| ID | Claim | Test | Pass Criterion |
+|----|-------|------|----------------|
+| **F-GAP-NET-001** | Protocol breakdown shows TCP count | 50 TCP, 10 UDP | "TCP: 50" present |
+| **F-GAP-NET-002** | Protocol breakdown shows UDP count | 50 TCP, 10 UDP | "UDP: 10" present |
+| **F-GAP-NET-003** | Top consumer shows PID and name | PID 1234 "chrome" | Both in output |
+| **F-GAP-NET-004** | Connection count in title | 60 connections | "60" in title |
+
+#### K.3.5 GPU Gap Falsification
+
+| ID | Claim | Test | Pass Criterion |
+|----|-------|------|----------------|
+| **F-GAP-GPU-001** | Compute process shows "C" badge | type="C" | "C" with cyan color |
+| **F-GAP-GPU-002** | Graphics process shows "G" badge | type="G" | "G" with magenta color |
+| **F-GAP-GPU-003** | Unknown process shows "?" badge | type="?" | "?" with gray color |
+| **F-GAP-GPU-004** | Clock speed displays MHz | core=1800, mem=7000 | "1800MHz" present |
+| **F-GAP-GPU-005** | Power history sparkline renders | 10 power samples | Sparkline chars present |
+| **F-GAP-GPU-006** | Power history length=60 samples | 100 samples added | Only 60 retained |
+
+#### K.3.6 Connections Gap Falsification
+
+| ID | Claim | Test | Pass Criterion |
+|----|-------|------|----------------|
+| **F-GAP-CONN-001** | Geo-IP resolves known IP | 8.8.8.8 | "US" or "United States" |
+| **F-GAP-CONN-002** | Geo-IP handles private IP | 192.168.1.1 | "Local" or "-" |
+| **F-GAP-CONN-003** | Connection age formats correctly | age=3661s | "1h 1m" format |
+| **F-GAP-CONN-004** | Service detection port 22 | port=22 | "ssh" label |
+| **F-GAP-CONN-005** | Service detection port 443 | port=443 | "https" label |
+| **F-GAP-CONN-006** | Unknown port shows number | port=54321 | "54321" shown |
+
+#### K.3.7 Sensors Gap Falsification
+
+| ID | Claim | Test | Pass Criterion |
+|----|-------|------|----------------|
+| **F-GAP-SENS-001** | Thermal headroom = Tjmax - current | Tjmax=100, curr=65 | "35°C headroom" |
+| **F-GAP-SENS-002** | Headroom color green >20°C | headroom=30 | Green color |
+| **F-GAP-SENS-003** | Headroom color red <10°C | headroom=5 | Red color |
+| **F-GAP-SENS-004** | Fan RPM displays value | rpm=1200 | "1200 RPM" |
+| **F-GAP-SENS-005** | Fan RPM 0 shows "OFF" | rpm=0 | "OFF" label |
+
+#### K.3.8 Treemap Gap Falsification
+
+| ID | Claim | Test | Pass Criterion |
+|----|-------|------|----------------|
+| **F-GAP-TREE-001** | Duplicate detection finds identical files | 2 files same hash | "DUP" marker |
+| **F-GAP-TREE-002** | Duplicate count accurate | 5 duplicates | "5 duplicates" |
+| **F-GAP-TREE-003** | Wasted space calculates correctly | 100MB wasted | "100MB wasted" |
+| **F-GAP-TREE-004** | Sparse file detection | sparse file | "sparse" marker |
+
+#### K.3.9 Widget Gap Falsification
+
+| ID | Claim | Test | Pass Criterion |
+|----|-------|------|----------------|
+| **F-GAP-WIDG-001** | Arc gauge renders quarter arc | mode=Quarter | Arc chars present |
+| **F-GAP-WIDG-002** | Arc gauge fills proportionally | value=50% | ~50% arc filled |
+| **F-GAP-WIDG-003** | Heatmap renders NxM grid | 4x4 grid | 16 cells rendered |
+| **F-GAP-WIDG-004** | Heatmap color gradient correct | value=0.0 | Blue color |
+| **F-GAP-WIDG-005** | Heatmap color gradient correct | value=1.0 | Red color |
+| **F-GAP-WIDG-006** | TTY fallback uses ░▒█ | tty_mode=true | Only ░▒█ chars |
+| **F-GAP-WIDG-007** | Block mode uses ▗▄▖▟▌▙█ | block_mode=true | Block chars present |
+| **F-GAP-WIDG-008** | Tree toggle O(1) | 10000 nodes | Toggle < 1μs |
+
+### K.4 Peer Review Criteria
+
+#### K.4.1 Code Review Checklist
+
+| # | Criterion | Reviewer Action |
+|---|-----------|-----------------|
+| 1 | **O(1) Complexity** | Verify no allocations in hot path |
+| 2 | **Copy Semantics** | Struct derives `Copy, Clone` |
+| 3 | **Const Constructors** | `new()` is `const fn` |
+| 4 | **Saturating Arithmetic** | No panics on overflow |
+| 5 | **Test Coverage** | 12 falsification tests per feature |
+| 6 | **Documentation** | Rustdoc with examples |
+| 7 | **Error Handling** | No unwrap() in library code |
+| 8 | **Unicode Safety** | Width calculations correct |
+
+#### K.4.2 Performance Review Checklist
+
+| # | Metric | Threshold | Tool |
+|---|--------|-----------|------|
+| 1 | **Render latency** | <1ms per panel | `perf_trace::TimingGuard` |
+| 2 | **Memory allocation** | 0 allocs in render loop | `#[global_allocator]` counter |
+| 3 | **Cache efficiency** | >95% L1 hit rate | `perf stat` |
+| 4 | **Branch prediction** | >98% prediction rate | `perf stat` |
+| 5 | **SIMD utilization** | Vectorized where applicable | Assembly inspection |
+
+#### K.4.3 Approval Requirements
+
+- **Minimum 2 approvals** for new widgets
+- **Minimum 1 approval** for panel modifications
+- **All falsification tests pass** before merge
+- **Performance regression test** against baseline
+- **Pixel diff** against ttop reference (<1% difference)
+
+### K.5 ComputeBlock Performance Criteria
+
+#### K.5.1 Hard Budgets (MUST NOT EXCEED)
+
+| Operation | Budget | Measurement |
+|-----------|--------|-------------|
+| **Panel render** | 1ms | `TimingGuard` |
+| **Widget draw** | 100μs | `TimingGuard` |
+| **Data collect** | 16ms | Async boundary |
+| **State update** | 10μs | Inline profiling |
+| **Event dispatch** | 1μs | Inline profiling |
+
+#### K.5.2 Soft Targets (SHOULD ACHIEVE)
+
+| Operation | Target | Measurement |
+|-----------|--------|-------------|
+| **Full frame** | 8ms (120fps capable) | Frame timer |
+| **Diff update** | 100μs | Delta render |
+| **Memory footprint** | <10MB RSS | `/proc/self/status` |
+| **Startup time** | <100ms to first frame | Wall clock |
+
+#### K.5.3 ComputeBlock Trait Requirements
+
+```rust
+/// All gap implementations MUST satisfy this trait
+pub trait ComputeBlock: Send + Sync + 'static {
+    /// O(1) state snapshot - NO ALLOCATIONS
+    type Snapshot: Copy + Default;
+
+    /// Collect data (may allocate, runs on background thread)
+    fn collect(&self) -> Self::Snapshot;
+
+    /// Render to canvas - MUST be O(1), NO ALLOCATIONS
+    fn render(&self, snapshot: &Self::Snapshot, canvas: &mut Canvas);
+
+    /// Performance budget in microseconds
+    const RENDER_BUDGET_US: u64 = 100;
+
+    /// Memory budget in bytes (stack only)
+    const MEMORY_BUDGET_BYTES: usize = 4096;
+}
+```
+
+#### K.5.4 Testing Infrastructure
+
+```rust
+#[cfg(test)]
+mod compute_block_tests {
+    use super::*;
+
+    /// F-CB-001: Render within budget
+    #[test]
+    fn f_cb_001_render_budget() {
+        let block = MyComputeBlock::new();
+        let snapshot = block.collect();
+        let mut canvas = TestCanvas::new(80, 24);
+
+        let start = std::time::Instant::now();
+        block.render(&snapshot, &mut canvas);
+        let elapsed = start.elapsed();
+
+        assert!(elapsed.as_micros() < MyComputeBlock::RENDER_BUDGET_US as u128,
+            "Render exceeded budget: {:?}", elapsed);
+    }
+
+    /// F-CB-002: No allocations in render
+    #[test]
+    fn f_cb_002_no_alloc() {
+        let block = MyComputeBlock::new();
+        let snapshot = block.collect();
+        let mut canvas = TestCanvas::new(80, 24);
+
+        let before = ALLOC_COUNTER.load(Ordering::SeqCst);
+        block.render(&snapshot, &mut canvas);
+        let after = ALLOC_COUNTER.load(Ordering::SeqCst);
+
+        assert_eq!(before, after, "Render allocated {} bytes", after - before);
+    }
+
+    /// F-CB-003: Snapshot is Copy
+    #[test]
+    fn f_cb_003_snapshot_copy() {
+        fn assert_copy<T: Copy>() {}
+        assert_copy::<MyComputeBlock::Snapshot>();
+    }
+}
+```
+
+### K.6 Implementation Schedule
+
+| Phase | Tickets | Est. Effort | Milestone |
+|-------|---------|-------------|-----------|
+| **Phase 1: Widgets** | PMAT-GAP-022 to 026 | 12h | Widget foundation |
+| **Phase 2: CPU/Mem** | PMAT-GAP-001 to 005 | 12h | Core panels complete |
+| **Phase 3: Disk/Net** | PMAT-GAP-006 to 011 | 12h | I/O panels complete |
+| **Phase 4: GPU/Sensors** | PMAT-GAP-012 to 019 | 14h | Hardware panels complete |
+| **Phase 5: Connections** | PMAT-GAP-015 to 017 | 8h | Network deep-dive |
+| **Phase 6: Treemap** | PMAT-GAP-020 to 021 | 6h | File analysis |
+| **Total** | 26 tickets | **64h** | Full ttop parity |
+
+### K.7 Acceptance Gate
+
+**ttop parity is achieved when:**
+
+1. All 26 PMAT-GAP tickets are closed
+2. All 50 F-GAP-* falsification tests pass
+3. Pixel diff against ttop reference < 1%
+4. All ComputeBlock performance budgets met
+5. Peer review approval obtained
+6. No regressions in existing functionality
+
+---
