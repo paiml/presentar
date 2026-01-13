@@ -33425,3 +33425,780 @@ mod seccomp_tests {
         assert_eq!(tracker.filters, cloned.filters);
     }
 }
+
+// ============================================================================
+// v9.47.0: Security Subsystem O(1) Helpers
+// ============================================================================
+
+/// Capabilities tracker - Linux capabilities tracking.
+///
+/// O(1) tracking of capability checks and changes.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CapabilitiesTracker {
+    /// Capability checks performed
+    pub checks: u64,
+    /// Capabilities granted
+    pub granted: u64,
+    /// Capabilities denied
+    pub denied: u64,
+    /// Capability set operations
+    pub set_ops: u64,
+    /// Capability drops
+    pub drops: u64,
+    /// Ambient caps raised
+    pub ambient_raises: u64,
+}
+
+impl CapabilitiesTracker {
+    /// Create new capabilities tracker.
+    #[inline]
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            checks: 0,
+            granted: 0,
+            denied: 0,
+            set_ops: 0,
+            drops: 0,
+            ambient_raises: 0,
+        }
+    }
+
+    /// Factory: Create for process
+    #[inline]
+    #[must_use]
+    pub fn for_process() -> Self {
+        Self::new()
+    }
+
+    /// Check capability
+    #[inline]
+    pub fn check(&mut self, has_cap: bool) {
+        self.checks = self.checks.saturating_add(1);
+        if has_cap {
+            self.granted = self.granted.saturating_add(1);
+        } else {
+            self.denied = self.denied.saturating_add(1);
+        }
+    }
+
+    /// Set capability
+    #[inline]
+    pub fn set_cap(&mut self) {
+        self.set_ops = self.set_ops.saturating_add(1);
+    }
+
+    /// Drop capability
+    #[inline]
+    pub fn drop_cap(&mut self) {
+        self.drops = self.drops.saturating_add(1);
+    }
+
+    /// Raise ambient cap
+    #[inline]
+    pub fn raise_ambient(&mut self) {
+        self.ambient_raises = self.ambient_raises.saturating_add(1);
+    }
+
+    /// Grant rate percentage
+    #[inline]
+    #[must_use]
+    pub fn grant_rate(&self) -> f32 {
+        if self.checks > 0 {
+            (self.granted as f32 / self.checks as f32) * 100.0
+        } else {
+            100.0
+        }
+    }
+
+    /// Reset counters
+    #[inline]
+    pub fn reset(&mut self) {
+        *self = Self::new();
+    }
+}
+
+/// LSM (Linux Security Module) tracker.
+///
+/// O(1) tracking of LSM hooks and decisions.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct LsmTracker {
+    /// Hook invocations
+    pub hooks: u64,
+    /// Allowed decisions
+    pub allowed: u64,
+    /// Denied decisions
+    pub denied: u64,
+    /// Audit events
+    pub audits: u64,
+    /// Policy loads
+    pub policy_loads: u64,
+    /// Label transitions
+    pub transitions: u64,
+}
+
+impl LsmTracker {
+    /// Create new LSM tracker.
+    #[inline]
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            hooks: 0,
+            allowed: 0,
+            denied: 0,
+            audits: 0,
+            policy_loads: 0,
+            transitions: 0,
+        }
+    }
+
+    /// Factory: Create for security module
+    #[inline]
+    #[must_use]
+    pub fn for_selinux() -> Self {
+        Self::new()
+    }
+
+    /// Record hook invocation
+    #[inline]
+    pub fn hook(&mut self, allowed: bool) {
+        self.hooks = self.hooks.saturating_add(1);
+        if allowed {
+            self.allowed = self.allowed.saturating_add(1);
+        } else {
+            self.denied = self.denied.saturating_add(1);
+        }
+    }
+
+    /// Record audit event
+    #[inline]
+    pub fn audit(&mut self) {
+        self.audits = self.audits.saturating_add(1);
+    }
+
+    /// Record policy load
+    #[inline]
+    pub fn load_policy(&mut self) {
+        self.policy_loads = self.policy_loads.saturating_add(1);
+    }
+
+    /// Record label transition
+    #[inline]
+    pub fn transition(&mut self) {
+        self.transitions = self.transitions.saturating_add(1);
+    }
+
+    /// Allow rate percentage
+    #[inline]
+    #[must_use]
+    pub fn allow_rate(&self) -> f32 {
+        if self.hooks > 0 {
+            (self.allowed as f32 / self.hooks as f32) * 100.0
+        } else {
+            100.0
+        }
+    }
+
+    /// Reset counters
+    #[inline]
+    pub fn reset(&mut self) {
+        *self = Self::new();
+    }
+}
+
+/// Audit tracker - Linux audit subsystem tracking.
+///
+/// O(1) tracking of audit events and records.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct AuditTracker {
+    /// Audit records generated
+    pub records: u64,
+    /// Records written
+    pub written: u64,
+    /// Records dropped
+    pub dropped: u64,
+    /// Backlog size
+    pub backlog: u32,
+    /// Peak backlog
+    pub peak_backlog: u32,
+    /// Rules loaded
+    pub rules: u32,
+}
+
+impl AuditTracker {
+    /// Create new audit tracker.
+    #[inline]
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            records: 0,
+            written: 0,
+            dropped: 0,
+            backlog: 0,
+            peak_backlog: 0,
+            rules: 0,
+        }
+    }
+
+    /// Factory: Create for audit daemon
+    #[inline]
+    #[must_use]
+    pub fn for_auditd(rules: u32) -> Self {
+        Self { rules, ..Self::new() }
+    }
+
+    /// Generate audit record
+    #[inline]
+    pub fn generate(&mut self) {
+        self.records = self.records.saturating_add(1);
+        self.backlog = self.backlog.saturating_add(1);
+        if self.backlog > self.peak_backlog {
+            self.peak_backlog = self.backlog;
+        }
+    }
+
+    /// Write record
+    #[inline]
+    pub fn write(&mut self) {
+        self.written = self.written.saturating_add(1);
+        self.backlog = self.backlog.saturating_sub(1);
+    }
+
+    /// Drop record
+    #[inline]
+    pub fn drop_record(&mut self) {
+        self.dropped = self.dropped.saturating_add(1);
+        self.backlog = self.backlog.saturating_sub(1);
+    }
+
+    /// Add audit rule
+    #[inline]
+    pub fn add_rule(&mut self) {
+        self.rules = self.rules.saturating_add(1);
+    }
+
+    /// Drop rate percentage
+    #[inline]
+    #[must_use]
+    pub fn drop_rate(&self) -> f32 {
+        if self.records > 0 {
+            (self.dropped as f32 / self.records as f32) * 100.0
+        } else {
+            0.0
+        }
+    }
+
+    /// Reset counters
+    #[inline]
+    pub fn reset(&mut self) {
+        *self = Self::new();
+    }
+}
+
+/// Integrity tracker - IMA/EVM tracking.
+///
+/// O(1) tracking of integrity measurements and verifications.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct IntegrityTracker {
+    /// Measurements taken
+    pub measurements: u64,
+    /// Verifications passed
+    pub verified: u64,
+    /// Verifications failed
+    pub failed: u64,
+    /// Appraisals performed
+    pub appraisals: u64,
+    /// Signatures validated
+    pub signatures: u64,
+    /// Policy violations
+    pub violations: u64,
+}
+
+impl IntegrityTracker {
+    /// Create new integrity tracker.
+    #[inline]
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            measurements: 0,
+            verified: 0,
+            failed: 0,
+            appraisals: 0,
+            signatures: 0,
+            violations: 0,
+        }
+    }
+
+    /// Factory: Create for IMA
+    #[inline]
+    #[must_use]
+    pub fn for_ima() -> Self {
+        Self::new()
+    }
+
+    /// Record measurement
+    #[inline]
+    pub fn measure(&mut self) {
+        self.measurements = self.measurements.saturating_add(1);
+    }
+
+    /// Record verification
+    #[inline]
+    pub fn verify(&mut self, success: bool) {
+        if success {
+            self.verified = self.verified.saturating_add(1);
+        } else {
+            self.failed = self.failed.saturating_add(1);
+        }
+    }
+
+    /// Record appraisal
+    #[inline]
+    pub fn appraise(&mut self) {
+        self.appraisals = self.appraisals.saturating_add(1);
+    }
+
+    /// Record signature validation
+    #[inline]
+    pub fn validate_sig(&mut self) {
+        self.signatures = self.signatures.saturating_add(1);
+    }
+
+    /// Record policy violation
+    #[inline]
+    pub fn violation(&mut self) {
+        self.violations = self.violations.saturating_add(1);
+    }
+
+    /// Verification success rate
+    #[inline]
+    #[must_use]
+    pub fn success_rate(&self) -> f32 {
+        let total = self.verified + self.failed;
+        if total > 0 {
+            (self.verified as f32 / total as f32) * 100.0
+        } else {
+            100.0
+        }
+    }
+
+    /// Reset counters
+    #[inline]
+    pub fn reset(&mut self) {
+        *self = Self::new();
+    }
+}
+
+#[cfg(test)]
+mod cap_tests {
+    use super::*;
+
+    /// F-CAP-001: New tracker is zeroed
+    #[test]
+    fn f_cap_001_new() {
+        let tracker = CapabilitiesTracker::new();
+        assert_eq!(tracker.checks, 0);
+    }
+
+    /// F-CAP-002: Default is zeroed
+    #[test]
+    fn f_cap_002_default() {
+        let tracker = CapabilitiesTracker::default();
+        assert_eq!(tracker.granted, 0);
+    }
+
+    /// F-CAP-003: Factory creates tracker
+    #[test]
+    fn f_cap_003_factory() {
+        let tracker = CapabilitiesTracker::for_process();
+        assert_eq!(tracker.checks, 0);
+    }
+
+    /// F-CAP-004: Check granted
+    #[test]
+    fn f_cap_004_check_granted() {
+        let mut tracker = CapabilitiesTracker::new();
+        tracker.check(true);
+        assert_eq!(tracker.checks, 1);
+        assert_eq!(tracker.granted, 1);
+    }
+
+    /// F-CAP-005: Check denied
+    #[test]
+    fn f_cap_005_check_denied() {
+        let mut tracker = CapabilitiesTracker::new();
+        tracker.check(false);
+        assert_eq!(tracker.checks, 1);
+        assert_eq!(tracker.denied, 1);
+    }
+
+    /// F-CAP-006: Set cap increments
+    #[test]
+    fn f_cap_006_set_cap() {
+        let mut tracker = CapabilitiesTracker::new();
+        tracker.set_cap();
+        assert_eq!(tracker.set_ops, 1);
+    }
+
+    /// F-CAP-007: Drop cap increments
+    #[test]
+    fn f_cap_007_drop_cap() {
+        let mut tracker = CapabilitiesTracker::new();
+        tracker.drop_cap();
+        assert_eq!(tracker.drops, 1);
+    }
+
+    /// F-CAP-008: Raise ambient increments
+    #[test]
+    fn f_cap_008_ambient() {
+        let mut tracker = CapabilitiesTracker::new();
+        tracker.raise_ambient();
+        assert_eq!(tracker.ambient_raises, 1);
+    }
+
+    /// F-CAP-009: Grant rate calculates
+    #[test]
+    fn f_cap_009_grant_rate() {
+        let mut tracker = CapabilitiesTracker::new();
+        tracker.check(true);
+        tracker.check(false);
+        let rate = tracker.grant_rate();
+        assert!((rate - 50.0).abs() < 0.1);
+    }
+
+    /// F-CAP-010: Default grant rate 100%
+    #[test]
+    fn f_cap_010_default_rate() {
+        let tracker = CapabilitiesTracker::new();
+        assert_eq!(tracker.grant_rate(), 100.0);
+    }
+
+    /// F-CAP-011: Reset clears counters
+    #[test]
+    fn f_cap_011_reset() {
+        let mut tracker = CapabilitiesTracker::new();
+        tracker.check(true);
+        tracker.reset();
+        assert_eq!(tracker.checks, 0);
+    }
+
+    /// F-CAP-012: Clone preserves state
+    #[test]
+    fn f_cap_012_clone() {
+        let mut tracker = CapabilitiesTracker::new();
+        tracker.check(true);
+        let cloned = tracker.clone();
+        assert_eq!(tracker.checks, cloned.checks);
+    }
+}
+
+#[cfg(test)]
+mod lsm_tests {
+    use super::*;
+
+    /// F-LSM-001: New tracker is zeroed
+    #[test]
+    fn f_lsm_001_new() {
+        let tracker = LsmTracker::new();
+        assert_eq!(tracker.hooks, 0);
+    }
+
+    /// F-LSM-002: Default is zeroed
+    #[test]
+    fn f_lsm_002_default() {
+        let tracker = LsmTracker::default();
+        assert_eq!(tracker.allowed, 0);
+    }
+
+    /// F-LSM-003: Factory creates tracker
+    #[test]
+    fn f_lsm_003_factory() {
+        let tracker = LsmTracker::for_selinux();
+        assert_eq!(tracker.hooks, 0);
+    }
+
+    /// F-LSM-004: Hook allowed
+    #[test]
+    fn f_lsm_004_hook_allowed() {
+        let mut tracker = LsmTracker::new();
+        tracker.hook(true);
+        assert_eq!(tracker.hooks, 1);
+        assert_eq!(tracker.allowed, 1);
+    }
+
+    /// F-LSM-005: Hook denied
+    #[test]
+    fn f_lsm_005_hook_denied() {
+        let mut tracker = LsmTracker::new();
+        tracker.hook(false);
+        assert_eq!(tracker.hooks, 1);
+        assert_eq!(tracker.denied, 1);
+    }
+
+    /// F-LSM-006: Audit increments
+    #[test]
+    fn f_lsm_006_audit() {
+        let mut tracker = LsmTracker::new();
+        tracker.audit();
+        assert_eq!(tracker.audits, 1);
+    }
+
+    /// F-LSM-007: Policy load increments
+    #[test]
+    fn f_lsm_007_policy() {
+        let mut tracker = LsmTracker::new();
+        tracker.load_policy();
+        assert_eq!(tracker.policy_loads, 1);
+    }
+
+    /// F-LSM-008: Transition increments
+    #[test]
+    fn f_lsm_008_transition() {
+        let mut tracker = LsmTracker::new();
+        tracker.transition();
+        assert_eq!(tracker.transitions, 1);
+    }
+
+    /// F-LSM-009: Allow rate calculates
+    #[test]
+    fn f_lsm_009_allow_rate() {
+        let mut tracker = LsmTracker::new();
+        tracker.hook(true);
+        tracker.hook(false);
+        let rate = tracker.allow_rate();
+        assert!((rate - 50.0).abs() < 0.1);
+    }
+
+    /// F-LSM-010: Default allow rate 100%
+    #[test]
+    fn f_lsm_010_default_rate() {
+        let tracker = LsmTracker::new();
+        assert_eq!(tracker.allow_rate(), 100.0);
+    }
+
+    /// F-LSM-011: Reset clears counters
+    #[test]
+    fn f_lsm_011_reset() {
+        let mut tracker = LsmTracker::new();
+        tracker.hook(true);
+        tracker.reset();
+        assert_eq!(tracker.hooks, 0);
+    }
+
+    /// F-LSM-012: Clone preserves state
+    #[test]
+    fn f_lsm_012_clone() {
+        let mut tracker = LsmTracker::new();
+        tracker.hook(true);
+        let cloned = tracker.clone();
+        assert_eq!(tracker.hooks, cloned.hooks);
+    }
+}
+
+#[cfg(test)]
+mod audit_tests {
+    use super::*;
+
+    /// F-AUDIT-001: New tracker is zeroed
+    #[test]
+    fn f_audit_001_new() {
+        let tracker = AuditTracker::new();
+        assert_eq!(tracker.records, 0);
+    }
+
+    /// F-AUDIT-002: Default is zeroed
+    #[test]
+    fn f_audit_002_default() {
+        let tracker = AuditTracker::default();
+        assert_eq!(tracker.written, 0);
+    }
+
+    /// F-AUDIT-003: Factory sets rules
+    #[test]
+    fn f_audit_003_factory() {
+        let tracker = AuditTracker::for_auditd(10);
+        assert_eq!(tracker.rules, 10);
+    }
+
+    /// F-AUDIT-004: Generate increments records and backlog
+    #[test]
+    fn f_audit_004_generate() {
+        let mut tracker = AuditTracker::new();
+        tracker.generate();
+        assert_eq!(tracker.records, 1);
+        assert_eq!(tracker.backlog, 1);
+    }
+
+    /// F-AUDIT-005: Write decrements backlog
+    #[test]
+    fn f_audit_005_write() {
+        let mut tracker = AuditTracker::new();
+        tracker.generate();
+        tracker.write();
+        assert_eq!(tracker.written, 1);
+        assert_eq!(tracker.backlog, 0);
+    }
+
+    /// F-AUDIT-006: Drop records tracked
+    #[test]
+    fn f_audit_006_drop() {
+        let mut tracker = AuditTracker::new();
+        tracker.generate();
+        tracker.drop_record();
+        assert_eq!(tracker.dropped, 1);
+        assert_eq!(tracker.backlog, 0);
+    }
+
+    /// F-AUDIT-007: Add rule increments
+    #[test]
+    fn f_audit_007_add_rule() {
+        let mut tracker = AuditTracker::new();
+        tracker.add_rule();
+        assert_eq!(tracker.rules, 1);
+    }
+
+    /// F-AUDIT-008: Peak backlog tracks max
+    #[test]
+    fn f_audit_008_peak() {
+        let mut tracker = AuditTracker::new();
+        tracker.generate();
+        tracker.generate();
+        tracker.write();
+        assert_eq!(tracker.peak_backlog, 2);
+    }
+
+    /// F-AUDIT-009: Drop rate calculates
+    #[test]
+    fn f_audit_009_drop_rate() {
+        let mut tracker = AuditTracker::new();
+        tracker.generate();
+        tracker.drop_record();
+        let rate = tracker.drop_rate();
+        assert!((rate - 100.0).abs() < 0.1);
+    }
+
+    /// F-AUDIT-010: Default drop rate 0%
+    #[test]
+    fn f_audit_010_default_rate() {
+        let tracker = AuditTracker::new();
+        assert_eq!(tracker.drop_rate(), 0.0);
+    }
+
+    /// F-AUDIT-011: Reset clears counters
+    #[test]
+    fn f_audit_011_reset() {
+        let mut tracker = AuditTracker::for_auditd(10);
+        tracker.reset();
+        assert_eq!(tracker.rules, 0);
+    }
+
+    /// F-AUDIT-012: Clone preserves state
+    #[test]
+    fn f_audit_012_clone() {
+        let tracker = AuditTracker::for_auditd(10);
+        let cloned = tracker.clone();
+        assert_eq!(tracker.rules, cloned.rules);
+    }
+}
+
+#[cfg(test)]
+mod integrity_tests {
+    use super::*;
+
+    /// F-INTEGRITY-001: New tracker is zeroed
+    #[test]
+    fn f_integrity_001_new() {
+        let tracker = IntegrityTracker::new();
+        assert_eq!(tracker.measurements, 0);
+    }
+
+    /// F-INTEGRITY-002: Default is zeroed
+    #[test]
+    fn f_integrity_002_default() {
+        let tracker = IntegrityTracker::default();
+        assert_eq!(tracker.verified, 0);
+    }
+
+    /// F-INTEGRITY-003: Factory creates tracker
+    #[test]
+    fn f_integrity_003_factory() {
+        let tracker = IntegrityTracker::for_ima();
+        assert_eq!(tracker.measurements, 0);
+    }
+
+    /// F-INTEGRITY-004: Measure increments
+    #[test]
+    fn f_integrity_004_measure() {
+        let mut tracker = IntegrityTracker::new();
+        tracker.measure();
+        assert_eq!(tracker.measurements, 1);
+    }
+
+    /// F-INTEGRITY-005: Verify success
+    #[test]
+    fn f_integrity_005_verify_success() {
+        let mut tracker = IntegrityTracker::new();
+        tracker.verify(true);
+        assert_eq!(tracker.verified, 1);
+    }
+
+    /// F-INTEGRITY-006: Verify failure
+    #[test]
+    fn f_integrity_006_verify_fail() {
+        let mut tracker = IntegrityTracker::new();
+        tracker.verify(false);
+        assert_eq!(tracker.failed, 1);
+    }
+
+    /// F-INTEGRITY-007: Appraise increments
+    #[test]
+    fn f_integrity_007_appraise() {
+        let mut tracker = IntegrityTracker::new();
+        tracker.appraise();
+        assert_eq!(tracker.appraisals, 1);
+    }
+
+    /// F-INTEGRITY-008: Signature validation increments
+    #[test]
+    fn f_integrity_008_signature() {
+        let mut tracker = IntegrityTracker::new();
+        tracker.validate_sig();
+        assert_eq!(tracker.signatures, 1);
+    }
+
+    /// F-INTEGRITY-009: Violation increments
+    #[test]
+    fn f_integrity_009_violation() {
+        let mut tracker = IntegrityTracker::new();
+        tracker.violation();
+        assert_eq!(tracker.violations, 1);
+    }
+
+    /// F-INTEGRITY-010: Success rate calculates
+    #[test]
+    fn f_integrity_010_success_rate() {
+        let mut tracker = IntegrityTracker::new();
+        tracker.verify(true);
+        tracker.verify(false);
+        let rate = tracker.success_rate();
+        assert!((rate - 50.0).abs() < 0.1);
+    }
+
+    /// F-INTEGRITY-011: Reset clears counters
+    #[test]
+    fn f_integrity_011_reset() {
+        let mut tracker = IntegrityTracker::new();
+        tracker.measure();
+        tracker.reset();
+        assert_eq!(tracker.measurements, 0);
+    }
+
+    /// F-INTEGRITY-012: Clone preserves state
+    #[test]
+    fn f_integrity_012_clone() {
+        let mut tracker = IntegrityTracker::new();
+        tracker.measure();
+        let cloned = tracker.clone();
+        assert_eq!(tracker.measurements, cloned.measurements);
+    }
+}
