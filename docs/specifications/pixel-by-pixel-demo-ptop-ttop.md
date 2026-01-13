@@ -8208,14 +8208,14 @@ Atoms must implement standard rendering behaviors for non-Ready states:
 
 ## Appendix K: ttop Parity Gap Analysis
 
-**Status**: 22/26 gaps CLOSED (85% complete), 4 remaining
+**Status**: 24/26 gaps CLOSED (92% complete), 2 remaining
 **Priority**: P0 (pixel-perfect parity requirement)
-**Remaining**: GAP-CONN-002, GAP-TREE-001, GAP-WIDG-007
+**Remaining**: GAP-CONN-002 (Geo-IP - external DB)
 **Peer Review**: Required for all ComputeBlock implementations
 
 ### K.1 Gap Inventory by Panel
 
-**Implementation Status**: 22/26 gaps closed (85% complete)
+**Implementation Status**: 24/26 gaps closed (92% complete)
 
 | # | Panel | Feature | ttop | ptop | Status | Gap ID |
 |---|-------|---------|------|------|--------|--------|
@@ -8237,14 +8237,14 @@ Atoms must implement standard rendering behaviors for non-Ready states:
 | 16 | Connections | Service auto-detection | ✓ | ✓ | **DONE** | GAP-CONN-003 |
 | 17 | Sensors | Fan RPM display | ✓ | ✓ | **DONE** | GAP-SENS-001 |
 | 18 | Sensors | Battery ETA formatting | ✓ | ✓ | **DONE** | GAP-SENS-002 |
-| 19 | Treemap | Flash on process change | ✓ | ✗ | OPEN | GAP-TREE-001 |
+| 19 | Treemap | Flash on process change | ✓ | ✓ | **DONE** | GAP-TREE-001 |
 | 20 | Widget | Border rounded corners | ✓ | ✓ | **DONE** | GAP-WIDG-001 |
 | 21 | Widget | Graph braille mode | ✓ | ✓ | **DONE** | GAP-WIDG-002 |
 | 22 | Widget | Graph block mode (▀▄█) | ✓ | ✓ | **DONE** | GAP-WIDG-003 |
 | 23 | Widget | Graph TTY fallback | ✓ | ✓ | **DONE** | GAP-WIDG-004 |
 | 24 | Widget | Responsive column widths | ✓ | ✓ | **DONE** | GAP-WIDG-005 |
 | 25 | Widget | Title truncation parity | ✓ | ✓ | **DONE** | GAP-WIDG-006 |
-| 26 | Widget | Circular gauge widget | ✓ | ✗ | OPEN | GAP-WIDG-007 |
+| 26 | Widget | Circular gauge widget | ✓ | ✓ | **DONE** | GAP-WIDG-007 |
 
 ### K.2 pmat Work Tickets
 

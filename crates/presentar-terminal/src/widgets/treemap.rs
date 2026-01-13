@@ -22,6 +22,11 @@ pub struct TreemapNode {
     pub color: Option<Color>,
     /// Child nodes.
     pub children: Vec<Self>,
+    /// Flash intensity (0.0-1.0) for change indication (GAP-TREE-001).
+    /// Decays over time to create visual flash effect.
+    pub flash_intensity: f32,
+    /// Previous value for change detection.
+    pub previous_value: Option<f64>,
 }
 
 impl TreemapNode {
@@ -33,6 +38,8 @@ impl TreemapNode {
             value,
             color: None,
             children: Vec::new(),
+            flash_intensity: 0.0,
+            previous_value: None,
         }
     }
 
@@ -44,6 +51,8 @@ impl TreemapNode {
             value,
             color: Some(color),
             children: Vec::new(),
+            flash_intensity: 0.0,
+            previous_value: None,
         }
     }
 
@@ -56,7 +65,51 @@ impl TreemapNode {
             value,
             color: None,
             children,
+            flash_intensity: 0.0,
+            previous_value: None,
         }
+    }
+
+    /// Update value and detect change for flash effect (GAP-TREE-001).
+    ///
+    /// Returns true if the value changed significantly.
+    pub fn update_value(&mut self, new_value: f64) -> bool {
+        let threshold = 0.01; // 1% change threshold
+        let changed = self.previous_value.map_or(true, |prev| {
+            let delta = (new_value - prev).abs();
+            let relative = delta / prev.max(1.0);
+            relative > threshold
+        });
+
+        if changed {
+            self.flash_intensity = 1.0; // Full flash on change
+        }
+
+        self.previous_value = Some(self.value);
+        self.value = new_value;
+        changed
+    }
+
+    /// Decay flash intensity over time.
+    ///
+    /// Call this each frame to animate the flash effect.
+    pub fn decay_flash(&mut self, decay_rate: f32) {
+        self.flash_intensity = (self.flash_intensity - decay_rate).max(0.0);
+        for child in &mut self.children {
+            child.decay_flash(decay_rate);
+        }
+    }
+
+    /// Check if this node is currently flashing.
+    #[must_use]
+    pub fn is_flashing(&self) -> bool {
+        self.flash_intensity > 0.01
+    }
+
+    /// Get flash color (white overlay with intensity).
+    #[must_use]
+    pub fn flash_color(&self) -> Color {
+        Color::new(1.0, 1.0, 1.0, self.flash_intensity * 0.5)
     }
 
     /// Get total value including children.
@@ -919,5 +972,141 @@ mod tests {
     fn test_treemap_layout_default() {
         let layout = TreemapLayout::default();
         assert!(matches!(layout, TreemapLayout::Squarify));
+    }
+
+    // =========================================================================
+    // GAP-TREE-001: Flash effect tests
+    // =========================================================================
+
+    #[test]
+    fn test_treemap_node_flash_intensity_default() {
+        let node = TreemapNode::leaf("test", 100.0);
+        assert_eq!(node.flash_intensity, 0.0);
+        assert!(node.previous_value.is_none());
+    }
+
+    #[test]
+    fn test_treemap_node_flash_intensity_colored() {
+        let node = TreemapNode::leaf_colored("test", 100.0, Color::new(1.0, 0.0, 0.0, 1.0));
+        assert_eq!(node.flash_intensity, 0.0);
+        assert!(node.previous_value.is_none());
+    }
+
+    #[test]
+    fn test_treemap_node_flash_intensity_branch() {
+        let node = TreemapNode::branch("root", vec![TreemapNode::leaf("child", 50.0)]);
+        assert_eq!(node.flash_intensity, 0.0);
+        assert!(node.previous_value.is_none());
+    }
+
+    #[test]
+    fn test_treemap_node_update_value_first_call() {
+        let mut node = TreemapNode::leaf("test", 100.0);
+        let changed = node.update_value(150.0);
+        assert!(changed, "First update should always report change");
+        assert_eq!(node.flash_intensity, 1.0);
+        assert_eq!(node.value, 150.0);
+        assert_eq!(node.previous_value, Some(100.0));
+    }
+
+    #[test]
+    fn test_treemap_node_update_value_significant_change() {
+        let mut node = TreemapNode::leaf("test", 100.0);
+        node.previous_value = Some(100.0);
+        node.flash_intensity = 0.0;
+
+        let changed = node.update_value(150.0); // 50% change
+        assert!(changed, "50% change should trigger flash");
+        assert_eq!(node.flash_intensity, 1.0);
+    }
+
+    #[test]
+    fn test_treemap_node_update_value_small_change() {
+        let mut node = TreemapNode::leaf("test", 100.0);
+        node.previous_value = Some(100.0);
+        node.flash_intensity = 0.0;
+
+        let changed = node.update_value(100.5); // 0.5% change
+        assert!(!changed, "0.5% change should not trigger flash");
+        assert_eq!(node.flash_intensity, 0.0);
+    }
+
+    #[test]
+    fn test_treemap_node_decay_flash() {
+        let mut node = TreemapNode::leaf("test", 100.0);
+        node.flash_intensity = 1.0;
+
+        node.decay_flash(0.1);
+        assert!((node.flash_intensity - 0.9).abs() < 0.001);
+
+        node.decay_flash(0.5);
+        assert!((node.flash_intensity - 0.4).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_treemap_node_decay_flash_clamps_zero() {
+        let mut node = TreemapNode::leaf("test", 100.0);
+        node.flash_intensity = 0.1;
+
+        node.decay_flash(0.5); // Would go negative
+        assert_eq!(node.flash_intensity, 0.0);
+    }
+
+    #[test]
+    fn test_treemap_node_decay_flash_recursive() {
+        let mut root = TreemapNode::branch(
+            "root",
+            vec![
+                TreemapNode::leaf("a", 50.0),
+                TreemapNode::leaf("b", 50.0),
+            ],
+        );
+        root.flash_intensity = 1.0;
+        root.children[0].flash_intensity = 0.8;
+        root.children[1].flash_intensity = 0.5;
+
+        root.decay_flash(0.2);
+
+        assert!((root.flash_intensity - 0.8).abs() < 0.001);
+        assert!((root.children[0].flash_intensity - 0.6).abs() < 0.001);
+        assert!((root.children[1].flash_intensity - 0.3).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_treemap_node_is_flashing() {
+        let mut node = TreemapNode::leaf("test", 100.0);
+        assert!(!node.is_flashing());
+
+        node.flash_intensity = 1.0;
+        assert!(node.is_flashing());
+
+        node.flash_intensity = 0.02;
+        assert!(node.is_flashing());
+
+        node.flash_intensity = 0.005; // Below threshold
+        assert!(!node.is_flashing());
+    }
+
+    #[test]
+    fn test_treemap_node_flash_color() {
+        let mut node = TreemapNode::leaf("test", 100.0);
+        node.flash_intensity = 1.0;
+
+        let color = node.flash_color();
+        assert_eq!(color.r, 1.0);
+        assert_eq!(color.g, 1.0);
+        assert_eq!(color.b, 1.0);
+        assert!((color.a - 0.5).abs() < 0.001); // 1.0 * 0.5
+
+        node.flash_intensity = 0.5;
+        let color2 = node.flash_color();
+        assert!((color2.a - 0.25).abs() < 0.001); // 0.5 * 0.5
+    }
+
+    #[test]
+    fn test_treemap_node_flash_color_zero_intensity() {
+        let node = TreemapNode::leaf("test", 100.0);
+        let color = node.flash_color();
+        assert_eq!(color.a, 0.0);
     }
 }
