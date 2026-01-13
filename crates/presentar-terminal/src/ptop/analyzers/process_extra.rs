@@ -53,6 +53,8 @@ pub struct ProcessExtra {
     pub pid: u32,
     /// cgroup path (v2 unified hierarchy)
     pub cgroup: String,
+    /// Container name extracted from cgroup (PMAT-GAP-032)
+    pub container: Option<String>,
     /// OOM score (0-1000, higher = more likely to be killed)
     pub oom_score: i32,
     /// OOM score adjustment (-1000 to +1000)
@@ -83,6 +85,26 @@ impl ProcessExtra {
     /// Check if process is protected from OOM killer
     pub fn is_oom_protected(&self) -> bool {
         self.oom_score_adj == -1000
+    }
+
+    /// Get container badge string (PMAT-GAP-032 - ttop parity).
+    ///
+    /// Format: `[container_name]` or `[truncated…]` if > 12 chars.
+    #[must_use]
+    pub fn container_badge(&self) -> Option<String> {
+        self.container.as_ref().map(|c| {
+            if c.len() > 12 {
+                format!("[{}…]", &c[..11])
+            } else {
+                format!("[{}]", c)
+            }
+        })
+    }
+
+    /// Check if process is running in a container.
+    #[must_use]
+    pub fn is_containerized(&self) -> bool {
+        self.container.is_some()
     }
 
     /// Format cgroup for display (short form)
@@ -643,5 +665,57 @@ mod tests {
     fn test_io_priority_class_eq() {
         assert_eq!(IoPriorityClass::RealTime, IoPriorityClass::RealTime);
         assert_ne!(IoPriorityClass::RealTime, IoPriorityClass::Idle);
+    }
+
+    // =========================================================================
+    // Container badge tests (PMAT-GAP-032)
+    // =========================================================================
+
+    #[test]
+    fn test_container_badge_none() {
+        let extra = ProcessExtra::default();
+        assert!(extra.container_badge().is_none());
+    }
+
+    #[test]
+    fn test_container_badge_short() {
+        let mut extra = ProcessExtra::default();
+        extra.container = Some("nginx".to_string());
+        assert_eq!(extra.container_badge(), Some("[nginx]".to_string()));
+    }
+
+    #[test]
+    fn test_container_badge_exact_12() {
+        let mut extra = ProcessExtra::default();
+        extra.container = Some("exactly12chr".to_string()); // 12 chars
+        assert_eq!(extra.container_badge(), Some("[exactly12chr]".to_string()));
+    }
+
+    #[test]
+    fn test_container_badge_truncated() {
+        let mut extra = ProcessExtra::default();
+        extra.container = Some("very-long-container-name".to_string());
+        // Should truncate to first 11 chars + "…"
+        assert_eq!(extra.container_badge(), Some("[very-long-c…]".to_string()));
+    }
+
+    #[test]
+    fn test_container_badge_13_chars() {
+        let mut extra = ProcessExtra::default();
+        extra.container = Some("1234567890123".to_string()); // 13 chars
+        assert_eq!(extra.container_badge(), Some("[12345678901…]".to_string()));
+    }
+
+    #[test]
+    fn test_is_containerized_false() {
+        let extra = ProcessExtra::default();
+        assert!(!extra.is_containerized());
+    }
+
+    #[test]
+    fn test_is_containerized_true() {
+        let mut extra = ProcessExtra::default();
+        extra.container = Some("docker-abc123".to_string());
+        assert!(extra.is_containerized());
     }
 }
