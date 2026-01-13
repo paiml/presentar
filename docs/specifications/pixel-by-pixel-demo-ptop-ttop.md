@@ -8349,6 +8349,61 @@ Atoms must implement standard rendering behaviors for non-Ready states:
 | **PMAT-GAP-035** | Panel collapse memory (persist first visible) | 1h | `ptop/app.rs` | toggle_panel method | **DONE** |
 | **PMAT-GAP-036** | Battery live updates (not just UI) | 2h | `analyzers/battery.rs` | /sys/class/power_supply | **DONE** |
 
+#### K.2.9 Phase 3 Gap Tickets (nvidia-smi pmon Parity)
+
+**Status**: 0/6 gaps OPEN (0% complete)
+
+**Semantic Diff**: ttop uses `nvidia-smi pmon` for per-process GPU metrics; ptop uses `--query-compute-apps` which lacks utilization data.
+
+| Ticket | Description | Effort | Files | Dependencies | Status |
+|--------|-------------|--------|-------|--------------|--------|
+| **PMAT-GAP-037** | Replace --query-compute-apps with pmon | 3h | `analyzers/gpu_procs.rs` | nvidia-smi pmon | TODO |
+| **PMAT-GAP-038** | Add sm_util (shader %) per process | 1h | `analyzers/gpu_procs.rs` | PMAT-GAP-037 | TODO |
+| **PMAT-GAP-039** | Add enc_util (NVENC %) per process | 1h | `analyzers/gpu_procs.rs` | PMAT-GAP-037 | TODO |
+| **PMAT-GAP-040** | Add dec_util (NVDEC %) per process | 1h | `analyzers/gpu_procs.rs` | PMAT-GAP-037 | TODO |
+| **PMAT-GAP-041** | GpuProcType enum (C/G) not String | 0.5h | `analyzers/gpu_procs.rs` | PMAT-GAP-037 | TODO |
+| **PMAT-GAP-042** | Sort processes by SM util not memory | 0.5h | `analyzers/gpu_procs.rs` | PMAT-GAP-038 | TODO |
+
+**Data Model Diff**:
+```
+ttop GpuProcess:                    ptop GpuProcess:
+├─ gpu_idx: u32                     ├─ gpu_index: u32        ✓
+├─ pid: u32                         ├─ pid: u32              ✓
+├─ proc_type: GpuProcType {C,G}     ├─ process_type: String  ✗ (enum → string)
+├─ sm_util: u8                      ├─ gpu_util: Option<f32> ✗ (missing pmon)
+├─ mem_util: u8                     ├─ mem_util: Option<f32> ✓
+├─ enc_util: u8                     ├─ (missing)             ✗
+├─ dec_util: u8                     ├─ (missing)             ✗
+└─ command: String                  └─ name: String          ✓
+```
+
+**Performance Guarantees (PMAT-GAP-037)**:
+
+| Metric | Requirement | Rationale |
+|--------|-------------|-----------|
+| `pmon` latency | <50ms | Single-sample `-c 1` flag |
+| Parse complexity | O(n) processes | Linear scan, no allocations |
+| Memory overhead | <1KB per process | Fixed-size struct |
+| Collection interval | ≥1s | Rate-limited to avoid nvidia-smi contention |
+| Fallback behavior | Graceful to --query-* | Non-NVIDIA or pmon failure |
+
+**Academic References**:
+
+1. **GPU Process Monitoring**:
+   - NVIDIA Management Library (NVML) Architecture, NVIDIA Technical Report, 2019
+   - "Efficient GPU Utilization Monitoring for HPC Workloads", SC'20 Workshop
+   - Reference: `nvidia-smi pmon` uses NVML `nvmlDeviceGetComputeRunningProcesses()`
+
+2. **Process Classification (Compute vs Graphics)**:
+   - CUDA C Programming Guide, Chapter 3.2.8 "Compute Mode"
+   - "Workload Characterization of GPU Compute vs Graphics", ISPASS 2018
+   - Graphics processes: OpenGL/Vulkan contexts; Compute: CUDA/OpenCL kernels
+
+3. **Video Encode/Decode Monitoring**:
+   - "NVENC/NVDEC Performance Analysis", GTC 2020
+   - NVML exposes `nvmlDeviceGetEncoderUtilization()` / `nvmlDeviceGetDecoderUtilization()`
+   - Used for transcoding workload detection (OBS, FFmpeg, etc.)
+
 ### K.3 Falsification Protocols (F-GAP-*)
 
 #### K.3.1 CPU Gap Falsification
@@ -8401,6 +8456,31 @@ Atoms must implement standard rendering behaviors for non-Ready states:
 | **F-GAP-GPU-004** | Clock speed displays MHz | core=1800, mem=7000 | "1800MHz" present |
 | **F-GAP-GPU-005** | Power history sparkline renders | 10 power samples | Sparkline chars present |
 | **F-GAP-GPU-006** | Power history length=60 samples | 100 samples added | Only 60 retained |
+
+#### K.3.5.1 GPU pmon Falsification (Phase 3)
+
+| ID | Claim | Test | Pass Criterion |
+|----|-------|------|----------------|
+| **F-GAP-PMON-001** | pmon output parsed correctly | Mock pmon stdout | All fields extracted |
+| **F-GAP-PMON-002** | SM utilization u8 range | sm_util=100 | Value ≤ 100 |
+| **F-GAP-PMON-003** | Encoder util captured | enc_util=50 | enc_util == 50 |
+| **F-GAP-PMON-004** | Decoder util captured | dec_util=75 | dec_util == 75 |
+| **F-GAP-PMON-005** | GpuProcType::Compute from "C" | type="C" | `GpuProcType::Compute` |
+| **F-GAP-PMON-006** | GpuProcType::Graphics from "G" | type="G" | `GpuProcType::Graphics` |
+| **F-GAP-PMON-007** | Processes sorted by SM desc | [sm=10, sm=50, sm=30] | Order: [50, 30, 10] |
+| **F-GAP-PMON-008** | Header lines skipped | Line starts with "#" | Not in result |
+| **F-GAP-PMON-009** | Missing field handled | "-" for sm_util | sm_util == 0 |
+| **F-GAP-PMON-010** | Collection rate-limited | 2 calls in 500ms | Only 1 pmon exec |
+| **F-GAP-PMON-011** | Fallback to --query-* on error | pmon returns error | Uses query-compute-apps |
+| **F-GAP-PMON-012** | pmon latency <50ms | Time pmon call | Elapsed < 50ms |
+
+**Statistical Requirements (n=1000, α=0.05)**:
+
+| Test | Null Hypothesis | Alternative | Power |
+|------|-----------------|-------------|-------|
+| F-PMON-007 | Sort order random | SM descending | >0.99 |
+| F-PMON-010 | Rate limit broken | ≥1s between calls | >0.95 |
+| F-PMON-012 | Latency ≥50ms | Latency <50ms | >0.95 |
 
 #### K.3.6 Connections Gap Falsification
 
