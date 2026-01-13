@@ -8334,7 +8334,7 @@ Atoms must implement standard rendering behaviors for non-Ready states:
 
 #### K.2.8 Phase 2 Gap Tickets (Semantic Diff from ttop)
 
-**Status**: 7/10 gaps CLOSED (70% complete)
+**Status**: 8/10 gaps CLOSED (80% complete)
 
 | Ticket | Description | Effort | Files | Dependencies | Status |
 |--------|-------------|--------|-------|--------------|--------|
@@ -8347,7 +8347,7 @@ Atoms must implement standard rendering behaviors for non-Ready states:
 | **PMAT-GAP-033** | Signal result auto-clear (3s timeout) | 0.5h | `ptop/app.rs` | Instant tracking | **DONE** |
 | **PMAT-GAP-034** | Files view mode toggle (tree/flat/size) | 2h | `ptop/app.rs`, `ptop/config.rs` | FilesViewMode enum | **DONE** |
 | **PMAT-GAP-035** | Panel collapse memory (persist first visible) | 1h | `ptop/app.rs` | toggle_panel method | **DONE** |
-| **PMAT-GAP-036** | Battery live updates (not just UI) | 2h | `analyzers/battery.rs` (new) | sysinfo battery | TODO |
+| **PMAT-GAP-036** | Battery live updates (not just UI) | 2h | `analyzers/battery.rs` | /sys/class/power_supply | **DONE** |
 
 ### K.3 Falsification Protocols (F-GAP-*)
 

@@ -14,6 +14,7 @@
 
 use std::time::Duration;
 
+mod battery;
 mod connections;
 mod containers;
 mod disk_entropy;
@@ -29,6 +30,7 @@ mod storage;
 mod swap;
 mod treemap;
 
+pub use battery::{BatteryAnalyzer, BatteryData, BatteryInfo, BatteryState};
 pub use connections::{ConnectionsAnalyzer, ConnectionsData, TcpConnection, TcpState};
 pub use containers::{
     Container, ContainerRuntime, ContainerState, ContainerStats, ContainersAnalyzer, ContainersData,
@@ -122,6 +124,8 @@ pub struct AnalyzerRegistry {
     pub disk_entropy: Option<DiskEntropyAnalyzer>,
     /// File activity and inode stats
     pub file_analyzer: Option<FileAnalyzer>,
+    /// Battery statistics (PMAT-GAP-036)
+    pub battery: Option<BatteryAnalyzer>,
 }
 
 impl Default for AnalyzerRegistry {
@@ -252,6 +256,9 @@ impl AnalyzerRegistry {
             }
         };
 
+        // Battery analyzer (PMAT-GAP-036)
+        let battery = BatteryAnalyzer::new();
+
         Self {
             psi,
             connections,
@@ -266,6 +273,7 @@ impl AnalyzerRegistry {
             storage,
             disk_entropy,
             file_analyzer,
+            battery,
         }
     }
 
@@ -309,6 +317,9 @@ impl AnalyzerRegistry {
         }
         if let Some(ref mut file_analyzer) = self.file_analyzer {
             let _ = file_analyzer.collect();
+        }
+        if let Some(ref mut battery) = self.battery {
+            battery.collect();
         }
     }
 
@@ -375,6 +386,11 @@ impl AnalyzerRegistry {
     /// Get file analyzer data if available
     pub fn file_analyzer_data(&self) -> Option<&FileAnalyzerData> {
         self.file_analyzer.as_ref().map(|f| f.data())
+    }
+
+    /// Get battery data if available (PMAT-GAP-036)
+    pub fn battery_data(&self) -> Option<&BatteryData> {
+        self.battery.as_ref().map(|b| b.data())
     }
 }
 
