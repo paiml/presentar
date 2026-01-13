@@ -8560,3 +8560,499 @@ mod compute_block_tests {
 6. No regressions in existing functionality
 
 ---
+
+## Appendix L: Renacer Profile Tracing & SIMD/O(1) Performance
+
+**Version**: 1.0.0
+**Status**: REQUIRED for all performance-critical paths
+**Reference**: trueno-viz/src/monitor/simd/* architecture
+
+### L.1 Renacer Profile Tracing Overview
+
+Renacer (Spanish: "rebirth") profile tracing provides compile-time and runtime performance analysis following Toyota Way principles (Kaizen continuous improvement, Jidoka automation with human touch).
+
+#### L.1.1 Core Principles
+
+| Principle | Implementation | Enforcement |
+|-----------|----------------|-------------|
+| **O(1) Complexity** | Fixed-size buffers, no allocations in hot paths | `#[no_alloc]` proc macro |
+| **SIMD-First** | Vectorized operations where applicable | Backend detection |
+| **Copy Semantics** | All snapshots implement Copy trait | Compile-time enforcement |
+| **Cache-Friendly** | 64-byte aligned structures, SoA layout | `#[repr(C, align(64))]` |
+| **Falsifiable** | Every performance claim has a test | F-PERF-* tests |
+
+#### L.1.2 SIMD Backend Selection
+
+Following trueno-viz architecture:
+
+```rust
+/// SIMD backend selection (trueno-viz parity).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SimdBackend {
+    /// Scalar fallback (no SIMD).
+    Scalar,
+    /// SSE2 (128-bit, x86_64 baseline).
+    Sse2,
+    /// AVX2 (256-bit, Haswell 2013+).
+    Avx2,
+    /// AVX-512 (512-bit, Skylake-X 2017+).
+    Avx512,
+    /// ARM NEON (128-bit, mandatory on aarch64).
+    Neon,
+    /// WebAssembly SIMD128.
+    WasmSimd128,
+}
+
+impl SimdBackend {
+    /// Runtime detection of best available backend.
+    pub fn detect() -> Self {
+        #[cfg(target_arch = "x86_64")]
+        {
+            if is_x86_feature_detected!("avx512f") { return Self::Avx512; }
+            if is_x86_feature_detected!("avx2") { return Self::Avx2; }
+            if is_x86_feature_detected!("sse2") { return Self::Sse2; }
+        }
+        #[cfg(target_arch = "aarch64")]
+        { return Self::Neon; }
+        #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+        { return Self::WasmSimd128; }
+        Self::Scalar
+    }
+
+    /// Lanes per operation for u64 values.
+    pub const fn u64_lanes(&self) -> usize {
+        self.register_width_bits() / 64
+    }
+}
+```
+
+#### L.1.3 O(1) Helper Pattern
+
+All O(1) helpers follow this template:
+
+```rust
+/// O(1) helper: [description]
+///
+/// # Complexity
+/// - Time: O(1) - no loops, no allocations
+/// - Space: O(1) - fixed stack size
+///
+/// # Performance Target (Falsifiable)
+/// - H₁: Execution time < 100ns (measured)
+/// - H₂: Zero heap allocations (verified)
+///
+/// # trueno-viz Parity
+/// - Reference: src/monitor/simd/kernels.rs line N
+#[inline(always)]
+#[must_use]
+pub const fn helper_name(input: Input) -> Output {
+    // O(1) implementation
+}
+
+#[cfg(test)]
+mod tests {
+    /// F-HELPER-001: Constant time execution
+    #[test]
+    fn f_helper_001_constant_time() {
+        let mut times = [0u64; 1000];
+        for i in 0..1000 {
+            let start = std::time::Instant::now();
+            let _ = helper_name(test_input());
+            times[i] = start.elapsed().as_nanos() as u64;
+        }
+        // Coefficient of variation < 50% indicates O(1)
+        let mean = times.iter().sum::<u64>() / 1000;
+        let variance: u64 = times.iter().map(|t| (t - mean).pow(2)).sum::<u64>() / 1000;
+        let std_dev = (variance as f64).sqrt();
+        let cv = std_dev / mean as f64;
+        assert!(cv < 0.5, "CV={:.2} suggests non-O(1) behavior", cv);
+    }
+}
+```
+
+### L.2 SIMD Kernel Implementations
+
+#### L.2.1 Required Kernels (trueno-viz parity)
+
+| Kernel | Purpose | SIMD Benefit | Files |
+|--------|---------|--------------|-------|
+| `simd_find_newlines` | Parse /proc files | 16x throughput | `perf_trace.rs` |
+| `simd_parse_integers` | Extract metrics | 4x throughput | `perf_trace.rs` |
+| `simd_delta` | Rate calculations | 8x throughput | `perf_trace.rs` |
+| `simd_reduce_sum` | Aggregations | 4-8x throughput | `perf_trace.rs` |
+| `simd_reduce_minmax` | Bounds detection | 4-8x throughput | `perf_trace.rs` |
+
+#### L.2.2 Aligned Buffer Pattern
+
+```rust
+/// Aligned buffer for SIMD operations.
+#[repr(C, align(64))]
+pub struct AlignedBuffer<const N: usize> {
+    data: [u8; N],
+    len: usize,
+}
+
+// Standard sizes for /proc parsing
+pub type StatBuffer = AlignedBuffer<4096>;    // /proc/stat
+pub type MeminfoBuffer = AlignedBuffer<2048>; // /proc/meminfo
+pub type NetDevBuffer = AlignedBuffer<8192>;  // /proc/net/dev
+```
+
+### L.3 Profile Tracing Infrastructure
+
+#### L.3.1 Trace Points
+
+```rust
+/// Profile trace point macro.
+macro_rules! trace_point {
+    ($name:expr) => {
+        #[cfg(feature = "profile")]
+        {
+            PROFILER.record($name, std::time::Instant::now());
+        }
+    };
+}
+
+/// Usage in hot paths:
+pub fn collect_cpu_metrics(&mut self) -> CpuSnapshot {
+    trace_point!("cpu_collect_start");
+    let data = self.read_proc_stat();
+    trace_point!("cpu_collect_read");
+    let parsed = simd_parse_cpu_line(&data);
+    trace_point!("cpu_collect_parse");
+    let snapshot = CpuSnapshot::from_parsed(parsed);
+    trace_point!("cpu_collect_end");
+    snapshot
+}
+```
+
+#### L.3.2 Performance Assertions
+
+```rust
+/// Runtime performance assertion.
+#[cfg(debug_assertions)]
+macro_rules! assert_perf {
+    ($name:expr, $budget_us:expr, $block:block) => {{
+        let start = std::time::Instant::now();
+        let result = $block;
+        let elapsed = start.elapsed();
+        assert!(
+            elapsed.as_micros() < $budget_us,
+            "{} exceeded budget: {:?} > {}μs",
+            $name, elapsed, $budget_us
+        );
+        result
+    }};
+}
+```
+
+### L.4 Falsification Protocols (F-PERF-*)
+
+| ID | Claim | Test | Pass Criterion |
+|----|-------|------|----------------|
+| **F-PERF-001** | SIMD backend detected | Runtime check | Returns non-Scalar on x86_64/aarch64 |
+| **F-PERF-002** | simd_find_newlines O(n/16) | Benchmark 16KB file | <1ms on AVX2 |
+| **F-PERF-003** | simd_parse_integers correctness | Parse /proc/stat | Matches scalar result |
+| **F-PERF-004** | AlignedBuffer 64-byte aligned | `std::mem::align_of` | Returns 64 |
+| **F-PERF-005** | Profile traces captured | Enable profile feature | Trace file generated |
+| **F-PERF-006** | O(1) helper constant time | 1000-iteration CV | CV < 0.5 |
+| **F-PERF-007** | Zero allocations in render | Alloc counter | Delta = 0 |
+| **F-PERF-008** | Cache-friendly layout | perf stat | L1 hit > 95% |
+| **F-PERF-009** | Copy semantics enforced | Compile check | All snapshots Copy |
+| **F-PERF-010** | SIMD fallback works | Force Scalar backend | Correct output |
+
+---
+
+## Appendix M: BrickProfiling & File Explosion Strategy
+
+**Version**: 1.0.0
+**Status**: REQUIRED for 95% coverage target
+**Goal**: Achieve trueno-viz architectural parity (106 files, 40.8K LOC)
+
+### M.1 File Explosion Overview
+
+Large files prevent thorough testing. File explosion creates focused, testable modules.
+
+#### M.1.1 Current State vs Target
+
+| Metric | Current | Target | Gap |
+|--------|---------|--------|-----|
+| Source files | ~45 | 100+ | +55 |
+| Max LOC/file | 7872 | 700 | -90% |
+| Avg LOC/file | ~800 | 400 | -50% |
+| Test coverage | ~88% | 95% | +7% |
+
+#### M.1.2 Explosion Candidates
+
+| File | Current LOC | Target Modules | New Files |
+|------|-------------|----------------|-----------|
+| `ui/core/render.rs` | 7872 | 12 modules | `render/*.rs` |
+| `ptop/app.rs` | 3293 | 6 modules | `app/*.rs` |
+| `compute_block.rs` | 2215 | 4 modules | `compute/*.rs` |
+| `analyzers/gpu_procs.rs` | 1200 | 3 modules | `gpu/*.rs` |
+| `widgets/border.rs` | 893 | 2 modules | Keep or split |
+
+### M.2 BrickProfiling Architecture
+
+#### M.2.1 Brick Trait Enhancement
+
+```rust
+/// Enhanced Brick trait with profiling support.
+pub trait Brick: Send + Sync {
+    /// Brick identifier for profiling.
+    fn brick_name(&self) -> &'static str;
+
+    /// Performance assertions that must pass.
+    fn assertions(&self) -> &[BrickAssertion];
+
+    /// Budget allocations for operations.
+    fn budget(&self) -> BrickBudget;
+
+    /// Runtime verification of assertions.
+    fn verify(&self) -> BrickVerification;
+
+    /// Profile data collection (feature-gated).
+    #[cfg(feature = "profile")]
+    fn profile_data(&self) -> BrickProfileData {
+        BrickProfileData::default()
+    }
+}
+
+/// Brick profiling data.
+#[derive(Debug, Clone, Default)]
+pub struct BrickProfileData {
+    /// Render time histogram (microseconds).
+    pub render_times: [u32; 100],
+    /// Memory high-water mark (bytes).
+    pub memory_hwm: usize,
+    /// Cache miss count.
+    pub cache_misses: u64,
+    /// SIMD instruction count.
+    pub simd_ops: u64,
+}
+```
+
+#### M.2.2 Module Explosion Template
+
+```
+src/ptop/ui/
+├── core/
+│   ├── mod.rs              # Re-exports only
+│   ├── render.rs           # Main render entry point (<300 LOC)
+│   ├── panel_cpu.rs        # CPU panel rendering
+│   ├── panel_memory.rs     # Memory panel rendering
+│   ├── panel_disk.rs       # Disk panel rendering
+│   ├── panel_network.rs    # Network panel rendering
+│   ├── panel_gpu.rs        # GPU panel rendering
+│   ├── panel_sensors.rs    # Sensors panel rendering
+│   ├── panel_process.rs    # Process table rendering
+│   ├── panel_connections.rs # Connections panel rendering
+│   ├── panel_battery.rs    # Battery panel rendering
+│   ├── layout.rs           # Layout calculations
+│   └── helpers.rs          # Shared formatting utilities
+├── panels/
+│   ├── mod.rs
+│   ├── cpu.rs              # CPU panel logic
+│   ├── memory.rs           # Memory panel logic
+│   └── ...
+└── widgets/
+    ├── mod.rs
+    └── ...
+```
+
+### M.3 Coverage Enforcement (95% Hard Requirement)
+
+#### M.3.1 Coverage Gates
+
+```toml
+# .presentar-gates.toml
+[coverage]
+# HARD REQUIREMENTS - Build fails if not met
+min_line_coverage = 0.95      # 95% line coverage
+min_branch_coverage = 0.85    # 85% branch coverage
+min_function_coverage = 0.98  # 98% function coverage
+
+# File-level requirements
+max_uncovered_lines_per_file = 20
+max_uncovered_functions_per_file = 2
+
+# Exclusions (must be justified)
+exclude_patterns = [
+    "**/tests/**",
+    "**/benches/**",
+    "**/*_test.rs",
+]
+```
+
+#### M.3.2 Coverage Tracking Commands
+
+```bash
+# Generate coverage report
+cargo llvm-cov --features ptop --html --output-dir coverage/
+
+# Check coverage threshold
+cargo llvm-cov --features ptop --fail-under-lines 95
+
+# Per-file coverage breakdown
+cargo llvm-cov --features ptop --show-missing-lines
+
+# Coverage delta from baseline
+cargo llvm-cov --features ptop --baseline coverage/baseline.json
+```
+
+### M.4 File Explosion Execution Plan
+
+#### M.4.1 Phase 1: render.rs Explosion (7872 → 12 files)
+
+| New File | Source Lines | Functions | Tests Required |
+|----------|--------------|-----------|----------------|
+| `render/mod.rs` | 50 | 2 | 2 |
+| `render/entry.rs` | 300 | 5 | 15 |
+| `render/panel_cpu.rs` | 600 | 12 | 36 |
+| `render/panel_memory.rs` | 500 | 10 | 30 |
+| `render/panel_disk.rs` | 450 | 9 | 27 |
+| `render/panel_network.rs` | 400 | 8 | 24 |
+| `render/panel_gpu.rs` | 550 | 11 | 33 |
+| `render/panel_sensors.rs` | 350 | 7 | 21 |
+| `render/panel_process.rs` | 700 | 14 | 42 |
+| `render/panel_connections.rs` | 500 | 10 | 30 |
+| `render/panel_battery.rs` | 300 | 6 | 18 |
+| `render/helpers.rs` | 400 | 8 | 24 |
+
+**Total**: ~5100 LOC, 102 functions, 302 tests
+
+#### M.4.2 Phase 2: app.rs Explosion (3293 → 6 files)
+
+| New File | LOC | Functions | Tests |
+|----------|-----|-----------|-------|
+| `app/mod.rs` | 100 | 3 | 6 |
+| `app/state.rs` | 500 | 15 | 45 |
+| `app/input.rs` | 400 | 12 | 36 |
+| `app/snapshot.rs` | 600 | 18 | 54 |
+| `app/lifecycle.rs` | 350 | 10 | 30 |
+| `app/config.rs` | 300 | 9 | 27 |
+
+**Total**: ~2250 LOC, 67 functions, 198 tests
+
+### M.5 PMAT Tickets for File Explosion
+
+| Ticket | Description | Effort | Coverage Impact |
+|--------|-------------|--------|-----------------|
+| **PMAT-EXPLODE-001** | Explode render.rs → 12 modules | 8h | +3% coverage |
+| **PMAT-EXPLODE-002** | Explode app.rs → 6 modules | 4h | +1.5% coverage |
+| **PMAT-EXPLODE-003** | Explode compute_block.rs → 4 modules | 3h | +1% coverage |
+| **PMAT-EXPLODE-004** | Add per-module test files | 6h | +2% coverage |
+| **PMAT-EXPLODE-005** | Update imports and re-exports | 2h | - |
+| **PMAT-EXPLODE-006** | Add integration tests | 4h | +0.5% coverage |
+
+**Total Effort**: 27h for ~8% coverage increase
+
+### M.6 Pixel Testing Integration
+
+#### M.6.1 Screenshot Capture Protocol
+
+```bash
+#!/bin/bash
+# scripts/pixel_capture.sh
+
+# Capture ptop screenshot
+./target/release/ptop --render-once --output pixel_test.txt
+
+# Compare against golden master
+diff -u golden/ptop_reference.txt pixel_test.txt > diff.txt
+
+# Calculate similarity score
+./scripts/pixel_similarity.py golden/ptop_reference.txt pixel_test.txt
+```
+
+#### M.6.2 Pixel Diff Threshold
+
+| Component | Threshold | Reason |
+|-----------|-----------|--------|
+| Border characters | 100% match | Unicode exact |
+| Title text | 95% match | Dynamic values |
+| Graph content | 90% match | Time-varying |
+| Overall frame | 95% match | Composite |
+
+### M.7 Falsification Protocols (F-EXPLODE-*)
+
+| ID | Claim | Test | Pass Criterion |
+|----|-------|------|----------------|
+| **F-EXPLODE-001** | render.rs < 300 LOC | `wc -l` | Lines ≤ 300 |
+| **F-EXPLODE-002** | No file > 700 LOC | `find | xargs wc` | Max ≤ 700 |
+| **F-EXPLODE-003** | 95% line coverage | `cargo llvm-cov` | Coverage ≥ 0.95 |
+| **F-EXPLODE-004** | All modules have tests | `find *_test.rs` | Count > 0 per module |
+| **F-EXPLODE-005** | Re-exports work | Compile check | No broken imports |
+| **F-EXPLODE-006** | Performance unchanged | Benchmark | <5% regression |
+| **F-EXPLODE-007** | 100+ source files | `find *.rs | wc` | Count ≥ 100 |
+| **F-EXPLODE-008** | trueno-viz parity | Architecture review | Same module structure |
+
+---
+
+## Appendix N: 95% Coverage Enforcement Protocol
+
+**Status**: MANDATORY - Build fails below threshold
+**Effective**: Immediately
+
+### N.1 Coverage Requirements
+
+| Metric | Threshold | Enforcement |
+|--------|-----------|-------------|
+| Line coverage | **≥95%** | `cargo llvm-cov --fail-under-lines 95` |
+| Branch coverage | ≥85% | Warning only |
+| Function coverage | ≥98% | `--fail-under-functions 98` |
+| Region coverage | ≥90% | Warning only |
+
+### N.2 Coverage Workflow
+
+```bash
+# Pre-commit hook (MANDATORY)
+#!/bin/bash
+set -e
+
+# Quick coverage check
+cargo llvm-cov --features ptop --no-report --fail-under-lines 95
+
+# If passed, continue with commit
+echo "Coverage check passed (≥95%)"
+```
+
+### N.3 Coverage Exclusions (Requires Justification)
+
+```rust
+// Only these patterns may be excluded:
+// 1. Platform-specific code (e.g., #[cfg(windows)])
+// 2. Panic handlers (unreachable code)
+// 3. Debug-only code (#[cfg(debug_assertions)])
+
+#[cfg(not(tarpaulin_include))]  // DEPRECATED - use llvm-cov
+#[coverage(off)]  // Nightly only - document reason
+fn platform_specific_code() {
+    // Justification: Windows-only path
+}
+```
+
+### N.4 Coverage Dashboard
+
+| Module | Current | Target | Gap | Status |
+|--------|---------|--------|-----|--------|
+| `ui/core/render.rs` | 82% | 95% | -13% | 🔴 BLOCKED |
+| `ptop/app.rs` | 89% | 95% | -6% | 🟡 IN PROGRESS |
+| `widgets/border.rs` | 96% | 95% | +1% | ✅ PASS |
+| `widgets/graph.rs` | 94% | 95% | -1% | 🟡 CLOSE |
+| `analyzers/gpu_procs.rs` | 91% | 95% | -4% | 🟡 IN PROGRESS |
+| **Total** | 88% | 95% | -7% | 🟡 IN PROGRESS |
+
+### N.5 Coverage Improvement Tickets
+
+| Ticket | Module | Current → Target | Tests Needed |
+|--------|--------|------------------|--------------|
+| **PMAT-COV-001** | render.rs | 82% → 95% | +150 tests |
+| **PMAT-COV-002** | app.rs | 89% → 95% | +60 tests |
+| **PMAT-COV-003** | gpu_procs.rs | 91% → 95% | +40 tests |
+| **PMAT-COV-004** | analyzers/*.rs | 87% → 95% | +80 tests |
+| **PMAT-COV-005** | widgets/*.rs | 93% → 95% | +20 tests |
+
+**Total**: ~350 new tests for 95% coverage
+
+---
