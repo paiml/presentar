@@ -1402,55 +1402,39 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_nvidia_process_line() {
-        let analyzer = GpuProcsAnalyzer::new();
-        let line = "1234, python3, 0, 2048";
-
-        let proc = analyzer.parse_nvidia_process_line(line);
-        assert!(proc.is_some());
-
-        let proc = proc.unwrap();
-        assert_eq!(proc.pid, 1234);
-        assert_eq!(proc.name, "python3");
-        assert_eq!(proc.gpu_index, 0);
-        assert_eq!(proc.used_memory, 2048 * 1024 * 1024);
-        assert_eq!(proc.proc_type, GpuProcType::Unknown); // Legacy parser doesn't know type
+    fn test_parse_pmon_single_process() {
+        let output = "# gpu        pid  type    sm   mem   enc   dec   jpg   ofa command\n# Idx          #   C/G     %     %     %     %     %     %   name\n    0       1234     C    85    45    10     5     0     0   python3";
+        let procs = GpuProcsAnalyzer::parse_pmon_output(output);
+        assert_eq!(procs.len(), 1);
+        assert_eq!(procs[0].pid, 1234);
+        assert_eq!(procs[0].proc_type, GpuProcType::Compute);
+        assert_eq!(procs[0].sm_util, 85);
+        assert_eq!(procs[0].mem_util, 45);
     }
 
     #[test]
-    fn test_parse_nvidia_process_line_invalid() {
-        let analyzer = GpuProcsAnalyzer::new();
+    fn test_parse_pmon_invalid_lines() {
+        // Empty output
+        let procs = GpuProcsAnalyzer::parse_pmon_output("");
+        assert!(procs.is_empty());
 
-        // Too few parts
-        assert!(analyzer.parse_nvidia_process_line("1234, python").is_none());
+        // Only headers
+        let procs = GpuProcsAnalyzer::parse_pmon_output("# header\n# header2");
+        assert!(procs.is_empty());
 
-        // Invalid PID
-        assert!(analyzer
-            .parse_nvidia_process_line("invalid, python, 0, 100")
-            .is_none());
-
-        // Invalid GPU index
-        assert!(analyzer
-            .parse_nvidia_process_line("1234, python, invalid, 100")
-            .is_none());
-
-        // Invalid memory
-        assert!(analyzer
-            .parse_nvidia_process_line("1234, python, 0, invalid")
-            .is_none());
+        // Malformed line
+        let procs = GpuProcsAnalyzer::parse_pmon_output("invalid data");
+        assert!(procs.is_empty());
     }
 
     #[test]
-    fn test_parse_nvidia_process_line_different_gpu() {
-        let analyzer = GpuProcsAnalyzer::new();
-        let line = "5678, cuda_app, 1, 4096";
-
-        let proc = analyzer.parse_nvidia_process_line(line);
-        assert!(proc.is_some());
-
-        let proc = proc.unwrap();
-        assert_eq!(proc.gpu_index, 1);
-        assert_eq!(proc.used_memory, 4096 * 1024 * 1024);
+    fn test_parse_pmon_graphics_process() {
+        let output = "# gpu        pid  type    sm   mem   enc   dec   jpg   ofa command\n    0       5678     G    50    30     0     0     0     0   X";
+        let procs = GpuProcsAnalyzer::parse_pmon_output(output);
+        assert_eq!(procs.len(), 1);
+        assert_eq!(procs[0].pid, 5678);
+        assert_eq!(procs[0].proc_type, GpuProcType::Graphics);
+        assert_eq!(procs[0].sm_util, 50);
     }
 
     // Analyzer trait tests
