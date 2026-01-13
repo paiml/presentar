@@ -10,7 +10,7 @@ use sysinfo::{
     System, Users,
 };
 
-use super::config::{DetailLevel, PanelType, PtopConfig, SignalType};
+use super::config::{DetailLevel, FilesViewMode, PanelType, PtopConfig, SignalType};
 use super::ui::{read_gpu_info, GpuInfo};
 
 /// Read cached memory from /proc/meminfo (Linux only).
@@ -776,6 +776,8 @@ pub struct App {
     pub exploded_panel: Option<PanelType>,
     /// Selected column index for DataFrame navigation (0-based, left-to-right)
     pub selected_column: usize,
+    /// Files panel view mode (PMAT-GAP-034 - ttop parity)
+    pub files_view_mode: FilesViewMode,
 
     // Configuration (SPEC-024 v5.0 Feature A)
     pub config: PtopConfig,
@@ -986,6 +988,7 @@ impl App {
             focused_panel: Some(PanelType::Cpu), // Start with CPU focused
             exploded_panel: None,
             selected_column: 0, // Start with first column (PID)
+            files_view_mode: FilesViewMode::default(), // PMAT-GAP-034: size view default
             config,
             frame_id: 0,
             avg_frame_time_us: 0,
@@ -1549,6 +1552,12 @@ impl App {
             KeyCode::Char('8') => self.panels.connections = !self.panels.connections,
             KeyCode::Char('9') => self.panels.psi = !self.panels.psi,
 
+            // Files view mode toggle (PMAT-GAP-034 - ttop parity)
+            // 'v' cycles: Size -> Tree -> Flat -> Size (when Files panel focused)
+            KeyCode::Char('v') if self.focused_panel == Some(PanelType::Files) => {
+                self.cycle_files_view_mode();
+            }
+
             // Process navigation (when Process panel focused)
             KeyCode::Down | KeyCode::Char('j') => self.navigate_process(1),
             KeyCode::Up | KeyCode::Char('k') => self.navigate_process(-1),
@@ -1794,6 +1803,13 @@ impl App {
     #[must_use]
     pub fn selected_interface_data(&self) -> Option<&NetworkInfo> {
         self.snapshot_networks.get(self.selected_interface_index)
+    }
+
+    /// Cycle to the next files view mode (PMAT-GAP-034 - ttop parity)
+    ///
+    /// 'v' key cycles: Size -> Tree -> Flat -> Size
+    pub fn cycle_files_view_mode(&mut self) {
+        self.files_view_mode = self.files_view_mode.next();
     }
 
     /// Send a signal to a process using the system `kill` command
@@ -3545,5 +3561,70 @@ mod tests {
         // Should navigate to next panel, not cycle interfaces
         assert_ne!(app.focused_panel, Some(PanelType::Cpu));
         assert_eq!(app.selected_interface_index, 0); // Unchanged
+    }
+
+    // =========================================================================
+    // PMAT-GAP-034: Files view mode toggle tests (ttop parity)
+    // =========================================================================
+
+    #[test]
+    fn test_files_view_mode_field_exists() {
+        let app = App::new(true);
+        // Field must exist and default to Size
+        assert_eq!(app.files_view_mode, FilesViewMode::Size);
+    }
+
+    #[test]
+    fn test_files_view_mode_next_cycle() {
+        assert_eq!(FilesViewMode::Size.next(), FilesViewMode::Tree);
+        assert_eq!(FilesViewMode::Tree.next(), FilesViewMode::Flat);
+        assert_eq!(FilesViewMode::Flat.next(), FilesViewMode::Size);
+    }
+
+    #[test]
+    fn test_files_view_mode_names() {
+        assert_eq!(FilesViewMode::Tree.name(), "tree");
+        assert_eq!(FilesViewMode::Flat.name(), "flat");
+        assert_eq!(FilesViewMode::Size.name(), "size");
+    }
+
+    #[test]
+    fn test_cycle_files_view_mode() {
+        let mut app = App::new(true);
+        assert_eq!(app.files_view_mode, FilesViewMode::Size);
+
+        app.cycle_files_view_mode();
+        assert_eq!(app.files_view_mode, FilesViewMode::Tree);
+
+        app.cycle_files_view_mode();
+        assert_eq!(app.files_view_mode, FilesViewMode::Flat);
+
+        app.cycle_files_view_mode();
+        assert_eq!(app.files_view_mode, FilesViewMode::Size);
+    }
+
+    #[test]
+    fn test_v_key_cycles_view_mode_when_files_focused() {
+        let mut app = App::new(true);
+        app.focused_panel = Some(PanelType::Files);
+        app.panels.files = true;
+
+        assert_eq!(app.files_view_mode, FilesViewMode::Size);
+        app.handle_key(KeyCode::Char('v'), KeyModifiers::empty());
+        assert_eq!(app.files_view_mode, FilesViewMode::Tree);
+        app.handle_key(KeyCode::Char('v'), KeyModifiers::empty());
+        assert_eq!(app.files_view_mode, FilesViewMode::Flat);
+        app.handle_key(KeyCode::Char('v'), KeyModifiers::empty());
+        assert_eq!(app.files_view_mode, FilesViewMode::Size);
+    }
+
+    #[test]
+    fn test_v_key_does_nothing_when_files_not_focused() {
+        let mut app = App::new(true);
+        app.focused_panel = Some(PanelType::Cpu);
+
+        assert_eq!(app.files_view_mode, FilesViewMode::Size);
+        app.handle_key(KeyCode::Char('v'), KeyModifiers::empty());
+        assert_eq!(app.files_view_mode, FilesViewMode::Size); // Unchanged
     }
 }

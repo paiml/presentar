@@ -8334,7 +8334,7 @@ Atoms must implement standard rendering behaviors for non-Ready states:
 
 #### K.2.8 Phase 2 Gap Tickets (Semantic Diff from ttop)
 
-**Status**: 5/10 gaps CLOSED (50% complete)
+**Status**: 6/10 gaps CLOSED (60% complete)
 
 | Ticket | Description | Effort | Files | Dependencies | Status |
 |--------|-------------|--------|-------|--------------|--------|
@@ -8345,7 +8345,7 @@ Atoms must implement standard rendering behaviors for non-Ready states:
 | **PMAT-GAP-031** | Network interface cycling (Tab to switch) | 1h | `ptop/app.rs`, `ui/panels/network.rs` | interface list | **DONE** |
 | **PMAT-GAP-032** | Container badge truncation (12 char max) | 1h | `analyzers/process_extra.rs` | container name | **DONE** |
 | **PMAT-GAP-033** | Signal result auto-clear (3s timeout) | 0.5h | `ptop/app.rs` | Instant tracking | **DONE** |
-| **PMAT-GAP-034** | Files view mode toggle (tree/flat/size) | 2h | `ptop/app.rs`, `ui/panels/files.rs` | treemap analyzer | TODO |
+| **PMAT-GAP-034** | Files view mode toggle (tree/flat/size) | 2h | `ptop/app.rs`, `ptop/config.rs` | FilesViewMode enum | **DONE** |
 | **PMAT-GAP-035** | Panel collapse memory (persist first visible) | 1h | `ptop/app.rs` | panel state | TODO |
 | **PMAT-GAP-036** | Battery live updates (not just UI) | 2h | `analyzers/battery.rs` (new) | sysinfo battery | TODO |
 

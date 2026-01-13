@@ -8,6 +8,40 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
+/// Files panel view mode (PMAT-GAP-034 - ttop parity)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FilesViewMode {
+    /// Tree view - hierarchical directory structure
+    Tree,
+    /// Flat view - all files without hierarchy
+    Flat,
+    /// Size view - sorted by size descending (default)
+    #[default]
+    Size,
+}
+
+impl FilesViewMode {
+    /// Cycle to next view mode
+    #[must_use]
+    pub fn next(self) -> Self {
+        match self {
+            Self::Tree => Self::Flat,
+            Self::Flat => Self::Size,
+            Self::Size => Self::Tree,
+        }
+    }
+
+    /// Get display name for status bar
+    #[must_use]
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Tree => "tree",
+            Self::Flat => "flat",
+            Self::Size => "size",
+        }
+    }
+}
+
 /// Panel types that can be configured
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PanelType {
