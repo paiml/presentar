@@ -31873,3 +31873,1555 @@ mod splice_tests {
         assert_eq!(splice.splices, cloned.splices);
     }
 }
+
+// ============================================================================
+// v9.45.0: Process Accounting O(1) Helpers
+// ============================================================================
+
+/// Task accounting tracker - per-task resource consumption.
+///
+/// O(1) tracking of task-level CPU, I/O, and memory accounting
+/// from /proc/[pid]/stat and taskstats.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TaskAccountingTracker {
+    /// User CPU time (clock ticks)
+    pub utime: u64,
+    /// System CPU time (clock ticks)
+    pub stime: u64,
+    /// Children user CPU time
+    pub cutime: u64,
+    /// Children system CPU time
+    pub cstime: u64,
+    /// Voluntary context switches
+    pub voluntary_ctxt_switches: u64,
+    /// Involuntary context switches
+    pub nonvoluntary_ctxt_switches: u64,
+}
+
+impl TaskAccountingTracker {
+    /// Create new task accounting tracker.
+    #[inline]
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            utime: 0,
+            stime: 0,
+            cutime: 0,
+            cstime: 0,
+            voluntary_ctxt_switches: 0,
+            nonvoluntary_ctxt_switches: 0,
+        }
+    }
+
+    /// Factory: Create for process stats
+    #[inline]
+    #[must_use]
+    pub fn for_proc(utime: u64, stime: u64) -> Self {
+        Self {
+            utime,
+            stime,
+            ..Self::new()
+        }
+    }
+
+    /// Record user time increment
+    #[inline]
+    pub fn add_utime(&mut self, ticks: u64) {
+        self.utime = self.utime.saturating_add(ticks);
+    }
+
+    /// Record system time increment
+    #[inline]
+    pub fn add_stime(&mut self, ticks: u64) {
+        self.stime = self.stime.saturating_add(ticks);
+    }
+
+    /// Record voluntary context switch
+    #[inline]
+    pub fn voluntary_switch(&mut self) {
+        self.voluntary_ctxt_switches = self.voluntary_ctxt_switches.saturating_add(1);
+    }
+
+    /// Record involuntary context switch
+    #[inline]
+    pub fn involuntary_switch(&mut self) {
+        self.nonvoluntary_ctxt_switches = self.nonvoluntary_ctxt_switches.saturating_add(1);
+    }
+
+    /// Total CPU time (user + system)
+    #[inline]
+    #[must_use]
+    pub const fn total_cpu(&self) -> u64 {
+        self.utime + self.stime
+    }
+
+    /// Total context switches
+    #[inline]
+    #[must_use]
+    pub const fn total_switches(&self) -> u64 {
+        self.voluntary_ctxt_switches + self.nonvoluntary_ctxt_switches
+    }
+
+    /// Reset counters
+    #[inline]
+    pub fn reset(&mut self) {
+        *self = Self::new();
+    }
+}
+
+/// I/O accounting tracker - per-task I/O statistics.
+///
+/// O(1) tracking of task I/O from /proc/[pid]/io.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct IoAccountingTracker {
+    /// Bytes read (rchar)
+    pub read_bytes: u64,
+    /// Bytes written (wchar)
+    pub write_bytes: u64,
+    /// Read syscalls
+    pub read_syscalls: u64,
+    /// Write syscalls
+    pub write_syscalls: u64,
+    /// Actual disk read bytes
+    pub disk_read_bytes: u64,
+    /// Actual disk write bytes
+    pub disk_write_bytes: u64,
+}
+
+impl IoAccountingTracker {
+    /// Create new I/O accounting tracker.
+    #[inline]
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            read_bytes: 0,
+            write_bytes: 0,
+            read_syscalls: 0,
+            write_syscalls: 0,
+            disk_read_bytes: 0,
+            disk_write_bytes: 0,
+        }
+    }
+
+    /// Factory: Create from /proc/[pid]/io stats
+    #[inline]
+    #[must_use]
+    pub fn for_proc_io(read_bytes: u64, write_bytes: u64) -> Self {
+        Self {
+            read_bytes,
+            write_bytes,
+            ..Self::new()
+        }
+    }
+
+    /// Record read operation
+    #[inline]
+    pub fn read(&mut self, bytes: u64) {
+        self.read_bytes = self.read_bytes.saturating_add(bytes);
+        self.read_syscalls = self.read_syscalls.saturating_add(1);
+    }
+
+    /// Record write operation
+    #[inline]
+    pub fn write(&mut self, bytes: u64) {
+        self.write_bytes = self.write_bytes.saturating_add(bytes);
+        self.write_syscalls = self.write_syscalls.saturating_add(1);
+    }
+
+    /// Record disk read
+    #[inline]
+    pub fn disk_read(&mut self, bytes: u64) {
+        self.disk_read_bytes = self.disk_read_bytes.saturating_add(bytes);
+    }
+
+    /// Record disk write
+    #[inline]
+    pub fn disk_write(&mut self, bytes: u64) {
+        self.disk_write_bytes = self.disk_write_bytes.saturating_add(bytes);
+    }
+
+    /// Total I/O bytes
+    #[inline]
+    #[must_use]
+    pub const fn total_bytes(&self) -> u64 {
+        self.read_bytes + self.write_bytes
+    }
+
+    /// Total syscalls
+    #[inline]
+    #[must_use]
+    pub const fn total_syscalls(&self) -> u64 {
+        self.read_syscalls + self.write_syscalls
+    }
+
+    /// Reset counters
+    #[inline]
+    pub fn reset(&mut self) {
+        *self = Self::new();
+    }
+}
+
+/// Scheduler accounting tracker - per-task scheduling statistics.
+///
+/// O(1) tracking of scheduling latency and policy from /proc/[pid]/sched.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SchedAccountingTracker {
+    /// Number of times scheduled
+    pub nr_switches: u64,
+    /// Total run time (ns)
+    pub sum_exec_runtime: u64,
+    /// Total wait time (ns)
+    pub wait_sum: u64,
+    /// Max wait time (ns)
+    pub wait_max: u64,
+    /// Time slices used
+    pub timeslices: u64,
+    /// Priority inversions
+    pub prio_inversions: u64,
+}
+
+impl SchedAccountingTracker {
+    /// Create new scheduler accounting tracker.
+    #[inline]
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            nr_switches: 0,
+            sum_exec_runtime: 0,
+            wait_sum: 0,
+            wait_max: 0,
+            timeslices: 0,
+            prio_inversions: 0,
+        }
+    }
+
+    /// Factory: Create from sched stats
+    #[inline]
+    #[must_use]
+    pub fn for_sched(switches: u64, runtime_ns: u64) -> Self {
+        Self {
+            nr_switches: switches,
+            sum_exec_runtime: runtime_ns,
+            ..Self::new()
+        }
+    }
+
+    /// Record context switch
+    #[inline]
+    pub fn switch(&mut self, runtime_ns: u64) {
+        self.nr_switches = self.nr_switches.saturating_add(1);
+        self.sum_exec_runtime = self.sum_exec_runtime.saturating_add(runtime_ns);
+    }
+
+    /// Record wait time
+    #[inline]
+    pub fn wait(&mut self, wait_ns: u64) {
+        self.wait_sum = self.wait_sum.saturating_add(wait_ns);
+        if wait_ns > self.wait_max {
+            self.wait_max = wait_ns;
+        }
+    }
+
+    /// Record timeslice
+    #[inline]
+    pub fn timeslice(&mut self) {
+        self.timeslices = self.timeslices.saturating_add(1);
+    }
+
+    /// Record priority inversion
+    #[inline]
+    pub fn prio_inversion(&mut self) {
+        self.prio_inversions = self.prio_inversions.saturating_add(1);
+    }
+
+    /// Average runtime per switch (ns)
+    #[inline]
+    #[must_use]
+    pub fn avg_runtime(&self) -> u64 {
+        if self.nr_switches > 0 {
+            self.sum_exec_runtime / self.nr_switches
+        } else {
+            0
+        }
+    }
+
+    /// Reset counters
+    #[inline]
+    pub fn reset(&mut self) {
+        *self = Self::new();
+    }
+}
+
+/// Memory accounting tracker - per-task memory statistics.
+///
+/// O(1) tracking of memory usage from /proc/[pid]/statm.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct MemAccountingTracker {
+    /// Virtual memory size (pages)
+    pub vsize: u64,
+    /// Resident set size (pages)
+    pub rss: u64,
+    /// Shared pages
+    pub shared: u64,
+    /// Text (code) pages
+    pub text: u64,
+    /// Data + stack pages
+    pub data: u64,
+    /// Peak RSS (pages)
+    pub peak_rss: u64,
+}
+
+impl MemAccountingTracker {
+    /// Create new memory accounting tracker.
+    #[inline]
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            vsize: 0,
+            rss: 0,
+            shared: 0,
+            text: 0,
+            data: 0,
+            peak_rss: 0,
+        }
+    }
+
+    /// Factory: Create from statm values
+    #[inline]
+    #[must_use]
+    pub fn for_statm(vsize: u64, rss: u64) -> Self {
+        Self {
+            vsize,
+            rss,
+            peak_rss: rss,
+            ..Self::new()
+        }
+    }
+
+    /// Update memory stats
+    #[inline]
+    pub fn update(&mut self, vsize: u64, rss: u64) {
+        self.vsize = vsize;
+        self.rss = rss;
+        if rss > self.peak_rss {
+            self.peak_rss = rss;
+        }
+    }
+
+    /// Set shared pages
+    #[inline]
+    pub fn set_shared(&mut self, shared: u64) {
+        self.shared = shared;
+    }
+
+    /// Set text pages
+    #[inline]
+    pub fn set_text(&mut self, text: u64) {
+        self.text = text;
+    }
+
+    /// Set data pages
+    #[inline]
+    pub fn set_data(&mut self, data: u64) {
+        self.data = data;
+    }
+
+    /// Private memory (rss - shared)
+    #[inline]
+    #[must_use]
+    pub fn private_mem(&self) -> u64 {
+        self.rss.saturating_sub(self.shared)
+    }
+
+    /// Reset counters
+    #[inline]
+    pub fn reset(&mut self) {
+        *self = Self::new();
+    }
+}
+
+#[cfg(test)]
+mod task_acct_tests {
+    use super::*;
+
+    /// F-TACCT-001: New tracker is zeroed
+    #[test]
+    fn f_tacct_001_new() {
+        let tracker = TaskAccountingTracker::new();
+        assert_eq!(tracker.utime, 0);
+        assert_eq!(tracker.stime, 0);
+    }
+
+    /// F-TACCT-002: Default is zeroed
+    #[test]
+    fn f_tacct_002_default() {
+        let tracker = TaskAccountingTracker::default();
+        assert_eq!(tracker.total_cpu(), 0);
+    }
+
+    /// F-TACCT-003: Factory sets utime/stime
+    #[test]
+    fn f_tacct_003_factory() {
+        let tracker = TaskAccountingTracker::for_proc(100, 50);
+        assert_eq!(tracker.utime, 100);
+        assert_eq!(tracker.stime, 50);
+    }
+
+    /// F-TACCT-004: Add utime increments
+    #[test]
+    fn f_tacct_004_add_utime() {
+        let mut tracker = TaskAccountingTracker::new();
+        tracker.add_utime(100);
+        assert_eq!(tracker.utime, 100);
+    }
+
+    /// F-TACCT-005: Add stime increments
+    #[test]
+    fn f_tacct_005_add_stime() {
+        let mut tracker = TaskAccountingTracker::new();
+        tracker.add_stime(50);
+        assert_eq!(tracker.stime, 50);
+    }
+
+    /// F-TACCT-006: Voluntary switch increments
+    #[test]
+    fn f_tacct_006_voluntary() {
+        let mut tracker = TaskAccountingTracker::new();
+        tracker.voluntary_switch();
+        assert_eq!(tracker.voluntary_ctxt_switches, 1);
+    }
+
+    /// F-TACCT-007: Involuntary switch increments
+    #[test]
+    fn f_tacct_007_involuntary() {
+        let mut tracker = TaskAccountingTracker::new();
+        tracker.involuntary_switch();
+        assert_eq!(tracker.nonvoluntary_ctxt_switches, 1);
+    }
+
+    /// F-TACCT-008: Total CPU sums user+sys
+    #[test]
+    fn f_tacct_008_total_cpu() {
+        let tracker = TaskAccountingTracker::for_proc(100, 50);
+        assert_eq!(tracker.total_cpu(), 150);
+    }
+
+    /// F-TACCT-009: Total switches sums vol+invol
+    #[test]
+    fn f_tacct_009_total_switches() {
+        let mut tracker = TaskAccountingTracker::new();
+        tracker.voluntary_switch();
+        tracker.involuntary_switch();
+        assert_eq!(tracker.total_switches(), 2);
+    }
+
+    /// F-TACCT-010: Saturating add prevents overflow
+    #[test]
+    fn f_tacct_010_saturating() {
+        let mut tracker = TaskAccountingTracker::for_proc(u64::MAX - 1, 0);
+        tracker.add_utime(10);
+        assert_eq!(tracker.utime, u64::MAX);
+    }
+
+    /// F-TACCT-011: Reset clears counters
+    #[test]
+    fn f_tacct_011_reset() {
+        let mut tracker = TaskAccountingTracker::for_proc(100, 50);
+        tracker.reset();
+        assert_eq!(tracker.total_cpu(), 0);
+    }
+
+    /// F-TACCT-012: Clone preserves state
+    #[test]
+    fn f_tacct_012_clone() {
+        let tracker = TaskAccountingTracker::for_proc(100, 50);
+        let cloned = tracker.clone();
+        assert_eq!(tracker.utime, cloned.utime);
+    }
+}
+
+#[cfg(test)]
+mod io_acct_tests {
+    use super::*;
+
+    /// F-IOACCT-001: New tracker is zeroed
+    #[test]
+    fn f_ioacct_001_new() {
+        let tracker = IoAccountingTracker::new();
+        assert_eq!(tracker.read_bytes, 0);
+    }
+
+    /// F-IOACCT-002: Default is zeroed
+    #[test]
+    fn f_ioacct_002_default() {
+        let tracker = IoAccountingTracker::default();
+        assert_eq!(tracker.total_bytes(), 0);
+    }
+
+    /// F-IOACCT-003: Factory sets read/write bytes
+    #[test]
+    fn f_ioacct_003_factory() {
+        let tracker = IoAccountingTracker::for_proc_io(1000, 500);
+        assert_eq!(tracker.read_bytes, 1000);
+        assert_eq!(tracker.write_bytes, 500);
+    }
+
+    /// F-IOACCT-004: Read increments bytes and syscalls
+    #[test]
+    fn f_ioacct_004_read() {
+        let mut tracker = IoAccountingTracker::new();
+        tracker.read(1024);
+        assert_eq!(tracker.read_bytes, 1024);
+        assert_eq!(tracker.read_syscalls, 1);
+    }
+
+    /// F-IOACCT-005: Write increments bytes and syscalls
+    #[test]
+    fn f_ioacct_005_write() {
+        let mut tracker = IoAccountingTracker::new();
+        tracker.write(2048);
+        assert_eq!(tracker.write_bytes, 2048);
+        assert_eq!(tracker.write_syscalls, 1);
+    }
+
+    /// F-IOACCT-006: Disk read tracks separately
+    #[test]
+    fn f_ioacct_006_disk_read() {
+        let mut tracker = IoAccountingTracker::new();
+        tracker.disk_read(4096);
+        assert_eq!(tracker.disk_read_bytes, 4096);
+    }
+
+    /// F-IOACCT-007: Disk write tracks separately
+    #[test]
+    fn f_ioacct_007_disk_write() {
+        let mut tracker = IoAccountingTracker::new();
+        tracker.disk_write(8192);
+        assert_eq!(tracker.disk_write_bytes, 8192);
+    }
+
+    /// F-IOACCT-008: Total bytes sums read+write
+    #[test]
+    fn f_ioacct_008_total_bytes() {
+        let tracker = IoAccountingTracker::for_proc_io(1000, 500);
+        assert_eq!(tracker.total_bytes(), 1500);
+    }
+
+    /// F-IOACCT-009: Total syscalls sums read+write
+    #[test]
+    fn f_ioacct_009_total_syscalls() {
+        let mut tracker = IoAccountingTracker::new();
+        tracker.read(1024);
+        tracker.write(1024);
+        assert_eq!(tracker.total_syscalls(), 2);
+    }
+
+    /// F-IOACCT-010: Saturating add prevents overflow
+    #[test]
+    fn f_ioacct_010_saturating() {
+        let mut tracker = IoAccountingTracker::for_proc_io(u64::MAX - 1, 0);
+        tracker.read(10);
+        assert_eq!(tracker.read_bytes, u64::MAX);
+    }
+
+    /// F-IOACCT-011: Reset clears counters
+    #[test]
+    fn f_ioacct_011_reset() {
+        let mut tracker = IoAccountingTracker::for_proc_io(1000, 500);
+        tracker.reset();
+        assert_eq!(tracker.total_bytes(), 0);
+    }
+
+    /// F-IOACCT-012: Clone preserves state
+    #[test]
+    fn f_ioacct_012_clone() {
+        let tracker = IoAccountingTracker::for_proc_io(1000, 500);
+        let cloned = tracker.clone();
+        assert_eq!(tracker.read_bytes, cloned.read_bytes);
+    }
+}
+
+#[cfg(test)]
+mod sched_acct_tests {
+    use super::*;
+
+    /// F-SCHEDACCT-001: New tracker is zeroed
+    #[test]
+    fn f_schedacct_001_new() {
+        let tracker = SchedAccountingTracker::new();
+        assert_eq!(tracker.nr_switches, 0);
+    }
+
+    /// F-SCHEDACCT-002: Default is zeroed
+    #[test]
+    fn f_schedacct_002_default() {
+        let tracker = SchedAccountingTracker::default();
+        assert_eq!(tracker.sum_exec_runtime, 0);
+    }
+
+    /// F-SCHEDACCT-003: Factory sets switches and runtime
+    #[test]
+    fn f_schedacct_003_factory() {
+        let tracker = SchedAccountingTracker::for_sched(100, 1_000_000);
+        assert_eq!(tracker.nr_switches, 100);
+        assert_eq!(tracker.sum_exec_runtime, 1_000_000);
+    }
+
+    /// F-SCHEDACCT-004: Switch increments count and runtime
+    #[test]
+    fn f_schedacct_004_switch() {
+        let mut tracker = SchedAccountingTracker::new();
+        tracker.switch(10_000);
+        assert_eq!(tracker.nr_switches, 1);
+        assert_eq!(tracker.sum_exec_runtime, 10_000);
+    }
+
+    /// F-SCHEDACCT-005: Wait tracks sum and max
+    #[test]
+    fn f_schedacct_005_wait() {
+        let mut tracker = SchedAccountingTracker::new();
+        tracker.wait(5000);
+        tracker.wait(10000);
+        assert_eq!(tracker.wait_sum, 15000);
+        assert_eq!(tracker.wait_max, 10000);
+    }
+
+    /// F-SCHEDACCT-006: Timeslice increments
+    #[test]
+    fn f_schedacct_006_timeslice() {
+        let mut tracker = SchedAccountingTracker::new();
+        tracker.timeslice();
+        assert_eq!(tracker.timeslices, 1);
+    }
+
+    /// F-SCHEDACCT-007: Priority inversion increments
+    #[test]
+    fn f_schedacct_007_prio_inversion() {
+        let mut tracker = SchedAccountingTracker::new();
+        tracker.prio_inversion();
+        assert_eq!(tracker.prio_inversions, 1);
+    }
+
+    /// F-SCHEDACCT-008: Avg runtime calculates correctly
+    #[test]
+    fn f_schedacct_008_avg_runtime() {
+        let tracker = SchedAccountingTracker::for_sched(10, 100_000);
+        assert_eq!(tracker.avg_runtime(), 10_000);
+    }
+
+    /// F-SCHEDACCT-009: Avg runtime returns 0 for no switches
+    #[test]
+    fn f_schedacct_009_avg_zero() {
+        let tracker = SchedAccountingTracker::new();
+        assert_eq!(tracker.avg_runtime(), 0);
+    }
+
+    /// F-SCHEDACCT-010: Saturating add prevents overflow
+    #[test]
+    fn f_schedacct_010_saturating() {
+        let mut tracker = SchedAccountingTracker::for_sched(u64::MAX - 1, 0);
+        tracker.switch(0);
+        assert_eq!(tracker.nr_switches, u64::MAX);
+    }
+
+    /// F-SCHEDACCT-011: Reset clears counters
+    #[test]
+    fn f_schedacct_011_reset() {
+        let mut tracker = SchedAccountingTracker::for_sched(100, 1_000_000);
+        tracker.reset();
+        assert_eq!(tracker.nr_switches, 0);
+    }
+
+    /// F-SCHEDACCT-012: Clone preserves state
+    #[test]
+    fn f_schedacct_012_clone() {
+        let tracker = SchedAccountingTracker::for_sched(100, 1_000_000);
+        let cloned = tracker.clone();
+        assert_eq!(tracker.nr_switches, cloned.nr_switches);
+    }
+}
+
+#[cfg(test)]
+mod mem_acct_tests {
+    use super::*;
+
+    /// F-MEMACCT-001: New tracker is zeroed
+    #[test]
+    fn f_memacct_001_new() {
+        let tracker = MemAccountingTracker::new();
+        assert_eq!(tracker.vsize, 0);
+        assert_eq!(tracker.rss, 0);
+    }
+
+    /// F-MEMACCT-002: Default is zeroed
+    #[test]
+    fn f_memacct_002_default() {
+        let tracker = MemAccountingTracker::default();
+        assert_eq!(tracker.peak_rss, 0);
+    }
+
+    /// F-MEMACCT-003: Factory sets vsize and rss
+    #[test]
+    fn f_memacct_003_factory() {
+        let tracker = MemAccountingTracker::for_statm(1000, 500);
+        assert_eq!(tracker.vsize, 1000);
+        assert_eq!(tracker.rss, 500);
+        assert_eq!(tracker.peak_rss, 500);
+    }
+
+    /// F-MEMACCT-004: Update changes vsize/rss
+    #[test]
+    fn f_memacct_004_update() {
+        let mut tracker = MemAccountingTracker::new();
+        tracker.update(2000, 1000);
+        assert_eq!(tracker.vsize, 2000);
+        assert_eq!(tracker.rss, 1000);
+    }
+
+    /// F-MEMACCT-005: Update tracks peak RSS
+    #[test]
+    fn f_memacct_005_peak() {
+        let mut tracker = MemAccountingTracker::for_statm(1000, 500);
+        tracker.update(1000, 600);
+        tracker.update(1000, 400);
+        assert_eq!(tracker.peak_rss, 600);
+    }
+
+    /// F-MEMACCT-006: Set shared pages
+    #[test]
+    fn f_memacct_006_shared() {
+        let mut tracker = MemAccountingTracker::new();
+        tracker.set_shared(100);
+        assert_eq!(tracker.shared, 100);
+    }
+
+    /// F-MEMACCT-007: Set text pages
+    #[test]
+    fn f_memacct_007_text() {
+        let mut tracker = MemAccountingTracker::new();
+        tracker.set_text(50);
+        assert_eq!(tracker.text, 50);
+    }
+
+    /// F-MEMACCT-008: Set data pages
+    #[test]
+    fn f_memacct_008_data() {
+        let mut tracker = MemAccountingTracker::new();
+        tracker.set_data(200);
+        assert_eq!(tracker.data, 200);
+    }
+
+    /// F-MEMACCT-009: Private mem = rss - shared
+    #[test]
+    fn f_memacct_009_private() {
+        let mut tracker = MemAccountingTracker::for_statm(1000, 500);
+        tracker.set_shared(100);
+        assert_eq!(tracker.private_mem(), 400);
+    }
+
+    /// F-MEMACCT-010: Private mem saturates at 0
+    #[test]
+    fn f_memacct_010_private_saturate() {
+        let mut tracker = MemAccountingTracker::for_statm(1000, 100);
+        tracker.set_shared(200);
+        assert_eq!(tracker.private_mem(), 0);
+    }
+
+    /// F-MEMACCT-011: Reset clears counters
+    #[test]
+    fn f_memacct_011_reset() {
+        let mut tracker = MemAccountingTracker::for_statm(1000, 500);
+        tracker.reset();
+        assert_eq!(tracker.vsize, 0);
+    }
+
+    /// F-MEMACCT-012: Clone preserves state
+    #[test]
+    fn f_memacct_012_clone() {
+        let tracker = MemAccountingTracker::for_statm(1000, 500);
+        let cloned = tracker.clone();
+        assert_eq!(tracker.rss, cloned.rss);
+    }
+}
+
+// ============================================================================
+// v9.46.0: Namespace & Security O(1) Helpers
+// ============================================================================
+
+/// PID namespace tracker - process ID tracking.
+///
+/// O(1) tracking of PID space usage and recycling.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PidTracker {
+    /// Current active PIDs
+    pub active_pids: u32,
+    /// Peak active PIDs
+    pub peak_pids: u32,
+    /// Total PIDs allocated
+    pub allocated: u64,
+    /// Total PIDs recycled
+    pub recycled: u64,
+    /// PID wraps (reached max)
+    pub wraps: u64,
+    /// Allocation failures
+    pub failures: u64,
+}
+
+impl PidTracker {
+    /// Create new PID tracker.
+    #[inline]
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            active_pids: 0,
+            peak_pids: 0,
+            allocated: 0,
+            recycled: 0,
+            wraps: 0,
+            failures: 0,
+        }
+    }
+
+    /// Factory: Create for namespace with active count
+    #[inline]
+    #[must_use]
+    pub fn for_namespace(active: u32) -> Self {
+        Self {
+            active_pids: active,
+            peak_pids: active,
+            ..Self::new()
+        }
+    }
+
+    /// Allocate a PID
+    #[inline]
+    pub fn allocate(&mut self) -> bool {
+        if self.active_pids < u32::MAX {
+            self.active_pids = self.active_pids.saturating_add(1);
+            self.allocated = self.allocated.saturating_add(1);
+            if self.active_pids > self.peak_pids {
+                self.peak_pids = self.active_pids;
+            }
+            true
+        } else {
+            self.failures = self.failures.saturating_add(1);
+            false
+        }
+    }
+
+    /// Free a PID
+    #[inline]
+    pub fn free(&mut self) {
+        if self.active_pids > 0 {
+            self.active_pids = self.active_pids.saturating_sub(1);
+            self.recycled = self.recycled.saturating_add(1);
+        }
+    }
+
+    /// Record PID wrap event
+    #[inline]
+    pub fn wrap(&mut self) {
+        self.wraps = self.wraps.saturating_add(1);
+    }
+
+    /// Utilization percentage
+    #[inline]
+    #[must_use]
+    pub fn utilization(&self, max_pids: u32) -> f32 {
+        if max_pids > 0 {
+            (self.active_pids as f32 / max_pids as f32) * 100.0
+        } else {
+            0.0
+        }
+    }
+
+    /// Reset counters
+    #[inline]
+    pub fn reset(&mut self) {
+        *self = Self::new();
+    }
+}
+
+/// UID namespace tracker - user ID tracking.
+///
+/// O(1) tracking of UID mappings and lookups.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct UidTracker {
+    /// Number of UID mappings
+    pub mappings: u32,
+    /// UID lookups
+    pub lookups: u64,
+    /// Successful translations
+    pub translations: u64,
+    /// Translation failures
+    pub failures: u64,
+    /// Root mappings (uid 0)
+    pub root_mappings: u32,
+    /// Unprivileged mappings
+    pub unpriv_mappings: u32,
+}
+
+impl UidTracker {
+    /// Create new UID tracker.
+    #[inline]
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            mappings: 0,
+            lookups: 0,
+            translations: 0,
+            failures: 0,
+            root_mappings: 0,
+            unpriv_mappings: 0,
+        }
+    }
+
+    /// Factory: Create for user namespace
+    #[inline]
+    #[must_use]
+    pub fn for_userns(mappings: u32) -> Self {
+        Self {
+            mappings,
+            ..Self::new()
+        }
+    }
+
+    /// Add a UID mapping
+    #[inline]
+    pub fn add_mapping(&mut self, is_root: bool) {
+        self.mappings = self.mappings.saturating_add(1);
+        if is_root {
+            self.root_mappings = self.root_mappings.saturating_add(1);
+        } else {
+            self.unpriv_mappings = self.unpriv_mappings.saturating_add(1);
+        }
+    }
+
+    /// Record UID lookup
+    #[inline]
+    pub fn lookup(&mut self, success: bool) {
+        self.lookups = self.lookups.saturating_add(1);
+        if success {
+            self.translations = self.translations.saturating_add(1);
+        } else {
+            self.failures = self.failures.saturating_add(1);
+        }
+    }
+
+    /// Translation success rate
+    #[inline]
+    #[must_use]
+    pub fn success_rate(&self) -> f32 {
+        if self.lookups > 0 {
+            (self.translations as f32 / self.lookups as f32) * 100.0
+        } else {
+            100.0
+        }
+    }
+
+    /// Reset counters
+    #[inline]
+    pub fn reset(&mut self) {
+        *self = Self::new();
+    }
+}
+
+/// Namespace tracker - Linux namespace tracking.
+///
+/// O(1) tracking of namespace operations.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NamespaceTracker {
+    /// Active namespaces
+    pub active: u32,
+    /// Created namespaces
+    pub created: u64,
+    /// Destroyed namespaces
+    pub destroyed: u64,
+    /// Setns operations
+    pub setns_ops: u64,
+    /// Unshare operations
+    pub unshare_ops: u64,
+    /// Clone with new ns
+    pub clone_newns: u64,
+}
+
+impl NamespaceTracker {
+    /// Create new namespace tracker.
+    #[inline]
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            active: 0,
+            created: 0,
+            destroyed: 0,
+            setns_ops: 0,
+            unshare_ops: 0,
+            clone_newns: 0,
+        }
+    }
+
+    /// Factory: Create for initial namespace count
+    #[inline]
+    #[must_use]
+    pub fn for_system(active: u32) -> Self {
+        Self {
+            active,
+            ..Self::new()
+        }
+    }
+
+    /// Create namespace
+    #[inline]
+    pub fn create(&mut self) {
+        self.active = self.active.saturating_add(1);
+        self.created = self.created.saturating_add(1);
+    }
+
+    /// Destroy namespace
+    #[inline]
+    pub fn destroy(&mut self) {
+        self.active = self.active.saturating_sub(1);
+        self.destroyed = self.destroyed.saturating_add(1);
+    }
+
+    /// Record setns operation
+    #[inline]
+    pub fn setns(&mut self) {
+        self.setns_ops = self.setns_ops.saturating_add(1);
+    }
+
+    /// Record unshare operation
+    #[inline]
+    pub fn unshare(&mut self) {
+        self.unshare_ops = self.unshare_ops.saturating_add(1);
+        self.create();
+    }
+
+    /// Record clone with CLONE_NEWNS
+    #[inline]
+    pub fn clone_ns(&mut self) {
+        self.clone_newns = self.clone_newns.saturating_add(1);
+        self.create();
+    }
+
+    /// Reset counters
+    #[inline]
+    pub fn reset(&mut self) {
+        *self = Self::new();
+    }
+}
+
+/// Seccomp tracker - seccomp filter tracking.
+///
+/// O(1) tracking of seccomp operations and violations.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SeccompTracker {
+    /// Active filters
+    pub filters: u32,
+    /// Syscalls checked
+    pub checks: u64,
+    /// Syscalls allowed
+    pub allowed: u64,
+    /// Syscalls denied
+    pub denied: u64,
+    /// Filter additions
+    pub filter_adds: u64,
+    /// Audit log events
+    pub audit_events: u64,
+}
+
+impl SeccompTracker {
+    /// Create new seccomp tracker.
+    #[inline]
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            filters: 0,
+            checks: 0,
+            allowed: 0,
+            denied: 0,
+            filter_adds: 0,
+            audit_events: 0,
+        }
+    }
+
+    /// Factory: Create with initial filter count
+    #[inline]
+    #[must_use]
+    pub fn for_process(filters: u32) -> Self {
+        Self {
+            filters,
+            ..Self::new()
+        }
+    }
+
+    /// Add a filter
+    #[inline]
+    pub fn add_filter(&mut self) {
+        self.filters = self.filters.saturating_add(1);
+        self.filter_adds = self.filter_adds.saturating_add(1);
+    }
+
+    /// Check syscall
+    #[inline]
+    pub fn check(&mut self, allowed: bool) {
+        self.checks = self.checks.saturating_add(1);
+        if allowed {
+            self.allowed = self.allowed.saturating_add(1);
+        } else {
+            self.denied = self.denied.saturating_add(1);
+        }
+    }
+
+    /// Record audit event
+    #[inline]
+    pub fn audit(&mut self) {
+        self.audit_events = self.audit_events.saturating_add(1);
+    }
+
+    /// Allow rate percentage
+    #[inline]
+    #[must_use]
+    pub fn allow_rate(&self) -> f32 {
+        if self.checks > 0 {
+            (self.allowed as f32 / self.checks as f32) * 100.0
+        } else {
+            100.0
+        }
+    }
+
+    /// Deny rate percentage
+    #[inline]
+    #[must_use]
+    pub fn deny_rate(&self) -> f32 {
+        if self.checks > 0 {
+            (self.denied as f32 / self.checks as f32) * 100.0
+        } else {
+            0.0
+        }
+    }
+
+    /// Reset counters
+    #[inline]
+    pub fn reset(&mut self) {
+        *self = Self::new();
+    }
+}
+
+#[cfg(test)]
+mod pid_tests {
+    use super::*;
+
+    /// F-PID-001: New tracker is zeroed
+    #[test]
+    fn f_pid_001_new() {
+        let tracker = PidTracker::new();
+        assert_eq!(tracker.active_pids, 0);
+    }
+
+    /// F-PID-002: Default is zeroed
+    #[test]
+    fn f_pid_002_default() {
+        let tracker = PidTracker::default();
+        assert_eq!(tracker.allocated, 0);
+    }
+
+    /// F-PID-003: Factory sets active count
+    #[test]
+    fn f_pid_003_factory() {
+        let tracker = PidTracker::for_namespace(100);
+        assert_eq!(tracker.active_pids, 100);
+        assert_eq!(tracker.peak_pids, 100);
+    }
+
+    /// F-PID-004: Allocate increments active
+    #[test]
+    fn f_pid_004_allocate() {
+        let mut tracker = PidTracker::new();
+        assert!(tracker.allocate());
+        assert_eq!(tracker.active_pids, 1);
+        assert_eq!(tracker.allocated, 1);
+    }
+
+    /// F-PID-005: Free decrements active
+    #[test]
+    fn f_pid_005_free() {
+        let mut tracker = PidTracker::for_namespace(5);
+        tracker.free();
+        assert_eq!(tracker.active_pids, 4);
+        assert_eq!(tracker.recycled, 1);
+    }
+
+    /// F-PID-006: Peak tracks maximum
+    #[test]
+    fn f_pid_006_peak() {
+        let mut tracker = PidTracker::new();
+        tracker.allocate();
+        tracker.allocate();
+        tracker.free();
+        assert_eq!(tracker.peak_pids, 2);
+    }
+
+    /// F-PID-007: Wrap increments
+    #[test]
+    fn f_pid_007_wrap() {
+        let mut tracker = PidTracker::new();
+        tracker.wrap();
+        assert_eq!(tracker.wraps, 1);
+    }
+
+    /// F-PID-008: Utilization calculates correctly
+    #[test]
+    fn f_pid_008_utilization() {
+        let tracker = PidTracker::for_namespace(50);
+        let util = tracker.utilization(100);
+        assert!((util - 50.0).abs() < 0.1);
+    }
+
+    /// F-PID-009: Utilization handles zero max
+    #[test]
+    fn f_pid_009_util_zero() {
+        let tracker = PidTracker::for_namespace(10);
+        assert_eq!(tracker.utilization(0), 0.0);
+    }
+
+    /// F-PID-010: Free doesn't underflow
+    #[test]
+    fn f_pid_010_free_underflow() {
+        let mut tracker = PidTracker::new();
+        tracker.free();
+        assert_eq!(tracker.active_pids, 0);
+    }
+
+    /// F-PID-011: Reset clears counters
+    #[test]
+    fn f_pid_011_reset() {
+        let mut tracker = PidTracker::for_namespace(100);
+        tracker.reset();
+        assert_eq!(tracker.active_pids, 0);
+    }
+
+    /// F-PID-012: Clone preserves state
+    #[test]
+    fn f_pid_012_clone() {
+        let tracker = PidTracker::for_namespace(100);
+        let cloned = tracker.clone();
+        assert_eq!(tracker.active_pids, cloned.active_pids);
+    }
+}
+
+#[cfg(test)]
+mod uid_tests {
+    use super::*;
+
+    /// F-UID-001: New tracker is zeroed
+    #[test]
+    fn f_uid_001_new() {
+        let tracker = UidTracker::new();
+        assert_eq!(tracker.mappings, 0);
+    }
+
+    /// F-UID-002: Default is zeroed
+    #[test]
+    fn f_uid_002_default() {
+        let tracker = UidTracker::default();
+        assert_eq!(tracker.lookups, 0);
+    }
+
+    /// F-UID-003: Factory sets mappings
+    #[test]
+    fn f_uid_003_factory() {
+        let tracker = UidTracker::for_userns(5);
+        assert_eq!(tracker.mappings, 5);
+    }
+
+    /// F-UID-004: Add root mapping
+    #[test]
+    fn f_uid_004_root_mapping() {
+        let mut tracker = UidTracker::new();
+        tracker.add_mapping(true);
+        assert_eq!(tracker.mappings, 1);
+        assert_eq!(tracker.root_mappings, 1);
+    }
+
+    /// F-UID-005: Add unpriv mapping
+    #[test]
+    fn f_uid_005_unpriv_mapping() {
+        let mut tracker = UidTracker::new();
+        tracker.add_mapping(false);
+        assert_eq!(tracker.mappings, 1);
+        assert_eq!(tracker.unpriv_mappings, 1);
+    }
+
+    /// F-UID-006: Lookup success
+    #[test]
+    fn f_uid_006_lookup_success() {
+        let mut tracker = UidTracker::new();
+        tracker.lookup(true);
+        assert_eq!(tracker.lookups, 1);
+        assert_eq!(tracker.translations, 1);
+    }
+
+    /// F-UID-007: Lookup failure
+    #[test]
+    fn f_uid_007_lookup_failure() {
+        let mut tracker = UidTracker::new();
+        tracker.lookup(false);
+        assert_eq!(tracker.lookups, 1);
+        assert_eq!(tracker.failures, 1);
+    }
+
+    /// F-UID-008: Success rate calculates
+    #[test]
+    fn f_uid_008_success_rate() {
+        let mut tracker = UidTracker::new();
+        tracker.lookup(true);
+        tracker.lookup(false);
+        let rate = tracker.success_rate();
+        assert!((rate - 50.0).abs() < 0.1);
+    }
+
+    /// F-UID-009: Success rate default 100%
+    #[test]
+    fn f_uid_009_default_rate() {
+        let tracker = UidTracker::new();
+        assert_eq!(tracker.success_rate(), 100.0);
+    }
+
+    /// F-UID-010: Mixed mappings
+    #[test]
+    fn f_uid_010_mixed() {
+        let mut tracker = UidTracker::new();
+        tracker.add_mapping(true);
+        tracker.add_mapping(false);
+        tracker.add_mapping(false);
+        assert_eq!(tracker.mappings, 3);
+        assert_eq!(tracker.root_mappings, 1);
+        assert_eq!(tracker.unpriv_mappings, 2);
+    }
+
+    /// F-UID-011: Reset clears counters
+    #[test]
+    fn f_uid_011_reset() {
+        let mut tracker = UidTracker::for_userns(5);
+        tracker.reset();
+        assert_eq!(tracker.mappings, 0);
+    }
+
+    /// F-UID-012: Clone preserves state
+    #[test]
+    fn f_uid_012_clone() {
+        let tracker = UidTracker::for_userns(5);
+        let cloned = tracker.clone();
+        assert_eq!(tracker.mappings, cloned.mappings);
+    }
+}
+
+#[cfg(test)]
+mod namespace_tests {
+    use super::*;
+
+    /// F-NS-001: New tracker is zeroed
+    #[test]
+    fn f_ns_001_new() {
+        let tracker = NamespaceTracker::new();
+        assert_eq!(tracker.active, 0);
+    }
+
+    /// F-NS-002: Default is zeroed
+    #[test]
+    fn f_ns_002_default() {
+        let tracker = NamespaceTracker::default();
+        assert_eq!(tracker.created, 0);
+    }
+
+    /// F-NS-003: Factory sets active count
+    #[test]
+    fn f_ns_003_factory() {
+        let tracker = NamespaceTracker::for_system(10);
+        assert_eq!(tracker.active, 10);
+    }
+
+    /// F-NS-004: Create increments active
+    #[test]
+    fn f_ns_004_create() {
+        let mut tracker = NamespaceTracker::new();
+        tracker.create();
+        assert_eq!(tracker.active, 1);
+        assert_eq!(tracker.created, 1);
+    }
+
+    /// F-NS-005: Destroy decrements active
+    #[test]
+    fn f_ns_005_destroy() {
+        let mut tracker = NamespaceTracker::for_system(5);
+        tracker.destroy();
+        assert_eq!(tracker.active, 4);
+        assert_eq!(tracker.destroyed, 1);
+    }
+
+    /// F-NS-006: Setns records op
+    #[test]
+    fn f_ns_006_setns() {
+        let mut tracker = NamespaceTracker::new();
+        tracker.setns();
+        assert_eq!(tracker.setns_ops, 1);
+    }
+
+    /// F-NS-007: Unshare creates ns
+    #[test]
+    fn f_ns_007_unshare() {
+        let mut tracker = NamespaceTracker::new();
+        tracker.unshare();
+        assert_eq!(tracker.unshare_ops, 1);
+        assert_eq!(tracker.active, 1);
+        assert_eq!(tracker.created, 1);
+    }
+
+    /// F-NS-008: Clone ns creates ns
+    #[test]
+    fn f_ns_008_clone_ns() {
+        let mut tracker = NamespaceTracker::new();
+        tracker.clone_ns();
+        assert_eq!(tracker.clone_newns, 1);
+        assert_eq!(tracker.active, 1);
+    }
+
+    /// F-NS-009: Destroy doesn't underflow
+    #[test]
+    fn f_ns_009_destroy_underflow() {
+        let mut tracker = NamespaceTracker::new();
+        tracker.destroy();
+        assert_eq!(tracker.active, 0);
+    }
+
+    /// F-NS-010: Multiple creates
+    #[test]
+    fn f_ns_010_multiple() {
+        let mut tracker = NamespaceTracker::new();
+        tracker.create();
+        tracker.unshare();
+        tracker.clone_ns();
+        assert_eq!(tracker.active, 3);
+        assert_eq!(tracker.created, 3);
+    }
+
+    /// F-NS-011: Reset clears counters
+    #[test]
+    fn f_ns_011_reset() {
+        let mut tracker = NamespaceTracker::for_system(10);
+        tracker.reset();
+        assert_eq!(tracker.active, 0);
+    }
+
+    /// F-NS-012: Clone preserves state
+    #[test]
+    fn f_ns_012_clone() {
+        let tracker = NamespaceTracker::for_system(10);
+        let cloned = tracker.clone();
+        assert_eq!(tracker.active, cloned.active);
+    }
+}
+
+#[cfg(test)]
+mod seccomp_tests {
+    use super::*;
+
+    /// F-SECCOMP-001: New tracker is zeroed
+    #[test]
+    fn f_seccomp_001_new() {
+        let tracker = SeccompTracker::new();
+        assert_eq!(tracker.filters, 0);
+    }
+
+    /// F-SECCOMP-002: Default is zeroed
+    #[test]
+    fn f_seccomp_002_default() {
+        let tracker = SeccompTracker::default();
+        assert_eq!(tracker.checks, 0);
+    }
+
+    /// F-SECCOMP-003: Factory sets filter count
+    #[test]
+    fn f_seccomp_003_factory() {
+        let tracker = SeccompTracker::for_process(3);
+        assert_eq!(tracker.filters, 3);
+    }
+
+    /// F-SECCOMP-004: Add filter increments
+    #[test]
+    fn f_seccomp_004_add_filter() {
+        let mut tracker = SeccompTracker::new();
+        tracker.add_filter();
+        assert_eq!(tracker.filters, 1);
+        assert_eq!(tracker.filter_adds, 1);
+    }
+
+    /// F-SECCOMP-005: Check allowed
+    #[test]
+    fn f_seccomp_005_check_allow() {
+        let mut tracker = SeccompTracker::new();
+        tracker.check(true);
+        assert_eq!(tracker.checks, 1);
+        assert_eq!(tracker.allowed, 1);
+    }
+
+    /// F-SECCOMP-006: Check denied
+    #[test]
+    fn f_seccomp_006_check_deny() {
+        let mut tracker = SeccompTracker::new();
+        tracker.check(false);
+        assert_eq!(tracker.checks, 1);
+        assert_eq!(tracker.denied, 1);
+    }
+
+    /// F-SECCOMP-007: Audit records event
+    #[test]
+    fn f_seccomp_007_audit() {
+        let mut tracker = SeccompTracker::new();
+        tracker.audit();
+        assert_eq!(tracker.audit_events, 1);
+    }
+
+    /// F-SECCOMP-008: Allow rate calculates
+    #[test]
+    fn f_seccomp_008_allow_rate() {
+        let mut tracker = SeccompTracker::new();
+        tracker.check(true);
+        tracker.check(false);
+        let rate = tracker.allow_rate();
+        assert!((rate - 50.0).abs() < 0.1);
+    }
+
+    /// F-SECCOMP-009: Default allow rate 100%
+    #[test]
+    fn f_seccomp_009_default_rate() {
+        let tracker = SeccompTracker::new();
+        assert_eq!(tracker.allow_rate(), 100.0);
+    }
+
+    /// F-SECCOMP-010: Deny rate calculates
+    #[test]
+    fn f_seccomp_010_deny_rate() {
+        let mut tracker = SeccompTracker::new();
+        tracker.check(false);
+        let rate = tracker.deny_rate();
+        assert!((rate - 100.0).abs() < 0.1);
+    }
+
+    /// F-SECCOMP-011: Reset clears counters
+    #[test]
+    fn f_seccomp_011_reset() {
+        let mut tracker = SeccompTracker::for_process(3);
+        tracker.reset();
+        assert_eq!(tracker.filters, 0);
+    }
+
+    /// F-SECCOMP-012: Clone preserves state
+    #[test]
+    fn f_seccomp_012_clone() {
+        let tracker = SeccompTracker::for_process(3);
+        let cloned = tracker.clone();
+        assert_eq!(tracker.filters, cloned.filters);
+    }
+}
