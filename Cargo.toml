@@ -13,7 +13,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 authors = ["Pragmatic AI Labs"]
 license = "MIT"
@@ -26,12 +26,12 @@ trueno = "0.13.0"
 trueno-viz = "0.1.19"
 
 # Internal crates (version + path for crates.io publishing)
-presentar-core = { version = "0.3.1", path = "crates/presentar-core" }
-presentar-widgets = { version = "0.3.1", path = "crates/presentar-widgets" }
-presentar-layout = { version = "0.3.1", path = "crates/presentar-layout" }
-presentar-yaml = { version = "0.3.1", path = "crates/presentar-yaml" }
-presentar-test = { version = "0.3.1", path = "crates/presentar-test" }
-presentar-test-macros = { version = "0.3.1", path = "crates/presentar-test-macros" }
+presentar-core = { version = "0.3.2", path = "crates/presentar-core" }
+presentar-widgets = { version = "0.3.2", path = "crates/presentar-widgets" }
+presentar-layout = { version = "0.3.2", path = "crates/presentar-layout" }
+presentar-yaml = { version = "0.3.2", path = "crates/presentar-yaml" }
+presentar-test = { version = "0.3.2", path = "crates/presentar-test" }
+presentar-test-macros = { version = "0.3.2", path = "crates/presentar-test-macros" }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
