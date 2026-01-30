@@ -70,6 +70,7 @@
 const _DESIGN_PRINCIPLES_TESTS: &str = include_str!("../tests/design_principles_interface.rs");
 
 mod app;
+pub mod cli;
 mod color;
 pub mod compute_block;
 pub mod direct;

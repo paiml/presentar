@@ -2034,7 +2034,7 @@ dependencies = [
 
 [[package]]
 name = "presentar"
-version = "0.3.1"
+version = "0.3.3"
 dependencies = [
  "bincode",
  "bytemuck",
@@ -2063,7 +2063,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-cli"
-version = "0.3.1"
+version = "0.3.3"
 dependencies = [
  "clap",
  "notify",
@@ -2074,19 +2074,19 @@ dependencies = [
 
 [[package]]
 name = "presentar-core"
-version = "0.3.1"
+version = "0.3.3"
 dependencies = [
  "criterion",
  "jugar-probar",
  "proptest",
  "serde",
  "serde_json",
- "trueno 0.13.0",
+ "trueno 0.14.3",
 ]
 
 [[package]]
 name = "presentar-layout"
-version = "0.3.1"
+version = "0.3.3"
 dependencies = [
  "criterion",
  "presentar-core",
@@ -2097,7 +2097,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-terminal"
-version = "0.3.1"
+version = "0.3.3"
 dependencies = [
  "bitvec",
  "clap",
@@ -2119,7 +2119,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-test"
-version = "0.3.1"
+version = "0.3.3"
 dependencies = [
  "presentar-core",
  "presentar-test-macros",
@@ -2130,7 +2130,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-test-macros"
-version = "0.3.1"
+version = "0.3.3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2139,7 +2139,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-widgets"
-version = "0.3.1"
+version = "0.3.3"
 dependencies = [
  "criterion",
  "presentar-core",
@@ -2151,7 +2151,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-yaml"
-version = "0.3.1"
+version = "0.3.3"
 dependencies = [
  "presentar-core",
  "proptest",
@@ -3090,9 +3090,9 @@ dependencies = [
 
 [[package]]
 name = "trueno"
-version = "0.13.0"
+version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ba5457f1f184520c46e6b315d540baa4cf2a2ae3d047e13001a4a23a12c6ab8"
+checksum = "79a02580ea35fc8544528c913545e45a5f1bb5bd7e354b4c9b44aafa4664239a"
 dependencies = [
  "anyhow",
  "chrono",

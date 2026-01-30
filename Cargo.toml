@@ -13,7 +13,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.3.2"
+version = "0.3.3"
 edition = "2021"
 authors = ["Pragmatic AI Labs"]
 license = "MIT"
@@ -22,8 +22,8 @@ rust-version = "1.75"
 
 [workspace.dependencies]
 # Sovereign Stack
-trueno = "0.13.0"
-trueno-viz = "0.1.19"
+trueno = "0.14"
+trueno-viz = "0.1.22"
 
 # Internal crates (version + path for crates.io publishing)
 presentar-core = { version = "0.3.2", path = "crates/presentar-core" }
