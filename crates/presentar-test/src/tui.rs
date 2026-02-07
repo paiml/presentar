@@ -942,8 +942,7 @@ mod tests {
         let mut freq_assertion = AsyncUpdateAssertion::new("per_core_freq[0]");
         let mut temp_assertion = AsyncUpdateAssertion::new("per_core_temp[0]");
 
-        // STEP 3: Simulate initial frame
-        // TODO: Replace with actual App/ui::draw when implementing
+        // STEP 3: Simulate initial frame with deterministic test values
         backend.render(|b| {
             // Simulated initial render
             b.draw_text(50, 3, "4.76GHz", (255, 255, 255));

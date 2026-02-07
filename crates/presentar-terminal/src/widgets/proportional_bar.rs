@@ -233,11 +233,21 @@ impl Brick for ProportionalBar {
     }
 
     fn to_html(&self) -> String {
-        String::new() // TODO
+        let mut html = String::from("<div class=\"proportional-bar\" style=\"display:flex;height:1em;\">");
+        let total: f64 = self.segments.iter().map(|s| s.value).sum();
+        for seg in &self.segments {
+            let pct = if total > 0.0 { (seg.value / total) * 100.0 } else { 0.0 };
+            let Color { r, g, b, .. } = seg.color;
+            html.push_str(&format!(
+                "<div style=\"width:{pct:.1}%;background:rgb({r},{g},{b})\"></div>"
+            ));
+        }
+        html.push_str("</div>");
+        html
     }
 
     fn to_css(&self) -> String {
-        String::new() // TODO
+        String::from(".proportional-bar{display:flex;height:1em;width:100%}.proportional-bar>div{min-width:1px}")
     }
 }
 
@@ -626,13 +636,16 @@ mod tests {
     fn test_to_html() {
         let bar = ProportionalBar::new();
         let html = bar.to_html();
-        assert!(html.is_empty());
+        assert!(html.contains("proportional-bar"));
+        assert!(html.starts_with("<div"));
+        assert!(html.ends_with("</div>"));
     }
 
     #[test]
     fn test_to_css() {
         let bar = ProportionalBar::new();
         let css = bar.to_css();
-        assert!(css.is_empty());
+        assert!(css.contains("proportional-bar"));
+        assert!(css.contains("display:flex"));
     }
 }

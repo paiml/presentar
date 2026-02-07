@@ -41,6 +41,30 @@ use crate::ptop::ui::core::layout::push_if_visible;
 #[allow(unused_imports)]
 use crate::ptop::ui_atoms::{draw_colored_text, severity_color, usage_color};
 
+// ── Shared helpers (PMAT-016: DataTransformation, PMAT-017: ControlFlow) ──
+
+/// Build a progress bar string of `width` characters using █ and ░.
+/// `ratio` is 0.0..=1.0 (percentage / 100).
+fn make_bar(ratio: f64, width: usize) -> String {
+    let filled = ((ratio * width as f64) as usize).min(width);
+    "█".repeat(filled) + &"░".repeat(width.saturating_sub(filled))
+}
+
+/// Safe percentage: returns `(numerator / denominator) * 100`, or 0 if denominator is 0.
+fn safe_pct(numerator: u64, denominator: u64) -> f64 {
+    if denominator == 0 { 0.0 } else { (numerator as f64 / denominator as f64) * 100.0 }
+}
+
+/// Returns true when a row at `y` still fits inside `inner`.
+fn can_draw_row(y: f32, inner: &Rect) -> bool {
+    y < inner.y + inner.height
+}
+
+/// Returns true when a panel is too small to render.
+fn panel_too_small(inner: &Rect, min_h: f32, min_w: f32) -> bool {
+    inner.height < min_h || inner.width < min_w
+}
+
 // ttop panel border colors (exact RGB values from theme.rs)
 const CPU_COLOR: Color = Color {
     r: 0.392,
@@ -844,7 +868,7 @@ fn draw_cpu_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect
     border.paint(canvas);
     let inner = border.inner_rect();
 
-    if inner.height < 2.0 || inner.width < 10.0 { return; }
+    if panel_too_small(&inner, 2.0, 10.0) { return; }
 
     let reserved_bottom = 2.0_f32;
     let core_area_height = (inner.height - reserved_bottom).max(1.0);
@@ -1021,10 +1045,10 @@ fn draw_memory_rows_deterministic(
 fn compute_mem_percentages(app: &App) -> (f64, f64, f64, f64) {
     let mem_total = app.mem_total;
     let swap_total = app.swap_total;
-    let used_pct = if mem_total > 0 { (app.mem_used as f64 / mem_total as f64) * 100.0 } else { 0.0 };
-    let cached_pct = if mem_total > 0 { (app.mem_cached as f64 / mem_total as f64) * 100.0 } else { 0.0 };
-    let free_pct = if mem_total > 0 { (app.mem_available as f64 / mem_total as f64) * 100.0 } else { 0.0 };
-    let swap_pct = if swap_total > 0 { (app.swap_used as f64 / swap_total as f64) * 100.0 } else { 0.0 };
+    let used_pct = safe_pct(app.mem_used, mem_total);
+    let cached_pct = safe_pct(app.mem_cached, mem_total);
+    let free_pct = safe_pct(app.mem_available, mem_total);
+    let swap_pct = safe_pct(app.swap_used, swap_total);
     (used_pct, cached_pct, free_pct, swap_pct)
 }
 
@@ -1059,8 +1083,7 @@ fn draw_zram_row(canvas: &mut DirectTerminalCanvas<'_>, inner: Rect, y: f32, zra
 /// Draw a single memory row with progress bar.
 fn draw_memory_row_bar(canvas: &mut DirectTerminalCanvas<'_>, inner: Rect, y: f32, label: &str, value: f64, pct: f64, color: Color) {
     let bar_width = 10.min((inner.width as usize).saturating_sub(22));
-    let filled = ((pct / 100.0) * bar_width as f64) as usize;
-    let bar: String = "█".repeat(filled.min(bar_width)) + &"░".repeat(bar_width - filled.min(bar_width));
+    let bar = make_bar(pct / 100.0, bar_width);
     let text = format!("{label:>6} {value:>5.1}G {bar} {pct:>5.1}%");
     canvas.draw_text(&text, Point::new(inner.x, y), &TextStyle { color, ..Default::default() });
 }
@@ -1189,12 +1212,11 @@ fn draw_disk_row(canvas: &mut DirectTerminalCanvas<'_>, inner: Rect, y: f32, dis
     let mount_short: String = if mount == "/" { "/".to_string() } else { mount.split('/').next_back().unwrap_or(&mount).chars().take(8).collect() };
     let total = disk.total_space();
     let used = total - disk.available_space();
-    let pct = if total > 0 { (used as f64 / total as f64) * 100.0 } else { 0.0 };
+    let pct = safe_pct(used, total);
     let total_gb = total as f64 / 1024.0 / 1024.0 / 1024.0;
     let io_str = if d_read > 0.0 || d_write > 0.0 { format!(" R:{} W:{}", format_bytes_rate(d_read), format_bytes_rate(d_write)) } else { String::new() };
     let bar_width = (inner.width as usize).saturating_sub(24 + io_str.len()).max(2);
-    let filled = ((pct / 100.0) * bar_width as f64) as usize;
-    let bar: String = "█".repeat(filled.min(bar_width)) + &"░".repeat(bar_width - filled.min(bar_width));
+    let bar = make_bar(pct / 100.0, bar_width);
     let text = format!("{mount_short:<8} {total_gb:>5.0}G {bar} {pct:>5.1}%{io_str}");
     let color = if d_read > 1024.0 || d_write > 1024.0 { Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 } } else { percent_color(pct) };
     canvas.draw_text(&text, Point::new(inner.x, y), &TextStyle { color, ..Default::default() });
@@ -1727,19 +1749,17 @@ fn format_gpu_title(gpu: Option<&GpuInfo>, detail_level: DetailLevel) -> String 
 /// Draw GPU utilization bar.
 fn draw_gpu_util_bar(canvas: &mut DirectTerminalCanvas<'_>, inner: Rect, y: &mut f32, util: u8) {
     let bar_width = (inner.width as usize).min(20);
-    let filled = ((util as f32 / 100.0) * bar_width as f32) as usize;
-    let bar: String = "█".repeat(filled) + &"░".repeat(bar_width.saturating_sub(filled));
+    let bar = make_bar(util as f64 / 100.0, bar_width);
     canvas.draw_text(&format!("GPU  {bar} {util:>3}%"), Point::new(inner.x, *y), &TextStyle { color: percent_color(util as f64), ..Default::default() });
     *y += 1.0;
 }
 
 /// Draw VRAM usage bar.
 fn draw_vram_bar(canvas: &mut DirectTerminalCanvas<'_>, inner: Rect, y: &mut f32, used: u64, total: u64) {
-    if total == 0 || *y >= inner.y + inner.height { return; }
-    let pct = (used as f64 / total as f64) * 100.0;
+    if total == 0 || !can_draw_row(*y, &inner) { return; }
+    let pct = safe_pct(used, total);
     let bar_width = (inner.width as usize).min(20);
-    let filled = ((pct / 100.0) * bar_width as f64) as usize;
-    let bar: String = "█".repeat(filled) + &"░".repeat(bar_width.saturating_sub(filled));
+    let bar = make_bar(pct / 100.0, bar_width);
     canvas.draw_text(&format!("VRAM {bar} {}M/{}M", used / 1024 / 1024, total / 1024 / 1024), Point::new(inner.x, *y), &TextStyle { color: percent_color(pct), ..Default::default() });
     *y += 1.0;
 }
@@ -1946,8 +1966,7 @@ fn draw_battery_panel(app: &App, canvas: &mut DirectTerminalCanvas<'_>, bounds: 
     if let Some(bat) = battery {
         // Draw charge bar with inverted color (red=low, green=full)
         let bar_width = (inner.width as usize).min(30);
-        let filled = ((bat.capacity as f32 / 100.0) * bar_width as f32) as usize;
-        let bar: String = "█".repeat(filled) + &"░".repeat(bar_width.saturating_sub(filled));
+        let bar = make_bar(bat.capacity as f64 / 100.0, bar_width);
 
         // Color: red when low, yellow when medium, green when high
         let color = if bat.capacity < 20 {
@@ -2894,8 +2913,7 @@ fn draw_file_row(
     let item_color = if item.is_dir { dir_color } else { file_color };
     let name = format_column(&item.name, name_width, ColumnAlign::Left, TruncateStrategy::Path);
     let size_str = format_column(&format_bytes(item.size), 7, ColumnAlign::Right, TruncateStrategy::End);
-    let filled = ((bar_width as f64 * item.ratio) as usize).max(1);
-    let bar: String = "█".repeat(filled) + &"░".repeat(bar_width.saturating_sub(filled));
+    let bar = make_bar(item.ratio, bar_width);
 
     canvas.draw_text(&name, Point::new(x, y), &TextStyle { color: item_color, ..Default::default() });
     canvas.draw_text(&size_str, Point::new(x + name_width as f32, y), &TextStyle { color: dim_color, ..Default::default() });
@@ -3790,7 +3808,7 @@ fn draw_memory_exploded(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect
     let mut row_y = process_rect.y + 2.0;
 
     for (idx, (pid, proc)) in processes.iter().take(visible_rows).enumerate() {
-        let is_selected = idx == 0; // TODO: Add memory_selected to App state
+        let is_selected = idx == app.process_selected;
 
         // FRAMEWORK: Use RowHighlight for selection
         let row_bounds = Rect::new(process_rect.x, row_y, process_rect.width, 1.0);
@@ -4026,8 +4044,7 @@ fn draw_disk_exploded(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect) 
         col_x += col_pct as f32 + 1.0;
 
         if col_bar >= 3 {
-            let filled = ((use_pct / 100.0) * col_bar as f64) as usize;
-            let bar_str: String = "█".repeat(filled) + &"░".repeat(col_bar.saturating_sub(filled));
+            let bar_str = make_bar(use_pct / 100.0, col_bar);
             canvas.draw_text(&bar_str, Point::new(col_x, y), &TextStyle { color: HeatScheme::Warm.color_for_percent(use_pct), ..Default::default() });
         }
         y += 1.0;
@@ -4302,8 +4319,7 @@ fn draw_gpu_exploded(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect) {
         // GPU Utilization bar
         let util = g.utilization.unwrap_or(0) as f64;
         let util_bar_width = (inner.width as usize).min(60);
-        let filled = ((util / 100.0) * util_bar_width as f64) as usize;
-        let bar: String = "█".repeat(filled) + &"░".repeat(util_bar_width.saturating_sub(filled));
+        let bar = make_bar(util / 100.0, util_bar_width);
         let util_color = HeatScheme::Warm.color_for_percent(util);
 
         canvas.draw_text(
@@ -4319,14 +4335,8 @@ fn draw_gpu_exploded(app: &App, canvas: &mut DirectTerminalCanvas, area: Rect) {
         // VRAM bar
         let vram_used = g.vram_used.unwrap_or(0);
         let vram_total = g.vram_total.unwrap_or(0);
-        let vram_pct = if vram_total > 0 {
-            (vram_used as f64 / vram_total as f64) * 100.0
-        } else {
-            0.0
-        };
-        let vram_filled = ((vram_pct / 100.0) * util_bar_width as f64) as usize;
-        let vram_bar: String =
-            "█".repeat(vram_filled) + &"░".repeat(util_bar_width.saturating_sub(vram_filled));
+        let vram_pct = safe_pct(vram_used, vram_total);
+        let vram_bar = make_bar(vram_pct / 100.0, util_bar_width);
         let vram_color = HeatScheme::Warm.color_for_percent(vram_pct);
 
         canvas.draw_text(

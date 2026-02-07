@@ -695,13 +695,13 @@ impl Default for PanelVisibility {
             disk: true,
             network: true,
             process: true,
-            // Hardware panels - visible if hardware available
-            gpu: false,     // TODO: detect GPU
-            sensors: false, // TODO: detect sensors
-            psi: false,     // TODO: detect PSI support
+            // Hardware panels - hidden by default, auto-shown via update_visibility()
+            gpu: false,
+            sensors: false,
+            psi: false,
             connections: false,
-            // Optional panels - hidden by default
-            battery: false, // TODO: detect battery
+            // Optional panels - hidden by default, auto-shown via update_visibility()
+            battery: false,
             sensors_compact: false,
             system: false,
             // Advanced panels - hidden by default
@@ -1344,7 +1344,7 @@ impl App {
                 .as_ref()
                 .map_or(0, |s| s.sensors.len()),
             gpu_available: self.gpu_info.is_some(),
-            battery_available: false, // TODO: Add battery snapshot
+            battery_available: self.analyzers.battery_data().map_or(false, |b| !b.batteries.is_empty()),
             treemap_ready: self
                 .snapshot_treemap
                 .as_ref()

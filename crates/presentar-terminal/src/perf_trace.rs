@@ -959,6 +959,42 @@ impl LatencyHistogram {
 }
 
 // =============================================================================
+// TRACKER MACRO (PMAT-019: reduce ResourceManagement entropy)
+// =============================================================================
+
+/// Generates a tracker struct with all-zero `new()`, `Default`, `Clone`, and `reset()`.
+/// Domain-specific methods are added via separate `impl` blocks.
+macro_rules! define_tracker {
+    (
+        $(#[$meta:meta])*
+        $vis:vis struct $name:ident {
+            $( $(#[$fmeta:meta])* $fvis:vis $fname:ident : $fty:ty ),+ $(,)?
+        }
+    ) => {
+        $(#[$meta])*
+        #[derive(Debug, Clone, Copy, PartialEq, Default)]
+        $vis struct $name {
+            $( $(#[$fmeta])* $fvis $fname : $fty, )+
+        }
+
+        impl $name {
+            /// Create new zeroed tracker.
+            #[inline]
+            #[must_use]
+            pub const fn new() -> Self {
+                Self { $( $fname: 0, )+ }
+            }
+
+            /// Reset all counters to zero.
+            #[inline]
+            pub fn reset(&mut self) {
+                *self = Self::new();
+            }
+        }
+    };
+}
+
+// =============================================================================
 // EMA TRACKER (trueno-viz O(1) smoothing pattern)
 // =============================================================================
 
@@ -31878,41 +31914,28 @@ mod splice_tests {
 // v9.45.0: Process Accounting O(1) Helpers
 // ============================================================================
 
-/// Task accounting tracker - per-task resource consumption.
-///
-/// O(1) tracking of task-level CPU, I/O, and memory accounting
-/// from /proc/[pid]/stat and taskstats.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct TaskAccountingTracker {
-    /// User CPU time (clock ticks)
-    pub utime: u64,
-    /// System CPU time (clock ticks)
-    pub stime: u64,
-    /// Children user CPU time
-    pub cutime: u64,
-    /// Children system CPU time
-    pub cstime: u64,
-    /// Voluntary context switches
-    pub voluntary_ctxt_switches: u64,
-    /// Involuntary context switches
-    pub nonvoluntary_ctxt_switches: u64,
+define_tracker! {
+    /// Task accounting tracker - per-task CPU and scheduling statistics.
+    ///
+    /// O(1) tracking of task-level CPU, I/O, and memory accounting
+    /// from /proc/[pid]/stat and taskstats.
+    pub struct TaskAccountingTracker {
+        /// User CPU time (clock ticks)
+        pub utime: u64,
+        /// System CPU time (clock ticks)
+        pub stime: u64,
+        /// Children user CPU time
+        pub cutime: u64,
+        /// Children system CPU time
+        pub cstime: u64,
+        /// Voluntary context switches
+        pub voluntary_ctxt_switches: u64,
+        /// Involuntary context switches
+        pub nonvoluntary_ctxt_switches: u64,
+    }
 }
 
 impl TaskAccountingTracker {
-    /// Create new task accounting tracker.
-    #[inline]
-    #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            utime: 0,
-            stime: 0,
-            cutime: 0,
-            cstime: 0,
-            voluntary_ctxt_switches: 0,
-            nonvoluntary_ctxt_switches: 0,
-        }
-    }
-
     /// Factory: Create for process stats
     #[inline]
     #[must_use]
@@ -31961,48 +31984,29 @@ impl TaskAccountingTracker {
     pub const fn total_switches(&self) -> u64 {
         self.voluntary_ctxt_switches + self.nonvoluntary_ctxt_switches
     }
-
-    /// Reset counters
-    #[inline]
-    pub fn reset(&mut self) {
-        *self = Self::new();
-    }
 }
 
-/// I/O accounting tracker - per-task I/O statistics.
-///
-/// O(1) tracking of task I/O from /proc/[pid]/io.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct IoAccountingTracker {
-    /// Bytes read (rchar)
-    pub read_bytes: u64,
-    /// Bytes written (wchar)
-    pub write_bytes: u64,
-    /// Read syscalls
-    pub read_syscalls: u64,
-    /// Write syscalls
-    pub write_syscalls: u64,
-    /// Actual disk read bytes
-    pub disk_read_bytes: u64,
-    /// Actual disk write bytes
-    pub disk_write_bytes: u64,
+define_tracker! {
+    /// I/O accounting tracker - per-task I/O statistics.
+    ///
+    /// O(1) tracking of task I/O from /proc/[pid]/io.
+    pub struct IoAccountingTracker {
+        /// Bytes read (rchar)
+        pub read_bytes: u64,
+        /// Bytes written (wchar)
+        pub write_bytes: u64,
+        /// Read syscalls
+        pub read_syscalls: u64,
+        /// Write syscalls
+        pub write_syscalls: u64,
+        /// Actual disk read bytes
+        pub disk_read_bytes: u64,
+        /// Actual disk write bytes
+        pub disk_write_bytes: u64,
+    }
 }
 
 impl IoAccountingTracker {
-    /// Create new I/O accounting tracker.
-    #[inline]
-    #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            read_bytes: 0,
-            write_bytes: 0,
-            read_syscalls: 0,
-            write_syscalls: 0,
-            disk_read_bytes: 0,
-            disk_write_bytes: 0,
-        }
-    }
-
     /// Factory: Create from /proc/[pid]/io stats
     #[inline]
     #[must_use]
@@ -32053,48 +32057,29 @@ impl IoAccountingTracker {
     pub const fn total_syscalls(&self) -> u64 {
         self.read_syscalls + self.write_syscalls
     }
-
-    /// Reset counters
-    #[inline]
-    pub fn reset(&mut self) {
-        *self = Self::new();
-    }
 }
 
-/// Scheduler accounting tracker - per-task scheduling statistics.
-///
-/// O(1) tracking of scheduling latency and policy from /proc/[pid]/sched.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct SchedAccountingTracker {
-    /// Number of times scheduled
-    pub nr_switches: u64,
-    /// Total run time (ns)
-    pub sum_exec_runtime: u64,
-    /// Total wait time (ns)
-    pub wait_sum: u64,
-    /// Max wait time (ns)
-    pub wait_max: u64,
-    /// Time slices used
-    pub timeslices: u64,
-    /// Priority inversions
-    pub prio_inversions: u64,
+define_tracker! {
+    /// Scheduler accounting tracker - per-task scheduling statistics.
+    ///
+    /// O(1) tracking of scheduling latency and policy from /proc/[pid]/sched.
+    pub struct SchedAccountingTracker {
+        /// Number of times scheduled
+        pub nr_switches: u64,
+        /// Total run time (ns)
+        pub sum_exec_runtime: u64,
+        /// Total wait time (ns)
+        pub wait_sum: u64,
+        /// Max wait time (ns)
+        pub wait_max: u64,
+        /// Time slices used
+        pub timeslices: u64,
+        /// Priority inversions
+        pub prio_inversions: u64,
+    }
 }
 
 impl SchedAccountingTracker {
-    /// Create new scheduler accounting tracker.
-    #[inline]
-    #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            nr_switches: 0,
-            sum_exec_runtime: 0,
-            wait_sum: 0,
-            wait_max: 0,
-            timeslices: 0,
-            prio_inversions: 0,
-        }
-    }
-
     /// Factory: Create from sched stats
     #[inline]
     #[must_use]
@@ -32144,48 +32129,29 @@ impl SchedAccountingTracker {
             0
         }
     }
-
-    /// Reset counters
-    #[inline]
-    pub fn reset(&mut self) {
-        *self = Self::new();
-    }
 }
 
-/// Memory accounting tracker - per-task memory statistics.
-///
-/// O(1) tracking of memory usage from /proc/[pid]/statm.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct MemAccountingTracker {
-    /// Virtual memory size (pages)
-    pub vsize: u64,
-    /// Resident set size (pages)
-    pub rss: u64,
-    /// Shared pages
-    pub shared: u64,
-    /// Text (code) pages
-    pub text: u64,
-    /// Data + stack pages
-    pub data: u64,
-    /// Peak RSS (pages)
-    pub peak_rss: u64,
+define_tracker! {
+    /// Memory accounting tracker - per-task memory statistics.
+    ///
+    /// O(1) tracking of memory usage from /proc/[pid]/statm.
+    pub struct MemAccountingTracker {
+        /// Virtual memory size (pages)
+        pub vsize: u64,
+        /// Resident set size (pages)
+        pub rss: u64,
+        /// Shared pages
+        pub shared: u64,
+        /// Text (code) pages
+        pub text: u64,
+        /// Data + stack pages
+        pub data: u64,
+        /// Peak RSS (pages)
+        pub peak_rss: u64,
+    }
 }
 
 impl MemAccountingTracker {
-    /// Create new memory accounting tracker.
-    #[inline]
-    #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            vsize: 0,
-            rss: 0,
-            shared: 0,
-            text: 0,
-            data: 0,
-            peak_rss: 0,
-        }
-    }
-
     /// Factory: Create from statm values
     #[inline]
     #[must_use]
@@ -32231,12 +32197,6 @@ impl MemAccountingTracker {
     #[must_use]
     pub fn private_mem(&self) -> u64 {
         self.rss.saturating_sub(self.shared)
-    }
-
-    /// Reset counters
-    #[inline]
-    pub fn reset(&mut self) {
-        *self = Self::new();
     }
 }
 
@@ -32648,40 +32608,27 @@ mod mem_acct_tests {
 // v9.46.0: Namespace & Security O(1) Helpers
 // ============================================================================
 
-/// PID namespace tracker - process ID tracking.
-///
-/// O(1) tracking of PID space usage and recycling.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct PidTracker {
-    /// Current active PIDs
-    pub active_pids: u32,
-    /// Peak active PIDs
-    pub peak_pids: u32,
-    /// Total PIDs allocated
-    pub allocated: u64,
-    /// Total PIDs recycled
-    pub recycled: u64,
-    /// PID wraps (reached max)
-    pub wraps: u64,
-    /// Allocation failures
-    pub failures: u64,
+define_tracker! {
+    /// PID namespace tracker - process ID tracking.
+    ///
+    /// O(1) tracking of PID space usage and recycling.
+    pub struct PidTracker {
+        /// Current active PIDs
+        pub active_pids: u32,
+        /// Peak active PIDs
+        pub peak_pids: u32,
+        /// Total PIDs allocated
+        pub allocated: u64,
+        /// Total PIDs recycled
+        pub recycled: u64,
+        /// PID wraps (reached max)
+        pub wraps: u64,
+        /// Allocation failures
+        pub failures: u64,
+    }
 }
 
 impl PidTracker {
-    /// Create new PID tracker.
-    #[inline]
-    #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            active_pids: 0,
-            peak_pids: 0,
-            allocated: 0,
-            recycled: 0,
-            wraps: 0,
-            failures: 0,
-        }
-    }
-
     /// Factory: Create for namespace with active count
     #[inline]
     #[must_use]
@@ -32734,48 +32681,29 @@ impl PidTracker {
             0.0
         }
     }
-
-    /// Reset counters
-    #[inline]
-    pub fn reset(&mut self) {
-        *self = Self::new();
-    }
 }
 
-/// UID namespace tracker - user ID tracking.
-///
-/// O(1) tracking of UID mappings and lookups.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct UidTracker {
-    /// Number of UID mappings
-    pub mappings: u32,
-    /// UID lookups
-    pub lookups: u64,
-    /// Successful translations
-    pub translations: u64,
-    /// Translation failures
-    pub failures: u64,
-    /// Root mappings (uid 0)
-    pub root_mappings: u32,
-    /// Unprivileged mappings
-    pub unpriv_mappings: u32,
+define_tracker! {
+    /// UID namespace tracker - user ID tracking.
+    ///
+    /// O(1) tracking of UID mappings and lookups.
+    pub struct UidTracker {
+        /// Number of UID mappings
+        pub mappings: u32,
+        /// UID lookups
+        pub lookups: u64,
+        /// Successful translations
+        pub translations: u64,
+        /// Translation failures
+        pub failures: u64,
+        /// Root mappings (uid 0)
+        pub root_mappings: u32,
+        /// Unprivileged mappings
+        pub unpriv_mappings: u32,
+    }
 }
 
 impl UidTracker {
-    /// Create new UID tracker.
-    #[inline]
-    #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            mappings: 0,
-            lookups: 0,
-            translations: 0,
-            failures: 0,
-            root_mappings: 0,
-            unpriv_mappings: 0,
-        }
-    }
-
     /// Factory: Create for user namespace
     #[inline]
     #[must_use]
@@ -32818,48 +32746,29 @@ impl UidTracker {
             100.0
         }
     }
-
-    /// Reset counters
-    #[inline]
-    pub fn reset(&mut self) {
-        *self = Self::new();
-    }
 }
 
-/// Namespace tracker - Linux namespace tracking.
-///
-/// O(1) tracking of namespace operations.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct NamespaceTracker {
-    /// Active namespaces
-    pub active: u32,
-    /// Created namespaces
-    pub created: u64,
-    /// Destroyed namespaces
-    pub destroyed: u64,
-    /// Setns operations
-    pub setns_ops: u64,
-    /// Unshare operations
-    pub unshare_ops: u64,
-    /// Clone with new ns
-    pub clone_newns: u64,
+define_tracker! {
+    /// Namespace tracker - Linux namespace tracking.
+    ///
+    /// O(1) tracking of namespace operations.
+    pub struct NamespaceTracker {
+        /// Active namespaces
+        pub active: u32,
+        /// Created namespaces
+        pub created: u64,
+        /// Destroyed namespaces
+        pub destroyed: u64,
+        /// Setns operations
+        pub setns_ops: u64,
+        /// Unshare operations
+        pub unshare_ops: u64,
+        /// Clone with new ns
+        pub clone_newns: u64,
+    }
 }
 
 impl NamespaceTracker {
-    /// Create new namespace tracker.
-    #[inline]
-    #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            active: 0,
-            created: 0,
-            destroyed: 0,
-            setns_ops: 0,
-            unshare_ops: 0,
-            clone_newns: 0,
-        }
-    }
-
     /// Factory: Create for initial namespace count
     #[inline]
     #[must_use]
@@ -32903,48 +32812,29 @@ impl NamespaceTracker {
         self.clone_newns = self.clone_newns.saturating_add(1);
         self.create();
     }
-
-    /// Reset counters
-    #[inline]
-    pub fn reset(&mut self) {
-        *self = Self::new();
-    }
 }
 
-/// Seccomp tracker - seccomp filter tracking.
-///
-/// O(1) tracking of seccomp operations and violations.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct SeccompTracker {
-    /// Active filters
-    pub filters: u32,
-    /// Syscalls checked
-    pub checks: u64,
-    /// Syscalls allowed
-    pub allowed: u64,
-    /// Syscalls denied
-    pub denied: u64,
-    /// Filter additions
-    pub filter_adds: u64,
-    /// Audit log events
-    pub audit_events: u64,
+define_tracker! {
+    /// Seccomp tracker - seccomp filter tracking.
+    ///
+    /// O(1) tracking of seccomp operations and violations.
+    pub struct SeccompTracker {
+        /// Active filters
+        pub filters: u32,
+        /// Syscalls checked
+        pub checks: u64,
+        /// Syscalls allowed
+        pub allowed: u64,
+        /// Syscalls denied
+        pub denied: u64,
+        /// Filter additions
+        pub filter_adds: u64,
+        /// Audit log events
+        pub audit_events: u64,
+    }
 }
 
 impl SeccompTracker {
-    /// Create new seccomp tracker.
-    #[inline]
-    #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            filters: 0,
-            checks: 0,
-            allowed: 0,
-            denied: 0,
-            filter_adds: 0,
-            audit_events: 0,
-        }
-    }
-
     /// Factory: Create with initial filter count
     #[inline]
     #[must_use]
@@ -32999,12 +32889,6 @@ impl SeccompTracker {
         } else {
             0.0
         }
-    }
-
-    /// Reset counters
-    #[inline]
-    pub fn reset(&mut self) {
-        *self = Self::new();
     }
 }
 
@@ -33430,40 +33314,27 @@ mod seccomp_tests {
 // v9.47.0: Security Subsystem O(1) Helpers
 // ============================================================================
 
-/// Capabilities tracker - Linux capabilities tracking.
-///
-/// O(1) tracking of capability checks and changes.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct CapabilitiesTracker {
-    /// Capability checks performed
-    pub checks: u64,
-    /// Capabilities granted
-    pub granted: u64,
-    /// Capabilities denied
-    pub denied: u64,
-    /// Capability set operations
-    pub set_ops: u64,
-    /// Capability drops
-    pub drops: u64,
-    /// Ambient caps raised
-    pub ambient_raises: u64,
+define_tracker! {
+    /// Capabilities tracker - Linux capabilities tracking.
+    ///
+    /// O(1) tracking of capability checks and changes.
+    pub struct CapabilitiesTracker {
+        /// Capability checks performed
+        pub checks: u64,
+        /// Capabilities granted
+        pub granted: u64,
+        /// Capabilities denied
+        pub denied: u64,
+        /// Capability set operations
+        pub set_ops: u64,
+        /// Capability drops
+        pub drops: u64,
+        /// Ambient caps raised
+        pub ambient_raises: u64,
+    }
 }
 
 impl CapabilitiesTracker {
-    /// Create new capabilities tracker.
-    #[inline]
-    #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            checks: 0,
-            granted: 0,
-            denied: 0,
-            set_ops: 0,
-            drops: 0,
-            ambient_raises: 0,
-        }
-    }
-
     /// Factory: Create for process
     #[inline]
     #[must_use]
@@ -33510,48 +33381,29 @@ impl CapabilitiesTracker {
             100.0
         }
     }
-
-    /// Reset counters
-    #[inline]
-    pub fn reset(&mut self) {
-        *self = Self::new();
-    }
 }
 
-/// LSM (Linux Security Module) tracker.
-///
-/// O(1) tracking of LSM hooks and decisions.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct LsmTracker {
-    /// Hook invocations
-    pub hooks: u64,
-    /// Allowed decisions
-    pub allowed: u64,
-    /// Denied decisions
-    pub denied: u64,
-    /// Audit events
-    pub audits: u64,
-    /// Policy loads
-    pub policy_loads: u64,
-    /// Label transitions
-    pub transitions: u64,
+define_tracker! {
+    /// LSM (Linux Security Module) tracker.
+    ///
+    /// O(1) tracking of LSM hooks and decisions.
+    pub struct LsmTracker {
+        /// Hook invocations
+        pub hooks: u64,
+        /// Allowed decisions
+        pub allowed: u64,
+        /// Denied decisions
+        pub denied: u64,
+        /// Audit events
+        pub audits: u64,
+        /// Policy loads
+        pub policy_loads: u64,
+        /// Label transitions
+        pub transitions: u64,
+    }
 }
 
 impl LsmTracker {
-    /// Create new LSM tracker.
-    #[inline]
-    #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            hooks: 0,
-            allowed: 0,
-            denied: 0,
-            audits: 0,
-            policy_loads: 0,
-            transitions: 0,
-        }
-    }
-
     /// Factory: Create for security module
     #[inline]
     #[must_use]
@@ -33598,48 +33450,29 @@ impl LsmTracker {
             100.0
         }
     }
-
-    /// Reset counters
-    #[inline]
-    pub fn reset(&mut self) {
-        *self = Self::new();
-    }
 }
 
-/// Audit tracker - Linux audit subsystem tracking.
-///
-/// O(1) tracking of audit events and records.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct AuditTracker {
-    /// Audit records generated
-    pub records: u64,
-    /// Records written
-    pub written: u64,
-    /// Records dropped
-    pub dropped: u64,
-    /// Backlog size
-    pub backlog: u32,
-    /// Peak backlog
-    pub peak_backlog: u32,
-    /// Rules loaded
-    pub rules: u32,
+define_tracker! {
+    /// Audit tracker - Linux audit subsystem tracking.
+    ///
+    /// O(1) tracking of audit events and records.
+    pub struct AuditTracker {
+        /// Audit records generated
+        pub records: u64,
+        /// Records written
+        pub written: u64,
+        /// Records dropped
+        pub dropped: u64,
+        /// Backlog size
+        pub backlog: u32,
+        /// Peak backlog
+        pub peak_backlog: u32,
+        /// Rules loaded
+        pub rules: u32,
+    }
 }
 
 impl AuditTracker {
-    /// Create new audit tracker.
-    #[inline]
-    #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            records: 0,
-            written: 0,
-            dropped: 0,
-            backlog: 0,
-            peak_backlog: 0,
-            rules: 0,
-        }
-    }
-
     /// Factory: Create for audit daemon
     #[inline]
     #[must_use]
@@ -33687,48 +33520,29 @@ impl AuditTracker {
             0.0
         }
     }
-
-    /// Reset counters
-    #[inline]
-    pub fn reset(&mut self) {
-        *self = Self::new();
-    }
 }
 
-/// Integrity tracker - IMA/EVM tracking.
-///
-/// O(1) tracking of integrity measurements and verifications.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct IntegrityTracker {
-    /// Measurements taken
-    pub measurements: u64,
-    /// Verifications passed
-    pub verified: u64,
-    /// Verifications failed
-    pub failed: u64,
-    /// Appraisals performed
-    pub appraisals: u64,
-    /// Signatures validated
-    pub signatures: u64,
-    /// Policy violations
-    pub violations: u64,
+define_tracker! {
+    /// Integrity tracker - IMA/EVM tracking.
+    ///
+    /// O(1) tracking of integrity measurements and verifications.
+    pub struct IntegrityTracker {
+        /// Measurements taken
+        pub measurements: u64,
+        /// Verifications passed
+        pub verified: u64,
+        /// Verifications failed
+        pub failed: u64,
+        /// Appraisals performed
+        pub appraisals: u64,
+        /// Signatures validated
+        pub signatures: u64,
+        /// Policy violations
+        pub violations: u64,
+    }
 }
 
 impl IntegrityTracker {
-    /// Create new integrity tracker.
-    #[inline]
-    #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            measurements: 0,
-            verified: 0,
-            failed: 0,
-            appraisals: 0,
-            signatures: 0,
-            violations: 0,
-        }
-    }
-
     /// Factory: Create for IMA
     #[inline]
     #[must_use]
@@ -33780,12 +33594,6 @@ impl IntegrityTracker {
         } else {
             100.0
         }
-    }
-
-    /// Reset counters
-    #[inline]
-    pub fn reset(&mut self) {
-        *self = Self::new();
     }
 }
 

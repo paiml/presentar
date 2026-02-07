@@ -157,6 +157,16 @@ impl Value {
         }
     }
 
+    /// Get as array or return `ExpectedArray` error (DRY helper for apply_ methods).
+    pub fn require_array(&self) -> Result<&Vec<Self>, ExecutionError> {
+        self.as_array().ok_or(ExecutionError::ExpectedArray)
+    }
+
+    /// Extract numeric values from array items by field name.
+    pub fn extract_numbers(&self, field: &str) -> Result<Vec<f64>, ExecutionError> {
+        Ok(self.require_array()?.iter().filter_map(|item| item.get(field)?.as_number()).collect())
+    }
+
     /// Get array length or object key count.
     #[must_use]
     pub fn len(&self) -> usize {
@@ -379,7 +389,7 @@ impl ExpressionExecutor {
         field: &str,
         match_value: &str,
     ) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let arr = value.require_array()?;
 
         let filtered: Vec<Value> = arr
             .iter()
@@ -415,7 +425,7 @@ impl ExpressionExecutor {
     }
 
     fn apply_select(&self, value: &Value, fields: &[String]) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let arr = value.require_array()?;
 
         let selected: Vec<Value> = arr
             .iter()
@@ -438,7 +448,7 @@ impl ExpressionExecutor {
     }
 
     fn apply_sort(&self, value: &Value, field: &str, desc: bool) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let arr = value.require_array()?;
         let mut sorted = arr.clone();
 
         sorted.sort_by(|a, b| {
@@ -464,7 +474,7 @@ impl ExpressionExecutor {
     }
 
     fn apply_limit(&self, value: &Value, n: usize) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let arr = value.require_array()?;
         Ok(Value::Array(arr.iter().take(n).cloned().collect()))
     }
 
@@ -478,36 +488,20 @@ impl ExpressionExecutor {
     }
 
     fn apply_sum(&self, value: &Value, field: &str) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
-
-        let sum: f64 = arr
-            .iter()
-            .filter_map(|item| item.get(field)?.as_number())
-            .sum();
-
-        Ok(Value::Number(sum))
+        let nums = value.extract_numbers(field)?;
+        Ok(Value::Number(nums.iter().sum()))
     }
 
     fn apply_mean(&self, value: &Value, field: &str) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
-
-        let values: Vec<f64> = arr
-            .iter()
-            .filter_map(|item| item.get(field)?.as_number())
-            .collect();
-
-        if values.is_empty() {
+        let nums = value.extract_numbers(field)?;
+        if nums.is_empty() {
             return Ok(Value::Number(0.0));
         }
-
-        let sum: f64 = values.iter().sum();
-        let mean = sum / values.len() as f64;
-
-        Ok(Value::Number(mean))
+        Ok(Value::Number(nums.iter().sum::<f64>() / nums.len() as f64))
     }
 
     fn apply_sample(&self, value: &Value, n: usize) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let arr = value.require_array()?;
 
         // Simple deterministic "sampling" - just take first n elements
         // Real implementation would use random sampling
@@ -524,7 +518,7 @@ impl ExpressionExecutor {
     }
 
     fn apply_rate(&self, value: &Value, window: &str) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let arr = value.require_array()?;
 
         // Parse window (e.g., "1m", "5m", "1h")
         let window_ms = self.parse_window(window)?;
@@ -616,7 +610,7 @@ impl ExpressionExecutor {
         on: &str,
         ctx: &DataContext,
     ) -> Result<Value, ExecutionError> {
-        let left_arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let left_arr = value.require_array()?;
 
         // Get the other dataset from context
         let right_value = ctx
@@ -678,7 +672,7 @@ impl ExpressionExecutor {
     }
 
     fn apply_group_by(&self, value: &Value, field: &str) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let arr = value.require_array()?;
 
         let mut groups: HashMap<String, Vec<Value>> = HashMap::new();
 
@@ -723,7 +717,7 @@ impl ExpressionExecutor {
     }
 
     fn apply_distinct(&self, value: &Value, field: Option<&str>) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let arr = value.require_array()?;
 
         let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
         let mut result = Vec::new();
@@ -756,7 +750,7 @@ impl ExpressionExecutor {
         op: &str,
         match_value: &str,
     ) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let arr = value.require_array()?;
 
         let filtered: Vec<Value> = arr
             .iter()
@@ -832,49 +826,31 @@ impl ExpressionExecutor {
     }
 
     fn apply_offset(&self, value: &Value, n: usize) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let arr = value.require_array()?;
         Ok(Value::Array(arr.iter().skip(n).cloned().collect()))
     }
 
     fn apply_min(&self, value: &Value, field: &str) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
-
-        let min = arr
-            .iter()
-            .filter_map(|item| item.get(field)?.as_number())
-            .fold(f64::INFINITY, f64::min);
-
-        if min.is_infinite() {
-            Ok(Value::Null)
-        } else {
-            Ok(Value::Number(min))
-        }
+        let nums = value.extract_numbers(field)?;
+        let min = nums.iter().copied().fold(f64::INFINITY, f64::min);
+        Ok(if min.is_infinite() { Value::Null } else { Value::Number(min) })
     }
 
     fn apply_max(&self, value: &Value, field: &str) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
-
-        let max = arr
-            .iter()
-            .filter_map(|item| item.get(field)?.as_number())
-            .fold(f64::NEG_INFINITY, f64::max);
-
-        if max.is_infinite() {
-            Ok(Value::Null)
-        } else {
-            Ok(Value::Number(max))
-        }
+        let nums = value.extract_numbers(field)?;
+        let max = nums.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        Ok(if max.is_infinite() { Value::Null } else { Value::Number(max) })
     }
 
     fn apply_last(&self, value: &Value, n: usize) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let arr = value.require_array()?;
         let len = arr.len();
         let skip = len.saturating_sub(n);
         Ok(Value::Array(arr.iter().skip(skip).cloned().collect()))
     }
 
     fn apply_flatten(&self, value: &Value) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let arr = value.require_array()?;
 
         let mut result = Vec::new();
         for item in arr {
@@ -889,7 +865,7 @@ impl ExpressionExecutor {
     }
 
     fn apply_reverse(&self, value: &Value) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let arr = value.require_array()?;
         let mut reversed = arr.clone();
         reversed.reverse();
         Ok(Value::Array(reversed))
@@ -900,7 +876,7 @@ impl ExpressionExecutor {
     // =========================================================================
 
     fn apply_map(&self, value: &Value, expr: &str) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let arr = value.require_array()?;
 
         // Simple expression evaluation: extract field if expr is "item.field"
         // For complex expressions, this would need a proper expression evaluator
@@ -930,7 +906,7 @@ impl ExpressionExecutor {
         initial: &str,
         _expr: &str,
     ) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let arr = value.require_array()?;
 
         // Parse initial value
         let mut acc: f64 = initial.parse().unwrap_or(0.0);
@@ -951,7 +927,7 @@ impl ExpressionExecutor {
         field: &str,
         op: AggregateOp,
     ) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let arr = value.require_array()?;
 
         // For grouped data, expect array of {key: ..., values: [...]}
         // For ungrouped data, operate on the field directly
@@ -1004,7 +980,7 @@ impl ExpressionExecutor {
         col_field: &str,
         value_field: &str,
     ) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let arr = value.require_array()?;
 
         // Build pivot table
         let mut rows: HashMap<String, HashMap<String, f64>> = HashMap::new();
@@ -1049,7 +1025,7 @@ impl ExpressionExecutor {
     }
 
     fn apply_cumsum(&self, value: &Value, field: &str) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let arr = value.require_array()?;
 
         let mut running_sum = 0.0;
         let result: Vec<Value> = arr
@@ -1077,7 +1053,7 @@ impl ExpressionExecutor {
         field: &str,
         method: RankMethod,
     ) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let arr = value.require_array()?;
 
         // Extract values with indices
         let mut indexed: Vec<(usize, f64)> = arr
@@ -1149,7 +1125,7 @@ impl ExpressionExecutor {
         field: &str,
         window: usize,
     ) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let arr = value.require_array()?;
 
         let values: Vec<f64> = arr
             .iter()
@@ -1182,7 +1158,7 @@ impl ExpressionExecutor {
     }
 
     fn apply_pct_change(&self, value: &Value, field: &str) -> Result<Value, ExecutionError> {
-        let arr = value.as_array().ok_or(ExecutionError::ExpectedArray)?;
+        let arr = value.require_array()?;
 
         let values: Vec<f64> = arr
             .iter()
