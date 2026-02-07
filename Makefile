@@ -3,9 +3,9 @@
 # Application name
 APP ?= presentar
 
-# Coverage exclusions for non-critical code paths and external dependencies
-# Grouped: external | CLI binary | test infra | GPU/render | stubs/unimplemented
-COVERAGE_EXCLUDE := --ignore-filename-regex='probar/.*\.rs|presentar-cli/src/main\.rs|test-macros/.*\.rs|(webgpu|draw|geometry|constraints)\.rs|(a11y|accessibility|bdd|shell_autocomplete)\.rs|(animation|binding|clipboard|dnd|gesture|cache|shortcut|streaming|virtualization)\.rs'
+# Coverage exclusions: platform-specific and binary entry points only (CB-125-A ≤10)
+# external | CLI binary | proc-macro infra | GPU-only | WASM-only
+COVERAGE_EXCLUDE := --ignore-filename-regex='probar/.*\.rs|presentar-cli/src/main\.rs|test-macros/.*\.rs|webgpu\.rs|shell_autocomplete\.rs'
 
 # Default target
 all: fmt lint test build
