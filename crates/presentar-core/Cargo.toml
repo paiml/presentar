@@ -12,15 +12,13 @@ rust-version.workspace = true
 serde = { workspace = true }
 serde_json = { workspace = true }
 trueno = { workspace = true, optional = true }
-# Brick Architecture: Tests define interface (PROBAR-SPEC-009)
-jugar-probar = { version = "1.0", default-features = false, optional = true }
 
 [features]
 # PROBAR-SPEC-009: Brick Architecture is MANDATORY, not optional
 # All widgets MUST implement Brick trait - tests define interface
-default = ["simd", "brick"]
+# CB-081: Brick types defined natively (no jugar-probar prod dep)
+default = ["simd"]
 simd = ["dep:trueno"]
-brick = ["dep:jugar-probar"]
 
 [dev-dependencies]
 proptest = { workspace = true }

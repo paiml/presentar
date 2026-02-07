@@ -46,8 +46,8 @@ use crate::geometry::{Rect, Size};
 use serde::{Deserialize, Serialize};
 use std::any::Any;
 
-// Re-export Brick types (PROBAR-SPEC-009: Brick is mandatory)
-pub use jugar_probar::brick::{
+// Re-export Brick types from native brick_types (CB-081: no jugar-probar prod dep)
+pub use crate::brick_types::{
     Brick, BrickAssertion, BrickBudget, BrickError, BrickPhase, BrickResult, BrickVerification,
     BudgetViolation,
 };

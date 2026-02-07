@@ -95,6 +95,9 @@ pub mod validation;
 pub mod virtualization;
 pub mod widget;
 
+// Brick Architecture types (native - CB-081: no jugar-probar prod dep)
+pub mod brick_types;
+
 // Brick Architecture integration (PROBAR-SPEC-009: Brick is mandatory)
 pub mod brick_widget;
 

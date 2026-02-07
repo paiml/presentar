@@ -27,7 +27,7 @@
 //! }
 //! ```
 
-use crate::widget::{Brick, BrickAssertion, BrickBudget, BrickVerification};
+use crate::brick_types::{Brick, BrickAssertion, BrickBudget, BrickVerification};
 use std::time::Duration;
 
 /// Simple Brick implementation for common use cases.
