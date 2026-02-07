@@ -9,6 +9,8 @@
 //! - WB: WASM Build Integrity
 //! - PERF: Performance
 
+#![cfg(feature = "shell-autocomplete")]
+
 use std::collections::HashSet;
 use std::time::Instant;
 
