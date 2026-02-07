@@ -153,10 +153,15 @@ impl ShellAutocomplete {
         // Decompress payload if needed
         let payload_decompressed: Vec<u8> = match compression {
             0x00 => payload_compressed.to_vec(), // No compression
+            #[cfg(feature = "shell-autocomplete")]
             0x01 | 0x02 => {
                 // Zstd compression
                 zstd::decode_all(payload_compressed)
                     .map_err(|e| format!("Failed to decompress: {}", e))?
+            }
+            #[cfg(not(feature = "shell-autocomplete"))]
+            0x01 | 0x02 => {
+                return Err("Zstd compression requires the 'shell-autocomplete' feature".to_string());
             }
             _ => return Err(format!("Unknown compression type: 0x{:02X}", compression)),
         };

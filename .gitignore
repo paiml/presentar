@@ -21,3 +21,10 @@ target
 *.tmp
 *.bak
 .DS_Store
+
+# PMAT
+.pmat/backup/
+.pmat-qa/
+.pmat/context.idx/
+.pmat/workspace.idx/
+.pmat/deps-cache.json

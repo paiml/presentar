@@ -135,6 +135,26 @@ Transforms: filter(), select(), sort(), limit(), count(), sum(), mean(), rate(),
 All transforms execute client-side in WASM - no server round-trips.
 
 
+## Code Search Policy
+
+**NEVER use grep/glob for code search. ALWAYS prefer `pmat query`.**
+
+`pmat query` returns quality-annotated, semantically ranked results with TDG grades, complexity, and --faults patterns.
+
+```bash
+# Find functions by intent
+pmat query "layout engine" --limit 10
+
+# Find with fault patterns
+pmat query "unwrap" --faults --exclude-tests
+
+# Include source code
+pmat query "render" --include-source
+
+# Regex search
+pmat query --regex "fn\s+draw_\w+" --limit 10
+```
+
 ## Stack Documentation Search (RAG Oracle)
 
 **IMPORTANT: Proactively use the batuta RAG oracle when:**

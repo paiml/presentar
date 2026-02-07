@@ -4,8 +4,8 @@
 APP ?= presentar
 
 # Coverage exclusions for non-critical code paths and external dependencies
-# Excludes: probar (external), CLI binaries, GPU/browser code, test infra, unused modules
-COVERAGE_EXCLUDE := --ignore-filename-regex='probar/.*\.rs|presentar-cli/src/main\.rs|webgpu\.rs|shell_autocomplete\.rs|a11y\.rs|bdd\.rs|build\.rs|accessibility\.rs|animation\.rs|binding\.rs|clipboard\.rs|dnd\.rs|gesture\.rs|cache\.rs|shortcut\.rs|streaming\.rs|virtualization\.rs|test-macros/.*\.rs|draw\.rs|geometry\.rs|constraints\.rs'
+# Grouped: external | CLI binary | test infra | GPU/render | stubs/unimplemented
+COVERAGE_EXCLUDE := --ignore-filename-regex='probar/.*\.rs|presentar-cli/src/main\.rs|test-macros/.*\.rs|(webgpu|draw|geometry|constraints)\.rs|(a11y|accessibility|bdd|shell_autocomplete)\.rs|(animation|binding|clipboard|dnd|gesture|cache|shortcut|streaming|virtualization)\.rs'
 
 # Default target
 all: fmt lint test build
@@ -25,21 +25,21 @@ test: test-unit test-integration
 
 test-unit:
 	@echo "Running unit tests..."
-	@cargo test --workspace --lib
+	@PROPTEST_CASES=256 cargo test --workspace --lib
 
 test-integration:
 	@echo "Running integration tests..."
-	@cargo test --workspace --test '*' 2>/dev/null || echo "No integration tests found"
+	@PROPTEST_CASES=256 cargo test --workspace --test '*' 2>/dev/null || echo "No integration tests found"
 
 # Fast tests for rapid TDD feedback (<30s target)
 test-fast: ## Fast unit tests (<30s target)
 	@echo "⚡ Running fast tests (target: <30s)..."
 	@if command -v cargo-nextest >/dev/null 2>&1; then \
-		cargo nextest run --workspace --lib \
+		PROPTEST_CASES=64 cargo nextest run --workspace --lib \
 			--status-level skip \
 			--failure-output immediate; \
 	else \
-		cargo test --workspace --lib --quiet; \
+		PROPTEST_CASES=64 cargo test --workspace --lib --quiet; \
 	fi
 
 # Linting
@@ -132,7 +132,7 @@ tier3: ## Tier 3: Mutation & coverage (ON-MERGE/NIGHTLY)
 
 # Run a single test
 test-one:
-	@cargo test --workspace $(TEST) -- --nocapture
+	@PROPTEST_CASES=256 cargo test --workspace $(TEST) -- --nocapture
 
 # Watch mode for TDD
 watch:

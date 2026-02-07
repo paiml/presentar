@@ -18,9 +18,12 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 wgpu = { workspace = true }
 bytemuck = { workspace = true }
-rmp-serde = "1.3"
 bincode = "1.3"
-zstd = "0.13"
+zstd = { version = "0.13", optional = true }
+
+[features]
+default = []
+shell-autocomplete = ["dep:zstd"]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = { workspace = true }
