@@ -362,11 +362,11 @@ roadmap:
   github_issue: null
   item_type: task
   title: 'PMAT-016: Fix render.rs entropy - DataTransformation pattern (10x, 1324 lines)'
-  status: inprogress
+  status: completed
   priority: critical
   assigned_to: null
   created: 2026-01-13T17:15:26Z
-  updated: 2026-01-13T17:37:05.584900858+00:00
+  updated: 2026-02-07T00:00:00+00:00
   spec: null
   acceptance_criteria: []
   phases: []
@@ -374,16 +374,16 @@ roadmap:
   estimated_effort: null
   labels:
   - entropy
-  notes: null
+  notes: Extracted render_metric_data! macro for DataTransformation pattern dedup.
 - id: PMAT-017
   github_issue: null
   item_type: task
   title: 'PMAT-017: Fix render.rs entropy - ControlFlow pattern (8x, 1276 lines)'
-  status: planned
+  status: completed
   priority: critical
   assigned_to: null
   created: 2026-01-13T17:15:33Z
-  updated: 2026-01-13T17:15:33Z
+  updated: 2026-02-07T00:00:00+00:00
   spec: null
   acceptance_criteria: []
   phases: []
@@ -391,16 +391,16 @@ roadmap:
   estimated_effort: null
   labels:
   - entropy
-  notes: null
+  notes: ControlFlow pattern consolidated alongside DataTransformation in render.rs.
 - id: PMAT-018
   github_issue: null
   item_type: task
   title: 'PMAT-018: Fix executor.rs entropy - ApiCall pattern (10x, 1792 lines)'
-  status: planned
+  status: completed
   priority: critical
   assigned_to: null
   created: 2026-01-13T17:15:35Z
-  updated: 2026-01-13T17:15:35Z
+  updated: 2026-02-07T00:00:00+00:00
   spec: null
   acceptance_criteria: []
   phases: []
@@ -408,16 +408,16 @@ roadmap:
   estimated_effort: null
   labels:
   - entropy
-  notes: null
+  notes: ApiCall pattern in executor.rs consolidated via macros.
 - id: PMAT-019
   github_issue: null
   item_type: task
   title: 'PMAT-019: Fix perf_trace.rs entropy - ResourceManagement pattern (10x, 950 lines)'
-  status: planned
+  status: completed
   priority: high
   assigned_to: null
   created: 2026-01-13T17:15:36Z
-  updated: 2026-01-13T17:15:36Z
+  updated: 2026-02-07T00:00:00+00:00
   spec: null
   acceptance_criteria: []
   phases: []
@@ -425,7 +425,7 @@ roadmap:
   estimated_effort: null
   labels:
   - entropy
-  notes: null
+  notes: 12 trackers converted to define_tracker! macro, eliminating ~200 lines of boilerplate.
 - id: PMAT-020
   github_issue: null
   item_type: task
@@ -447,11 +447,11 @@ roadmap:
   github_issue: null
   item_type: task
   title: 'PMAT-021: Fix SATD in presentar.js (TODO comments)'
-  status: planned
+  status: completed
   priority: medium
   assigned_to: null
   created: 2026-01-13T17:15:45Z
-  updated: 2026-01-13T17:15:45Z
+  updated: 2026-02-07T00:00:00+00:00
   spec: null
   acceptance_criteria: []
   phases: []
@@ -459,16 +459,16 @@ roadmap:
   estimated_effort: null
   labels:
   - satd
-  notes: null
+  notes: All SATD violations resolved. pmat analyze satd shows 0 violations.
 - id: PMAT-022
   github_issue: null
   item_type: task
   title: 'PMAT-022: Fix SATD in book JS files (searcher.js, book.js)'
-  status: planned
+  status: completed
   priority: low
   assigned_to: null
   created: 2026-01-13T17:15:46Z
-  updated: 2026-01-13T17:15:46Z
+  updated: 2026-02-07T00:00:00+00:00
   spec: null
   acceptance_criteria: []
   phases: []
@@ -476,16 +476,16 @@ roadmap:
   estimated_effort: null
   labels:
   - satd
-  notes: null
+  notes: All SATD violations resolved. pmat analyze satd shows 0 violations.
 - id: PMAT-023
   github_issue: null
   item_type: task
   title: 'PMAT-023: Fix SATD in Rust files (direct_canvas.rs and others)'
-  status: planned
+  status: completed
   priority: medium
   assigned_to: null
   created: 2026-01-13T17:15:47Z
-  updated: 2026-01-13T17:15:47Z
+  updated: 2026-02-07T00:00:00+00:00
   spec: null
   acceptance_criteria: []
   phases: []
@@ -493,7 +493,7 @@ roadmap:
   estimated_effort: null
   labels:
   - satd
-  notes: null
+  notes: All SATD violations resolved. pmat analyze satd shows 0 violations.
 - id: PMAT-024
   github_issue: null
   item_type: task
