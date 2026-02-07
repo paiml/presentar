@@ -27,11 +27,14 @@
 use clap::{Parser, Subcommand};
 use std::fs;
 use std::io::Read;
+#[cfg(feature = "dev-server")]
 use std::net::TcpListener;
 use std::path::PathBuf;
 use std::process::Command;
+#[cfg(feature = "dev-server")]
 use std::sync::atomic::{AtomicU64, Ordering};
 use tiny_http::{Response, Server};
+#[cfg(feature = "dev-server")]
 use tungstenite::accept;
 
 #[derive(Parser)]
@@ -206,9 +209,11 @@ fn main() {
     }
 }
 
+#[cfg(feature = "dev-server")]
 /// Atomic counter for triggering hot reload
 static RELOAD_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+#[cfg(feature = "dev-server")]
 /// Hot reload WebSocket script to inject into HTML
 const HOT_RELOAD_SCRIPT: &str = r#"
 <script>
@@ -243,7 +248,8 @@ fn serve(port: u16, dir: PathBuf, watch: bool) {
     println!();
     println!("Press Ctrl+C to stop");
 
-    // Start file watcher in background thread
+    // Start file watcher in background thread (requires dev-server feature)
+    #[cfg(feature = "dev-server")]
     if watch {
         let watch_dir = dir.clone();
         std::thread::spawn(move || {
@@ -254,6 +260,10 @@ fn serve(port: u16, dir: PathBuf, watch: bool) {
         std::thread::spawn(|| {
             run_hot_reload_server();
         });
+    }
+    #[cfg(not(feature = "dev-server"))]
+    if watch {
+        eprintln!("Warning: --watch requires the 'dev-server' feature. Serving without hot reload.");
     }
 
     let addr = format!("0.0.0.0:{}", port);
@@ -285,11 +295,14 @@ fn serve(port: u16, dir: PathBuf, watch: bool) {
             };
 
             // Inject hot reload script into HTML files when watching
+            #[cfg(feature = "dev-server")]
             let content = if watch && content_type == "text/html" {
                 inject_hot_reload_script(&content)
             } else {
                 content
             };
+            #[cfg(not(feature = "dev-server"))]
+            let content = content;
 
             Response::from_data(content).with_header(
                 tiny_http::Header::from_bytes(&b"Content-Type"[..], content_type.as_bytes())
@@ -303,6 +316,7 @@ fn serve(port: u16, dir: PathBuf, watch: bool) {
     }
 }
 
+#[cfg(feature = "dev-server")]
 /// Inject hot reload script before </body> or at end of HTML
 fn inject_hot_reload_script(html: &[u8]) -> Vec<u8> {
     let html_str = String::from_utf8_lossy(html);
@@ -318,6 +332,7 @@ fn inject_hot_reload_script(html: &[u8]) -> Vec<u8> {
     }
 }
 
+#[cfg(feature = "dev-server")]
 /// Check if WebSocket client disconnected (non-blocking).
 /// Returns true if client is still connected.
 fn is_client_connected(websocket: &mut tungstenite::WebSocket<std::net::TcpStream>) -> bool {
@@ -332,6 +347,7 @@ fn is_client_connected(websocket: &mut tungstenite::WebSocket<std::net::TcpStrea
     connected
 }
 
+#[cfg(feature = "dev-server")]
 /// Handle a single WebSocket client connection for hot reload.
 fn handle_hot_reload_client(mut websocket: tungstenite::WebSocket<std::net::TcpStream>) {
     let mut last_sent = RELOAD_COUNTER.load(Ordering::Relaxed);
@@ -358,6 +374,7 @@ fn handle_hot_reload_client(mut websocket: tungstenite::WebSocket<std::net::TcpS
     }
 }
 
+#[cfg(feature = "dev-server")]
 /// Run WebSocket server that broadcasts reload events
 fn run_hot_reload_server() {
     let server = match TcpListener::bind("127.0.0.1:35729") {
@@ -378,11 +395,13 @@ fn run_hot_reload_server() {
     }
 }
 
+#[cfg(feature = "dev-server")]
 /// Trigger a hot reload for all connected clients
 fn trigger_hot_reload() {
     RELOAD_COUNTER.fetch_add(1, Ordering::Relaxed);
 }
 
+#[cfg(feature = "dev-server")]
 /// Handle YAML file change: validate and trigger reload if valid.
 fn handle_yaml_change(path: &std::path::Path) {
     println!("[watch] YAML change: {}", path.display());
@@ -397,6 +416,7 @@ fn handle_yaml_change(path: &std::path::Path) {
     }
 }
 
+#[cfg(feature = "dev-server")]
 /// Handle file change based on extension.
 fn handle_file_change(path: &std::path::Path) {
     let ext = path.extension().and_then(|e| e.to_str());
@@ -415,6 +435,7 @@ fn handle_file_change(path: &std::path::Path) {
     }
 }
 
+#[cfg(feature = "dev-server")]
 fn watch_and_rebuild(dir: &PathBuf) {
     use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
     use std::sync::mpsc::channel;
@@ -461,6 +482,7 @@ fn watch_and_rebuild(dir: &PathBuf) {
     }
 }
 
+#[cfg(feature = "dev-server")]
 fn rebuild_wasm() {
     let status = Command::new("wasm-pack")
         .args([
@@ -1520,9 +1542,10 @@ layout:
     }
 
     // ==========================================================================
-    // Hot Reload Tests
+    // Hot Reload Tests (require dev-server feature)
     // ==========================================================================
 
+    #[cfg(feature = "dev-server")]
     #[test]
     fn test_inject_hot_reload_script_with_body() {
         let html = b"<!DOCTYPE html><html><body><p>Hello</p></body></html>";
@@ -1537,6 +1560,7 @@ layout:
         assert!(script_pos < body_pos);
     }
 
+    #[cfg(feature = "dev-server")]
     #[test]
     fn test_inject_hot_reload_script_without_body() {
         let html = b"<html><p>No body tag</p></html>";
@@ -1548,6 +1572,7 @@ layout:
         assert!(result_str.contains("new WebSocket"));
     }
 
+    #[cfg(feature = "dev-server")]
     #[test]
     fn test_trigger_hot_reload_increments_counter() {
         let initial = RELOAD_COUNTER.load(std::sync::atomic::Ordering::Relaxed);
@@ -1556,11 +1581,13 @@ layout:
         assert_eq!(after, initial + 1);
     }
 
+    #[cfg(feature = "dev-server")]
     #[test]
     fn test_hot_reload_script_has_websocket_url() {
         assert!(HOT_RELOAD_SCRIPT.contains("ws://localhost:35729"));
     }
 
+    #[cfg(feature = "dev-server")]
     #[test]
     fn test_hot_reload_script_handles_reconnect() {
         assert!(HOT_RELOAD_SCRIPT.contains("reconnecting"));

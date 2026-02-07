@@ -79,8 +79,10 @@ pub use browser::{App, Canvas2DRenderer};
 
 pub use browser::{BrowserRouter, RouteMatch, RouteMatcher};
 
-// WebGPU types available on all platforms for testing
+// WebGPU types available when gpu feature is enabled
+#[cfg(feature = "gpu")]
 mod webgpu;
+#[cfg(feature = "gpu")]
 pub use webgpu::{
     commands_to_instances, Instance as GpuInstance, Uniforms as GpuUniforms, Vertex as GpuVertex,
 };

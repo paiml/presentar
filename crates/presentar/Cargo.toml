@@ -16,13 +16,14 @@ presentar-layout = { workspace = true }
 presentar-yaml = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-wgpu = { workspace = true }
-bytemuck = { workspace = true }
+wgpu = { workspace = true, optional = true }
+bytemuck = { workspace = true, optional = true }
 bincode = "1.3"
 zstd = { version = "0.13", optional = true }
 
 [features]
 default = []
+gpu = ["dep:wgpu", "dep:bytemuck"]
 shell-autocomplete = ["dep:zstd"]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
