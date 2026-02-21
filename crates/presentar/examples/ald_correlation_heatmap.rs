@@ -136,19 +136,30 @@ impl CorrelationMatrix {
 
 /// Get ASCII character for correlation value.
 fn correlation_char(val: f32) -> char {
-    if val > 0.8 { '█' }
-    else if val > 0.5 { '▓' }
-    else if val > 0.0 { '░' }
-    else if val > -0.5 { '·' }
-    else if val > -0.8 { '▒' }
-    else { '▓' }
+    if val > 0.8 {
+        '█'
+    } else if val > 0.5 {
+        '▓'
+    } else if val > 0.0 {
+        '░'
+    } else if val > -0.5 {
+        '·'
+    } else if val > -0.8 {
+        '▒'
+    } else {
+        '▓'
+    }
 }
 
 /// Get strength label for correlation value.
 fn correlation_strength(corr: f32) -> &'static str {
-    if corr.abs() > 0.8 { "strong" }
-    else if corr.abs() > 0.5 { "moderate" }
-    else { "weak" }
+    if corr.abs() > 0.8 {
+        "strong"
+    } else if corr.abs() > 0.5 {
+        "moderate"
+    } else {
+        "weak"
+    }
 }
 
 /// Print correlation matrix.
@@ -189,7 +200,12 @@ fn main() {
     let w: Vec<f32> = (0..n).map(|i| (i % 10) as f32).collect();
 
     let matrix = CorrelationMatrix::from_columns(
-        vec!["x".to_string(), "y".to_string(), "z".to_string(), "w".to_string()],
+        vec![
+            "x".to_string(),
+            "y".to_string(),
+            "z".to_string(),
+            "w".to_string(),
+        ],
         vec![x, y, z, w],
     );
 

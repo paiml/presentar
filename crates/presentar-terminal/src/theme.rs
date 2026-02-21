@@ -41,7 +41,11 @@ impl Gradient {
     #[must_use]
     pub fn sample(&self, t: f64) -> Color {
         // Handle NaN/Inf by treating as 0.0
-        let t = if t.is_finite() { t.clamp(0.0, 1.0) } else { 0.0 };
+        let t = if t.is_finite() {
+            t.clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
 
         if self.stops.is_empty() {
             return Color::WHITE;

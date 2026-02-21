@@ -13,11 +13,7 @@ use presentar_core::Color;
 ///
 /// Format: "Network │ eth0 │ ↓1.5MB/s ↑500KB/s"
 #[must_use]
-pub fn build_network_title(
-    interface: &str,
-    rx_rate: u64,
-    tx_rate: u64,
-) -> String {
+pub fn build_network_title(interface: &str, rx_rate: u64, tx_rate: u64) -> String {
     let rx_str = format_traffic_rate(rx_rate);
     let tx_str = format_traffic_rate(tx_rate);
     format!("Network │ {} │ ↓{} ↑{}", interface, rx_str, tx_str)
@@ -507,10 +503,7 @@ mod tests {
     #[test]
     fn test_traffic_intensity_color_idle() {
         let color = traffic_intensity_color(0);
-        assert!(
-            (color.r - color.g).abs() < 0.1,
-            "Idle should be gray"
-        );
+        assert!((color.r - color.g).abs() < 0.1, "Idle should be gray");
     }
 
     #[test]
@@ -628,10 +621,7 @@ mod tests {
     #[test]
     fn test_connection_state_color_closed() {
         let color = ConnectionState::Closed.color();
-        assert!(
-            (color.r - color.g).abs() < 0.1,
-            "Closed should be gray"
-        );
+        assert!((color.r - color.g).abs() < 0.1, "Closed should be gray");
     }
 
     #[test]

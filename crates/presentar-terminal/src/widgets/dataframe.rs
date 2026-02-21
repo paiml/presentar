@@ -985,8 +985,7 @@ mod tests {
 
     #[test]
     fn test_column_with_values() {
-        let col = Column::new("Test")
-            .with_values(vec![CellValue::Int64(1), CellValue::Int64(2)]);
+        let col = Column::new("Test").with_values(vec![CellValue::Int64(1), CellValue::Int64(2)]);
         assert_eq!(col.values.len(), 2);
     }
 
@@ -1014,10 +1013,7 @@ mod tests {
 
     #[test]
     fn test_column_sparkline_from_rows() {
-        let rows = vec![
-            vec![1.0, 2.0, 3.0],
-            vec![4.0, 5.0, 6.0],
-        ];
+        let rows = vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]];
         let col = Column::sparkline_from_rows("Sparklines", rows);
         assert_eq!(col.values.len(), 2);
         assert_eq!(col.width, 12);
@@ -1071,8 +1067,7 @@ mod tests {
 
     #[test]
     fn test_dataframe_sparkline_column_invalid_source() {
-        let mut df = DataFrame::new()
-            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
+        let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
 
         // Reference non-existent column
         df.add_sparkline_column("Trend", &[0, 99]);
@@ -1105,8 +1100,7 @@ mod tests {
 
     #[test]
     fn test_dataframe_paint_small_bounds() {
-        let mut df = DataFrame::new()
-            .with_column(Column::from_f64("A", &[1.0, 2.0]));
+        let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0]));
 
         df.bounds = Rect::new(0.0, 0.0, 5.0, 2.0); // Too small
 
@@ -1145,8 +1139,7 @@ mod tests {
 
     #[test]
     fn test_dataframe_paint_with_selection() {
-        let mut df = DataFrame::new()
-            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
+        let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
         df.select_row(Some(1));
 
         let bounds = Rect::new(0.0, 0.0, 80.0, 24.0);
@@ -1159,14 +1152,13 @@ mod tests {
 
     #[test]
     fn test_dataframe_paint_with_all_cell_types() {
-        let mut df = DataFrame::new()
-            .with_column(Column::new("Types").with_values(vec![
-                CellValue::Null,
-                CellValue::Bool(true),
-                CellValue::Int64(42),
-                CellValue::Float64(3.14),
-                CellValue::String(CompactString::from("text")),
-            ]));
+        let mut df = DataFrame::new().with_column(Column::new("Types").with_values(vec![
+            CellValue::Null,
+            CellValue::Bool(true),
+            CellValue::Int64(42),
+            CellValue::Float64(3.14),
+            CellValue::String(CompactString::from("text")),
+        ]));
 
         let bounds = Rect::new(0.0, 0.0, 80.0, 24.0);
         df.layout(bounds);
@@ -1195,7 +1187,7 @@ mod tests {
         let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
         df.visible_rows = 10;
         df.scroll_to(100); // Beyond data
-        // Should clamp to valid range
+                           // Should clamp to valid range
         assert!(df.scroll_offset <= df.row_count());
     }
 
@@ -1214,8 +1206,7 @@ mod tests {
 
     #[test]
     fn test_dataframe_event_up() {
-        let mut df = DataFrame::new()
-            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
+        let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
         df.select_row(Some(2));
 
         let result = df.event(&Event::KeyDown { key: Key::Up });
@@ -1225,8 +1216,7 @@ mod tests {
 
     #[test]
     fn test_dataframe_event_down() {
-        let mut df = DataFrame::new()
-            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
+        let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
         df.select_row(Some(0));
 
         let result = df.event(&Event::KeyDown { key: Key::Down });
@@ -1236,8 +1226,7 @@ mod tests {
 
     #[test]
     fn test_dataframe_event_k() {
-        let mut df = DataFrame::new()
-            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
+        let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
         df.select_row(Some(2));
 
         let _ = df.event(&Event::KeyDown { key: Key::K });
@@ -1246,8 +1235,7 @@ mod tests {
 
     #[test]
     fn test_dataframe_event_j() {
-        let mut df = DataFrame::new()
-            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
+        let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
         df.select_row(Some(0));
 
         let _ = df.event(&Event::KeyDown { key: Key::J });
@@ -1256,8 +1244,7 @@ mod tests {
 
     #[test]
     fn test_dataframe_event_up_at_top() {
-        let mut df = DataFrame::new()
-            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
+        let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
         df.select_row(Some(0));
 
         let _ = df.event(&Event::KeyDown { key: Key::Up });
@@ -1266,8 +1253,7 @@ mod tests {
 
     #[test]
     fn test_dataframe_event_down_at_bottom() {
-        let mut df = DataFrame::new()
-            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
+        let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
         df.select_row(Some(2));
 
         let _ = df.event(&Event::KeyDown { key: Key::Down });
@@ -1276,8 +1262,7 @@ mod tests {
 
     #[test]
     fn test_dataframe_event_up_no_selection() {
-        let mut df = DataFrame::new()
-            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
+        let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
         df.select_row(None);
 
         let _ = df.event(&Event::KeyDown { key: Key::Up });
@@ -1286,8 +1271,7 @@ mod tests {
 
     #[test]
     fn test_dataframe_event_down_no_selection() {
-        let mut df = DataFrame::new()
-            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
+        let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
         df.select_row(None);
 
         let _ = df.event(&Event::KeyDown { key: Key::Down });
@@ -1296,8 +1280,10 @@ mod tests {
 
     #[test]
     fn test_dataframe_event_pageup() {
-        let mut df = DataFrame::new()
-            .with_column(Column::from_f64("A", &(0..50).map(|i| i as f64).collect::<Vec<_>>()));
+        let mut df = DataFrame::new().with_column(Column::from_f64(
+            "A",
+            &(0..50).map(|i| i as f64).collect::<Vec<_>>(),
+        ));
         df.visible_rows = 10;
         df.scroll_offset = 30;
         df.select_row(Some(35));
@@ -1308,8 +1294,10 @@ mod tests {
 
     #[test]
     fn test_dataframe_event_pagedown() {
-        let mut df = DataFrame::new()
-            .with_column(Column::from_f64("A", &(0..50).map(|i| i as f64).collect::<Vec<_>>()));
+        let mut df = DataFrame::new().with_column(Column::from_f64(
+            "A",
+            &(0..50).map(|i| i as f64).collect::<Vec<_>>(),
+        ));
         df.visible_rows = 10;
         df.scroll_offset = 0;
         df.select_row(Some(5));
@@ -1320,8 +1308,7 @@ mod tests {
 
     #[test]
     fn test_dataframe_event_other_key() {
-        let mut df = DataFrame::new()
-            .with_column(Column::from_f64("A", &[1.0, 2.0]));
+        let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0]));
         df.select_row(Some(0));
 
         let _ = df.event(&Event::KeyDown { key: Key::A });
@@ -1331,8 +1318,7 @@ mod tests {
 
     #[test]
     fn test_dataframe_event_non_keydown() {
-        let mut df = DataFrame::new()
-            .with_column(Column::from_f64("A", &[1.0, 2.0]));
+        let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0]));
         df.select_row(Some(0));
 
         let _ = df.event(&Event::FocusIn);
@@ -1344,8 +1330,8 @@ mod tests {
 
     #[test]
     fn test_dataframe_measure() {
-        let df = DataFrame::new()
-            .with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]).with_width(10));
+        let df =
+            DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]).with_width(10));
         let size = df.measure(Constraints {
             min_width: 0.0,
             max_width: 100.0,

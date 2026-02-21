@@ -173,27 +173,38 @@ impl Heatmap {
 
 /// Get heat level character for normalized value.
 fn heat_char(t: f32) -> char {
-    if t > 0.8 { '█' }
-    else if t > 0.6 { '▓' }
-    else if t > 0.4 { '▒' }
-    else if t > 0.2 { '░' }
-    else { ' ' }
+    if t > 0.8 {
+        '█'
+    } else if t > 0.6 {
+        '▓'
+    } else if t > 0.4 {
+        '▒'
+    } else if t > 0.2 {
+        '░'
+    } else {
+        ' '
+    }
 }
 
 /// Print heatmap data table.
 fn print_data_table(heatmap: &Heatmap) {
     println!(
         "\n        {}",
-        heatmap.col_labels.iter()
+        heatmap
+            .col_labels
+            .iter()
             .map(|s| format!("{:>5}", &s[..3.min(s.len())]))
-            .collect::<Vec<_>>().join(" ")
+            .collect::<Vec<_>>()
+            .join(" ")
     );
     println!("       {}", "-".repeat(heatmap.cols() * 6));
 
     for (i, row_label) in heatmap.row_labels.iter().enumerate() {
         print!("{:>6} |", &row_label[..6.min(row_label.len())]);
         for j in 0..heatmap.cols() {
-            if let Some(val) = heatmap.get(i, j) { print!("{val:>5.0} "); }
+            if let Some(val) = heatmap.get(i, j) {
+                print!("{val:>5.0} ");
+            }
         }
         println!();
     }
@@ -202,7 +213,14 @@ fn print_data_table(heatmap: &Heatmap) {
 /// Print ASCII heatmap.
 fn print_ascii_heatmap(heatmap: &Heatmap) {
     println!("\n=== ASCII Heatmap ===\n");
-    println!("       {}", heatmap.col_labels.iter().map(|s| format!("{:>3}", &s[..1])).collect::<String>());
+    println!(
+        "       {}",
+        heatmap
+            .col_labels
+            .iter()
+            .map(|s| format!("{:>3}", &s[..1]))
+            .collect::<String>()
+    );
 
     for (i, row_label) in heatmap.row_labels.iter().enumerate() {
         print!("{:>6} ", &row_label[..6.min(row_label.len())]);
@@ -219,15 +237,32 @@ fn main() {
     println!("=== Heatmap Basic ===\n");
 
     let data = vec![
-        vec![5.0, 7.0, 12.0, 18.0, 23.0, 28.0, 30.0, 29.0, 24.0, 17.0, 10.0, 6.0],
-        vec![2.0, 4.0, 10.0, 16.0, 21.0, 26.0, 29.0, 28.0, 22.0, 14.0, 7.0, 3.0],
-        vec![10.0, 12.0, 16.0, 20.0, 25.0, 30.0, 33.0, 32.0, 28.0, 22.0, 15.0, 11.0],
-        vec![-5.0, -2.0, 5.0, 12.0, 18.0, 23.0, 26.0, 24.0, 18.0, 10.0, 2.0, -3.0],
+        vec![
+            5.0, 7.0, 12.0, 18.0, 23.0, 28.0, 30.0, 29.0, 24.0, 17.0, 10.0, 6.0,
+        ],
+        vec![
+            2.0, 4.0, 10.0, 16.0, 21.0, 26.0, 29.0, 28.0, 22.0, 14.0, 7.0, 3.0,
+        ],
+        vec![
+            10.0, 12.0, 16.0, 20.0, 25.0, 30.0, 33.0, 32.0, 28.0, 22.0, 15.0, 11.0,
+        ],
+        vec![
+            -5.0, -2.0, 5.0, 12.0, 18.0, 23.0, 26.0, 24.0, 18.0, 10.0, 2.0, -3.0,
+        ],
     ];
 
-    let row_labels = vec!["Paris".to_string(), "Berlin".to_string(), "Madrid".to_string(), "Moscow".to_string()];
-    let col_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-        .iter().map(|s| (*s).to_string()).collect();
+    let row_labels = vec![
+        "Paris".to_string(),
+        "Berlin".to_string(),
+        "Madrid".to_string(),
+        "Moscow".to_string(),
+    ];
+    let col_labels = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ]
+    .iter()
+    .map(|s| (*s).to_string())
+    .collect();
 
     let heatmap = Heatmap::new(data, "Monthly Average Temperatures (°C)")
         .with_labels(row_labels, col_labels)

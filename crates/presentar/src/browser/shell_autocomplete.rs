@@ -161,7 +161,9 @@ impl ShellAutocomplete {
             }
             #[cfg(not(feature = "shell-autocomplete"))]
             0x01 | 0x02 => {
-                return Err("Zstd compression requires the 'shell-autocomplete' feature".to_string());
+                return Err(
+                    "Zstd compression requires the 'shell-autocomplete' feature".to_string()
+                );
             }
             _ => return Err(format!("Unknown compression type: 0x{:02X}", compression)),
         };

@@ -329,7 +329,10 @@ mod tests {
     #[test]
     fn test_memory_color_is_purple() {
         assert!(MEMORY_COLOR.b > 0.9, "Memory should be purple (high blue)");
-        assert!(MEMORY_COLOR.r > 0.6, "Memory should be purple (medium-high red)");
+        assert!(
+            MEMORY_COLOR.r > 0.6,
+            "Memory should be purple (medium-high red)"
+        );
         assert!(MEMORY_COLOR.g < 0.5, "Memory should be purple (low green)");
     }
 
@@ -342,14 +345,20 @@ mod tests {
     #[test]
     fn test_network_color_is_orange() {
         assert!(NETWORK_COLOR.r > 0.9, "Network should be orange (high red)");
-        assert!(NETWORK_COLOR.g > 0.5, "Network should be orange (medium green)");
+        assert!(
+            NETWORK_COLOR.g > 0.5,
+            "Network should be orange (medium green)"
+        );
         assert!(NETWORK_COLOR.b < 0.5, "Network should be orange (low blue)");
     }
 
     #[test]
     fn test_process_color_is_yellow() {
         assert!(PROCESS_COLOR.r > 0.8, "Process should be yellow (high red)");
-        assert!(PROCESS_COLOR.g > 0.6, "Process should be yellow (medium-high green)");
+        assert!(
+            PROCESS_COLOR.g > 0.6,
+            "Process should be yellow (medium-high green)"
+        );
     }
 
     #[test]
@@ -367,7 +376,10 @@ mod tests {
     #[test]
     fn test_sensors_color_is_pink() {
         assert!(SENSORS_COLOR.r > 0.9, "Sensors should be pink (high red)");
-        assert!(SENSORS_COLOR.b > 0.5, "Sensors should be pink (medium blue)");
+        assert!(
+            SENSORS_COLOR.b > 0.5,
+            "Sensors should be pink (medium blue)"
+        );
     }
 
     #[test]
@@ -378,7 +390,10 @@ mod tests {
 
     #[test]
     fn test_connections_color_is_light_blue() {
-        assert!(CONNECTIONS_COLOR.b > 0.8, "Connections should be light blue");
+        assert!(
+            CONNECTIONS_COLOR.b > 0.8,
+            "Connections should be light blue"
+        );
     }
 
     #[test]

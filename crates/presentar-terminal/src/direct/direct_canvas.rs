@@ -1056,7 +1056,8 @@ mod tests {
             // This was the bug - draw_text was setting bg to TRANSPARENT
             let cell = buffer.get(0, 1).unwrap();
             assert_eq!(
-                cell.bg, Color::BLUE,
+                cell.bg,
+                Color::BLUE,
                 "Text draw MUST preserve fill_rect background, got {:?}",
                 cell.bg
             );

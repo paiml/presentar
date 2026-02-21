@@ -503,14 +503,20 @@ mod tests {
 
     #[test]
     fn test_cached_color_is_cyan() {
-        assert!(CACHED_COLOR.b > CACHED_COLOR.r, "Cached should be cyan (more blue than red)");
+        assert!(
+            CACHED_COLOR.b > CACHED_COLOR.r,
+            "Cached should be cyan (more blue than red)"
+        );
         assert!(CACHED_COLOR.g > 0.7, "Cached should have high green");
     }
 
     #[test]
     fn test_free_color_is_blue() {
         assert!(FREE_COLOR.b > FREE_COLOR.r, "Free should be blue");
-        assert!(FREE_COLOR.b > FREE_COLOR.g, "Free should be more blue than green");
+        assert!(
+            FREE_COLOR.b > FREE_COLOR.g,
+            "Free should be more blue than green"
+        );
     }
 
     #[test]
@@ -541,13 +547,19 @@ mod tests {
     #[test]
     fn test_format_bytes_rate_infinity() {
         let result = format_bytes_rate(f64::INFINITY);
-        assert!(result.contains("inf") || result.contains("G"), "Infinity should be handled");
+        assert!(
+            result.contains("inf") || result.contains("G"),
+            "Infinity should be handled"
+        );
     }
 
     #[test]
     fn test_format_bytes_rate_nan() {
         let result = format_bytes_rate(f64::NAN);
-        assert!(result.contains("NaN") || result.contains("nan"), "NaN should be handled");
+        assert!(
+            result.contains("NaN") || result.contains("nan"),
+            "NaN should be handled"
+        );
     }
 
     #[test]

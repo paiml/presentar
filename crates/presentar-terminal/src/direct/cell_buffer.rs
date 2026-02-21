@@ -248,7 +248,10 @@ impl CellBuffer {
         debug_assert!(idx < self.cells.len(), "index out of bounds");
         let x = (idx % (self.width as usize)) as u16;
         let y = (idx / (self.width as usize)) as u16;
-        debug_assert!(x < self.width && y < self.height, "coords must be in bounds");
+        debug_assert!(
+            x < self.width && y < self.height,
+            "coords must be in bounds"
+        );
         (x, y)
     }
 

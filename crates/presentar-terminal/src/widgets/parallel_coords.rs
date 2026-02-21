@@ -348,14 +348,12 @@ mod tests {
     fn test_parallel_coords_with_alpha_clamped() {
         let columns = vec!["A".to_string()];
         let data = vec![vec![1.0]];
-        let plot = ParallelCoordinates::new(columns, data)
-            .with_alpha(2.0); // Should clamp to 1.0
+        let plot = ParallelCoordinates::new(columns, data).with_alpha(2.0); // Should clamp to 1.0
         assert!((plot.alpha - 1.0).abs() < 0.01);
 
         let columns2 = vec!["B".to_string()];
         let data2 = vec![vec![1.0]];
-        let plot2 = ParallelCoordinates::new(columns2, data2)
-            .with_alpha(-0.5); // Should clamp to 0.0
+        let plot2 = ParallelCoordinates::new(columns2, data2).with_alpha(-0.5); // Should clamp to 0.0
         assert!((plot2.alpha - 0.0).abs() < 0.01);
     }
 
@@ -363,8 +361,7 @@ mod tests {
     fn test_parallel_coords_with_labels() {
         let columns = vec!["A".to_string()];
         let data = vec![vec![1.0]];
-        let plot = ParallelCoordinates::new(columns, data)
-            .with_labels(false);
+        let plot = ParallelCoordinates::new(columns, data).with_labels(false);
         assert!(!plot.show_labels);
     }
 
@@ -427,8 +424,7 @@ mod tests {
     fn test_parallel_coords_paint_with_color_by() {
         let columns = vec!["A".to_string(), "B".to_string()];
         let data = vec![vec![1.0, 2.0], vec![3.0, 4.0], vec![5.0, 6.0]];
-        let mut plot = ParallelCoordinates::new(columns, data)
-            .with_color_by(vec![0.0, 0.5, 1.0]);
+        let mut plot = ParallelCoordinates::new(columns, data).with_color_by(vec![0.0, 0.5, 1.0]);
 
         let bounds = Rect::new(0.0, 0.0, 80.0, 20.0);
         plot.layout(bounds);
@@ -461,8 +457,8 @@ mod tests {
         let columns = vec!["A".to_string(), "B".to_string()];
         let data = vec![
             vec![1.0, 2.0],
-            vec![f64::NAN, 3.0],  // NaN value
-            vec![f64::INFINITY, f64::NEG_INFINITY],  // Infinite values
+            vec![f64::NAN, 3.0],                    // NaN value
+            vec![f64::INFINITY, f64::NEG_INFINITY], // Infinite values
         ];
         let mut plot = ParallelCoordinates::new(columns, data);
 
@@ -529,8 +525,7 @@ mod tests {
     fn test_parallel_coords_get_row_color_with_color_by() {
         let columns = vec!["A".to_string()];
         let data = vec![vec![1.0], vec![2.0], vec![3.0]];
-        let plot = ParallelCoordinates::new(columns, data)
-            .with_color_by(vec![0.0, 0.5, 1.0]);
+        let plot = ParallelCoordinates::new(columns, data).with_color_by(vec![0.0, 0.5, 1.0]);
 
         let color0 = plot.get_row_color(0); // Low value - more blue
         let color2 = plot.get_row_color(2); // High value - more red
@@ -543,11 +538,10 @@ mod tests {
     fn test_parallel_coords_get_row_color_out_of_range() {
         let columns = vec!["A".to_string()];
         let data = vec![vec![1.0]];
-        let plot = ParallelCoordinates::new(columns, data)
-            .with_color_by(vec![0.0]);
+        let plot = ParallelCoordinates::new(columns, data).with_color_by(vec![0.0]);
 
         let color = plot.get_row_color(100); // Out of range
-        // Should return default color
+                                             // Should return default color
         assert!(color.b > 0.0);
     }
 
@@ -561,8 +555,7 @@ mod tests {
 
     #[test]
     fn test_parallel_coords_verify_small_bounds() {
-        let mut plot =
-            ParallelCoordinates::new(vec!["A".to_string()], vec![vec![1.0]]);
+        let mut plot = ParallelCoordinates::new(vec!["A".to_string()], vec![vec![1.0]]);
         plot.bounds = Rect::new(0.0, 0.0, 10.0, 3.0);
         let verification = plot.verify();
         assert!(!verification.failed.is_empty());

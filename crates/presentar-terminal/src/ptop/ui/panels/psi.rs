@@ -305,7 +305,10 @@ mod tests {
     #[test]
     fn test_build_psi_title_zero() {
         let title = build_psi_title(0.0, 0.0, 0.0);
-        assert!(title.contains(" "), "Zero pressure should have space symbol");
+        assert!(
+            title.contains(" "),
+            "Zero pressure should have space symbol"
+        );
     }
 
     #[test]

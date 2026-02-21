@@ -167,7 +167,11 @@ pub(crate) fn format_memory_row(label: &str, value_gb: f64, pct: f64, bar_width:
 /// Calculate bar segment widths for stacked memory bar.
 #[must_use]
 #[allow(dead_code)]
-pub(crate) fn calculate_bar_segments(used_pct: f64, cached_pct: f64, total_width: usize) -> (usize, usize, usize) {
+pub(crate) fn calculate_bar_segments(
+    used_pct: f64,
+    cached_pct: f64,
+    total_width: usize,
+) -> (usize, usize, usize) {
     let used_chars = ((used_pct / 100.0) * total_width as f64) as usize;
     let cached_chars = ((cached_pct / 100.0) * total_width as f64) as usize;
     let free_chars = total_width.saturating_sub(used_chars + cached_chars);
@@ -196,7 +200,10 @@ pub(crate) fn psi_memory_indicator(some_pct: f64, full_pct: f64) -> (&'static st
 #[must_use]
 pub(crate) fn format_psi_line(some_pct: f64, full_pct: f64) -> String {
     let (symbol, _) = psi_memory_indicator(some_pct, full_pct);
-    format!("   PSI {symbol} {:>5.1}% some {:>5.1}% full", some_pct, full_pct)
+    format!(
+        "   PSI {symbol} {:>5.1}% some {:>5.1}% full",
+        some_pct, full_pct
+    )
 }
 
 // =============================================================================
@@ -221,8 +228,16 @@ impl ZramDisplay {
         let gb = |b: u64| b as f64 / 1024.0 / 1024.0 / 1024.0;
         let orig_gb = gb(orig_size);
         let compr_gb = gb(compr_size);
-        let ratio = if compr_gb > 0.0 { orig_gb / compr_gb } else { 0.0 };
-        Self { orig_gb, compr_gb, ratio }
+        let ratio = if compr_gb > 0.0 {
+            orig_gb / compr_gb
+        } else {
+            0.0
+        };
+        Self {
+            orig_gb,
+            compr_gb,
+            ratio,
+        }
     }
 
     /// Format size as human-readable string.
@@ -277,10 +292,10 @@ mod tests {
     #[test]
     fn test_memory_stats_conversion() {
         let stats = MemoryStats::from_bytes(
-            1024 * 1024 * 1024,      // 1 GB used
-            512 * 1024 * 1024,       // 0.5 GB cached
-            2 * 1024 * 1024 * 1024,  // 2 GB available
-            4 * 1024 * 1024 * 1024,  // 4 GB total
+            1024 * 1024 * 1024,     // 1 GB used
+            512 * 1024 * 1024,      // 0.5 GB cached
+            2 * 1024 * 1024 * 1024, // 2 GB available
+            4 * 1024 * 1024 * 1024, // 4 GB total
         );
         assert!((stats.used_gb - 1.0).abs() < 0.01);
         assert!((stats.cached_gb - 0.5).abs() < 0.01);
@@ -498,9 +513,9 @@ mod tests {
     fn test_memory_stats_cached_percent() {
         let stats = MemoryStats::from_bytes(
             0,
-            2 * 1024 * 1024 * 1024,  // 2 GB cached
+            2 * 1024 * 1024 * 1024, // 2 GB cached
             0,
-            8 * 1024 * 1024 * 1024,  // 8 GB total
+            8 * 1024 * 1024 * 1024, // 8 GB total
         );
         assert!((stats.cached_percent() - 25.0).abs() < 0.1);
     }
@@ -626,8 +641,8 @@ mod tests {
     #[test]
     fn test_zram_from_bytes() {
         let zram = ZramDisplay::from_bytes(
-            2 * 1024 * 1024 * 1024,  // 2 GB original
-            1024 * 1024 * 1024,      // 1 GB compressed
+            2 * 1024 * 1024 * 1024, // 2 GB original
+            1024 * 1024 * 1024,     // 1 GB compressed
         );
         assert!((zram.orig_gb - 2.0).abs() < 0.01);
         assert!((zram.compr_gb - 1.0).abs() < 0.01);
@@ -651,7 +666,11 @@ mod tests {
     // F-MEM-046: ZramDisplay title suffix
     #[test]
     fn test_zram_title_suffix() {
-        let zram = ZramDisplay { orig_gb: 4.0, compr_gb: 2.0, ratio: 2.0 };
+        let zram = ZramDisplay {
+            orig_gb: 4.0,
+            compr_gb: 2.0,
+            ratio: 2.0,
+        };
         let suffix = zram.title_suffix();
         assert!(suffix.contains("ZRAM:2.0x"));
     }

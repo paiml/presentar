@@ -228,7 +228,15 @@ impl ScatterPlot {
     }
 
     /// Draw Y-axis labels.
-    fn draw_y_axis(&self, canvas: &mut dyn Canvas, y_min: f64, y_max: f64, plot_y: f32, plot_height: f32, label_style: &TextStyle) {
+    fn draw_y_axis(
+        &self,
+        canvas: &mut dyn Canvas,
+        y_min: f64,
+        y_max: f64,
+        plot_y: f32,
+        plot_height: f32,
+        label_style: &TextStyle,
+    ) {
         for i in 0..=self.y_axis.ticks {
             let t = i as f64 / self.y_axis.ticks as f64;
             let y_val = y_min + (y_max - y_min) * (1.0 - t);
@@ -243,7 +251,17 @@ impl ScatterPlot {
 
     /// Draw X-axis labels.
     #[allow(clippy::too_many_arguments)]
-    fn draw_x_axis(&self, canvas: &mut dyn Canvas, x_min: f64, x_max: f64, plot_x: f32, plot_y: f32, plot_width: f32, plot_height: f32, label_style: &TextStyle) {
+    fn draw_x_axis(
+        &self,
+        canvas: &mut dyn Canvas,
+        x_min: f64,
+        x_max: f64,
+        plot_x: f32,
+        plot_y: f32,
+        plot_width: f32,
+        plot_height: f32,
+        label_style: &TextStyle,
+    ) {
         for i in 0..=self.x_axis.ticks.min(plot_width as usize / 8) {
             let t = i as f64 / self.x_axis.ticks as f64;
             let x_val = x_min + (x_max - x_min) * t;
@@ -328,7 +346,16 @@ impl Widget for ScatterPlot {
         // Draw axis labels
         if self.show_axes {
             self.draw_y_axis(canvas, y_min, y_max, plot_y, plot_height, &label_style);
-            self.draw_x_axis(canvas, x_min, x_max, plot_x, plot_y, plot_width, plot_height, &label_style);
+            self.draw_x_axis(
+                canvas,
+                x_min,
+                x_max,
+                plot_x,
+                plot_y,
+                plot_width,
+                plot_height,
+                &label_style,
+            );
         }
 
         // Draw points
@@ -740,8 +767,11 @@ mod tests {
 
     #[test]
     fn test_scatter_infinite_values() {
-        let mut scatter =
-            ScatterPlot::new(vec![(0.0, 0.0), (f64::INFINITY, f64::NEG_INFINITY), (2.0, 2.0)]);
+        let mut scatter = ScatterPlot::new(vec![
+            (0.0, 0.0),
+            (f64::INFINITY, f64::NEG_INFINITY),
+            (2.0, 2.0),
+        ]);
         let bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
         scatter.layout(bounds);
         let mut buffer = CellBuffer::new(60, 20);
@@ -759,8 +789,10 @@ mod tests {
 
     #[test]
     fn test_scatter_color_range_with_values() {
-        let scatter = ScatterPlot::new(vec![(0.0, 0.0), (1.0, 1.0), (2.0, 2.0)])
-            .with_color_by(vec![5.0, 10.0, 15.0], Gradient::two(Color::BLUE, Color::RED));
+        let scatter = ScatterPlot::new(vec![(0.0, 0.0), (1.0, 1.0), (2.0, 2.0)]).with_color_by(
+            vec![5.0, 10.0, 15.0],
+            Gradient::two(Color::BLUE, Color::RED),
+        );
         let (c_min, c_max) = scatter.color_range();
         assert_eq!(c_min, 5.0);
         assert_eq!(c_max, 15.0);

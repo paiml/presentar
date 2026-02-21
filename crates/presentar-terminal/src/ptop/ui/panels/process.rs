@@ -15,7 +15,10 @@ use presentar_core::Color;
 #[must_use]
 pub fn build_process_title(total: usize, running: usize, filter: Option<&str>) -> String {
     if let Some(f) = filter {
-        format!("Processes │ {} │ Running: {} │ filter: {}", total, running, f)
+        format!(
+            "Processes │ {} │ Running: {} │ filter: {}",
+            total, running, f
+        )
     } else {
         format!("Processes │ {} │ Running: {}", total, running)
     }
@@ -265,11 +268,11 @@ pub fn compare_processes(
             let ub = b.1.user_id().map(|u| u.to_string()).unwrap_or_default();
             ua.cmp(&ub)
         }
-        ProcessSortColumn::Cpu => a
-            .1
-            .cpu_usage()
-            .partial_cmp(&b.1.cpu_usage())
-            .unwrap_or(Ordering::Equal),
+        ProcessSortColumn::Cpu => {
+            a.1.cpu_usage()
+                .partial_cmp(&b.1.cpu_usage())
+                .unwrap_or(Ordering::Equal)
+        }
         ProcessSortColumn::Mem => a.1.memory().cmp(&b.1.memory()),
         ProcessSortColumn::Command => {
             let na = a.1.name().to_string_lossy();
@@ -427,10 +430,7 @@ mod tests {
     #[test]
     fn test_process_state_color_sleeping() {
         let color = process_state_color("S");
-        assert!(
-            (color.r - color.g).abs() < 0.1,
-            "Sleeping should be gray"
-        );
+        assert!((color.r - color.g).abs() < 0.1, "Sleeping should be gray");
     }
 
     #[test]

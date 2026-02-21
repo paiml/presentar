@@ -281,7 +281,11 @@ impl GpuProcsAnalyzer {
         if let Ok(output) = Command::new("nvidia-smi").arg("--version").output() {
             if output.status.success() {
                 // nvidia-smi is available, use it directly from PATH
-                return (Some(GpuVendor::Nvidia), Some("nvidia-smi".to_string()), None);
+                return (
+                    Some(GpuVendor::Nvidia),
+                    Some("nvidia-smi".to_string()),
+                    None,
+                );
             }
         }
 
@@ -479,10 +483,7 @@ impl GpuProcsAnalyzer {
     /// Format: gpu pid type sm mem enc dec jpg ofa command
     fn query_nvidia_pmon(&self, nvidia_smi: &str) -> Vec<GpuProcess> {
         // Run nvidia-smi pmon with single sample (-c 1)
-        let output = match Command::new(nvidia_smi)
-            .args(["pmon", "-c", "1"])
-            .output()
-        {
+        let output = match Command::new(nvidia_smi).args(["pmon", "-c", "1"]).output() {
             Ok(o) if o.status.success() => o,
             _ => return Vec::new(),
         };
@@ -560,7 +561,15 @@ impl GpuProcsAnalyzer {
 
         // Query GPU info using rocm-smi
         let output = Command::new(rocm_smi)
-            .args(["--showid", "--showtemp", "--showuse", "--showmemuse", "--showpower", "--showfan", "--json"])
+            .args([
+                "--showid",
+                "--showtemp",
+                "--showuse",
+                "--showmemuse",
+                "--showpower",
+                "--showfan",
+                "--json",
+            ])
             .output()
             .map_err(|e| AnalyzerError::IoError(format!("rocm-smi failed: {}", e)))?;
 
@@ -586,33 +595,45 @@ impl GpuProcsAnalyzer {
                         .unwrap_or(0);
 
                     let get_f32 = |key: &str| -> f32 {
-                        card_info.get(key)
+                        card_info
+                            .get(key)
                             .and_then(|v| v.as_str())
-                            .and_then(|s| s.trim_end_matches('%').trim_end_matches('W').trim_end_matches('C').parse().ok())
+                            .and_then(|s| {
+                                s.trim_end_matches('%')
+                                    .trim_end_matches('W')
+                                    .trim_end_matches('C')
+                                    .parse()
+                                    .ok()
+                            })
                             .unwrap_or(0.0)
                     };
 
                     let get_u64 = |key: &str| -> u64 {
-                        card_info.get(key)
+                        card_info
+                            .get(key)
                             .and_then(|v| v.as_str())
                             .and_then(|s| s.parse().ok())
                             .unwrap_or(0)
                     };
 
-                    let gpu_name = card_info.get("Card series")
+                    let gpu_name = card_info
+                        .get("Card series")
                         .and_then(|v| v.as_str())
                         .unwrap_or("AMD GPU")
                         .to_string();
 
                     let utilization = get_f32("GPU use (%)");
-                    let temperature = card_info.get("Temperature (Sensor junction) (C)")
+                    let temperature = card_info
+                        .get("Temperature (Sensor junction) (C)")
                         .or_else(|| card_info.get("Temperature (Sensor edge) (C)"))
                         .and_then(|v| v.as_str())
                         .and_then(|s| s.trim_end_matches('C').trim().parse().ok());
-                    let power_draw = card_info.get("Average Graphics Package Power (W)")
+                    let power_draw = card_info
+                        .get("Average Graphics Package Power (W)")
                         .and_then(|v| v.as_str())
                         .and_then(|s| s.trim_end_matches('W').trim().parse().ok());
-                    let fan_speed = card_info.get("Fan speed (%)")
+                    let fan_speed = card_info
+                        .get("Fan speed (%)")
                         .and_then(|v| v.as_str())
                         .and_then(|s| s.trim_end_matches('%').trim().parse().ok());
 
@@ -662,14 +683,16 @@ impl GpuProcsAnalyzer {
                     if let Some(obj) = json.as_object() {
                         for (pid_str, pid_info) in obj {
                             if let Ok(pid) = pid_str.parse::<u32>() {
-                                let gpu_index = pid_info.get("GPU ID")
-                                    .and_then(|v| v.as_u64())
-                                    .unwrap_or(0) as u32;
-                                let name = pid_info.get("Process name")
+                                let gpu_index =
+                                    pid_info.get("GPU ID").and_then(|v| v.as_u64()).unwrap_or(0)
+                                        as u32;
+                                let name = pid_info
+                                    .get("Process name")
                                     .and_then(|v| v.as_str())
                                     .unwrap_or("unknown")
                                     .to_string();
-                                let used_memory = pid_info.get("VRAM used")
+                                let used_memory = pid_info
+                                    .get("VRAM used")
                                     .and_then(|v| v.as_u64())
                                     .unwrap_or(0);
 
@@ -1034,10 +1057,7 @@ impl GpuProcsAnalyzer {
     /// Get Apple system memory size (PMAT-GAP-030)
     #[cfg(target_os = "macos")]
     fn get_apple_memory_size() -> u64 {
-        if let Ok(output) = Command::new("sysctl")
-            .args(["-n", "hw.memsize"])
-            .output()
-        {
+        if let Ok(output) = Command::new("sysctl").args(["-n", "hw.memsize"]).output() {
             if output.status.success() {
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 return stdout.trim().parse().unwrap_or(0);

@@ -822,7 +822,8 @@ mod tests {
 
     #[test]
     fn test_status_determination_at_min() {
-        let status = SensorHealthAnalyzer::determine_status(10.0, Some(95.0), Some(85.0), Some(10.0));
+        let status =
+            SensorHealthAnalyzer::determine_status(10.0, Some(95.0), Some(85.0), Some(10.0));
         assert_eq!(status, SensorStatus::Low);
     }
 

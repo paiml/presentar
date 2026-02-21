@@ -271,11 +271,11 @@ impl BrickType {
     #[must_use]
     pub fn default_budget_us(&self) -> u64 {
         match self {
-            Self::Collect => 100_000,  // 100ms for collection
-            Self::Render => 16_000,    // 16ms for 60fps
-            Self::Compute => 1_000,    // 1ms for compute
-            Self::Network => 500_000,  // 500ms for network
-            Self::Storage => 50_000,   // 50ms for storage
+            Self::Collect => 100_000, // 100ms for collection
+            Self::Render => 16_000,   // 16ms for 60fps
+            Self::Compute => 1_000,   // 1ms for compute
+            Self::Network => 500_000, // 500ms for network
+            Self::Storage => 50_000,  // 50ms for storage
         }
     }
 
@@ -283,11 +283,11 @@ impl BrickType {
     #[must_use]
     pub fn cv_threshold(&self) -> f64 {
         match self {
-            Self::Render => 10.0,   // Strict for render
-            Self::Compute => 15.0,  // Standard
-            Self::Collect => 25.0,  // More lenient
-            Self::Network => 50.0,  // High variance expected
-            Self::Storage => 30.0,  // Moderate variance
+            Self::Render => 10.0,  // Strict for render
+            Self::Compute => 15.0, // Standard
+            Self::Collect => 25.0, // More lenient
+            Self::Network => 50.0, // High variance expected
+            Self::Storage => 30.0, // Moderate variance
         }
     }
 }
@@ -369,7 +369,9 @@ impl BrickProfiler {
         sorted.sort_by(|a, b| {
             let a_total = a.1 .1.sum;
             let b_total = b.1 .1.sum;
-            b_total.partial_cmp(&a_total).unwrap_or(std::cmp::Ordering::Equal)
+            b_total
+                .partial_cmp(&a_total)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         for (name, (brick_type, stats)) in sorted {
@@ -377,7 +379,11 @@ impl BrickProfiler {
             let avg = stats.mean();
             let cv = stats.cv_percent();
             let status = if avg > budget as f64 { "⚠️" } else { "✓" };
-            let escalate = if self.should_escalate(name) { " [ESCALATE]" } else { "" };
+            let escalate = if self.should_escalate(name) {
+                " [ESCALATE]"
+            } else {
+                ""
+            };
 
             lines.push(format!(
                 "{status} {name} ({brick_type:?}): avg={avg:.0}μs cv={cv:.1}% n={}{escalate}",
@@ -790,11 +796,7 @@ impl<T: Default + Copy, const N: usize> RingBuffer<T, N> {
         if index >= self.len {
             return None;
         }
-        let start = if self.len < N {
-            0
-        } else {
-            self.head
-        };
+        let start = if self.len < N { 0 } else { self.head };
         let actual_idx = (start + index) % N;
         Some(&self.data[actual_idx])
     }
@@ -884,13 +886,13 @@ impl LatencyHistogram {
     /// Record a latency value in microseconds (O(1))
     pub fn record(&mut self, latency_us: u64) {
         let bin = match latency_us {
-            0..=999 => 0,        // 0-1ms
-            1000..=4999 => 1,    // 1-5ms
-            5000..=9999 => 2,    // 5-10ms
-            10000..=49999 => 3,  // 10-50ms
-            50000..=99999 => 4,  // 50-100ms
+            0..=999 => 0,         // 0-1ms
+            1000..=4999 => 1,     // 1-5ms
+            5000..=9999 => 2,     // 5-10ms
+            10000..=49999 => 3,   // 10-50ms
+            50000..=99999 => 4,   // 50-100ms
             100000..=499999 => 5, // 100-500ms
-            _ => 6,              // 500ms+
+            _ => 6,               // 500ms+
         };
         self.bins[bin] += 1;
         self.count += 1;
@@ -972,7 +974,7 @@ macro_rules! define_tracker {
         }
     ) => {
         $(#[$meta])*
-        #[derive(Debug, Clone, Copy, PartialEq, Default)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
         $vis struct $name {
             $( $(#[$fmeta])* $fvis $fname : $fty, )+
         }
@@ -1119,7 +1121,11 @@ impl RateLimiter {
     /// Create rate limiter for given frequency (Hz)
     #[must_use]
     pub fn new_hz(hz: u32) -> Self {
-        let interval_us = if hz == 0 { 1_000_000 } else { 1_000_000 / hz as u64 };
+        let interval_us = if hz == 0 {
+            1_000_000
+        } else {
+            1_000_000 / hz as u64
+        };
         Self::new(interval_us)
     }
 
@@ -1783,16 +1789,16 @@ impl PercentileTracker {
             count: 0,
             // Boundaries in microseconds: 1ms, 5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1000ms, infinity
             boundaries: [
-                1_000,    // 0-1ms
-                5_000,    // 1-5ms
-                10_000,   // 5-10ms
-                25_000,   // 10-25ms
-                50_000,   // 25-50ms
-                100_000,  // 50-100ms
-                250_000,  // 100-250ms
-                500_000,  // 250-500ms
+                1_000,     // 0-1ms
+                5_000,     // 1-5ms
+                10_000,    // 5-10ms
+                25_000,    // 10-25ms
+                50_000,    // 25-50ms
+                100_000,   // 50-100ms
+                250_000,   // 100-250ms
+                500_000,   // 250-500ms
                 1_000_000, // 500-1000ms
-                u64::MAX, // 1000ms+
+                u64::MAX,  // 1000ms+
             ],
         }
     }
@@ -3092,7 +3098,7 @@ impl IntegralTracker {
         }
 
         let dt = (now.saturating_sub(self.prev_time_us)) as f64 / 1_000_000.0; // seconds
-        // Trapezoidal rule
+                                                                               // Trapezoidal rule
         self.integral += (self.prev + value) / 2.0 * dt;
 
         self.prev = value;
@@ -3594,7 +3600,9 @@ impl SlidingMedian {
     pub fn new() -> Self {
         Self {
             buckets: [0; 10],
-            boundaries: [100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 700.0, 800.0, 900.0, 1000.0],
+            boundaries: [
+                100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 700.0, 800.0, 900.0, 1000.0,
+            ],
             count: 0,
             min: f64::MAX,
             max: f64::MIN,
@@ -3679,13 +3687,21 @@ impl SlidingMedian {
     /// Get min value
     #[must_use]
     pub fn min(&self) -> f64 {
-        if self.count == 0 { 0.0 } else { self.min }
+        if self.count == 0 {
+            0.0
+        } else {
+            self.min
+        }
     }
 
     /// Get max value
     #[must_use]
     pub fn max(&self) -> f64 {
-        if self.count == 0 { 0.0 } else { self.max }
+        if self.count == 0 {
+            0.0
+        } else {
+            self.max
+        }
     }
 
     /// Reset tracker
@@ -3997,25 +4013,41 @@ impl GaugeTracker {
     /// Get minimum value (O(1))
     #[must_use]
     pub fn min(&self) -> f64 {
-        if self.count == 0 { 0.0 } else { self.min }
+        if self.count == 0 {
+            0.0
+        } else {
+            self.min
+        }
     }
 
     /// Get maximum value (O(1))
     #[must_use]
     pub fn max(&self) -> f64 {
-        if self.count == 0 { 0.0 } else { self.max }
+        if self.count == 0 {
+            0.0
+        } else {
+            self.max
+        }
     }
 
     /// Get average value (O(1))
     #[must_use]
     pub fn average(&self) -> f64 {
-        if self.count == 0 { 0.0 } else { self.sum / self.count as f64 }
+        if self.count == 0 {
+            0.0
+        } else {
+            self.sum / self.count as f64
+        }
     }
 
     /// Get range (max - min) (O(1))
     #[must_use]
     pub fn range(&self) -> f64 {
-        if self.count == 0 { 0.0 } else { self.max - self.min }
+        if self.count == 0 {
+            0.0
+        } else {
+            self.max - self.min
+        }
     }
 
     /// Get sample count
@@ -4108,7 +4140,11 @@ impl CounterPair {
     #[must_use]
     pub fn success_rate(&self) -> f64 {
         let total = self.total();
-        if total == 0 { 100.0 } else { (self.successes as f64 / total as f64) * 100.0 }
+        if total == 0 {
+            100.0
+        } else {
+            (self.successes as f64 / total as f64) * 100.0
+        }
     }
 
     /// Get failure rate (percentage) (O(1))
@@ -5144,7 +5180,12 @@ impl Histogram2D {
     /// Get max cell count
     #[must_use]
     pub fn max_count(&self) -> u64 {
-        self.cells.iter().flat_map(|r| r.iter()).copied().max().unwrap_or(0)
+        self.cells
+            .iter()
+            .flat_map(|r| r.iter())
+            .copied()
+            .max()
+            .unwrap_or(0)
     }
 
     /// Get hotspot (cell with max count)
@@ -5215,7 +5256,10 @@ impl ReservoirSampler {
 
     /// Simple LCG random number generator
     fn next_random(&mut self) -> u64 {
-        self.rng_state = self.rng_state.wrapping_mul(6364136223846793005).wrapping_add(1);
+        self.rng_state = self
+            .rng_state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1);
         self.rng_state
     }
 
@@ -6856,7 +6900,8 @@ impl CooldownTimer {
         if self.is_ready(now_us) {
             0
         } else {
-            self.cooldown_us.saturating_sub(now_us.saturating_sub(self.last_action_us))
+            self.cooldown_us
+                .saturating_sub(now_us.saturating_sub(self.last_action_us))
         }
     }
 
@@ -7196,13 +7241,21 @@ impl DriftTracker {
     /// Get max drift (positive = late, negative = early)
     #[must_use]
     pub fn max_drift_us(&self) -> i64 {
-        if self.samples == 0 { 0 } else { self.max_drift_us }
+        if self.samples == 0 {
+            0
+        } else {
+            self.max_drift_us
+        }
     }
 
     /// Get min drift
     #[must_use]
     pub fn min_drift_us(&self) -> i64 {
-        if self.samples == 0 { 0 } else { self.min_drift_us }
+        if self.samples == 0 {
+            0
+        } else {
+            self.min_drift_us
+        }
     }
 
     /// Check if drift is within tolerance
@@ -8235,8 +8288,8 @@ mod tests {
     #[test]
     fn f_hist_003_bin_0_1ms() {
         let mut h = LatencyHistogram::new();
-        h.record(500);  // 0.5ms
-        h.record(999);  // 0.999ms
+        h.record(500); // 0.5ms
+        h.record(999); // 0.999ms
         assert_eq!(h.bin_count(0), 2);
     }
 
@@ -8244,8 +8297,8 @@ mod tests {
     #[test]
     fn f_hist_004_bin_1_5ms() {
         let mut h = LatencyHistogram::new();
-        h.record(1000);  // 1ms
-        h.record(4999);  // 4.999ms
+        h.record(1000); // 1ms
+        h.record(4999); // 4.999ms
         assert_eq!(h.bin_count(1), 2);
     }
 
@@ -8253,7 +8306,7 @@ mod tests {
     #[test]
     fn f_hist_005_bin_500ms_plus() {
         let mut h = LatencyHistogram::new();
-        h.record(500_000);  // 500ms
+        h.record(500_000); // 500ms
         h.record(1_000_000); // 1s
         assert_eq!(h.bin_count(6), 2);
     }
@@ -8338,13 +8391,13 @@ mod tests {
     #[test]
     fn f_hist_014_all_bins() {
         let mut h = LatencyHistogram::new();
-        h.record(500);      // bin 0
-        h.record(2000);     // bin 1
-        h.record(7000);     // bin 2
-        h.record(25000);    // bin 3
-        h.record(75000);    // bin 4
-        h.record(250000);   // bin 5
-        h.record(750000);   // bin 6
+        h.record(500); // bin 0
+        h.record(2000); // bin 1
+        h.record(7000); // bin 2
+        h.record(25000); // bin 3
+        h.record(75000); // bin 4
+        h.record(250000); // bin 5
+        h.record(750000); // bin 6
 
         for i in 0..7 {
             assert!(h.bin_count(i) > 0, "Bin {} should have count", i);
@@ -9167,7 +9220,7 @@ mod tests {
     #[test]
     fn f_pct_004_record_us() {
         let mut pt = PercentileTracker::new();
-        pt.record_us(500);  // 0.5ms -> bucket 0
+        pt.record_us(500); // 0.5ms -> bucket 0
         pt.record_us(3000); // 3ms -> bucket 1
         assert_eq!(pt.count(), 2);
     }
@@ -9220,7 +9273,7 @@ mod tests {
         let mut pt = PercentileTracker::new();
         // Record values in different buckets
         for _ in 0..50 {
-            pt.record_ms(2.0);  // 2ms -> bucket 1
+            pt.record_ms(2.0); // 2ms -> bucket 1
         }
         for _ in 0..50 {
             pt.record_ms(20.0); // 20ms -> bucket 3
@@ -11706,7 +11759,7 @@ mod tests {
         let mut lb = LeakyBucket::new(100.0, 10.0);
         lb.add(50.0, 1000); // Init with timestamp 1000
         lb.update_with_time(1_001_000); // 1 second later
-        // Leaked 10 tokens: 50 - 10 = 40
+                                        // Leaked 10 tokens: 50 - 10 = 40
         assert!(lb.level() < 45.0);
     }
 
@@ -11949,7 +12002,7 @@ mod tests {
         pool.acquire(100);
         pool.acquire(100); // timeout
         pool.acquire(100); // timeout
-        // 1 success, 2 timeouts = 66.67% timeout rate
+                           // 1 success, 2 timeouts = 66.67% timeout rate
         assert!(pool.timeout_rate() > 60.0);
     }
 
@@ -12689,7 +12742,7 @@ mod tests {
         let mut bt = BurstTracker::new(100.0, 100.0);
         bt.consume(50.0, 1000);
         bt.consume(0.0, 1_001_000); // 1 second later
-        // Should have refilled 100 tokens (capped at capacity)
+                                    // Should have refilled 100 tokens (capped at capacity)
         assert!(bt.tokens() > 50.0);
     }
 
@@ -13180,7 +13233,7 @@ mod tests {
     #[test]
     fn f_timeout_005_rate() {
         let mut tt = TimeoutTracker::new(1_000_000);
-        tt.record(500_000);  // Success
+        tt.record(500_000); // Success
         tt.record(1_500_000); // Timeout
         assert!((tt.timeout_rate() - 50.0).abs() < 0.01);
     }
@@ -24091,12 +24144,12 @@ impl CgroupTracker {
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            cpu_shares: 1024,      // Default shares
-            memory_limit: 0,       // No limit
+            cpu_shares: 1024, // Default shares
+            memory_limit: 0,  // No limit
             memory_usage: 0,
             cpu_throttled: 0,
             oom_events: 0,
-            io_weight: 100,        // Default weight
+            io_weight: 100, // Default weight
         }
     }
 
@@ -26913,7 +26966,9 @@ impl RcuTracker {
     /// Queue callback.
     pub fn queue_callback(&mut self) {
         self.callbacks_queued += 1;
-        let pending = self.callbacks_queued.saturating_sub(self.callbacks_executed);
+        let pending = self
+            .callbacks_queued
+            .saturating_sub(self.callbacks_executed);
         if pending > self.peak_callbacks {
             self.peak_callbacks = pending;
         }
@@ -26941,7 +26996,8 @@ impl RcuTracker {
     /// Get pending callbacks.
     #[must_use]
     pub fn pending_callbacks(&self) -> u64 {
-        self.callbacks_queued.saturating_sub(self.callbacks_executed)
+        self.callbacks_queued
+            .saturating_sub(self.callbacks_executed)
     }
 
     /// Reset counters.
@@ -31160,7 +31216,8 @@ impl AioTracker {
     /// Get pending operations.
     #[must_use]
     pub fn pending(&self) -> u64 {
-        self.submissions.saturating_sub(self.completions + self.cancels)
+        self.submissions
+            .saturating_sub(self.completions + self.cancels)
     }
 
     /// Reset counters.
@@ -33477,7 +33534,10 @@ impl AuditTracker {
     #[inline]
     #[must_use]
     pub fn for_auditd(rules: u32) -> Self {
-        Self { rules, ..Self::new() }
+        Self {
+            rules,
+            ..Self::new()
+        }
     }
 
     /// Generate audit record

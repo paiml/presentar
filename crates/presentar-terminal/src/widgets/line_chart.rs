@@ -275,45 +275,99 @@ impl LineChart {
     }
 
     /// Draw Y axis labels.
-    fn draw_y_axis(&self, canvas: &mut dyn Canvas, y_min: f64, y_max: f64, plot_y: f32, plot_height: f32) {
-        let style = TextStyle { color: Color::new(0.6, 0.6, 0.6, 1.0), ..Default::default() };
+    fn draw_y_axis(
+        &self,
+        canvas: &mut dyn Canvas,
+        y_min: f64,
+        y_max: f64,
+        plot_y: f32,
+        plot_height: f32,
+    ) {
+        let style = TextStyle {
+            color: Color::new(0.6, 0.6, 0.6, 1.0),
+            ..Default::default()
+        };
         for i in 0..=self.y_axis.ticks {
             let t = i as f64 / self.y_axis.ticks as f64;
             let y_val = y_min + (y_max - y_min) * (1.0 - t);
             let y_pos = plot_y + plot_height * t as f32;
             if y_pos >= plot_y && y_pos < plot_y + plot_height {
-                canvas.draw_text(&format!("{y_val:>5.0}"), Point::new(self.bounds.x, y_pos), &style);
+                canvas.draw_text(
+                    &format!("{y_val:>5.0}"),
+                    Point::new(self.bounds.x, y_pos),
+                    &style,
+                );
             }
         }
     }
 
     /// Draw X axis labels.
     #[allow(clippy::too_many_arguments)]
-    fn draw_x_axis(&self, canvas: &mut dyn Canvas, x_min: f64, x_max: f64, plot_x: f32, plot_y: f32, plot_width: f32, plot_height: f32) {
-        let style = TextStyle { color: Color::new(0.6, 0.6, 0.6, 1.0), ..Default::default() };
+    fn draw_x_axis(
+        &self,
+        canvas: &mut dyn Canvas,
+        x_min: f64,
+        x_max: f64,
+        plot_x: f32,
+        plot_y: f32,
+        plot_width: f32,
+        plot_height: f32,
+    ) {
+        let style = TextStyle {
+            color: Color::new(0.6, 0.6, 0.6, 1.0),
+            ..Default::default()
+        };
         for i in 0..=self.x_axis.ticks.min(plot_width as usize / 8) {
             let t = i as f64 / self.x_axis.ticks as f64;
             let x_val = x_min + (x_max - x_min) * t;
             let x_pos = plot_x + plot_width * t as f32;
             if x_pos >= plot_x && x_pos < plot_x + plot_width - 4.0 {
-                canvas.draw_text(&format!("{x_val:.0}"), Point::new(x_pos, plot_y + plot_height), &style);
+                canvas.draw_text(
+                    &format!("{x_val:.0}"),
+                    Point::new(x_pos, plot_y + plot_height),
+                    &style,
+                );
             }
         }
     }
 
     /// Draw the legend.
-    fn draw_legend(&self, canvas: &mut dyn Canvas, plot_x: f32, plot_y: f32, plot_width: f32, plot_height: f32) {
-        if matches!(self.legend, LegendPosition::None) || self.series.is_empty() { return; }
-        let legend_width = self.series.iter().map(|s| s.name.len() + 3).max().unwrap_or(10) as f32;
+    fn draw_legend(
+        &self,
+        canvas: &mut dyn Canvas,
+        plot_x: f32,
+        plot_y: f32,
+        plot_width: f32,
+        plot_height: f32,
+    ) {
+        if matches!(self.legend, LegendPosition::None) || self.series.is_empty() {
+            return;
+        }
+        let legend_width = self
+            .series
+            .iter()
+            .map(|s| s.name.len() + 3)
+            .max()
+            .unwrap_or(10) as f32;
         let (lx, ly) = match self.legend {
             LegendPosition::TopRight => (plot_x + plot_width - legend_width, plot_y),
             LegendPosition::TopLeft => (plot_x, plot_y),
-            LegendPosition::BottomRight => (plot_x + plot_width - legend_width, plot_y + plot_height - self.series.len() as f32),
+            LegendPosition::BottomRight => (
+                plot_x + plot_width - legend_width,
+                plot_y + plot_height - self.series.len() as f32,
+            ),
             LegendPosition::BottomLeft => (plot_x, plot_y + plot_height - self.series.len() as f32),
             LegendPosition::None => return,
         };
         for (i, series) in self.series.iter().enumerate() {
-            canvas.draw_text(&format!("─ {}", series.name), Point::new(lx, ly + i as f32), &TextStyle { color: series.color, ..Default::default() });
+            canvas.draw_text(
+                &format!("─ {}", series.name),
+                Point::new(lx, ly + i as f32),
+                &TextStyle {
+                    color: series.color,
+                    ..Default::default()
+                },
+            );
         }
     }
 }
@@ -344,7 +398,9 @@ impl Widget for LineChart {
     }
 
     fn paint(&self, canvas: &mut dyn Canvas) {
-        if self.bounds.width < 10.0 || self.bounds.height < 5.0 { return; }
+        if self.bounds.width < 10.0 || self.bounds.height < 5.0 {
+            return;
+        }
 
         let (x_min, x_max) = self.x_range();
         let (y_min, y_max) = self.y_range();
@@ -352,16 +408,28 @@ impl Widget for LineChart {
         let plot_y = self.bounds.y;
         let plot_width = self.bounds.width - self.margin_left;
         let plot_height = self.bounds.height - self.margin_bottom;
-        if plot_width <= 0.0 || plot_height <= 0.0 { return; }
+        if plot_width <= 0.0 || plot_height <= 0.0 {
+            return;
+        }
 
         // Draw axes
         self.draw_y_axis(canvas, y_min, y_max, plot_y, plot_height);
-        self.draw_x_axis(canvas, x_min, x_max, plot_x, plot_y, plot_width, plot_height);
+        self.draw_x_axis(
+            canvas,
+            x_min,
+            x_max,
+            plot_x,
+            plot_y,
+            plot_width,
+            plot_height,
+        );
 
         // Draw each series
         for series in &self.series {
             let simplified = self.simplify(&series.data);
-            let style = TextStyle { color: series.color, ..Default::default()
+            let style = TextStyle {
+                color: series.color,
+                ..Default::default()
             };
 
             // Create a grid to track which cells have been drawn
@@ -534,7 +602,11 @@ fn is_in_grid_bounds(x: isize, y: isize, cols: isize, rows: isize) -> bool {
 /// Compute step direction for line drawing (-1 or 1).
 #[inline]
 fn line_step(from: usize, to: usize) -> isize {
-    if from < to { 1 } else { -1 }
+    if from < to {
+        1
+    } else {
+        -1
+    }
 }
 
 /// Draw a line between two points using Bresenham's algorithm.
@@ -562,8 +634,14 @@ fn draw_line(grid: &mut [Vec<bool>], x0: usize, y0: usize, x1: usize, y1: usize)
         }
 
         let e2 = 2 * err;
-        if e2 >= dy { err += dy; x += sx; }
-        if e2 <= dx { err += dx; y += sy; }
+        if e2 >= dy {
+            err += dy;
+            x += sx;
+        }
+        if e2 <= dx {
+            err += dx;
+            y += sy;
+        }
     }
 }
 
@@ -981,11 +1059,7 @@ mod tests {
     fn test_line_chart_infinite_values() {
         let mut chart = LineChart::new().add_series(
             "test",
-            vec![
-                (0.0, 0.0),
-                (f64::INFINITY, f64::NEG_INFINITY),
-                (2.0, 2.0),
-            ],
+            vec![(0.0, 0.0), (f64::INFINITY, f64::NEG_INFINITY), (2.0, 2.0)],
             Color::RED,
         );
         let bounds = Rect::new(0.0, 0.0, 80.0, 24.0);
@@ -998,11 +1072,8 @@ mod tests {
 
     #[test]
     fn test_line_chart_too_small() {
-        let mut chart = LineChart::new().add_series(
-            "test",
-            vec![(0.0, 0.0), (1.0, 1.0)],
-            Color::RED,
-        );
+        let mut chart =
+            LineChart::new().add_series("test", vec![(0.0, 0.0), (1.0, 1.0)], Color::RED);
         // Too small - should early return from paint
         let bounds = Rect::new(0.0, 0.0, 5.0, 2.0);
         chart.layout(bounds);

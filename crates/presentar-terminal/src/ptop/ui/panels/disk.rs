@@ -403,10 +403,7 @@ mod tests {
     #[test]
     fn test_io_activity_color_idle() {
         let color = io_activity_color(0);
-        assert!(
-            (color.r - color.g).abs() < 0.1,
-            "Idle should be gray"
-        );
+        assert!((color.r - color.g).abs() < 0.1, "Idle should be gray");
     }
 
     #[test]
@@ -418,7 +415,10 @@ mod tests {
     #[test]
     fn test_io_activity_color_moderate() {
         let color = io_activity_color(50 * 1024 * 1024);
-        assert!(color.r > 0.9 && color.g > 0.7, "Moderate I/O should be yellow");
+        assert!(
+            color.r > 0.9 && color.g > 0.7,
+            "Moderate I/O should be yellow"
+        );
     }
 
     #[test]

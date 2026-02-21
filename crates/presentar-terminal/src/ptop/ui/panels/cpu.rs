@@ -170,7 +170,10 @@ mod tests {
     #[test]
     fn test_build_cpu_title_no_boost() {
         let title = build_cpu_title(50.0, 4, 2.4, false, 0, 1.0, false);
-        assert!(!title.contains("⚡"), "Not boosting should not show lightning");
+        assert!(
+            !title.contains("⚡"),
+            "Not boosting should not show lightning"
+        );
     }
 
     #[test]
@@ -324,7 +327,10 @@ mod tests {
     fn test_load_color_boundary_07() {
         let below = load_color(0.69);
         let above = load_color(0.71);
-        assert!(below.g > above.g, "0.7 is boundary between green and yellow");
+        assert!(
+            below.g > above.g,
+            "0.7 is boundary between green and yellow"
+        );
     }
 
     #[test]

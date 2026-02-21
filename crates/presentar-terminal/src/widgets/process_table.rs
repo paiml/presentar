@@ -656,9 +656,9 @@ impl ProcessTable {
     /// Get nice value color based on priority.
     fn nice_color(ni: i32) -> Color {
         match ni.cmp(&0) {
-            Ordering::Less => Color::new(0.3, 0.9, 0.9, 1.0),    // Cyan - high priority
+            Ordering::Less => Color::new(0.3, 0.9, 0.9, 1.0), // Cyan - high priority
             Ordering::Greater => Color::new(0.6, 0.6, 0.6, 1.0), // Gray - low priority
-            Ordering::Equal => Color::new(0.8, 0.8, 0.8, 1.0),   // White - normal
+            Ordering::Equal => Color::new(0.8, 0.8, 0.8, 1.0), // White - normal
         }
     }
 
@@ -685,13 +685,32 @@ impl ProcessTable {
             header.push_str(sep);
             let _ = write!(header, "{:w$}", "USER", w = cols.user);
         }
-        if self.show_oom { header.push_str(sep); let _ = write!(header, "{:>3}", "OOM"); }
-        if self.show_nice { header.push_str(sep); let _ = write!(header, "{:>3}", "NI"); }
-        if self.show_threads { header.push_str(sep); let _ = write!(header, "{:>3}", "TH"); }
+        if self.show_oom {
+            header.push_str(sep);
+            let _ = write!(header, "{:>3}", "OOM");
+        }
+        if self.show_nice {
+            header.push_str(sep);
+            let _ = write!(header, "{:>3}", "NI");
+        }
+        if self.show_threads {
+            header.push_str(sep);
+            let _ = write!(header, "{:>3}", "TH");
+        }
         header.push_str(sep);
-        let _ = write!(header, "{:>w$}", if self.compact { "C%" } else { "CPU%" }, w = cols.cpu);
+        let _ = write!(
+            header,
+            "{:>w$}",
+            if self.compact { "C%" } else { "CPU%" },
+            w = cols.cpu
+        );
         header.push_str(sep);
-        let _ = write!(header, "{:>w$}", if self.compact { "M%" } else { "MEM%" }, w = cols.mem);
+        let _ = write!(
+            header,
+            "{:>w$}",
+            if self.compact { "M%" } else { "MEM%" },
+            w = cols.mem
+        );
         header.push_str(sep);
         let _ = write!(header, "{:w$}", "COMMAND", w = cols.cmd);
         header
@@ -699,50 +718,108 @@ impl ProcessTable {
 
     /// Draw a single process row.
     #[allow(clippy::too_many_arguments)]
-    fn draw_row(&self, canvas: &mut dyn Canvas, proc: &ProcessEntry, y: f32, is_selected: bool, cols: &ColumnWidths, default_style: &TextStyle) {
+    fn draw_row(
+        &self,
+        canvas: &mut dyn Canvas,
+        proc: &ProcessEntry,
+        y: f32,
+        is_selected: bool,
+        cols: &ColumnWidths,
+        default_style: &TextStyle,
+    ) {
         let sep = if self.compact { 1.0 } else { 3.0 };
         let mut x = self.bounds.x;
         // PID
-        canvas.draw_text(&format!("{:>w$}", proc.pid, w = cols.pid), Point::new(x, y), default_style);
+        canvas.draw_text(
+            &format!("{:>w$}", proc.pid, w = cols.pid),
+            Point::new(x, y),
+            default_style,
+        );
         x += cols.pid as f32;
         // State or User
         if self.compact {
             x += 1.0;
-            canvas.draw_text(&proc.state.char().to_string(), Point::new(x, y), &TextStyle { color: proc.state.color(), ..Default::default() });
+            canvas.draw_text(
+                &proc.state.char().to_string(),
+                Point::new(x, y),
+                &TextStyle {
+                    color: proc.state.color(),
+                    ..Default::default()
+                },
+            );
             x += 1.0;
         } else {
             x += sep;
-            canvas.draw_text(&Self::truncate(&proc.user, cols.user), Point::new(x, y), default_style);
+            canvas.draw_text(
+                &Self::truncate(&proc.user, cols.user),
+                Point::new(x, y),
+                default_style,
+            );
             x += cols.user as f32;
         }
         // OOM
         if self.show_oom {
             x += sep;
             let oom = proc.oom_score.unwrap_or(0);
-            canvas.draw_text(&format!("{oom:>3}"), Point::new(x, y), &TextStyle { color: Self::oom_color(oom), ..Default::default() });
+            canvas.draw_text(
+                &format!("{oom:>3}"),
+                Point::new(x, y),
+                &TextStyle {
+                    color: Self::oom_color(oom),
+                    ..Default::default()
+                },
+            );
             x += 3.0;
         }
         // Nice
         if self.show_nice {
             x += sep;
             let ni = proc.nice.unwrap_or(0);
-            canvas.draw_text(&format!("{ni:>3}"), Point::new(x, y), &TextStyle { color: Self::nice_color(ni), ..Default::default() });
+            canvas.draw_text(
+                &format!("{ni:>3}"),
+                Point::new(x, y),
+                &TextStyle {
+                    color: Self::nice_color(ni),
+                    ..Default::default()
+                },
+            );
             x += 3.0;
         }
         // Threads
         if self.show_threads {
             x += sep;
             let th = proc.threads.unwrap_or(1);
-            canvas.draw_text(&format!("{th:>3}"), Point::new(x, y), &TextStyle { color: Self::threads_color(th), ..Default::default() });
+            canvas.draw_text(
+                &format!("{th:>3}"),
+                Point::new(x, y),
+                &TextStyle {
+                    color: Self::threads_color(th),
+                    ..Default::default()
+                },
+            );
             x += 3.0;
         }
         // CPU
         x += sep;
-        canvas.draw_text(&format!("{:>5.1}%", proc.cpu_percent), Point::new(x, y), &TextStyle { color: self.cpu_gradient.for_percent(proc.cpu_percent as f64), ..Default::default() });
+        canvas.draw_text(
+            &format!("{:>5.1}%", proc.cpu_percent),
+            Point::new(x, y),
+            &TextStyle {
+                color: self.cpu_gradient.for_percent(proc.cpu_percent as f64),
+                ..Default::default()
+            },
+        );
         x += cols.cpu as f32;
         // Mem
         x += sep;
-        canvas.draw_text(&format!("{:>5.1}%", proc.mem_percent), Point::new(x, y), &TextStyle { color: self.mem_gradient.for_percent(proc.mem_percent as f64), ..Default::default() });
+        canvas.draw_text(
+            &format!("{:>5.1}%", proc.mem_percent),
+            Point::new(x, y),
+            &TextStyle {
+                color: self.mem_gradient.for_percent(proc.mem_percent as f64),
+                ..Default::default()
+            },
+        );
         x += cols.mem as f32;
         // Command
         x += sep;
@@ -751,13 +828,44 @@ impl ProcessTable {
 
     /// Draw command column with optional tree prefix.
     #[allow(clippy::too_many_arguments)]
-    fn draw_command(&self, canvas: &mut dyn Canvas, proc: &ProcessEntry, x: f32, y: f32, is_selected: bool, cmd_w: usize, default_style: &TextStyle) {
-        let cmd = if self.show_cmdline { proc.cmdline.as_deref().unwrap_or(&proc.command) } else { &proc.command };
-        let cmd_style = if is_selected { TextStyle { color: Color::new(1.0, 1.0, 1.0, 1.0), ..Default::default() } } else { default_style.clone() };
+    fn draw_command(
+        &self,
+        canvas: &mut dyn Canvas,
+        proc: &ProcessEntry,
+        x: f32,
+        y: f32,
+        is_selected: bool,
+        cmd_w: usize,
+        default_style: &TextStyle,
+    ) {
+        let cmd = if self.show_cmdline {
+            proc.cmdline.as_deref().unwrap_or(&proc.command)
+        } else {
+            &proc.command
+        };
+        let cmd_style = if is_selected {
+            TextStyle {
+                color: Color::new(1.0, 1.0, 1.0, 1.0),
+                ..Default::default()
+            }
+        } else {
+            default_style.clone()
+        };
         if self.tree_view && !proc.tree_prefix.is_empty() {
             let prefix_len = proc.tree_prefix.chars().count();
-            canvas.draw_text(&proc.tree_prefix, Point::new(x, y), &TextStyle { color: Color::new(0.4, 0.5, 0.6, 1.0), ..Default::default() });
-            canvas.draw_text(&Self::truncate(cmd, cmd_w.saturating_sub(prefix_len)), Point::new(x + prefix_len as f32, y), &cmd_style);
+            canvas.draw_text(
+                &proc.tree_prefix,
+                Point::new(x, y),
+                &TextStyle {
+                    color: Color::new(0.4, 0.5, 0.6, 1.0),
+                    ..Default::default()
+                },
+            );
+            canvas.draw_text(
+                &Self::truncate(cmd, cmd_w.saturating_sub(prefix_len)),
+                Point::new(x + prefix_len as f32, y),
+                &cmd_style,
+            );
         } else {
             canvas.draw_text(&Self::truncate(cmd, cmd_w), Point::new(x, y), &cmd_style);
         }
@@ -797,7 +905,19 @@ impl ColumnWidths {
         let num_seps = if table.compact { 3 } else { 4 } + extra_cols;
         let fixed = pid + state + oom + nice + threads + user + cpu + mem + sep * num_seps;
         let cmd = width.saturating_sub(fixed);
-        Self { pid, state, oom, nice, threads, user, cpu, mem, sep, cmd, num_seps }
+        Self {
+            pid,
+            state,
+            oom,
+            nice,
+            threads,
+            user,
+            cpu,
+            mem,
+            sep,
+            cmd,
+            num_seps,
+        }
     }
 }
 
@@ -873,33 +993,68 @@ impl Widget for ProcessTable {
     fn paint(&self, canvas: &mut dyn Canvas) {
         let width = self.bounds.width as usize;
         let height = self.bounds.height as usize;
-        if width == 0 || height == 0 { return; }
+        if width == 0 || height == 0 {
+            return;
+        }
 
         let cols = ColumnWidths::new(self, width);
 
         // Draw header
-        let header_style = TextStyle { color: Color::new(0.0, 1.0, 1.0, 1.0), weight: presentar_core::FontWeight::Bold, ..Default::default() };
-        canvas.draw_text(&self.build_header(&cols), Point::new(self.bounds.x, self.bounds.y), &header_style);
+        let header_style = TextStyle {
+            color: Color::new(0.0, 1.0, 1.0, 1.0),
+            weight: presentar_core::FontWeight::Bold,
+            ..Default::default()
+        };
+        canvas.draw_text(
+            &self.build_header(&cols),
+            Point::new(self.bounds.x, self.bounds.y),
+            &header_style,
+        );
 
         // Draw separator
         if height > 1 {
-            canvas.draw_text(&"─".repeat(width), Point::new(self.bounds.x, self.bounds.y + 1.0), &TextStyle { color: Color::new(0.3, 0.3, 0.4, 1.0), ..Default::default() });
+            canvas.draw_text(
+                &"─".repeat(width),
+                Point::new(self.bounds.x, self.bounds.y + 1.0),
+                &TextStyle {
+                    color: Color::new(0.3, 0.3, 0.4, 1.0),
+                    ..Default::default()
+                },
+            );
         }
 
         // Draw rows
-        let default_style = TextStyle { color: Color::new(0.8, 0.8, 0.8, 1.0), ..Default::default() };
+        let default_style = TextStyle {
+            color: Color::new(0.8, 0.8, 0.8, 1.0),
+            ..Default::default()
+        };
         let visible_rows = height.saturating_sub(2);
-        for (i, proc_idx) in (self.scroll_offset..self.processes.len()).take(visible_rows).enumerate() {
+        for (i, proc_idx) in (self.scroll_offset..self.processes.len())
+            .take(visible_rows)
+            .enumerate()
+        {
             let proc = &self.processes[proc_idx];
             let y = self.bounds.y + 2.0 + i as f32;
             let is_selected = proc_idx == self.selected;
-            if is_selected { canvas.fill_rect(Rect::new(self.bounds.x, y, self.bounds.width, 1.0), Color::new(0.2, 0.2, 0.4, 0.5)); }
+            if is_selected {
+                canvas.fill_rect(
+                    Rect::new(self.bounds.x, y, self.bounds.width, 1.0),
+                    Color::new(0.2, 0.2, 0.4, 0.5),
+                );
+            }
             self.draw_row(canvas, proc, y, is_selected, &cols, &default_style);
         }
 
         // Empty state
         if self.processes.is_empty() && height > 2 {
-            canvas.draw_text("No processes", Point::new(self.bounds.x + 1.0, self.bounds.y + 2.0), &TextStyle { color: Color::new(0.5, 0.5, 0.5, 1.0), ..Default::default() });
+            canvas.draw_text(
+                "No processes",
+                Point::new(self.bounds.x + 1.0, self.bounds.y + 2.0),
+                &TextStyle {
+                    color: Color::new(0.5, 0.5, 0.5, 1.0),
+                    ..Default::default()
+                },
+            );
         }
     }
 

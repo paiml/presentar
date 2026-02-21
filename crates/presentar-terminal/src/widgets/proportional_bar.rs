@@ -233,10 +233,15 @@ impl Brick for ProportionalBar {
     }
 
     fn to_html(&self) -> String {
-        let mut html = String::from("<div class=\"proportional-bar\" style=\"display:flex;height:1em;\">");
+        let mut html =
+            String::from("<div class=\"proportional-bar\" style=\"display:flex;height:1em;\">");
         let total: f64 = self.segments.iter().map(|s| s.value).sum();
         for seg in &self.segments {
-            let pct = if total > 0.0 { (seg.value / total) * 100.0 } else { 0.0 };
+            let pct = if total > 0.0 {
+                (seg.value / total) * 100.0
+            } else {
+                0.0
+            };
             let Color { r, g, b, .. } = seg.color;
             html.push_str(&format!(
                 "<div style=\"width:{pct:.1}%;background:rgb({r},{g},{b})\"></div>"

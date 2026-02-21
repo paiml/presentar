@@ -168,7 +168,10 @@ mod tests {
         let mut rng2 = SeededRng::new(2);
         let val1 = rng1.next_u64();
         let val2 = rng2.next_u64();
-        assert_ne!(val1, val2, "Different seeds should produce different sequences");
+        assert_ne!(
+            val1, val2,
+            "Different seeds should produce different sequences"
+        );
     }
 
     #[test]

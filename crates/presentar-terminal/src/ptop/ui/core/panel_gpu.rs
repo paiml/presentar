@@ -33,7 +33,7 @@ pub(crate) fn gpu_proc_badge(process_type: &str) -> (&'static str, Color) {
     match process_type.to_uppercase().as_str() {
         "C" | "COMPUTE" => ("C", Color::new(0.0, 0.8, 1.0, 1.0)), // Cyan
         "G" | "GRAPHICS" => ("G", Color::new(1.0, 0.0, 1.0, 1.0)), // Magenta
-        _ => ("?", Color::new(0.5, 0.5, 0.5, 1.0)), // Gray
+        _ => ("?", Color::new(0.5, 0.5, 0.5, 1.0)),               // Gray
     }
 }
 
@@ -106,7 +106,12 @@ pub(crate) fn truncate_name(name: &str, max_len: usize) -> &str {
 
 /// Build GPU panel title with optional temperature and power.
 #[must_use]
-pub(crate) fn build_gpu_title(name: &str, temp: Option<u32>, power: Option<f32>, minimal: bool) -> String {
+pub(crate) fn build_gpu_title(
+    name: &str,
+    temp: Option<u32>,
+    power: Option<f32>,
+    minimal: bool,
+) -> String {
     if minimal {
         name.to_string()
     } else {
@@ -176,7 +181,10 @@ mod tests {
     fn test_proc_badge_unknown() {
         let (badge, color) = gpu_proc_badge("unknown");
         assert_eq!(badge, "?");
-        assert!(color.r == color.g && color.g == color.b, "Unknown should be gray");
+        assert!(
+            color.r == color.g && color.g == color.b,
+            "Unknown should be gray"
+        );
     }
 
     // F-GPU-009: Power color is gray

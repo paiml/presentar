@@ -172,7 +172,7 @@ fn capture_command(cmd: &str, width: u16, height: u16) -> io::Result<CellBuffer>
 fn skip_ansi_escape(chars: &mut std::iter::Peekable<std::str::Chars>) {
     if chars.peek() == Some(&'[') {
         chars.next(); // consume '['
-        // Skip parameters and command
+                      // Skip parameters and command
         while let Some(&c) = chars.peek() {
             chars.next();
             if c.is_ascii_alphabetic() {

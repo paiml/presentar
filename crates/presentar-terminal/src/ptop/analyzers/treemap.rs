@@ -491,7 +491,12 @@ mod tests {
 
     #[test]
     fn test_treemap_node_clone() {
-        let node = TreemapNode::file("test.txt".to_string(), PathBuf::from("/tmp/test.txt"), 1024, 0);
+        let node = TreemapNode::file(
+            "test.txt".to_string(),
+            PathBuf::from("/tmp/test.txt"),
+            1024,
+            0,
+        );
         let cloned = node.clone();
         assert_eq!(cloned.name, node.name);
         assert_eq!(cloned.size, node.size);
@@ -582,7 +587,12 @@ mod tests {
     #[test]
     fn test_treemap_node_children() {
         let mut parent = TreemapNode::directory("parent".to_string(), PathBuf::from("/parent"), 0);
-        let child = TreemapNode::file("child.txt".to_string(), PathBuf::from("/parent/child.txt"), 100, 1);
+        let child = TreemapNode::file(
+            "child.txt".to_string(),
+            PathBuf::from("/parent/child.txt"),
+            100,
+            1,
+        );
         parent.children.push(child);
 
         assert_eq!(parent.children.len(), 1);

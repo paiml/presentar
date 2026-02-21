@@ -127,7 +127,11 @@ fn main() -> io::Result<()> {
 
     setup_terminal(&mut stdout)?;
 
-    let color_mode = if cli.no_color { ColorMode::Mono } else { ColorMode::TrueColor };
+    let color_mode = if cli.no_color {
+        ColorMode::Mono
+    } else {
+        ColorMode::TrueColor
+    };
     let result = run_app(&mut stdout, app, cli.refresh, color_mode, cli.qa_timing);
 
     cleanup_terminal(&mut stdout)?;
@@ -187,7 +191,10 @@ fn spawn_metrics_collector(
         while bg_running_thread.load(Ordering::Relaxed) {
             let collect_start = Instant::now();
             let snapshot = collector.collect();
-            collect_time_bg.store(collect_start.elapsed().as_micros() as u64, Ordering::Relaxed);
+            collect_time_bg.store(
+                collect_start.elapsed().as_micros() as u64,
+                Ordering::Relaxed,
+            );
             if tx.send(snapshot).is_err() {
                 break;
             }
@@ -235,17 +242,21 @@ fn render_frame(
 }
 
 /// Report QA timing stats to stderr.
-fn report_qa_stats(
-    input_times: &[u64],
-    render_times: &[u64],
-    collect_time_us: u64,
-) {
-    let avg = |v: &[u64]| if v.is_empty() { 0 } else { v.iter().sum::<u64>() / v.len() as u64 };
+fn report_qa_stats(input_times: &[u64], render_times: &[u64], collect_time_us: u64) {
+    let avg = |v: &[u64]| {
+        if v.is_empty() {
+            0
+        } else {
+            v.iter().sum::<u64>() / v.len() as u64
+        }
+    };
     let max = |v: &[u64]| v.iter().max().copied().unwrap_or(0);
     eprintln!(
         "[QA] input: avg={}us max={}us | render: avg={}us max={}us | collect: {}us (NO LOCK)",
-        avg(input_times), max(input_times),
-        avg(render_times), max(render_times),
+        avg(input_times),
+        max(input_times),
+        avg(render_times),
+        max(render_times),
         collect_time_us
     );
 }
@@ -293,7 +304,10 @@ impl QaTimingState {
 }
 
 /// Apply all pending snapshots from the metrics collector.
-fn apply_pending_snapshots(rx: &std::sync::mpsc::Receiver<presentar_terminal::ptop::MetricsSnapshot>, app: &mut App) {
+fn apply_pending_snapshots(
+    rx: &std::sync::mpsc::Receiver<presentar_terminal::ptop::MetricsSnapshot>,
+    app: &mut App,
+) {
     while let Ok(snapshot) = rx.try_recv() {
         app.apply_snapshot(snapshot);
     }
@@ -375,7 +389,12 @@ fn run_app(
         track_frame_time(&mut frame_times, render_start.elapsed());
         app.update_frame_stats(&frame_times);
 
-        record_qa_render(qa_timing, &mut qa_state, render_start.elapsed(), collect_time_us.load(Ordering::Relaxed));
+        record_qa_render(
+            qa_timing,
+            &mut qa_state,
+            render_start.elapsed(),
+            collect_time_us.load(Ordering::Relaxed),
+        );
     }
 
     Ok(())

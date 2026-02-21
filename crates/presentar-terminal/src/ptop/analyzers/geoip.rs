@@ -54,7 +54,11 @@ struct IpRange {
 
 impl IpRange {
     const fn new(start: u32, end: u32, country: CountryInfo) -> Self {
-        Self { start, end, country }
+        Self {
+            start,
+            end,
+            country,
+        }
     }
 
     fn contains(&self, ip: u32) -> bool {
@@ -74,7 +78,11 @@ fn ip_to_u32(ip: Ipv4Addr) -> u32 {
 /// Convert CIDR notation to range
 const fn cidr_to_range(a: u8, b: u8, c: u8, d: u8, prefix: u8) -> (u32, u32) {
     let ip = ((a as u32) << 24) | ((b as u32) << 16) | ((c as u32) << 8) | (d as u32);
-    let mask = if prefix == 0 { 0 } else { !0u32 << (32 - prefix) };
+    let mask = if prefix == 0 {
+        0
+    } else {
+        !0u32 << (32 - prefix)
+    };
     let start = ip & mask;
     let end = start | !mask;
     (start, end)
@@ -98,110 +106,93 @@ fn get_ranges() -> Vec<IpRange> {
         range!(172, 16, 0, 0, 12, PRIVATE),  // Private Class B
         range!(192, 168, 0, 0, 16, PRIVATE), // Private Class C
         range!(169, 254, 0, 0, 16, LOCAL),   // Link-local
-
         // === Major Cloud Providers ===
         // Cloudflare (anycast, but HQ in US)
-        range!(104, 16, 0, 0, 13, US),   // Cloudflare
-        range!(104, 24, 0, 0, 14, US),   // Cloudflare
-        range!(172, 64, 0, 0, 13, US),   // Cloudflare
-        range!(173, 245, 48, 0, 20, US), // Cloudflare
-        range!(141, 101, 64, 0, 18, US), // Cloudflare
+        range!(104, 16, 0, 0, 13, US),    // Cloudflare
+        range!(104, 24, 0, 0, 14, US),    // Cloudflare
+        range!(172, 64, 0, 0, 13, US),    // Cloudflare
+        range!(173, 245, 48, 0, 20, US),  // Cloudflare
+        range!(141, 101, 64, 0, 18, US),  // Cloudflare
         range!(108, 162, 192, 0, 18, US), // Cloudflare
-        range!(162, 158, 0, 0, 15, US),  // Cloudflare
-
+        range!(162, 158, 0, 0, 15, US),   // Cloudflare
         // Google (US-based, global anycast)
-        range!(8, 8, 8, 0, 24, US),       // Google DNS
-        range!(8, 8, 4, 0, 24, US),       // Google DNS
-        range!(34, 64, 0, 0, 10, US),     // Google Cloud
-        range!(34, 128, 0, 0, 10, US),    // Google Cloud
-        range!(35, 184, 0, 0, 13, US),    // Google Cloud
-        range!(35, 192, 0, 0, 12, US),    // Google Cloud
-        range!(142, 250, 0, 0, 15, US),   // Google
-        range!(172, 217, 0, 0, 16, US),   // Google
-        range!(216, 58, 192, 0, 19, US),  // Google
-
+        range!(8, 8, 8, 0, 24, US),      // Google DNS
+        range!(8, 8, 4, 0, 24, US),      // Google DNS
+        range!(34, 64, 0, 0, 10, US),    // Google Cloud
+        range!(34, 128, 0, 0, 10, US),   // Google Cloud
+        range!(35, 184, 0, 0, 13, US),   // Google Cloud
+        range!(35, 192, 0, 0, 12, US),   // Google Cloud
+        range!(142, 250, 0, 0, 15, US),  // Google
+        range!(172, 217, 0, 0, 16, US),  // Google
+        range!(216, 58, 192, 0, 19, US), // Google
         // Amazon AWS - Regional ranges (specific before general)
-        range!(3, 248, 0, 0, 13, IE),     // AWS eu-west-1 (Ireland)
-        range!(52, 16, 0, 0, 12, IE),     // AWS eu-west-1
-        range!(54, 72, 0, 0, 13, IE),     // AWS eu-west-1
-        range!(3, 64, 0, 0, 10, DE),      // AWS eu-central-1 (Frankfurt)
-        range!(52, 28, 0, 0, 14, DE),     // AWS eu-central-1
-        range!(13, 112, 0, 0, 12, JP),    // AWS ap-northeast-1 (Tokyo)
-        range!(52, 68, 0, 0, 14, JP),     // AWS ap-northeast-1
-        range!(13, 228, 0, 0, 14, SG),    // AWS ap-southeast-1 (Singapore)
-        range!(52, 74, 0, 0, 15, SG),     // AWS ap-southeast-1
-        range!(13, 236, 0, 0, 14, AU),    // AWS ap-southeast-2 (Sydney)
-        range!(52, 62, 0, 0, 15, AU),     // AWS ap-southeast-2
-
+        range!(3, 248, 0, 0, 13, IE),  // AWS eu-west-1 (Ireland)
+        range!(52, 16, 0, 0, 12, IE),  // AWS eu-west-1
+        range!(54, 72, 0, 0, 13, IE),  // AWS eu-west-1
+        range!(3, 64, 0, 0, 10, DE),   // AWS eu-central-1 (Frankfurt)
+        range!(52, 28, 0, 0, 14, DE),  // AWS eu-central-1
+        range!(13, 112, 0, 0, 12, JP), // AWS ap-northeast-1 (Tokyo)
+        range!(52, 68, 0, 0, 14, JP),  // AWS ap-northeast-1
+        range!(13, 228, 0, 0, 14, SG), // AWS ap-southeast-1 (Singapore)
+        range!(52, 74, 0, 0, 15, SG),  // AWS ap-southeast-1
+        range!(13, 236, 0, 0, 14, AU), // AWS ap-southeast-2 (Sydney)
+        range!(52, 62, 0, 0, 15, AU),  // AWS ap-southeast-2
         // AWS US (general fallback)
-        range!(3, 0, 0, 0, 8, US),        // AWS (mostly US)
-        range!(18, 128, 0, 0, 9, US),     // AWS US
-        range!(52, 0, 0, 0, 8, US),       // AWS (global fallback)
-        range!(54, 64, 0, 0, 10, US),     // AWS US
-
+        range!(3, 0, 0, 0, 8, US),    // AWS (mostly US)
+        range!(18, 128, 0, 0, 9, US), // AWS US
+        range!(52, 0, 0, 0, 8, US),   // AWS (global fallback)
+        range!(54, 64, 0, 0, 10, US), // AWS US
         // Microsoft Azure
-        range!(13, 64, 0, 0, 10, US),     // Azure US
-        range!(20, 0, 0, 0, 8, US),       // Azure (global, mostly US)
-        range!(40, 64, 0, 0, 10, US),     // Azure US
-        range!(104, 40, 0, 0, 13, US),    // Azure US
-
+        range!(13, 64, 0, 0, 10, US),  // Azure US
+        range!(20, 0, 0, 0, 8, US),    // Azure (global, mostly US)
+        range!(40, 64, 0, 0, 10, US),  // Azure US
+        range!(104, 40, 0, 0, 13, US), // Azure US
         // DigitalOcean
-        range!(45, 55, 0, 0, 16, US),     // DigitalOcean
-        range!(104, 131, 0, 0, 16, US),   // DigitalOcean
-        range!(138, 197, 0, 0, 16, US),   // DigitalOcean
-        range!(159, 65, 0, 0, 16, US),    // DigitalOcean
-
+        range!(45, 55, 0, 0, 16, US),   // DigitalOcean
+        range!(104, 131, 0, 0, 16, US), // DigitalOcean
+        range!(138, 197, 0, 0, 16, US), // DigitalOcean
+        range!(159, 65, 0, 0, 16, US),  // DigitalOcean
         // Hetzner (Germany)
-        range!(5, 9, 0, 0, 16, DE),       // Hetzner
-        range!(78, 46, 0, 0, 15, DE),     // Hetzner
-        range!(88, 198, 0, 0, 15, DE),    // Hetzner
-        range!(136, 243, 0, 0, 16, DE),   // Hetzner
-        range!(148, 251, 0, 0, 16, DE),   // Hetzner
-        range!(176, 9, 0, 0, 16, DE),     // Hetzner
-
+        range!(5, 9, 0, 0, 16, DE),     // Hetzner
+        range!(78, 46, 0, 0, 15, DE),   // Hetzner
+        range!(88, 198, 0, 0, 15, DE),  // Hetzner
+        range!(136, 243, 0, 0, 16, DE), // Hetzner
+        range!(148, 251, 0, 0, 16, DE), // Hetzner
+        range!(176, 9, 0, 0, 16, DE),   // Hetzner
         // OVH (France)
-        range!(5, 39, 0, 0, 16, FR),      // OVH
-        range!(51, 68, 0, 0, 14, FR),     // OVH
-        range!(51, 77, 0, 0, 16, FR),     // OVH
-        range!(51, 91, 0, 0, 16, FR),     // OVH
-        range!(91, 121, 0, 0, 16, FR),    // OVH
-        range!(137, 74, 0, 0, 15, FR),    // OVH
-
+        range!(5, 39, 0, 0, 16, FR),   // OVH
+        range!(51, 68, 0, 0, 14, FR),  // OVH
+        range!(51, 77, 0, 0, 16, FR),  // OVH
+        range!(51, 91, 0, 0, 16, FR),  // OVH
+        range!(91, 121, 0, 0, 16, FR), // OVH
+        range!(137, 74, 0, 0, 15, FR), // OVH
         // Linode
-        range!(45, 33, 0, 0, 16, US),     // Linode
-        range!(139, 162, 0, 0, 15, US),   // Linode
-        range!(172, 104, 0, 0, 13, US),   // Linode
-
+        range!(45, 33, 0, 0, 16, US),   // Linode
+        range!(139, 162, 0, 0, 15, US), // Linode
+        range!(172, 104, 0, 0, 13, US), // Linode
         // === Major Services ===
         // Apple
-        range!(17, 0, 0, 0, 8, US),       // Apple (entire /8)
-
+        range!(17, 0, 0, 0, 8, US), // Apple (entire /8)
         // Microsoft (non-Azure)
-        range!(40, 76, 0, 0, 14, US),     // Microsoft
-        range!(65, 52, 0, 0, 14, US),     // Microsoft
-        range!(131, 107, 0, 0, 16, US),   // Microsoft
-
+        range!(40, 76, 0, 0, 14, US),   // Microsoft
+        range!(65, 52, 0, 0, 14, US),   // Microsoft
+        range!(131, 107, 0, 0, 16, US), // Microsoft
         // GitHub (Microsoft)
         range!(140, 82, 112, 0, 20, US),  // GitHub
         range!(143, 55, 64, 0, 20, US),   // GitHub
         range!(185, 199, 108, 0, 22, US), // GitHub
-
         // Akamai
-        range!(23, 0, 0, 0, 11, US),      // Akamai
-        range!(23, 32, 0, 0, 11, US),     // Akamai
-        range!(104, 64, 0, 0, 10, US),    // Akamai
-
+        range!(23, 0, 0, 0, 11, US),   // Akamai
+        range!(23, 32, 0, 0, 11, US),  // Akamai
+        range!(104, 64, 0, 0, 10, US), // Akamai
         // Fastly
-        range!(151, 101, 0, 0, 16, US),   // Fastly
-        range!(199, 232, 0, 0, 16, US),   // Fastly
-
+        range!(151, 101, 0, 0, 16, US), // Fastly
+        range!(199, 232, 0, 0, 16, US), // Fastly
         // Netflix
-        range!(45, 57, 0, 0, 16, US),     // Netflix
-        range!(108, 175, 32, 0, 19, US),  // Netflix
-
+        range!(45, 57, 0, 0, 16, US),    // Netflix
+        range!(108, 175, 32, 0, 19, US), // Netflix
         // Discord
         range!(162, 159, 128, 0, 17, US), // Discord
-
         // === Major Country Allocations (rough) ===
         // China (APNIC)
         range!(1, 0, 0, 0, 8, CN),
@@ -237,7 +228,6 @@ fn get_ranges() -> Vec<IpRange> {
         range!(221, 0, 0, 0, 8, CN),
         range!(222, 0, 0, 0, 8, CN),
         range!(223, 0, 0, 0, 8, CN),
-
         // Russia
         range!(5, 8, 0, 0, 13, RU),
         range!(31, 40, 0, 0, 13, RU),
@@ -249,7 +239,6 @@ fn get_ranges() -> Vec<IpRange> {
         range!(87, 224, 0, 0, 12, RU),
         range!(89, 208, 0, 0, 12, RU),
         range!(93, 80, 0, 0, 12, RU),
-
         // India
         range!(14, 139, 0, 0, 16, IN),
         range!(14, 192, 0, 0, 11, IN),
@@ -264,7 +253,6 @@ fn get_ranges() -> Vec<IpRange> {
         range!(106, 0, 0, 0, 10, IN),
         range!(117, 192, 0, 0, 10, IN),
         range!(182, 64, 0, 0, 10, IN),
-
         // Brazil
         range!(131, 0, 0, 0, 10, BR),
         range!(177, 0, 0, 0, 8, BR),
@@ -274,7 +262,6 @@ fn get_ranges() -> Vec<IpRange> {
         range!(191, 0, 0, 0, 9, BR),
         range!(200, 0, 0, 0, 9, BR),
         range!(201, 0, 0, 0, 8, BR),
-
         // South Korea
         range!(1, 208, 0, 0, 12, KR),
         range!(14, 32, 0, 0, 11, KR),
@@ -285,7 +272,6 @@ fn get_ranges() -> Vec<IpRange> {
         range!(118, 32, 0, 0, 11, KR),
         range!(121, 128, 0, 0, 10, KR),
         range!(175, 192, 0, 0, 10, KR),
-
         // Japan
         range!(42, 96, 0, 0, 11, JP),
         range!(49, 212, 0, 0, 14, JP),
@@ -301,7 +287,6 @@ fn get_ranges() -> Vec<IpRange> {
         range!(202, 0, 0, 0, 11, JP),
         range!(210, 128, 0, 0, 10, JP),
         range!(211, 0, 0, 0, 10, JP),
-
         // UK
         range!(2, 16, 0, 0, 14, GB),
         range!(5, 64, 0, 0, 11, GB),
@@ -318,7 +303,6 @@ fn get_ranges() -> Vec<IpRange> {
         range!(86, 0, 0, 0, 11, GB),
         range!(193, 0, 0, 0, 10, GB),
         range!(194, 0, 0, 0, 10, GB),
-
         // Germany
         range!(2, 200, 0, 0, 13, DE),
         range!(31, 0, 0, 0, 12, DE),
@@ -333,7 +317,6 @@ fn get_ranges() -> Vec<IpRange> {
         range!(84, 128, 0, 0, 10, DE),
         range!(85, 128, 0, 0, 10, DE),
         range!(217, 0, 0, 0, 10, DE),
-
         // France
         range!(2, 0, 0, 0, 11, FR),
         range!(5, 32, 0, 0, 11, FR),
@@ -350,7 +333,6 @@ fn get_ranges() -> Vec<IpRange> {
         range!(88, 0, 0, 0, 11, FR),
         range!(89, 64, 0, 0, 10, FR),
         range!(90, 0, 0, 0, 11, FR),
-
         // Netherlands
         range!(2, 56, 0, 0, 13, NL),
         range!(31, 160, 0, 0, 11, NL),

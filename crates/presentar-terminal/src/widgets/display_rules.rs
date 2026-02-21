@@ -377,7 +377,12 @@ fn simple_truncate(s: &str, width: usize) -> String {
 }
 
 /// Build truncated command from components.
-fn build_command_with_args(basename: &str, first_arg: &str, key_args: &[&str], width: usize) -> String {
+fn build_command_with_args(
+    basename: &str,
+    first_arg: &str,
+    key_args: &[&str],
+    width: usize,
+) -> String {
     let ellipsis = " … ";
     let base_len = basename.chars().count();
 
@@ -456,7 +461,9 @@ fn truncate_command(cmd: &str, width: usize) -> Cow<'_, str> {
     let args = &parts[1..];
     let key_args = extract_key_args(args);
     let first_arg = args.first().copied().unwrap_or("");
-    Cow::Owned(build_command_with_args(basename, first_arg, &key_args, width))
+    Cow::Owned(build_command_with_args(
+        basename, first_arg, &key_args, width,
+    ))
 }
 
 // =============================================================================
@@ -1630,13 +1637,21 @@ mod display_rules_tests {
 
     #[test]
     fn test_truncate_path_strategy() {
-        let result = truncate("/home/user/very/long/path/file.txt", 20, TruncateStrategy::Path);
+        let result = truncate(
+            "/home/user/very/long/path/file.txt",
+            20,
+            TruncateStrategy::Path,
+        );
         assert!(result.chars().count() <= 20);
     }
 
     #[test]
     fn test_truncate_command_strategy() {
-        let result = truncate("command --with-very-long-argument", 15, TruncateStrategy::Command);
+        let result = truncate(
+            "command --with-very-long-argument",
+            15,
+            TruncateStrategy::Command,
+        );
         assert!(result.chars().count() <= 15);
     }
 
@@ -1723,7 +1738,10 @@ mod display_rules_tests {
 
     #[test]
     fn test_terminal_size_clone() {
-        let size = TerminalSize { width: 120, height: 40 };
+        let size = TerminalSize {
+            width: 120,
+            height: 40,
+        };
         let cloned = size.clone();
         assert_eq!(cloned.width, 120);
         assert_eq!(cloned.height, 40);

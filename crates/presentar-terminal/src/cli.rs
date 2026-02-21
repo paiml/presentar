@@ -166,12 +166,7 @@ impl Spinner {
             }
 
             // Clean up: clear line and show cursor
-            let _ = execute!(
-                stdout,
-                MoveToColumn(0),
-                Clear(ClearType::CurrentLine),
-                Show
-            );
+            let _ = execute!(stdout, MoveToColumn(0), Clear(ClearType::CurrentLine), Show);
             let _ = stdout.flush();
         });
 

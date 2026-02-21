@@ -141,7 +141,9 @@ fn compute_comparison_metrics(
 /// Check if result passes the configured thresholds.
 #[inline]
 fn check_thresholds(cld: f64, avg_delta_e: f64, ssim: f64, config: &TuiComparisonConfig) -> bool {
-    cld < config.cld_threshold && avg_delta_e < config.delta_e_threshold && ssim > config.ssim_threshold
+    cld < config.cld_threshold
+        && avg_delta_e < config.delta_e_threshold
+        && ssim > config.ssim_threshold
 }
 
 /// Compare two TUI cell buffers
@@ -191,7 +193,8 @@ pub fn compare_tui(
     }
 
     // Calculate metrics using helpers
-    let (cld, avg_delta_e) = compute_comparison_metrics(char_diff_count, total_delta_e, total_cells);
+    let (cld, avg_delta_e) =
+        compute_comparison_metrics(char_diff_count, total_delta_e, total_cells);
     let ssim = calculate_ssim(reference, target);
     let passed = check_thresholds(cld, avg_delta_e, ssim, config);
 

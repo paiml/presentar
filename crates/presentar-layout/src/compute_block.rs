@@ -505,13 +505,19 @@ impl std::error::Error for CompositorError {}
 /// Compute width allocation for a single constraint.
 /// Returns the allocated width (0 for Fill which is handled in phase 2).
 #[inline]
-fn compute_constraint_width(hint: &SizeHint, constraint: FlexConstraint, available_width: u16) -> u16 {
+fn compute_constraint_width(
+    hint: &SizeHint,
+    constraint: FlexConstraint,
+    available_width: u16,
+) -> u16 {
     match constraint {
         FlexConstraint::Fixed(size) => size,
         FlexConstraint::Min(size) => size.max(hint.min.width),
         FlexConstraint::Max(size) => size.min(hint.preferred.width),
         FlexConstraint::Percentage(pct) => (available_width as u32 * pct as u32 / 100) as u16,
-        FlexConstraint::Ratio(num, den) if den > 0 => (available_width as u32 * num as u32 / den as u32) as u16,
+        FlexConstraint::Ratio(num, den) if den > 0 => {
+            (available_width as u32 * num as u32 / den as u32) as u16
+        }
         FlexConstraint::Ratio(_, _) => 0,
         FlexConstraint::Content => hint.preferred.width,
         FlexConstraint::Fill(_) => 0, // Handle in phase 2
@@ -526,11 +532,21 @@ fn distribute_fill_space(
     remaining_width: u16,
     count: usize,
 ) {
-    let fill_total: u16 = constraints.iter().take(count)
-        .filter_map(|c| if let FlexConstraint::Fill(w) = c { Some(*w) } else { None })
+    let fill_total: u16 = constraints
+        .iter()
+        .take(count)
+        .filter_map(|c| {
+            if let FlexConstraint::Fill(w) = c {
+                Some(*w)
+            } else {
+                None
+            }
+        })
         .sum();
 
-    if fill_total == 0 || remaining_width == 0 { return; }
+    if fill_total == 0 || remaining_width == 0 {
+        return;
+    }
 
     for (i, constraint) in constraints.iter().enumerate().take(count) {
         if let FlexConstraint::Fill(weight) = constraint {

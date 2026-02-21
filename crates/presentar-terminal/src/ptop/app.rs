@@ -18,7 +18,10 @@ use super::ui::{read_gpu_info, GpuInfo};
 #[cfg(target_os = "linux")]
 fn parse_meminfo_line(line: &str) -> Option<u64> {
     let parts: Vec<&str> = line.split_whitespace().collect();
-    parts.get(1).and_then(|s| s.parse::<u64>().ok()).map(|kb| kb * 1024)
+    parts
+        .get(1)
+        .and_then(|s| s.parse::<u64>().ok())
+        .map(|kb| kb * 1024)
 }
 
 /// Check if line is the Cached memory line (not SwapCached).
@@ -34,7 +37,8 @@ fn read_cached_memory() -> u64 {
     std::fs::read_to_string("/proc/meminfo")
         .ok()
         .and_then(|contents| {
-            contents.lines()
+            contents
+                .lines()
                 .find(|line| is_cached_line(line))
                 .and_then(parse_meminfo_line)
         })
@@ -52,10 +56,7 @@ fn read_cached_memory() -> u64 {
 /// AMD Threadripper/EPYC: cores are distributed across CCDs.
 /// Each CCD gets an equal share of cores.
 #[cfg(target_os = "linux")]
-fn map_ccd_temps_to_cores(
-    ccd_temps: &std::collections::HashMap<String, f32>,
-    temps: &mut [f32],
-) {
+fn map_ccd_temps_to_cores(ccd_temps: &std::collections::HashMap<String, f32>, temps: &mut [f32]) {
     let core_count = temps.len();
     let cores_per_ccd = core_count / 4;
 
@@ -95,7 +96,10 @@ fn read_amd_temps(path: &std::path::Path, temps: &mut [f32]) -> bool {
         let label_path = path.join(format!("temp{i}_label"));
         let input_path = path.join(format!("temp{i}_input"));
 
-        if let (Ok(label), Ok(input)) = (fs::read_to_string(&label_path), fs::read_to_string(&input_path)) {
+        if let (Ok(label), Ok(input)) = (
+            fs::read_to_string(&label_path),
+            fs::read_to_string(&input_path),
+        ) {
             let label = label.trim().to_string();
             if let Ok(millidegrees) = input.trim().parse::<i64>() {
                 ccd_temps.insert(label, millidegrees as f32 / 1000.0);
@@ -1075,7 +1079,10 @@ impl App {
     pub fn collect_metrics(&mut self) {
         self.frame_id += 1;
         // Provability: frame_id is monotonically increasing
-        debug_assert!(self.frame_id > 0, "frame_id must be positive after increment");
+        debug_assert!(
+            self.frame_id > 0,
+            "frame_id must be positive after increment"
+        );
 
         // Check for config hot reload (SPEC-024 v5.2.0 Feature A)
         // Only check every 10 frames to reduce filesystem overhead
@@ -1232,7 +1239,11 @@ impl App {
         // Copy analyzer data to snapshot fields for render access (sync mode parity with async mode)
         // This ensures render code can use the same snapshot_* fields in both modes.
         self.snapshot_psi = self.analyzers.psi.as_ref().map(|p| p.data().clone());
-        self.snapshot_connections = self.analyzers.connections.as_ref().map(|c| c.data().clone());
+        self.snapshot_connections = self
+            .analyzers
+            .connections
+            .as_ref()
+            .map(|c| c.data().clone());
         self.snapshot_treemap = self.analyzers.treemap.as_ref().map(|t| t.data().clone());
         self.snapshot_sensor_health = self
             .analyzers
@@ -1344,7 +1355,10 @@ impl App {
                 .as_ref()
                 .map_or(0, |s| s.sensors.len()),
             gpu_available: self.gpu_info.is_some(),
-            battery_available: self.analyzers.battery_data().map_or(false, |b| !b.batteries.is_empty()),
+            battery_available: self
+                .analyzers
+                .battery_data()
+                .map_or(false, |b| !b.batteries.is_empty()),
             treemap_ready: self
                 .snapshot_treemap
                 .as_ref()
@@ -1467,7 +1481,9 @@ impl App {
                 self.filter.clear();
             }
             KeyCode::Enter => self.show_filter_input = false,
-            KeyCode::Backspace => { self.filter.pop(); }
+            KeyCode::Backspace => {
+                self.filter.pop();
+            }
             KeyCode::Char(c) => self.filter.push(c),
             _ => {}
         }
@@ -1561,7 +1577,8 @@ impl App {
             self.sort_descending = !self.sort_descending;
         } else {
             self.sort_column = new_col;
-            self.sort_descending = matches!(new_col, ProcessSortColumn::Cpu | ProcessSortColumn::Mem);
+            self.sort_descending =
+                matches!(new_col, ProcessSortColumn::Cpu | ProcessSortColumn::Mem);
         }
     }
 
@@ -1862,24 +1879,33 @@ impl App {
             }
             Ok(result) => {
                 let stderr = String::from_utf8_lossy(&result.stderr);
-                (false, format!(
-                    "Failed to send SIG{} to {}: {}",
-                    signal.name(),
-                    pid,
-                    stderr.trim()
-                ))
+                (
+                    false,
+                    format!(
+                        "Failed to send SIG{} to {}: {}",
+                        signal.name(),
+                        pid,
+                        stderr.trim()
+                    ),
+                )
             }
-            Err(e) => (false, format!("Failed to send SIG{} to {}: {}", signal.name(), pid, e)),
+            Err(e) => (
+                false,
+                format!("Failed to send SIG{} to {}: {}", signal.name(), pid, e),
+            ),
         }
     }
 
     #[cfg(not(unix))]
     fn send_signal(&self, pid: u32, signal: SignalType) -> (bool, String) {
-        (false, format!(
-            "Signal {} not supported on this platform (PID {})",
-            signal.name(),
-            pid
-        ))
+        (
+            false,
+            format!(
+                "Signal {} not supported on this platform (PID {})",
+                signal.name(),
+                pid
+            ),
+        )
     }
 
     /// Get sorted and filtered processes

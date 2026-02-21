@@ -63,7 +63,13 @@ fn test_process_table_renders_visible_text() {
 
     for cell in cells {
         if contains_pid_digit(&cell.symbol) {
-            assert!(is_visible_color(&cell.fg), "PID digit should not be black, got: ({}, {}, {})", cell.fg.r, cell.fg.g, cell.fg.b);
+            assert!(
+                is_visible_color(&cell.fg),
+                "PID digit should not be black, got: ({}, {}, {})",
+                cell.fg.r,
+                cell.fg.g,
+                cell.fg.b
+            );
             found_pid = true;
         }
     }

@@ -559,15 +559,39 @@ mod tests {
     #[test]
     fn test_delta_e_category_boundary_values() {
         // Exactly at boundaries
-        assert_eq!(DeltaECategory::from_delta_e(0.0), DeltaECategory::Imperceptible);
-        assert_eq!(DeltaECategory::from_delta_e(0.9999), DeltaECategory::Imperceptible);
-        assert_eq!(DeltaECategory::from_delta_e(1.0), DeltaECategory::BarelyPerceptible);
-        assert_eq!(DeltaECategory::from_delta_e(1.9999), DeltaECategory::BarelyPerceptible);
-        assert_eq!(DeltaECategory::from_delta_e(2.0), DeltaECategory::Noticeable);
-        assert_eq!(DeltaECategory::from_delta_e(9.9999), DeltaECategory::Noticeable);
+        assert_eq!(
+            DeltaECategory::from_delta_e(0.0),
+            DeltaECategory::Imperceptible
+        );
+        assert_eq!(
+            DeltaECategory::from_delta_e(0.9999),
+            DeltaECategory::Imperceptible
+        );
+        assert_eq!(
+            DeltaECategory::from_delta_e(1.0),
+            DeltaECategory::BarelyPerceptible
+        );
+        assert_eq!(
+            DeltaECategory::from_delta_e(1.9999),
+            DeltaECategory::BarelyPerceptible
+        );
+        assert_eq!(
+            DeltaECategory::from_delta_e(2.0),
+            DeltaECategory::Noticeable
+        );
+        assert_eq!(
+            DeltaECategory::from_delta_e(9.9999),
+            DeltaECategory::Noticeable
+        );
         assert_eq!(DeltaECategory::from_delta_e(10.0), DeltaECategory::Distinct);
-        assert_eq!(DeltaECategory::from_delta_e(49.9999), DeltaECategory::Distinct);
-        assert_eq!(DeltaECategory::from_delta_e(50.0), DeltaECategory::VeryDistinct);
+        assert_eq!(
+            DeltaECategory::from_delta_e(49.9999),
+            DeltaECategory::Distinct
+        );
+        assert_eq!(
+            DeltaECategory::from_delta_e(50.0),
+            DeltaECategory::VeryDistinct
+        );
     }
 
     #[test]

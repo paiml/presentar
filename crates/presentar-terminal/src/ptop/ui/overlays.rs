@@ -57,7 +57,14 @@ pub fn draw_help_overlay(canvas: &mut DirectTerminalCanvas<'_>, w: f32, h: f32) 
     let py = (h - popup_h) / 2.0;
 
     // Clear background
-    draw_popup_background(canvas, px, py, popup_w, popup_h, Color::new(0.1, 0.1, 0.15, 1.0));
+    draw_popup_background(
+        canvas,
+        px,
+        py,
+        popup_w,
+        popup_h,
+        Color::new(0.1, 0.1, 0.15, 1.0),
+    );
 
     // Border
     let mut border = Border::new()
@@ -124,7 +131,14 @@ pub fn draw_signal_dialog(app: &App, canvas: &mut DirectTerminalCanvas<'_>, w: f
     let py = (h - popup_h) / 2.0;
 
     // Clear background
-    draw_popup_background(canvas, px, py, popup_w, popup_h, Color::new(0.15, 0.1, 0.1, 1.0));
+    draw_popup_background(
+        canvas,
+        px,
+        py,
+        popup_w,
+        popup_h,
+        Color::new(0.15, 0.1, 0.1, 1.0),
+    );
 
     // Border
     let border_color = signal_border_color(signal);
@@ -269,7 +283,8 @@ pub fn draw_status_bar(app: &App, canvas: &mut DirectTerminalCanvas<'_>, w: f32,
     };
 
     // Draw hints with bracket highlighting
-    let x_end = draw_hints_with_brackets(canvas, hints, y, &bracket_style, &key_style, &action_style);
+    let x_end =
+        draw_hints_with_brackets(canvas, hints, y, &bracket_style, &key_style, &action_style);
 
     // Focus indicator on right
     if let Some(panel) = app.focused_panel {
@@ -385,13 +400,19 @@ mod tests {
 
     #[test]
     fn test_help_lines_has_sections() {
-        let sections: Vec<_> = HELP_LINES.iter().filter(|(_, _, is_sect)| *is_sect).collect();
+        let sections: Vec<_> = HELP_LINES
+            .iter()
+            .filter(|(_, _, is_sect)| *is_sect)
+            .collect();
         assert_eq!(sections.len(), 5, "Should have 5 section headers");
     }
 
     #[test]
     fn test_help_lines_has_keybindings() {
-        let keybindings: Vec<_> = HELP_LINES.iter().filter(|(_, _, is_sect)| !*is_sect).collect();
+        let keybindings: Vec<_> = HELP_LINES
+            .iter()
+            .filter(|(_, _, is_sect)| !*is_sect)
+            .collect();
         assert_eq!(keybindings.len(), 18, "Should have 18 keybindings");
     }
 
@@ -543,7 +564,10 @@ mod tests {
 
     #[test]
     fn test_truncate_name_very_long() {
-        assert_eq!(truncate_name("this is a very long process name", 15), "this is a ve...");
+        assert_eq!(
+            truncate_name("this is a very long process name", 15),
+            "this is a ve..."
+        );
     }
 
     #[test]
@@ -653,7 +677,13 @@ mod tests {
 
     #[test]
     fn test_signal_colors_have_valid_alpha() {
-        for signal in [SignalType::Kill, SignalType::Term, SignalType::Stop, SignalType::Hup, SignalType::Int] {
+        for signal in [
+            SignalType::Kill,
+            SignalType::Term,
+            SignalType::Stop,
+            SignalType::Hup,
+            SignalType::Int,
+        ] {
             let color = signal_border_color(signal);
             assert_eq!(color.a, 1.0, "Signal {:?} should have full alpha", signal);
         }
@@ -661,7 +691,13 @@ mod tests {
 
     #[test]
     fn test_signal_colors_in_valid_range() {
-        for signal in [SignalType::Kill, SignalType::Term, SignalType::Stop, SignalType::Hup, SignalType::Int] {
+        for signal in [
+            SignalType::Kill,
+            SignalType::Term,
+            SignalType::Stop,
+            SignalType::Hup,
+            SignalType::Int,
+        ] {
             let color = signal_border_color(signal);
             assert!(color.r >= 0.0 && color.r <= 1.0);
             assert!(color.g >= 0.0 && color.g <= 1.0);

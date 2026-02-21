@@ -46,10 +46,10 @@ impl ThrashingSeverity {
     #[must_use]
     pub fn color(&self) -> Color {
         match self {
-            Self::None => Color::new(0.3, 0.9, 0.5, 1.0),    // Green
-            Self::Mild => Color::new(1.0, 0.9, 0.3, 1.0),    // Yellow
+            Self::None => Color::new(0.3, 0.9, 0.5, 1.0), // Green
+            Self::Mild => Color::new(1.0, 0.9, 0.3, 1.0), // Yellow
             Self::Moderate => Color::new(1.0, 0.6, 0.2, 1.0), // Orange
-            Self::Severe => Color::new(1.0, 0.3, 0.3, 1.0),   // Red
+            Self::Severe => Color::new(1.0, 0.3, 0.3, 1.0), // Red
         }
     }
 
@@ -994,13 +994,19 @@ mod tests {
     #[test]
     fn test_detect_thrashing_with_psi_mild() {
         let data = SwapData::default();
-        assert_eq!(data.detect_thrashing_with_psi(15.0), ThrashingSeverity::Mild);
+        assert_eq!(
+            data.detect_thrashing_with_psi(15.0),
+            ThrashingSeverity::Mild
+        );
     }
 
     #[test]
     fn test_detect_thrashing_with_psi_severe() {
         let data = SwapData::default();
-        assert_eq!(data.detect_thrashing_with_psi(60.0), ThrashingSeverity::Severe);
+        assert_eq!(
+            data.detect_thrashing_with_psi(60.0),
+            ThrashingSeverity::Severe
+        );
     }
 
     // =========================================================================

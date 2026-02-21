@@ -166,11 +166,11 @@ pub fn battery_percent_color(percent: f64, is_charging: bool) -> Color {
 #[must_use]
 pub fn battery_state_color(state: BatteryState) -> Color {
     match state {
-        BatteryState::Charging => Color::new(0.3, 0.9, 0.5, 1.0),    // Green
-        BatteryState::Full => Color::new(0.4, 0.8, 1.0, 1.0),        // Blue
+        BatteryState::Charging => Color::new(0.3, 0.9, 0.5, 1.0), // Green
+        BatteryState::Full => Color::new(0.4, 0.8, 1.0, 1.0),     // Blue
         BatteryState::Discharging => Color::new(1.0, 0.8, 0.3, 1.0), // Yellow
-        BatteryState::Unknown => Color::new(0.5, 0.5, 0.5, 1.0),     // Gray
-        BatteryState::NotPresent => Color::new(0.3, 0.3, 0.3, 1.0),  // Dark gray
+        BatteryState::Unknown => Color::new(0.5, 0.5, 0.5, 1.0),  // Gray
+        BatteryState::NotPresent => Color::new(0.3, 0.3, 0.3, 1.0), // Dark gray
     }
 }
 
@@ -265,9 +265,9 @@ impl BatteryHealth {
     #[must_use]
     pub fn color(&self) -> Color {
         match self {
-            Self::Good => Color::new(0.3, 0.9, 0.5, 1.0),    // Green
-            Self::Fair => Color::new(1.0, 0.8, 0.3, 1.0),    // Yellow
-            Self::Poor => Color::new(1.0, 0.4, 0.3, 1.0),    // Red
+            Self::Good => Color::new(0.3, 0.9, 0.5, 1.0), // Green
+            Self::Fair => Color::new(1.0, 0.8, 0.3, 1.0), // Yellow
+            Self::Poor => Color::new(1.0, 0.4, 0.3, 1.0), // Red
             Self::Unknown => Color::new(0.5, 0.5, 0.5, 1.0), // Gray
         }
     }
@@ -414,7 +414,10 @@ mod tests {
     #[test]
     fn test_battery_percent_color_charging() {
         let color = battery_percent_color(5.0, true);
-        assert!(color.g > 0.8, "Charging should be green even at low percent");
+        assert!(
+            color.g > 0.8,
+            "Charging should be green even at low percent"
+        );
     }
 
     #[test]

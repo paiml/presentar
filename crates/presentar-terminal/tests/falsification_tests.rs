@@ -682,14 +682,10 @@ fn falsify_filter_does_not_match_known_process() {
     let mut app = App::with_config(false, Default::default());
 
     // Find a process that definitely exists
-    let known_process = app
-        .system
-        .processes()
-        .values()
-        .find(|p| {
-            let name = p.name().to_string_lossy().to_lowercase();
-            name.len() > 3 && !name.contains(' ')
-        });
+    let known_process = app.system.processes().values().find(|p| {
+        let name = p.name().to_string_lossy().to_lowercase();
+        name.len() > 3 && !name.contains(' ')
+    });
 
     let Some(proc) = known_process else {
         println!("SKIP: Could not find suitable process for testing");
@@ -699,7 +695,10 @@ fn falsify_filter_does_not_match_known_process() {
     let proc_name = proc.name().to_string_lossy().to_string();
     let search_term = proc_name.chars().take(4).collect::<String>().to_lowercase();
 
-    println!("Testing filter with known process: {} (searching for '{}')", proc_name, search_term);
+    println!(
+        "Testing filter with known process: {} (searching for '{}')",
+        proc_name, search_term
+    );
 
     // Set filter to match this process
     app.filter = search_term.clone();
@@ -818,7 +817,10 @@ fn falsify_request_signal_sets_pending() {
     if let Some((pid, name, signal_type)) = &app.pending_signal {
         assert!(*pid > 0, "PID should be positive");
         assert!(!name.is_empty(), "Process name should not be empty");
-        println!("Signal request created: PID={}, name={}, signal={:?}", pid, name, signal_type);
+        println!(
+            "Signal request created: PID={}, name={}, signal={:?}",
+            pid, name, signal_type
+        );
     }
 }
 
@@ -829,8 +831,8 @@ fn falsify_request_signal_sets_pending() {
 #[test]
 fn falsify_signal_hotkeys_work() {
     use crossterm::event::{KeyCode, KeyModifiers};
-    use presentar_terminal::ptop::App;
     use presentar_terminal::ptop::config::SignalType;
+    use presentar_terminal::ptop::App;
 
     let mut app = App::with_config(false, Default::default());
     app.focused_panel = Some(PanelType::Process);

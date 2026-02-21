@@ -154,7 +154,12 @@ impl StackedAreaChart {
 
 /// Get character for series index.
 fn series_char(idx: usize) -> char {
-    match idx { 0 => '█', 1 => '▓', 2 => '░', _ => '·' }
+    match idx {
+        0 => '█',
+        1 => '▓',
+        2 => '░',
+        _ => '·',
+    }
 }
 
 /// Find character for cell at (x, level) in stacked chart.
@@ -209,12 +214,29 @@ fn main() {
     println!("=== Stacked Area Chart ===\n");
 
     let mut chart = StackedAreaChart::new("Monthly Revenue by Product")
-        .with_x_labels(["Jan", "Feb", "Mar", "Apr", "May", "Jun"].iter().map(|s| (*s).to_string()).collect())
+        .with_x_labels(
+            ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect(),
+        )
         .with_y_label("Revenue ($K)");
 
-    chart.add_series("Product A", vec![120.0, 135.0, 142.0, 160.0, 175.0, 190.0], Color::new(0.4, 0.6, 0.9, 0.8));
-    chart.add_series("Product B", vec![80.0, 95.0, 88.0, 105.0, 115.0, 125.0], Color::new(0.9, 0.5, 0.4, 0.8));
-    chart.add_series("Product C", vec![45.0, 52.0, 60.0, 58.0, 70.0, 85.0], Color::new(0.4, 0.8, 0.5, 0.8));
+    chart.add_series(
+        "Product A",
+        vec![120.0, 135.0, 142.0, 160.0, 175.0, 190.0],
+        Color::new(0.4, 0.6, 0.9, 0.8),
+    );
+    chart.add_series(
+        "Product B",
+        vec![80.0, 95.0, 88.0, 105.0, 115.0, 125.0],
+        Color::new(0.9, 0.5, 0.4, 0.8),
+    );
+    chart.add_series(
+        "Product C",
+        vec![45.0, 52.0, 60.0, 58.0, 70.0, 85.0],
+        Color::new(0.4, 0.8, 0.5, 0.8),
+    );
 
     println!("Title: {}", chart.title());
     println!("Y-axis: {}", chart.y_label());
@@ -228,7 +250,9 @@ fn main() {
     let pcts = chart.percentages();
     for (i, series) in chart.series().iter().enumerate() {
         print!("{:<12}", series.name);
-        for &pct in &pcts[i] { print!(" {pct:>5.1}%"); }
+        for &pct in &pcts[i] {
+            print!(" {pct:>5.1}%");
+        }
         println!();
     }
 

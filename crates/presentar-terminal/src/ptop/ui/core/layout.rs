@@ -84,6 +84,7 @@ mod tests {
     #[test]
     fn test_push_if_visible_signature() {
         // Verify function compiles with correct signature
-        let _ = push_if_visible as fn(&mut Vec<PanelDrawFn>, &App, bool, PanelType, PanelDrawFn, Option<PanelDrawFn>);
+        let _ = push_if_visible
+            as fn(&mut Vec<PanelDrawFn>, &App, bool, PanelType, PanelDrawFn, Option<PanelDrawFn>);
     }
 }

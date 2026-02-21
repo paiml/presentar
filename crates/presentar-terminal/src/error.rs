@@ -155,7 +155,10 @@ mod tests {
             passed: vec![BrickAssertion::max_latency_ms(100)],
             failed: vec![
                 (BrickAssertion::max_latency_ms(16), "too slow".to_string()),
-                (BrickAssertion::max_latency_ms(8), "way too slow".to_string()),
+                (
+                    BrickAssertion::max_latency_ms(8),
+                    "way too slow".to_string(),
+                ),
             ],
             verification_time: Duration::from_micros(50),
         };

@@ -117,13 +117,17 @@ impl RadarPlot {
 
     /// Check if point is within bounds.
     fn in_bounds(&self, x: f32, y: f32) -> bool {
-        x >= self.bounds.x && x < self.bounds.x + self.bounds.width
-            && y >= self.bounds.y && y < self.bounds.y + self.bounds.height
+        x >= self.bounds.x
+            && x < self.bounds.x + self.bounds.width
+            && y >= self.bounds.y
+            && y < self.bounds.y + self.bounds.height
     }
 
     /// Draw a point if in bounds.
     fn draw_point(&self, canvas: &mut dyn Canvas, x: f32, y: f32, ch: &str, style: &TextStyle) {
-        if self.in_bounds(x, y) { canvas.draw_text(ch, Point::new(x, y), style); }
+        if self.in_bounds(x, y) {
+            canvas.draw_text(ch, Point::new(x, y), style);
+        }
     }
 }
 

@@ -704,7 +704,10 @@ mod tests {
 
     #[test]
     fn test_tcp_connection_state_display_name() {
-        assert_eq!(TcpConnectionState::Established.display_name(), "ESTABLISHED");
+        assert_eq!(
+            TcpConnectionState::Established.display_name(),
+            "ESTABLISHED"
+        );
         assert_eq!(TcpConnectionState::Listen.display_name(), "LISTEN");
         assert_eq!(TcpConnectionState::TimeWait.display_name(), "TIME_WAIT");
     }
@@ -745,7 +748,10 @@ mod tests {
 
     #[test]
     fn test_tcp_connection_state_default() {
-        assert_eq!(TcpConnectionState::default(), TcpConnectionState::Established);
+        assert_eq!(
+            TcpConnectionState::default(),
+            TcpConnectionState::Established
+        );
     }
 
     #[test]
@@ -1197,7 +1203,10 @@ mod tests {
     #[test]
     fn f_conn_cat_009_color_secure_is_red() {
         let color = ServiceCategory::Secure.color();
-        assert!(color.r > 0.9 && color.g < 0.5, "Secure category should be red");
+        assert!(
+            color.r > 0.9 && color.g < 0.5,
+            "Secure category should be red"
+        );
     }
 
     #[test]

@@ -618,8 +618,8 @@ mod tests {
     fn test_paint_with_nan_centroid() {
         let points = vec![(0.0, 0.0), (1.0, 1.0)];
         let labels = vec![0, 0];
-        let mut plot = ClusterPlot::new(points, labels)
-            .with_centroids(vec![(f64::NAN, 0.5), (0.5, f64::NAN)]);
+        let mut plot =
+            ClusterPlot::new(points, labels).with_centroids(vec![(f64::NAN, 0.5), (0.5, f64::NAN)]);
         plot.bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
 
         let mut buffer = CellBuffer::new(60, 20);
@@ -665,7 +665,8 @@ mod tests {
 
     #[test]
     fn test_algorithm_hierarchical() {
-        let plot = ClusterPlot::default().with_algorithm(ClusterAlgorithm::Hierarchical { n_clusters: 4 });
+        let plot =
+            ClusterPlot::default().with_algorithm(ClusterAlgorithm::Hierarchical { n_clusters: 4 });
         assert!(matches!(
             plot.algorithm,
             ClusterAlgorithm::Hierarchical { n_clusters: 4 }
@@ -674,10 +675,14 @@ mod tests {
 
     #[test]
     fn test_algorithm_hdbscan() {
-        let plot = ClusterPlot::default().with_algorithm(ClusterAlgorithm::HDBSCAN { min_cluster_size: 10 });
+        let plot = ClusterPlot::default().with_algorithm(ClusterAlgorithm::HDBSCAN {
+            min_cluster_size: 10,
+        });
         assert!(matches!(
             plot.algorithm,
-            ClusterAlgorithm::HDBSCAN { min_cluster_size: 10 }
+            ClusterAlgorithm::HDBSCAN {
+                min_cluster_size: 10
+            }
         ));
     }
 
@@ -796,7 +801,9 @@ mod tests {
                 min_samples: 5,
             },
             ClusterAlgorithm::Hierarchical { n_clusters: 3 },
-            ClusterAlgorithm::HDBSCAN { min_cluster_size: 5 },
+            ClusterAlgorithm::HDBSCAN {
+                min_cluster_size: 5,
+            },
         ];
 
         for algo in algorithms {

@@ -121,7 +121,11 @@ fn compute_collapsed(items: &[FlexItem], sizes: &[f32]) -> Vec<bool> {
 }
 
 /// Sum a flex factor (grow or shrink) for non-collapsed items.
-fn sum_flex_factor(items: &[FlexItem], collapsed: &[bool], get_factor: fn(&FlexItem) -> f32) -> f32 {
+fn sum_flex_factor(
+    items: &[FlexItem],
+    collapsed: &[bool],
+    get_factor: fn(&FlexItem) -> f32,
+) -> f32 {
     items
         .iter()
         .zip(collapsed.iter())
@@ -149,7 +153,11 @@ fn apply_flex_adjustment(
                 0.0
             } else {
                 let adjusted = size + (remaining * get_factor(item) / total_factor);
-                if clamp { adjusted.max(0.0) } else { adjusted }
+                if clamp {
+                    adjusted.max(0.0)
+                } else {
+                    adjusted
+                }
             }
         })
         .collect()
@@ -184,12 +192,22 @@ pub(crate) fn distribute_flex(items: &[FlexItem], sizes: &[f32], available: f32)
     if remaining > 0.0 {
         let total_grow = sum_flex_factor(items, &collapsed, get_grow);
         if total_grow > 0.0 {
-            return apply_flex_adjustment(sizes, items, &collapsed, remaining, total_grow, get_grow, false);
+            return apply_flex_adjustment(
+                sizes, items, &collapsed, remaining, total_grow, get_grow, false,
+            );
         }
     } else {
         let total_shrink = sum_flex_factor(items, &collapsed, get_shrink);
         if total_shrink > 0.0 {
-            return apply_flex_adjustment(sizes, items, &collapsed, remaining, total_shrink, get_shrink, true);
+            return apply_flex_adjustment(
+                sizes,
+                items,
+                &collapsed,
+                remaining,
+                total_shrink,
+                get_shrink,
+                true,
+            );
         }
     }
 

@@ -705,8 +705,7 @@ mod tests {
 
     #[test]
     fn test_get_point_color_with_labels() {
-        let plot = PCAPlot::new(vec![(0.0, 0.0), (1.0, 1.0)])
-            .with_labels(vec![0, 1]);
+        let plot = PCAPlot::new(vec![(0.0, 0.0), (1.0, 1.0)]).with_labels(vec![0, 1]);
         let color0 = plot.get_point_color(0);
         let color1 = plot.get_point_color(1);
         // Different labels should give different colors

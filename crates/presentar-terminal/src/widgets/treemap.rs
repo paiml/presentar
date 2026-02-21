@@ -1056,10 +1056,7 @@ mod tests {
     fn test_treemap_node_decay_flash_recursive() {
         let mut root = TreemapNode::branch(
             "root",
-            vec![
-                TreemapNode::leaf("a", 50.0),
-                TreemapNode::leaf("b", 50.0),
-            ],
+            vec![TreemapNode::leaf("a", 50.0), TreemapNode::leaf("b", 50.0)],
         );
         root.flash_intensity = 1.0;
         root.children[0].flash_intensity = 0.8;

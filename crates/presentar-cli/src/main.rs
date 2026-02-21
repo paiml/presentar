@@ -263,7 +263,9 @@ fn serve(port: u16, dir: PathBuf, watch: bool) {
     }
     #[cfg(not(feature = "dev-server"))]
     if watch {
-        eprintln!("Warning: --watch requires the 'dev-server' feature. Serving without hot reload.");
+        eprintln!(
+            "Warning: --watch requires the 'dev-server' feature. Serving without hot reload."
+        );
     }
 
     let addr = format!("0.0.0.0:{}", port);

@@ -334,14 +334,20 @@ mod tests {
     #[test]
     fn test_title_contains_lav() {
         let title = build_cpu_title(45.0, 8, 3.5, false, 3600, 2.5, false);
-        assert!(title.contains("LAV 2.5"), "Title should contain load average");
+        assert!(
+            title.contains("LAV 2.5"),
+            "Title should contain load average"
+        );
     }
 
     // F-CPU-007: Deterministic title omits LAV
     #[test]
     fn test_deterministic_title_omits_lav() {
         let title = build_cpu_title(45.0, 8, 3.5, false, 3600, 2.5, true);
-        assert!(!title.contains("LAV"), "Deterministic title should not contain LAV");
+        assert!(
+            !title.contains("LAV"),
+            "Deterministic title should not contain LAV"
+        );
     }
 
     // F-CPU-008: Compact title is shorter
@@ -349,14 +355,20 @@ mod tests {
     fn test_compact_title_shorter() {
         let full = build_cpu_title(45.0, 8, 3.5, false, 3600, 1.5, false);
         let compact = build_cpu_title_compact(45.0, 8, 3.5, false);
-        assert!(compact.len() < full.len(), "Compact title should be shorter");
+        assert!(
+            compact.len() < full.len(),
+            "Compact title should be shorter"
+        );
     }
 
     // F-CPU-009: Compact title uses abbreviated core count
     #[test]
     fn test_compact_title_abbreviated_cores() {
         let compact = build_cpu_title_compact(45.0, 8, 3.5, false);
-        assert!(compact.contains("8c"), "Compact title should use abbreviated core count");
+        assert!(
+            compact.contains("8c"),
+            "Compact title should use abbreviated core count"
+        );
     }
 
     // F-CPU-010: Meter layout for 8 cores standard
@@ -386,7 +398,10 @@ mod tests {
     #[test]
     fn test_load_color_red_overloaded() {
         let color = load_color(1.5);
-        assert!(color.r > 0.8 && color.g < 0.5, "Should be red when overloaded");
+        assert!(
+            color.r > 0.8 && color.g < 0.5,
+            "Should be red when overloaded"
+        );
     }
 
     // F-CPU-014: Load color yellow when high
@@ -400,7 +415,10 @@ mod tests {
     #[test]
     fn test_load_color_green_normal() {
         let color = load_color(0.5);
-        assert!(color.g > 0.8 && color.r < 0.5, "Should be green when normal");
+        assert!(
+            color.g > 0.8 && color.r < 0.5,
+            "Should be green when normal"
+        );
     }
 
     // F-CPU-016: Load trend up arrow
@@ -494,7 +512,9 @@ mod tests {
     // F-CPU-029: Process name color is bright
     #[test]
     fn test_process_name_color_bright() {
-        assert!(PROCESS_NAME_COLOR.r > 0.8 && PROCESS_NAME_COLOR.g > 0.8 && PROCESS_NAME_COLOR.b > 0.8);
+        assert!(
+            PROCESS_NAME_COLOR.r > 0.8 && PROCESS_NAME_COLOR.g > 0.8 && PROCESS_NAME_COLOR.b > 0.8
+        );
     }
 
     // F-CPU-030: Title with zero CPU percentage
@@ -562,7 +582,10 @@ mod tests {
     #[test]
     fn test_format_load_deterministic() {
         let line = format_load_line(0.0, 0.0, 0.0, 0.0, 50, true, 8);
-        assert!(line.contains("Fre"), "Deterministic mode has special format");
+        assert!(
+            line.contains("Fre"),
+            "Deterministic mode has special format"
+        );
     }
 
     // F-CPU-039: Consumer threshold at 50%

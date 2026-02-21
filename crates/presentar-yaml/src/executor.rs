@@ -164,7 +164,11 @@ impl Value {
 
     /// Extract numeric values from array items by field name.
     pub fn extract_numbers(&self, field: &str) -> Result<Vec<f64>, ExecutionError> {
-        Ok(self.require_array()?.iter().filter_map(|item| item.get(field)?.as_number()).collect())
+        Ok(self
+            .require_array()?
+            .iter()
+            .filter_map(|item| item.get(field)?.as_number())
+            .collect())
     }
 
     /// Get array length or object key count.
@@ -833,13 +837,21 @@ impl ExpressionExecutor {
     fn apply_min(&self, value: &Value, field: &str) -> Result<Value, ExecutionError> {
         let nums = value.extract_numbers(field)?;
         let min = nums.iter().copied().fold(f64::INFINITY, f64::min);
-        Ok(if min.is_infinite() { Value::Null } else { Value::Number(min) })
+        Ok(if min.is_infinite() {
+            Value::Null
+        } else {
+            Value::Number(min)
+        })
     }
 
     fn apply_max(&self, value: &Value, field: &str) -> Result<Value, ExecutionError> {
         let nums = value.extract_numbers(field)?;
         let max = nums.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-        Ok(if max.is_infinite() { Value::Null } else { Value::Number(max) })
+        Ok(if max.is_infinite() {
+            Value::Null
+        } else {
+            Value::Number(max)
+        })
     }
 
     fn apply_last(&self, value: &Value, n: usize) -> Result<Value, ExecutionError> {

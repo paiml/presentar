@@ -394,10 +394,25 @@ mod tests {
     fn test_mount_info_is_real_fs_all_virtual_types() {
         // Test all virtual fs types in the match
         let virtual_types = [
-            "proc", "sysfs", "devtmpfs", "devpts", "securityfs",
-            "cgroup", "cgroup2", "pstore", "debugfs", "tracefs",
-            "hugetlbfs", "mqueue", "fusectl", "configfs", "bpf",
-            "efivarfs", "autofs", "rpc_pipefs", "overlay",
+            "proc",
+            "sysfs",
+            "devtmpfs",
+            "devpts",
+            "securityfs",
+            "cgroup",
+            "cgroup2",
+            "pstore",
+            "debugfs",
+            "tracefs",
+            "hugetlbfs",
+            "mqueue",
+            "fusectl",
+            "configfs",
+            "bpf",
+            "efivarfs",
+            "autofs",
+            "rpc_pipefs",
+            "overlay",
         ];
         for fs in virtual_types {
             let mount = MountInfo {
@@ -486,8 +501,8 @@ mod tests {
     #[test]
     fn test_mount_info_display_methods() {
         let mount = MountInfo {
-            total: 1099511627776,   // 1TB
-            used: 536870912000,     // ~500GB
+            total: 1099511627776,    // 1TB
+            used: 536870912000,      // ~500GB
             available: 562949953536, // ~524GB
             ..Default::default()
         };
@@ -509,7 +524,10 @@ mod tests {
         // Test newline escape
         assert_eq!(unescape_mount_point("/mnt/new\\012line"), "/mnt/new\nline");
         // Test backslash escape
-        assert_eq!(unescape_mount_point("/mnt/back\\134slash"), "/mnt/back\\slash");
+        assert_eq!(
+            unescape_mount_point("/mnt/back\\134slash"),
+            "/mnt/back\\slash"
+        );
         // Test multiple escapes
         assert_eq!(
             unescape_mount_point("/mnt/My\\040Drive\\040With\\040Spaces"),
@@ -802,7 +820,8 @@ mod tests {
         let data = analyzer.data();
 
         // total_capacity should be sum of real fs totals
-        let expected_total: u64 = data.mounts
+        let expected_total: u64 = data
+            .mounts
             .iter()
             .filter(|m| m.is_real_fs() && !m.is_tmpfs())
             .map(|m| m.total)

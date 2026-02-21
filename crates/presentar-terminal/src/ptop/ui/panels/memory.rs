@@ -208,12 +208,7 @@ mod tests {
 
     #[test]
     fn test_build_memory_title_no_swap() {
-        let title = build_memory_title(
-            4 * 1024 * 1024 * 1024,
-            16 * 1024 * 1024 * 1024,
-            0,
-            0,
-        );
+        let title = build_memory_title(4 * 1024 * 1024 * 1024, 16 * 1024 * 1024 * 1024, 0, 0);
         assert!(!title.contains("Swap"));
         assert!(title.contains("25%"));
     }
@@ -401,7 +396,10 @@ mod tests {
             compr_data_size: 0,
             algorithm: "lz4".to_string(),
         };
-        assert!((stats.ratio() - 1.0).abs() < 0.01, "Zero compressed should return 1.0");
+        assert!(
+            (stats.ratio() - 1.0).abs() < 0.01,
+            "Zero compressed should return 1.0"
+        );
     }
 
     #[test]

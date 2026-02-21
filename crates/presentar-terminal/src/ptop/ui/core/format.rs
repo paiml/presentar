@@ -406,7 +406,10 @@ mod tests {
     #[test]
     fn test_percent_color_medium() {
         let color = percent_color(60.0);
-        assert!(color.r > 0.5 && color.g > 0.5, "Medium percent should be yellow");
+        assert!(
+            color.r > 0.5 && color.g > 0.5,
+            "Medium percent should be yellow"
+        );
     }
 
     // F-FORMAT-022: percent_color high (red)
@@ -517,7 +520,10 @@ mod tests {
     #[test]
     fn test_memory_segment_color_cached() {
         let color = memory_segment_color("cached");
-        assert!(color.g > color.r && color.g > color.b, "Cached should be green-ish");
+        assert!(
+            color.g > color.r && color.g > color.b,
+            "Cached should be green-ish"
+        );
     }
 
     // F-FORMAT-039: memory_segment_color unknown
@@ -550,7 +556,10 @@ mod tests {
     #[test]
     fn test_percent_color_boundary_70() {
         let color = percent_color(70.0);
-        assert!(color.r > 0.5 && color.g > 0.3, "70% should be orange-yellow");
+        assert!(
+            color.r > 0.5 && color.g > 0.3,
+            "70% should be orange-yellow"
+        );
     }
 
     // F-FORMAT-044: percent_color boundary 50%

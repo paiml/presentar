@@ -260,7 +260,10 @@ mod tests {
             CONTAINERS_COLOR,
         ];
         for color in colors {
-            assert!((color.a - 1.0).abs() < 0.001, "Panel color must have full alpha");
+            assert!(
+                (color.a - 1.0).abs() < 0.001,
+                "Panel color must have full alpha"
+            );
         }
     }
 

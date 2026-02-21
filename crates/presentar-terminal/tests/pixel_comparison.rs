@@ -4,8 +4,8 @@
 #![cfg(feature = "ptop")]
 
 use presentar_terminal::direct::CellBuffer;
-use presentar_terminal::ptop::App;
 use presentar_terminal::ptop::ui::draw;
+use presentar_terminal::ptop::App;
 
 /// Helper to create a deterministic app for testing.
 fn create_deterministic_app() -> App {
@@ -181,7 +181,10 @@ fn test_border_characters_present() {
     assert!(has_top_left, "Should have top-left corner character");
     assert!(has_top_right, "Should have top-right corner character");
     assert!(has_bottom_left, "Should have bottom-left corner character");
-    assert!(has_bottom_right, "Should have bottom-right corner character");
+    assert!(
+        has_bottom_right,
+        "Should have bottom-right corner character"
+    );
 }
 
 // F-PIXEL-007: Panel titles are visible
@@ -231,7 +234,9 @@ fn test_braille_characters_for_graphs() {
     let output = render_to_string(&app, 120, 40);
 
     // Braille block starts at U+2800
-    let has_braille = output.chars().any(|c| ('\u{2800}'..='\u{28FF}').contains(&c));
+    let has_braille = output
+        .chars()
+        .any(|c| ('\u{2800}'..='\u{28FF}').contains(&c));
 
     // At least some UI should use braille for graphs
     // (This may fail if no network traffic, which is OK in deterministic mode)
@@ -299,8 +304,11 @@ fn test_memory_formatting() {
     let output = render_to_string(&app, 120, 40);
 
     // Should have memory units
-    let has_units =
-        output.contains("GB") || output.contains("MB") || output.contains("KB") || output.contains('G') || output.contains('M');
+    let has_units = output.contains("GB")
+        || output.contains("MB")
+        || output.contains("KB")
+        || output.contains('G')
+        || output.contains('M');
 
     assert!(has_units, "Should contain memory units");
 }

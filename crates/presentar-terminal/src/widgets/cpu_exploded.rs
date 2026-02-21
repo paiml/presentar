@@ -992,8 +992,7 @@ mod tests {
     #[test]
     fn test_per_core_sparkline_grid_with_gradient() {
         let custom_gradient = Gradient::from_hex(&["#ff0000", "#00ff00"]);
-        let grid = PerCoreSparklineGrid::new(vec![vec![10.0]; 4])
-            .with_gradient(custom_gradient);
+        let grid = PerCoreSparklineGrid::new(vec![vec![10.0]; 4]).with_gradient(custom_gradient);
         // Gradient is set (can't easily test internal value, but no panic)
         assert!(!grid.core_histories.is_empty());
     }
@@ -1195,9 +1194,8 @@ mod tests {
 
     #[test]
     fn test_cpu_state_breakdown_paint_zero_total() {
-        let mut breakdown = CpuStateBreakdown::new(vec![
-            CpuCoreState::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
-        ]);
+        let mut breakdown =
+            CpuStateBreakdown::new(vec![CpuCoreState::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)]);
         let mut buffer = CellBuffer::new(80, 20);
         let mut canvas = DirectTerminalCanvas::new(&mut buffer);
         breakdown.layout(Rect::new(0.0, 0.0, 80.0, 20.0));
@@ -1206,9 +1204,8 @@ mod tests {
 
     #[test]
     fn test_cpu_state_breakdown_paint_with_irq() {
-        let mut breakdown = CpuStateBreakdown::new(vec![
-            CpuCoreState::new(30.0, 10.0, 40.0, 5.0, 10.0, 5.0),
-        ]);
+        let mut breakdown =
+            CpuStateBreakdown::new(vec![CpuCoreState::new(30.0, 10.0, 40.0, 5.0, 10.0, 5.0)]);
         let mut buffer = CellBuffer::new(80, 20);
         let mut canvas = DirectTerminalCanvas::new(&mut buffer);
         breakdown.layout(Rect::new(0.0, 0.0, 80.0, 20.0));
@@ -1217,10 +1214,8 @@ mod tests {
 
     #[test]
     fn test_cpu_state_breakdown_measure() {
-        let breakdown = CpuStateBreakdown::new(vec![
-            CpuCoreState::default(),
-            CpuCoreState::default(),
-        ]);
+        let breakdown =
+            CpuStateBreakdown::new(vec![CpuCoreState::default(), CpuCoreState::default()]);
         let size = breakdown.measure(Constraints {
             min_width: 0.0,
             max_width: 80.0,
@@ -1252,7 +1247,10 @@ mod tests {
     #[test]
     fn test_cpu_state_breakdown_type_id() {
         let breakdown = CpuStateBreakdown::default();
-        assert_eq!(Widget::type_id(&breakdown), TypeId::of::<CpuStateBreakdown>());
+        assert_eq!(
+            Widget::type_id(&breakdown),
+            TypeId::of::<CpuStateBreakdown>()
+        );
     }
 
     #[test]
@@ -1354,9 +1352,11 @@ mod tests {
 
     #[test]
     fn test_top_processes_mini_paint_long_name_truncation() {
-        let mut top = TopProcessesMini::new(vec![
-            TopProcess::new(1234, 45.2, "this_is_a_very_long_process_name_that_should_be_truncated"),
-        ]);
+        let mut top = TopProcessesMini::new(vec![TopProcess::new(
+            1234,
+            45.2,
+            "this_is_a_very_long_process_name_that_should_be_truncated",
+        )]);
         let mut buffer = CellBuffer::new(30, 10);
         let mut canvas = DirectTerminalCanvas::new(&mut buffer);
         top.layout(Rect::new(0.0, 0.0, 30.0, 10.0));
@@ -1484,11 +1484,7 @@ mod tests {
     #[test]
     fn test_freq_temp_heatmap_set_data() {
         let mut heatmap = FreqTempHeatmap::default();
-        heatmap.set_data(
-            vec![3600, 3200],
-            vec![4000, 4000],
-            Some(vec![65.0, 70.0]),
-        );
+        heatmap.set_data(vec![3600, 3200], vec![4000, 4000], Some(vec![65.0, 70.0]));
         assert_eq!(heatmap.frequencies.len(), 2);
         assert!(heatmap.temperatures.is_some());
     }
@@ -1540,8 +1536,8 @@ mod tests {
 
     #[test]
     fn test_freq_temp_heatmap_paint_extreme_temps() {
-        let mut heatmap = FreqTempHeatmap::new(vec![3600], vec![4000])
-            .with_temperatures(vec![20.0]); // Below normal range
+        let mut heatmap =
+            FreqTempHeatmap::new(vec![3600], vec![4000]).with_temperatures(vec![20.0]); // Below normal range
         let mut buffer = CellBuffer::new(60, 15);
         let mut canvas = DirectTerminalCanvas::new(&mut buffer);
         heatmap.layout(Rect::new(0.0, 0.0, 60.0, 15.0));
@@ -1562,8 +1558,7 @@ mod tests {
 
     #[test]
     fn test_freq_temp_heatmap_measure_with_temps() {
-        let heatmap = FreqTempHeatmap::new(vec![3600], vec![4000])
-            .with_temperatures(vec![65.0]);
+        let heatmap = FreqTempHeatmap::new(vec![3600], vec![4000]).with_temperatures(vec![65.0]);
         let size = heatmap.measure(Constraints {
             min_width: 0.0,
             max_width: 60.0,
@@ -1739,7 +1734,10 @@ mod tests {
     #[test]
     fn test_load_average_timeline_type_id() {
         let timeline = LoadAverageTimeline::default();
-        assert_eq!(Widget::type_id(&timeline), TypeId::of::<LoadAverageTimeline>());
+        assert_eq!(
+            Widget::type_id(&timeline),
+            TypeId::of::<LoadAverageTimeline>()
+        );
     }
 
     #[test]

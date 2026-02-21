@@ -2,7 +2,6 @@
 use presentar_terminal::ptop::analyzers::{Analyzer, ConnectionsAnalyzer, TcpState};
 
 fn main() {
-
     println!("Testing ConnectionsAnalyzer...");
 
     let mut analyzer = ConnectionsAnalyzer::new();

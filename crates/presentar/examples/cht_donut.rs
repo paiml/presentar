@@ -200,7 +200,11 @@ fn donut_char_at(
     let angle = dy.atan2(dx);
 
     if dist < inner_r - 0.5 {
-        if x == center.0 && y == center.1 { '*' } else { ' ' }
+        if x == center.0 && y == center.1 {
+            '*'
+        } else {
+            ' '
+        }
     } else if dist <= outer_r + 0.5 {
         find_segment_char(chart, angle)
     } else {
@@ -241,8 +245,11 @@ fn print_chart_info(chart: &DonutChart) {
         let (start, end) = chart.segment_angles(i).unwrap_or((0.0, 0.0));
         println!(
             "{:<12} {:>8.1} {:>7.1}% {:>12.1} {:>12.1}",
-            segment.label, segment.value, pct,
-            start.to_degrees(), end.to_degrees()
+            segment.label,
+            segment.value,
+            pct,
+            start.to_degrees(),
+            end.to_degrees()
         );
     }
 }

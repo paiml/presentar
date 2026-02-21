@@ -325,14 +325,20 @@ mod tests {
         // Selection background should be subtle dark purple (ttop-style)
         // Just slightly different from DIMMED_BG, barely visible
         assert!(SELECTION_BG.r < 0.25, "Selection bg should be dark");
-        assert!(SELECTION_BG.b > SELECTION_BG.r, "Selection bg should have purple tint");
+        assert!(
+            SELECTION_BG.b > SELECTION_BG.r,
+            "Selection bg should have purple tint"
+        );
     }
 
     #[test]
     fn test_selection_accent_is_green() {
         // ttop uses bright green for the ▶ indicator
         assert!(SELECTION_ACCENT.g > 0.8, "Accent should be bright green");
-        assert!(SELECTION_ACCENT.r > 0.3, "Accent has some red for visibility");
+        assert!(
+            SELECTION_ACCENT.r > 0.3,
+            "Accent has some red for visibility"
+        );
     }
 
     #[test]

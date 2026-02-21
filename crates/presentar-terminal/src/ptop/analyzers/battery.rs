@@ -180,7 +180,9 @@ impl BatteryAnalyzer {
             data: BatteryData::default(),
             sysfs_path,
             update_interval: Duration::from_secs(5), // Update every 5s
-            last_update: Instant::now().checked_sub(Duration::from_secs(10)).unwrap_or_else(Instant::now), // Force immediate update
+            last_update: Instant::now()
+                .checked_sub(Duration::from_secs(10))
+                .unwrap_or_else(Instant::now), // Force immediate update
         })
     }
 
@@ -228,7 +230,10 @@ impl BatteryAnalyzer {
             BatteryState::Charging
         } else if batteries.iter().all(|b| b.state == BatteryState::Full) {
             BatteryState::Full
-        } else if batteries.iter().any(|b| b.state == BatteryState::Discharging) {
+        } else if batteries
+            .iter()
+            .any(|b| b.state == BatteryState::Discharging)
+        {
             BatteryState::Discharging
         } else {
             BatteryState::Unknown
@@ -245,13 +250,10 @@ impl BatteryAnalyzer {
 
     /// Read battery info from sysfs path
     fn read_battery(path: &Path, name: &str) -> Option<BatteryInfo> {
-        let read_file = |file: &str| -> Option<String> {
-            std::fs::read_to_string(path.join(file)).ok()
-        };
+        let read_file =
+            |file: &str| -> Option<String> { std::fs::read_to_string(path.join(file)).ok() };
 
-        let read_int = |file: &str| -> Option<i64> {
-            read_file(file)?.trim().parse().ok()
-        };
+        let read_int = |file: &str| -> Option<i64> { read_file(file)?.trim().parse().ok() };
 
         // Read status
         let state = read_file("status")
@@ -280,19 +282,17 @@ impl BatteryAnalyzer {
 
         // Calculate time to empty/full
         let (time_to_empty, time_to_full) = match (power_now, energy_now, energy_full) {
-            (Some(power), Some(now), Some(full)) if power > 0.0 => {
-                match state {
-                    BatteryState::Discharging => {
-                        let hours = now / power;
-                        (Some((hours * 3600.0) as u64), None)
-                    }
-                    BatteryState::Charging => {
-                        let hours = (full - now) / power;
-                        (None, Some((hours * 3600.0) as u64))
-                    }
-                    _ => (None, None),
+            (Some(power), Some(now), Some(full)) if power > 0.0 => match state {
+                BatteryState::Discharging => {
+                    let hours = now / power;
+                    (Some((hours * 3600.0) as u64), None)
                 }
-            }
+                BatteryState::Charging => {
+                    let hours = (full - now) / power;
+                    (None, Some((hours * 3600.0) as u64))
+                }
+                _ => (None, None),
+            },
             _ => (None, None),
         };
 
@@ -334,7 +334,9 @@ impl Default for BatteryAnalyzer {
             data: BatteryData::default(),
             sysfs_path: PathBuf::from("/sys/class/power_supply"),
             update_interval: Duration::from_secs(5),
-            last_update: Instant::now().checked_sub(Duration::from_secs(10)).unwrap_or_else(Instant::now),
+            last_update: Instant::now()
+                .checked_sub(Duration::from_secs(10))
+                .unwrap_or_else(Instant::now),
         }
     }
 }
@@ -346,9 +348,15 @@ mod tests {
     #[test]
     fn test_battery_state_from_str() {
         assert_eq!(BatteryState::from_str("Charging"), BatteryState::Charging);
-        assert_eq!(BatteryState::from_str("Discharging"), BatteryState::Discharging);
+        assert_eq!(
+            BatteryState::from_str("Discharging"),
+            BatteryState::Discharging
+        );
         assert_eq!(BatteryState::from_str("Full"), BatteryState::Full);
-        assert_eq!(BatteryState::from_str("Not charging"), BatteryState::NotCharging);
+        assert_eq!(
+            BatteryState::from_str("Not charging"),
+            BatteryState::NotCharging
+        );
         assert_eq!(BatteryState::from_str("unknown"), BatteryState::Unknown);
         assert_eq!(BatteryState::from_str("random"), BatteryState::Unknown);
     }
