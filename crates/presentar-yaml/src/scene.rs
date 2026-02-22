@@ -489,7 +489,7 @@ pub struct Permissions {
 #[derive(Debug)]
 pub enum SceneError {
     /// YAML parsing error
-    Yaml(serde_yaml::Error),
+    Yaml(serde_yaml_ng::Error),
 
     /// Invalid prs_version format
     InvalidVersion(String),
@@ -581,8 +581,8 @@ impl std::error::Error for SceneError {
     }
 }
 
-impl From<serde_yaml::Error> for SceneError {
-    fn from(e: serde_yaml::Error) -> Self {
+impl From<serde_yaml_ng::Error> for SceneError {
+    fn from(e: serde_yaml_ng::Error) -> Self {
         Self::Yaml(e)
     }
 }
@@ -594,7 +594,7 @@ impl Scene {
     ///
     /// Returns an error if the YAML is invalid or fails validation.
     pub fn from_yaml(yaml: &str) -> Result<Self, SceneError> {
-        let scene: Self = serde_yaml::from_str(yaml)?;
+        let scene: Self = serde_yaml_ng::from_str(yaml)?;
         scene.validate()?;
         Ok(scene)
     }
@@ -604,8 +604,8 @@ impl Scene {
     /// # Errors
     ///
     /// Returns an error if serialization fails.
-    pub fn to_yaml(&self) -> Result<String, serde_yaml::Error> {
-        serde_yaml::to_string(self)
+    pub fn to_yaml(&self) -> Result<String, serde_yaml_ng::Error> {
+        serde_yaml_ng::to_string(self)
     }
 
     /// Validate the scene structure.
@@ -1486,8 +1486,8 @@ widgets: []
 
     #[test]
     fn test_error_display_yaml() {
-        let yaml_err: serde_yaml::Error =
-            serde_yaml::from_str::<serde_yaml::Value>("{{").unwrap_err();
+        let yaml_err: serde_yaml_ng::Error =
+            serde_yaml_ng::from_str::<serde_yaml_ng::Value>("{{").unwrap_err();
         let err = SceneError::Yaml(yaml_err);
         assert!(err.to_string().contains("YAML error"));
     }
@@ -1533,8 +1533,8 @@ widgets: []
 
     #[test]
     fn test_error_source() {
-        let yaml_err: serde_yaml::Error =
-            serde_yaml::from_str::<serde_yaml::Value>("{{").unwrap_err();
+        let yaml_err: serde_yaml_ng::Error =
+            serde_yaml_ng::from_str::<serde_yaml_ng::Value>("{{").unwrap_err();
         let err = SceneError::Yaml(yaml_err);
         assert!(err.source().is_some());
 

@@ -792,7 +792,7 @@ fn main() {
     // Load config (F-PMAT-018)
     let config = if let Some(config_path) = &cli.config {
         match std::fs::read_to_string(config_path) {
-            Ok(content) => serde_yaml::from_str(&content).unwrap_or_default(),
+            Ok(content) => serde_yaml_ng::from_str(&content).unwrap_or_default(),
             Err(_) => ScoringConfig::default(),
         }
     } else {
@@ -826,7 +826,7 @@ fn main() {
                         std::process::exit(1);
                     }
                 },
-                OutputFormat::Yaml => match serde_yaml::to_string(&report) {
+                OutputFormat::Yaml => match serde_yaml_ng::to_string(&report) {
                     Ok(yaml) => println!("{yaml}"),
                     Err(e) => {
                         eprintln!("YAML serialization error: {e}");
@@ -1086,7 +1086,7 @@ mod tests {
             threshold: 80,
             analysis_time_ms: Some(100),
         };
-        let yaml = serde_yaml::to_string(&report);
+        let yaml = serde_yaml_ng::to_string(&report);
         assert!(yaml.is_ok());
     }
 }

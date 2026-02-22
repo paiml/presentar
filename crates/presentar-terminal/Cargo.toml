@@ -42,7 +42,7 @@ default = []
 ptop = ["sysinfo", "clap", "serde_json"]
 tui-compare = ["clap"]
 bench-tool = ["clap"]
-score = ["clap", "serde", "serde_json", "serde_yaml"]
+score = ["clap", "serde", "serde_json", "serde_yaml_ng"]
 
 # SPEC-024: Enforcement features
 # These features require interface tests to exist and pass
@@ -66,8 +66,8 @@ optional = true
 version = "1"
 optional = true
 
-[dependencies.serde_yaml]
-version = "0.9"
+[dependencies.serde_yaml_ng]
+version = "0.10"
 optional = true
 
 [[bin]]

@@ -13,7 +13,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.3.4"
+version = "0.3.5"
 edition = "2021"
 authors = ["Pragmatic AI Labs"]
 license = "MIT"
@@ -36,7 +36,7 @@ presentar-test-macros = { version = "0.3.2", path = "crates/presentar-test-macro
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-serde_yaml = "0.9"
+serde_yaml_ng = "0.10"
 toml = "0.8"
 
 # Testing

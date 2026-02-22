@@ -1608,7 +1608,7 @@ dependencies = [
 
 [[package]]
 name = "presentar"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "bincode",
  "bytemuck",
@@ -1636,7 +1636,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-cli"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "clap",
  "notify",
@@ -1647,7 +1647,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-core"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "criterion",
  "proptest",
@@ -1658,7 +1658,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-layout"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "criterion",
  "presentar-core",
@@ -1669,7 +1669,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-terminal"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "bitvec",
  "clap",
@@ -1680,7 +1680,7 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
- "serde_yaml",
+ "serde_yaml_ng",
  "sysinfo",
  "thiserror 2.0.18",
  "trueno-viz",
@@ -1691,7 +1691,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-test"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "presentar-core",
  "presentar-test-macros",
@@ -1702,7 +1702,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-test-macros"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1711,7 +1711,7 @@ dependencies = [
 
 [[package]]
 name = "presentar-widgets"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "criterion",
  "presentar-core",
@@ -1723,12 +1723,12 @@ dependencies = [
 
 [[package]]
 name = "presentar-yaml"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "presentar-core",
  "proptest",
  "serde",
- "serde_yaml",
+ "serde_yaml_ng",
 ]
 
 [[package]]
@@ -2081,6 +2081,19 @@ name = "serde_yaml"
 version = "0.9.34+deprecated"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
+dependencies = [
+ "indexmap",
+ "itoa",
+ "ryu",
+ "serde",
+ "unsafe-libyaml",
+]
+
+[[package]]
+name = "serde_yaml_ng"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b4db627b98b36d4203a7b458cf3573730f2bb591b28871d916dfa9efabfd41f"
 dependencies = [
  "indexmap",
  "itoa",

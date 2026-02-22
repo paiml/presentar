@@ -680,7 +680,7 @@ keybindings:
 
     /// Parse YAML config string (simplified parser without full serde)
     /// SPEC-024 v5.2.0: Complete parser for all `LayoutConfig` fields
-    /// For full YAML support, add `serde_yaml` dependency
+    /// For full YAML support, add `serde_yaml_ng` dependency
     fn parse_yaml(contents: &str) -> Option<Self> {
         let mut config = Self::default();
         let mut warnings: Vec<String> = Vec::new();

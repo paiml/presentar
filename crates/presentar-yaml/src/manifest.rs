@@ -159,7 +159,7 @@ pub struct WidgetConfig {
     pub acceleration: Option<String>,
     /// Additional properties
     #[serde(flatten)]
-    pub extra: HashMap<String, serde_yaml::Value>,
+    pub extra: HashMap<String, serde_yaml_ng::Value>,
 }
 
 /// Interaction configuration.
@@ -197,8 +197,8 @@ impl Manifest {
     /// # Errors
     ///
     /// Returns an error if the YAML is invalid.
-    pub fn from_yaml(yaml: &str) -> Result<Self, serde_yaml::Error> {
-        serde_yaml::from_str(yaml)
+    pub fn from_yaml(yaml: &str) -> Result<Self, serde_yaml_ng::Error> {
+        serde_yaml_ng::from_str(yaml)
     }
 
     /// Serialize manifest to YAML string.
@@ -206,8 +206,8 @@ impl Manifest {
     /// # Errors
     ///
     /// Returns an error if serialization fails.
-    pub fn to_yaml(&self) -> Result<String, serde_yaml::Error> {
-        serde_yaml::to_string(self)
+    pub fn to_yaml(&self) -> Result<String, serde_yaml_ng::Error> {
+        serde_yaml_ng::to_string(self)
     }
 }
 
