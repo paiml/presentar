@@ -1653,7 +1653,7 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
- "trueno",
+ "trueno 0.15.0",
 ]
 
 [[package]]
@@ -2391,6 +2391,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "trueno"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85e19fa22753d395f043b205999122520efd45a33e0867d137f20b777ad794ef"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hostname",
+ "num_cpus",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "toml",
+ "trueno-quant",
+]
+
+[[package]]
+name = "trueno-quant"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5da5ac788b596e45d1d3fa0991c04b0e1bac63ffe4ae2faf6ae7c0d9fdfc00eb"
+dependencies = [
+ "half",
+]
+
+[[package]]
 name = "trueno-viz"
 version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2406,7 +2432,7 @@ dependencies = [
  "serde",
  "serde_yaml",
  "thiserror 2.0.18",
- "trueno",
+ "trueno 0.14.4",
 ]
 
 [[package]]

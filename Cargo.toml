@@ -22,7 +22,7 @@ rust-version = "1.75"
 
 [workspace.dependencies]
 # Sovereign Stack
-trueno = "0.14"
+trueno = "0.15"
 trueno-viz = "0.1.22"
 
 # Internal crates (version + path for crates.io publishing)
