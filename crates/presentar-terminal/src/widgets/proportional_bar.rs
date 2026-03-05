@@ -8,6 +8,7 @@ use presentar_core::{
     LayoutResult, Point, Rect, Size, TextStyle, TypeId, Widget,
 };
 use std::any::Any;
+use std::fmt::Write as _;
 use std::time::Duration;
 
 /// A single segment in a proportional bar.
@@ -243,9 +244,10 @@ impl Brick for ProportionalBar {
                 0.0
             };
             let Color { r, g, b, .. } = seg.color;
-            html.push_str(&format!(
+            let _ = write!(
+                html,
                 "<div style=\"width:{pct:.1}%;background:rgb({r},{g},{b})\"></div>"
-            ));
+            );
         }
         html.push_str("</div>");
         html
