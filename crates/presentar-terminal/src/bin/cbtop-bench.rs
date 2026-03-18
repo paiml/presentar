@@ -36,6 +36,7 @@ use std::time::Instant;
     version,
     about = "Headless benchmarking for cbtop widgets"
 )]
+#[allow(clippy::struct_excessive_bools)]
 struct Cli {
     /// Widget to benchmark.
     #[arg(long)]
@@ -157,11 +158,9 @@ fn run_single_benchmark(widget_name: &str, cli: &Cli) {
     let start = Instant::now();
 
     if cli.verbose {
-        eprintln!("Benchmarking widget: {}", widget_name);
-        eprintln!(
-            "  Dimensions: {}x{}, Warmup: {}, Frames: {}",
-            cli.width, cli.height, cli.warmup, cli.frames
-        );
+        eprintln!("Benchmarking widget: {widget_name}");
+        let (width, height, warmup, frames) = (cli.width, cli.height, cli.warmup, cli.frames);
+        eprintln!("  Dimensions: {width}x{height}, Warmup: {warmup}, Frames: {frames}");
     }
 
     let result = benchmark_widget(widget_name, cli);
@@ -182,19 +181,17 @@ fn benchmark_widget(widget_name: &str, cli: &Cli) -> BenchmarkResult {
         .with_frames(cli.warmup, cli.frames)
         .with_deterministic(cli.deterministic);
 
-    let bounds = Rect::new(0.0, 0.0, cli.width as f32, cli.height as f32);
+    let bounds = Rect::new(0.0, 0.0, f32::from(cli.width), f32::from(cli.height));
 
     match widget_name.to_lowercase().as_str() {
         "cpu-grid" | "cpugrid" => {
             let ctx = DeterministicContext::new();
-            let mut widget = CpuGrid::new(ctx.cpu_usage.clone())
-                .with_columns(8)
-                .compact();
+            let mut widget = CpuGrid::new(ctx.cpu_usage).with_columns(8).compact();
             harness.benchmark(&mut widget, bounds)
         }
         "braille-graph" | "braillegraph" | "graph" => {
             let data: Vec<f64> = (0..60)
-                .map(|i| (i as f64 * 0.1).sin() * 50.0 + 50.0)
+                .map(|i| (f64::from(i) * 0.1).sin().mul_add(50.0, 50.0))
                 .collect();
             let mut widget = BrailleGraph::new(data).with_mode(GraphMode::Braille);
             harness.benchmark(&mut widget, bounds)
@@ -220,9 +217,9 @@ fn benchmark_widget(widget_name: &str, cli: &Cli) -> BenchmarkResult {
             harness.benchmark(&mut widget, bounds)
         }
         "process-table" | "processtable" => {
+            use presentar_terminal::{ProcessEntry, ProcessState};
             let mut widget = ProcessTable::new();
             // Add some test processes
-            use presentar_terminal::{ProcessEntry, ProcessState};
             widget.set_processes(vec![
                 ProcessEntry {
                     pid: 1,
@@ -235,6 +232,11 @@ fn benchmark_widget(widget_name: &str, cli: &Cli) -> BenchmarkResult {
                     oom_score: Some(0),
                     cgroup: None,
                     nice: Some(0),
+                    threads: None,
+                    parent_pid: None,
+                    tree_depth: 0,
+                    is_last_child: false,
+                    tree_prefix: String::new(),
                 },
                 ProcessEntry {
                     pid: 1000,
@@ -247,12 +249,17 @@ fn benchmark_widget(widget_name: &str, cli: &Cli) -> BenchmarkResult {
                     oom_score: Some(100),
                     cgroup: None,
                     nice: Some(0),
+                    threads: None,
+                    parent_pid: None,
+                    tree_depth: 0,
+                    is_last_child: false,
+                    tree_prefix: String::new(),
                 },
             ]);
             harness.benchmark(&mut widget, bounds)
         }
         _ => {
-            eprintln!("Unknown widget: {}", widget_name);
+            eprintln!("Unknown widget: {widget_name}");
             eprintln!("Available widgets: cpu-grid, braille-graph, memory-bar, process-table");
             std::process::exit(1);
         }
@@ -282,7 +289,7 @@ fn output_result(result: &BenchmarkResult, cli: &Cli) {
             eprintln!("Results written to: {}", path.display());
         }
     } else {
-        println!("{}", output);
+        println!("{output}");
     }
 }
 
@@ -291,7 +298,7 @@ fn format_text_output(result: &BenchmarkResult) -> String {
     let ft = &metrics.frame_times;
 
     format!(
-        r#"
+        r"
 ╔══════════════════════════════════════════════════════════════════╗
 ║                    BENCHMARK RESULTS                              ║
 ╠══════════════════════════════════════════════════════════════════╣
@@ -314,7 +321,7 @@ fn format_text_output(result: &BenchmarkResult) -> String {
 ║  60fps (16.67ms): {:<48} ║
 ║  1ms p99:         {:<48} ║
 ╚══════════════════════════════════════════════════════════════════╝
-"#,
+",
         result.widget_name,
         result.width,
         result.height,
@@ -377,14 +384,14 @@ fn run_suite(all: bool, output_dir: &PathBuf, cli: &Cli) {
 
     for widget in widgets {
         if cli.verbose {
-            eprintln!("Benchmarking: {}", widget);
+            eprintln!("Benchmarking: {widget}");
         }
 
         let result = benchmark_widget(widget, cli);
         all_results.push(result.clone());
 
         // Write individual result
-        let path = output_dir.join(format!("{}.json", widget));
+        let path = output_dir.join(format!("{widget}.json"));
         let json = result.to_json();
         fs::write(&path, json).expect("Failed to write result");
     }
@@ -434,34 +441,29 @@ fn run_compare(widget_a: &str, widget_b: &str, cli: &Cli) {
         .with_frames(cli.warmup, cli.frames)
         .with_deterministic(cli.deterministic);
 
-    let bounds = Rect::new(0.0, 0.0, cli.width as f32, cli.height as f32);
+    let bounds = Rect::new(0.0, 0.0, f32::from(cli.width), f32::from(cli.height));
 
     // Create widgets for comparison
-    let ctx = DeterministicContext::new();
+    let _ctx = DeterministicContext::new();
     let data: Vec<f64> = (0..60)
-        .map(|i| (i as f64 * 0.1).sin() * 50.0 + 50.0)
+        .map(|i| (f64::from(i) * 0.1).sin().mul_add(50.0, 50.0))
         .collect();
 
-    let result = match (
+    let result = if (
         widget_a.to_lowercase().as_str(),
         widget_b.to_lowercase().as_str(),
-    ) {
-        ("braille", "block") => {
-            let mut braille = BrailleGraph::new(data.clone()).with_mode(GraphMode::Braille);
-            let mut block = BrailleGraph::new(data).with_mode(GraphMode::Block);
-            harness.compare(&mut braille, &mut block, bounds)
-        }
-        _ => {
-            eprintln!(
-                "Comparison not implemented for: {} vs {}",
-                widget_a, widget_b
-            );
-            eprintln!("Available comparisons: braille vs block");
-            std::process::exit(1);
-        }
+    ) == ("braille", "block")
+    {
+        let mut braille = BrailleGraph::new(data.clone()).with_mode(GraphMode::Braille);
+        let mut block = BrailleGraph::new(data).with_mode(GraphMode::Block);
+        harness.compare(&mut braille, &mut block, bounds)
+    } else {
+        eprintln!("Comparison not implemented for: {widget_a} vs {widget_b}");
+        eprintln!("Available comparisons: braille vs block");
+        std::process::exit(1);
     };
 
-    println!("Comparison: {} vs {}", widget_a, widget_b);
+    println!("Comparison: {widget_a} vs {widget_b}");
     println!("{}", result.summary());
     println!();
     println!(

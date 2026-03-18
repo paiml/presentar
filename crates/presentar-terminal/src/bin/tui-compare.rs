@@ -4,6 +4,7 @@
 //!
 //! Run: cargo run --bin tui-compare --features tui-compare -- --help
 
+use std::fmt::Write as _;
 use std::fs;
 use std::io;
 use std::path::PathBuf;
@@ -149,7 +150,7 @@ fn load_or_capture(source: &str, width: u16, height: u16) -> io::Result<CellBuff
 
 fn load_ansi_file(path: &PathBuf, width: u16, height: u16) -> io::Result<CellBuffer> {
     let content = fs::read_to_string(path)?;
-    parse_ansi_to_buffer(&content, width, height)
+    Ok(parse_ansi_to_buffer(&content, width, height))
 }
 
 fn capture_command(cmd: &str, width: u16, height: u16) -> io::Result<CellBuffer> {
@@ -165,7 +166,7 @@ fn capture_command(cmd: &str, width: u16, height: u16) -> io::Result<CellBuffer>
         .output()?;
 
     let content = String::from_utf8_lossy(&output.stdout);
-    parse_ansi_to_buffer(&content, width, height)
+    Ok(parse_ansi_to_buffer(&content, width, height))
 }
 
 /// Skip an ANSI escape sequence (CSI sequence).
@@ -183,7 +184,7 @@ fn skip_ansi_escape(chars: &mut std::iter::Peekable<std::str::Chars>) {
 }
 
 /// Parse ANSI escape sequences into a `CellBuffer`
-fn parse_ansi_to_buffer(content: &str, width: u16, height: u16) -> io::Result<CellBuffer> {
+fn parse_ansi_to_buffer(content: &str, width: u16, height: u16) -> CellBuffer {
     let mut buffer = CellBuffer::new(width, height);
     let mut x = 0u16;
     let mut y = 0u16;
@@ -206,7 +207,7 @@ fn parse_ansi_to_buffer(content: &str, width: u16, height: u16) -> io::Result<Ce
         }
     }
 
-    Ok(buffer)
+    buffer
 }
 
 /// Generate text-based diff visualization
@@ -223,10 +224,11 @@ fn generate_diff_text(
         return output;
     }
 
-    output.push_str(&format!(
+    let _ = write!(
+        output,
         "Found {} differing cells:\n\n",
         result.diff_cells.len()
-    ));
+    );
 
     // Group by row
     let mut by_row: std::collections::HashMap<u16, Vec<_>> = std::collections::HashMap::new();
@@ -239,7 +241,7 @@ fn generate_diff_text(
 
     for row in rows.iter().take(20) {
         // Limit output
-        output.push_str(&format!("Row {row}:\n"));
+        let _ = writeln!(output, "Row {row}:");
 
         // Show reference row
         output.push_str("  REF: ");
@@ -265,7 +267,8 @@ fn generate_diff_text(
 
         // Show diff markers
         output.push_str("  DIF: ");
-        let row_diffs = by_row.get(row).unwrap_or(&Vec::new());
+        let empty = Vec::new();
+        let row_diffs = by_row.get(row).unwrap_or(&empty);
         for x in 0..reference.width().min(80) {
             if row_diffs.iter().any(|d| d.x == x) {
                 output.push('^');
@@ -277,10 +280,11 @@ fn generate_diff_text(
     }
 
     if rows.len() > 20 {
-        output.push_str(&format!(
-            "... and {} more rows with differences\n",
+        let _ = writeln!(
+            output,
+            "... and {} more rows with differences",
             rows.len() - 20
-        ));
+        );
     }
 
     output

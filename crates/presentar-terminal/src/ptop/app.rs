@@ -1358,7 +1358,7 @@ impl App {
             battery_available: self
                 .analyzers
                 .battery_data()
-                .map_or(false, |b| !b.batteries.is_empty()),
+                .is_some_and(|b| !b.batteries.is_empty()),
             treemap_ready: self
                 .snapshot_treemap
                 .as_ref()

@@ -29,6 +29,7 @@ use std::time::Instant;
 /// TUI Quality Scorer - SPEC-024 Section 18.10
 #[derive(Parser, Debug)]
 #[command(name = "score", version, about = "TUI Quality Scorer for Rust crates")]
+#[allow(clippy::struct_excessive_bools)]
 struct Cli {
     /// Path to crate root (default: current directory)
     #[arg(default_value = ".")]
@@ -115,6 +116,7 @@ enum MetricValue {
 
 /// Scoring configuration (F-PMAT-018)
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct ScoringConfig {
     #[serde(default = "default_weights")]
     weights: Weights,
@@ -134,7 +136,7 @@ struct Weights {
     falsifiability: f64,
 }
 
-fn default_weights() -> Weights {
+const fn default_weights() -> Weights {
     Weights {
         performance: 0.25,
         testing: 0.20,
@@ -146,6 +148,7 @@ fn default_weights() -> Weights {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct Thresholds {
     #[serde(default = "default_pass")]
     pass: u32,
@@ -159,7 +162,7 @@ impl Default for Thresholds {
     }
 }
 
-fn default_pass() -> u32 {
+const fn default_pass() -> u32 {
     80
 }
 
@@ -204,7 +207,7 @@ struct CrateAnalyzer {
 }
 
 impl CrateAnalyzer {
-    fn new(path: PathBuf, config: ScoringConfig) -> Self {
+    const fn new(path: PathBuf, config: ScoringConfig) -> Self {
         Self { path, config }
     }
 
@@ -234,8 +237,7 @@ impl CrateAnalyzer {
         }
         self.path
             .file_name()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_else(|| "unknown".into())
+            .map_or_else(|| "unknown".into(), |s| s.to_string_lossy().to_string())
     }
 
     /// Score performance dimension (25 points max)
@@ -406,7 +408,7 @@ impl CrateAnalyzer {
             MetricValue::Number(clippy_warnings as f64),
         );
 
-        let clippy_score = (6.0 - (clippy_warnings as f64 * 0.5)).max(0.0);
+        let clippy_score = (clippy_warnings as f64).mul_add(-0.5, 6.0).max(0.0);
         score += clippy_score;
 
         // Check rustfmt
@@ -551,7 +553,7 @@ impl CrateAnalyzer {
             .current_dir(&self.path)
             .output();
 
-        output.map(|o| o.status.success()).unwrap_or(true)
+        output.map_or(true, |o| o.status.success())
     }
 
     /// Grep for a pattern in src/**/*.rs and tests/**/*.rs
@@ -569,7 +571,11 @@ impl CrateAnalyzer {
                 let text = String::from_utf8_lossy(&out.stdout);
                 total += text
                     .lines()
-                    .filter_map(|line| line.split(':').last().and_then(|n| n.parse::<usize>().ok()))
+                    .filter_map(|line| {
+                        line.split(':')
+                            .next_back()
+                            .and_then(|n| n.parse::<usize>().ok())
+                    })
                     .sum::<usize>();
             }
         }
@@ -585,7 +591,11 @@ impl CrateAnalyzer {
                 let text = String::from_utf8_lossy(&out.stdout);
                 total += text
                     .lines()
-                    .filter_map(|line| line.split(':').last().and_then(|n| n.parse::<usize>().ok()))
+                    .filter_map(|line| {
+                        line.split(':')
+                            .next_back()
+                            .and_then(|n| n.parse::<usize>().ok())
+                    })
                     .sum::<usize>();
             }
         }
@@ -643,7 +653,7 @@ impl CrateAnalyzer {
             total_score,
             max_score: 100,
             grade,
-            pass: total_score >= threshold as f64,
+            pass: total_score >= f64::from(threshold),
             threshold,
             analysis_time_ms: Some(analysis_time),
         })
@@ -679,7 +689,7 @@ struct Colors {
 }
 
 impl Colors {
-    fn new(no_color: bool) -> Self {
+    const fn new(no_color: bool) -> Self {
         if no_color {
             Self {
                 green: "",
@@ -711,7 +721,7 @@ impl Colors {
 /// Format a metric value for display.
 fn format_metric(value: &MetricValue) -> String {
     match value {
-        MetricValue::Number(n) => format!("{:.1}", n),
+        MetricValue::Number(n) => format!("{n:.1}"),
         MetricValue::Text(s) => s.clone(),
         MetricValue::Bool(b) => if *b { "yes" } else { "no" }.into(),
     }
@@ -719,7 +729,7 @@ fn format_metric(value: &MetricValue) -> String {
 
 /// Print a single dimension row with optional verbose metrics.
 fn print_dimension(name: &str, dim: &DimensionResult, colors: &Colors, verbose: bool) {
-    let pct = (dim.score / dim.max as f64) * 100.0;
+    let pct = (dim.score / f64::from(dim.max)) * 100.0;
     let bar = progress_bar(pct, 20);
     println!(
         "\u{2551} {:20} \u{2502} {:5.1}/{:2} ({:5.1}%) \u{2502} {}{}{} \u{2551}",
@@ -782,7 +792,7 @@ fn print_text_report(report: &QualityReport, verbose: bool, no_color: bool) {
     println!("\u{255a}{}\u{255d}", "\u{2550}".repeat(64));
 
     if let Some(ms) = report.analysis_time_ms {
-        println!("\nAnalysis completed in {}ms", ms);
+        println!("\nAnalysis completed in {ms}ms");
     }
 }
 
@@ -807,10 +817,7 @@ fn main() {
         + config.weights.quality_metrics
         + config.weights.falsifiability;
     if (weight_sum - 1.0).abs() > 0.001 {
-        eprintln!(
-            "Warning: Dimension weights sum to {:.3}, expected 1.0",
-            weight_sum
-        );
+        eprintln!("Warning: Dimension weights sum to {weight_sum:.3}, expected 1.0");
     }
 
     let analyzer = CrateAnalyzer::new(cli.path.clone(), config);
@@ -849,7 +856,7 @@ fn main() {
             }
         }
         Err(e) => {
-            eprintln!("Error: {}", e);
+            eprintln!("Error: {e}");
             std::process::exit(1);
         }
     }
