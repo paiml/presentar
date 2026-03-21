@@ -74,82 +74,9 @@ impl InputHandler {
 
     fn convert_key(&self, key: KeyEvent) -> Option<Event> {
         let presentar_key = match key.code {
-            KeyCode::Char('a' | 'A') => Key::A,
-            KeyCode::Char('b' | 'B') => Key::B,
-            KeyCode::Char('c' | 'C') => Key::C,
-            KeyCode::Char('d' | 'D') => Key::D,
-            KeyCode::Char('e' | 'E') => Key::E,
-            KeyCode::Char('f' | 'F') => Key::F,
-            KeyCode::Char('g' | 'G') => Key::G,
-            KeyCode::Char('h' | 'H') => Key::H,
-            KeyCode::Char('i' | 'I') => Key::I,
-            KeyCode::Char('j' | 'J') => Key::J,
-            KeyCode::Char('k' | 'K') => Key::K,
-            KeyCode::Char('l' | 'L') => Key::L,
-            KeyCode::Char('m' | 'M') => Key::M,
-            KeyCode::Char('n' | 'N') => Key::N,
-            KeyCode::Char('o' | 'O') => Key::O,
-            KeyCode::Char('p' | 'P') => Key::P,
-            KeyCode::Char('q' | 'Q') => Key::Q,
-            KeyCode::Char('r' | 'R') => Key::R,
-            KeyCode::Char('s' | 'S') => Key::S,
-            KeyCode::Char('t' | 'T') => Key::T,
-            KeyCode::Char('u' | 'U') => Key::U,
-            KeyCode::Char('v' | 'V') => Key::V,
-            KeyCode::Char('w' | 'W') => Key::W,
-            KeyCode::Char('x' | 'X') => Key::X,
-            KeyCode::Char('y' | 'Y') => Key::Y,
-            KeyCode::Char('z' | 'Z') => Key::Z,
-            KeyCode::Char('0') => Key::Num0,
-            KeyCode::Char('1') => Key::Num1,
-            KeyCode::Char('2') => Key::Num2,
-            KeyCode::Char('3') => Key::Num3,
-            KeyCode::Char('4') => Key::Num4,
-            KeyCode::Char('5') => Key::Num5,
-            KeyCode::Char('6') => Key::Num6,
-            KeyCode::Char('7') => Key::Num7,
-            KeyCode::Char('8') => Key::Num8,
-            KeyCode::Char('9') => Key::Num9,
-            KeyCode::Enter => Key::Enter,
-            KeyCode::Esc => Key::Escape,
-            KeyCode::Backspace => Key::Backspace,
-            KeyCode::Tab => Key::Tab,
-            KeyCode::Delete => Key::Delete,
-            KeyCode::Insert => Key::Insert,
-            KeyCode::Up => Key::Up,
-            KeyCode::Down => Key::Down,
-            KeyCode::Left => Key::Left,
-            KeyCode::Right => Key::Right,
-            KeyCode::Home => Key::Home,
-            KeyCode::End => Key::End,
-            KeyCode::PageUp => Key::PageUp,
-            KeyCode::PageDown => Key::PageDown,
-            KeyCode::F(1) => Key::F1,
-            KeyCode::F(2) => Key::F2,
-            KeyCode::F(3) => Key::F3,
-            KeyCode::F(4) => Key::F4,
-            KeyCode::F(5) => Key::F5,
-            KeyCode::F(6) => Key::F6,
-            KeyCode::F(7) => Key::F7,
-            KeyCode::F(8) => Key::F8,
-            KeyCode::F(9) => Key::F9,
-            KeyCode::F(10) => Key::F10,
-            KeyCode::F(11) => Key::F11,
-            KeyCode::F(12) => Key::F12,
-            KeyCode::Char(' ') => Key::Space,
-            KeyCode::Char('-') => Key::Minus,
-            KeyCode::Char('=') => Key::Equal,
-            KeyCode::Char('[') => Key::BracketLeft,
-            KeyCode::Char(']') => Key::BracketRight,
-            KeyCode::Char('\\') => Key::Backslash,
-            KeyCode::Char(';') => Key::Semicolon,
-            KeyCode::Char('\'') => Key::Quote,
-            KeyCode::Char('`') => Key::Grave,
-            KeyCode::Char(',') => Key::Comma,
-            KeyCode::Char('.') => Key::Period,
-            KeyCode::Char('/') => Key::Slash,
-            // Unknown keys are ignored
-            _ => return None,
+            KeyCode::Char(ch) => char_to_key(ch)?,
+            KeyCode::F(n) => fn_key(n)?,
+            _ => non_char_key(key.code)?,
         };
 
         Some(Event::KeyDown { key: presentar_key })
@@ -202,6 +129,102 @@ impl InputHandler {
     pub fn find_binding(&self, event: &KeyEvent) -> Option<&KeyBinding> {
         self.bindings.iter().find(|b| b.matches(event))
     }
+}
+
+// =============================================================================
+// Key conversion helpers (extracted from convert_key for CB-200 compliance)
+// =============================================================================
+
+/// Sorted table for punctuation/symbol char-to-Key lookups.
+static CHAR_PUNCT_TABLE: &[(char, Key)] = &[
+    (' ', Key::Space),
+    ('\'', Key::Quote),
+    (',', Key::Comma),
+    ('-', Key::Minus),
+    ('.', Key::Period),
+    ('/', Key::Slash),
+    (';', Key::Semicolon),
+    ('=', Key::Equal),
+    ('[', Key::BracketLeft),
+    ('\\', Key::Backslash),
+    (']', Key::BracketRight),
+    ('`', Key::Grave),
+];
+
+/// Convert a character to a presentar Key.
+fn char_to_key(ch: char) -> Option<Key> {
+    match ch {
+        'a' | 'A' => Some(Key::A),
+        'b' | 'B' => Some(Key::B),
+        'c' | 'C' => Some(Key::C),
+        'd' | 'D' => Some(Key::D),
+        'e' | 'E' => Some(Key::E),
+        'f' | 'F' => Some(Key::F),
+        'g' | 'G' => Some(Key::G),
+        'h' | 'H' => Some(Key::H),
+        'i' | 'I' => Some(Key::I),
+        'j' | 'J' => Some(Key::J),
+        'k' | 'K' => Some(Key::K),
+        'l' | 'L' => Some(Key::L),
+        'm' | 'M' => Some(Key::M),
+        'n' | 'N' => Some(Key::N),
+        'o' | 'O' => Some(Key::O),
+        'p' | 'P' => Some(Key::P),
+        'q' | 'Q' => Some(Key::Q),
+        'r' | 'R' => Some(Key::R),
+        's' | 'S' => Some(Key::S),
+        't' | 'T' => Some(Key::T),
+        'u' | 'U' => Some(Key::U),
+        'v' | 'V' => Some(Key::V),
+        'w' | 'W' => Some(Key::W),
+        'x' | 'X' => Some(Key::X),
+        'y' | 'Y' => Some(Key::Y),
+        'z' | 'Z' => Some(Key::Z),
+        '0' => Some(Key::Num0),
+        '1' => Some(Key::Num1),
+        '2' => Some(Key::Num2),
+        '3' => Some(Key::Num3),
+        '4' => Some(Key::Num4),
+        '5' => Some(Key::Num5),
+        '6' => Some(Key::Num6),
+        '7' => Some(Key::Num7),
+        '8' => Some(Key::Num8),
+        '9' => Some(Key::Num9),
+        _ => CHAR_PUNCT_TABLE
+            .binary_search_by_key(&ch, |&(c, _)| c)
+            .map(|i| CHAR_PUNCT_TABLE[i].1)
+            .ok(),
+    }
+}
+
+/// Convert function key number to presentar Key.
+fn fn_key(n: u8) -> Option<Key> {
+    static FN_KEYS: [Key; 12] = [
+        Key::F1, Key::F2, Key::F3, Key::F4, Key::F5, Key::F6,
+        Key::F7, Key::F8, Key::F9, Key::F10, Key::F11, Key::F12,
+    ];
+    FN_KEYS.get(n.wrapping_sub(1) as usize).copied()
+}
+
+/// Convert non-char KeyCode to presentar Key.
+fn non_char_key(code: KeyCode) -> Option<Key> {
+    Some(match code {
+        KeyCode::Enter => Key::Enter,
+        KeyCode::Esc => Key::Escape,
+        KeyCode::Backspace => Key::Backspace,
+        KeyCode::Tab => Key::Tab,
+        KeyCode::Delete => Key::Delete,
+        KeyCode::Insert => Key::Insert,
+        KeyCode::Up => Key::Up,
+        KeyCode::Down => Key::Down,
+        KeyCode::Left => Key::Left,
+        KeyCode::Right => Key::Right,
+        KeyCode::Home => Key::Home,
+        KeyCode::End => Key::End,
+        KeyCode::PageUp => Key::PageUp,
+        KeyCode::PageDown => Key::PageDown,
+        _ => return None,
+    })
 }
 
 #[cfg(test)]

@@ -497,79 +497,88 @@ pub fn truncate_process_name(name: &str, max_len: usize) -> String {
 // SERVICE AUTO-DETECTION (GAP-CONN-003)
 // =============================================================================
 
-/// Port-to-service name mapping (GAP-CONN-003).
+/// Sorted port-to-service lookup table (GAP-CONN-003).
 ///
 /// Maps well-known ports to service names for quick identification.
 /// Based on IANA port assignments and common conventions.
+/// Sorted by port number for binary search.
+static PORT_SERVICES: &[(u16, &str)] = &[
+    // System services
+    (20, "ftp-data"),
+    (21, "ftp"),
+    (22, "ssh"),
+    (23, "telnet"),
+    (25, "smtp"),
+    (53, "dns"),
+    (67, "dhcp"),
+    (68, "dhcp"),
+    (69, "tftp"),
+    (80, "http"),
+    (110, "pop3"),
+    (119, "nntp"),
+    (123, "ntp"),
+    (143, "imap"),
+    (161, "snmp"),
+    (162, "snmptrap"),
+    (179, "bgp"),
+    (194, "irc"),
+    (443, "https"),
+    (445, "smb"),
+    (465, "smtps"),
+    (514, "syslog"),
+    (587, "submission"),
+    (636, "ldaps"),
+    (873, "rsync"),
+    (993, "imaps"),
+    (995, "pop3s"),
+    // Other common
+    (1080, "socks"),
+    // Database services
+    (1433, "mssql"),
+    (1521, "oracle"),
+    // Message queues
+    (1883, "mqtt"),
+    // Container/orchestration
+    (2375, "docker"),
+    (2376, "docker-tls"),
+    // Development
+    (3000, "dev-http"),
+    // Monitoring
+    (3100, "loki"),
+    (3306, "mysql"),
+    (3389, "rdp"),
+    (4000, "dev-http"),
+    (5000, "dev-http"),
+    (5432, "postgres"),
+    (5601, "kibana"),
+    (5672, "amqp"),
+    (5900, "vnc"),
+    (6379, "redis"),
+    (6443, "k8s-api"),
+    (8000, "dev-http"),
+    (8080, "http-alt"),
+    (8443, "https-alt"),
+    (9000, "dev-http"),
+    (9042, "cassandra"),
+    (9090, "prometheus"),
+    (9092, "kafka"),
+    (9100, "node-exp"),
+    (9200, "elastic"),
+    (10250, "kubelet"),
+    (27017, "mongodb"),
+];
+
+/// Port-to-service name lookup via binary search (GAP-CONN-003).
 #[must_use]
 pub fn port_to_service(port: u16) -> Option<&'static str> {
-    match port {
-        // System services
-        20 => Some("ftp-data"),
-        21 => Some("ftp"),
-        22 => Some("ssh"),
-        23 => Some("telnet"),
-        25 => Some("smtp"),
-        53 => Some("dns"),
-        67 => Some("dhcp"),
-        68 => Some("dhcp"),
-        69 => Some("tftp"),
-        80 => Some("http"),
-        110 => Some("pop3"),
-        119 => Some("nntp"),
-        123 => Some("ntp"),
-        143 => Some("imap"),
-        161 => Some("snmp"),
-        162 => Some("snmptrap"),
-        179 => Some("bgp"),
-        194 => Some("irc"),
-        443 => Some("https"),
-        445 => Some("smb"),
-        465 => Some("smtps"),
-        514 => Some("syslog"),
-        587 => Some("submission"),
-        636 => Some("ldaps"),
-        873 => Some("rsync"),
-        993 => Some("imaps"),
-        995 => Some("pop3s"),
-        // Database services
-        1433 => Some("mssql"),
-        1521 => Some("oracle"),
-        3306 => Some("mysql"),
-        5432 => Some("postgres"),
-        6379 => Some("redis"),
-        9042 => Some("cassandra"),
-        27017 => Some("mongodb"),
-        // Message queues
-        1883 => Some("mqtt"),
-        5672 => Some("amqp"),
-        9092 => Some("kafka"),
-        // Container/orchestration
-        2375 => Some("docker"),
-        2376 => Some("docker-tls"),
-        6443 => Some("k8s-api"),
-        10250 => Some("kubelet"),
-        // Development
-        3000 => Some("dev-http"),
-        4000 => Some("dev-http"),
-        5000 => Some("dev-http"),
-        8000 => Some("dev-http"),
-        8080 => Some("http-alt"),
-        8443 => Some("https-alt"),
-        9000 => Some("dev-http"),
-        // Monitoring
-        9090 => Some("prometheus"),
-        9100 => Some("node-exp"),
-        3100 => Some("loki"),
-        9200 => Some("elastic"),
-        5601 => Some("kibana"),
-        // Other common
-        1080 => Some("socks"),
-        3389 => Some("rdp"),
-        5900 => Some("vnc"),
-        6000..=6063 => Some("x11"),
-        _ => None,
+    // Handle X11 range specially (6000..=6063)
+    if (6000..=6063).contains(&port) {
+        return Some("x11");
     }
+    PORT_SERVICES
+        .binary_search_by_key(&port, |&(p, _)| p)
+        .map(|i| PORT_SERVICES[i].1)
+        .ok()
 }
 
 /// Get service name with fallback to port number.
