@@ -75,8 +75,14 @@ impl Harness {
 
     /// Simulate a key press.
     pub fn press_key(&mut self, key: Key) -> &mut Self {
-        self.event_queue.push_back(Event::KeyDown { key, modifiers: Default::default() });
-        self.event_queue.push_back(Event::KeyUp { key, modifiers: Default::default() });
+        self.event_queue.push_back(Event::KeyDown {
+            key,
+            modifiers: Default::default(),
+        });
+        self.event_queue.push_back(Event::KeyUp {
+            key,
+            modifiers: Default::default(),
+        });
         self.process_events();
         self
     }

@@ -46,6 +46,18 @@ pub struct Scene {
     /// Security permissions
     #[serde(default)]
     pub permissions: Permissions,
+
+    /// Header bar configuration (for tmux layout)
+    #[serde(default)]
+    pub header: Option<HeaderFooter>,
+
+    /// Footer bar configuration (for tmux layout)
+    #[serde(default)]
+    pub footer: Option<HeaderFooter>,
+
+    /// Keyboard sequence bindings (for tmux layout)
+    #[serde(default)]
+    pub key_bindings: Option<KeyBindings>,
 }
 
 /// Scene metadata.
@@ -233,6 +245,8 @@ pub enum LayoutType {
     Flex,
     /// Absolute positioning
     Absolute,
+    /// TMUX-style multi-pane terminal layout
+    Tmux,
 }
 
 /// Flex direction.
@@ -290,6 +304,8 @@ pub enum WidgetType {
     Markdown,
     /// Model inference runner
     Inference,
+    /// Interactive terminal pane (APR shell, WOS, or static)
+    Terminal,
 }
 
 /// Grid position for widgets.
@@ -413,6 +429,29 @@ pub struct WidgetConfig {
     /// Output field
     #[serde(default)]
     pub output: Option<String>,
+
+    // Terminal fields (mode field shared with Image)
+    /// URL to APR model file
+    #[serde(default)]
+    pub model_url: Option<String>,
+    /// Terminal prompt string
+    #[serde(default)]
+    pub prompt: Option<String>,
+    /// Enable search bar at bottom of pane
+    #[serde(default)]
+    pub search_bar: Option<bool>,
+    /// Scrollback history size (lines)
+    #[serde(default)]
+    pub history_size: Option<u32>,
+    /// Script path for WOS mode
+    #[serde(default)]
+    pub script: Option<String>,
+    /// Auto-run script on load
+    #[serde(default)]
+    pub auto_run: Option<bool>,
+    /// Hint text shown when auto-run is enabled
+    #[serde(default)]
+    pub auto_run_hint: Option<String>,
 }
 
 /// Gauge threshold.
@@ -483,6 +522,115 @@ pub struct Permissions {
     /// Camera access
     #[serde(default)]
     pub camera: bool,
+}
+
+/// Header or footer bar configuration for tmux layout.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HeaderFooter {
+    /// Height in pixels
+    #[serde(default = "default_header_height")]
+    pub height: u32,
+
+    /// Background color
+    #[serde(default)]
+    pub background: Option<String>,
+
+    /// Content sections (left, center, right)
+    #[serde(default)]
+    pub content: HeaderContent,
+}
+
+fn default_header_height() -> u32 {
+    48
+}
+
+/// Header/footer content layout.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HeaderContent {
+    /// Left-aligned items
+    #[serde(default)]
+    pub left: Vec<ContentItem>,
+    /// Center-aligned items
+    #[serde(default)]
+    pub center: Vec<ContentItem>,
+    /// Right-aligned items
+    #[serde(default)]
+    pub right: Vec<ContentItem>,
+}
+
+/// A content item within header/footer.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContentItem {
+    /// Item type (text, nav, pane_tabs)
+    #[serde(rename = "type")]
+    pub item_type: String,
+    /// Text content
+    #[serde(default)]
+    pub content: Option<String>,
+    /// Style name
+    #[serde(default)]
+    pub style: Option<String>,
+    /// Navigation items (for nav type)
+    #[serde(default)]
+    pub items: Vec<NavItem>,
+}
+
+/// Navigation link item.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NavItem {
+    /// Display label
+    pub label: String,
+    /// Link target
+    pub href: String,
+    /// Open in new tab
+    #[serde(default)]
+    pub external: bool,
+}
+
+/// Keyboard binding configuration for tmux-style prefix keys.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeyBindings {
+    /// Prefix key (e.g., "ctrl+b")
+    #[serde(default = "default_prefix_key")]
+    pub prefix_key: String,
+
+    /// Timeout in ms after prefix key before returning to normal mode
+    #[serde(default = "default_prefix_timeout")]
+    pub prefix_timeout_ms: u32,
+
+    /// Two-key sequences (prefix + follow-up)
+    #[serde(default)]
+    pub sequences: Vec<KeySequence>,
+
+    /// Single-key global bindings (no prefix needed)
+    #[serde(default)]
+    pub global: Vec<GlobalKeyBinding>,
+}
+
+fn default_prefix_key() -> String {
+    "ctrl+b".into()
+}
+
+fn default_prefix_timeout() -> u32 {
+    500
+}
+
+/// A two-key sequence binding.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeySequence {
+    /// Key sequence (e.g., ["ctrl+b", "0"])
+    pub keys: Vec<String>,
+    /// Action to perform
+    pub action: serde_yaml_ng::Value,
+}
+
+/// A single global key binding.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GlobalKeyBinding {
+    /// Key name
+    pub key: String,
+    /// Action to perform
+    pub action: serde_yaml_ng::Value,
 }
 
 /// Error type for scene parsing and validation.
@@ -752,6 +900,9 @@ impl Scene {
             }
             LayoutType::Flex => {
                 // Flex layout has optional fields
+            }
+            LayoutType::Tmux => {
+                // Tmux layout uses rows/cols from SceneLayout (optional)
             }
         }
         Ok(())

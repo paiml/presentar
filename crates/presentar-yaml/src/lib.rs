@@ -40,8 +40,9 @@ pub use pacha::{
     ResourceType,
 };
 pub use scene::{
-    Binding, BindingAction, DatasetResource, DatasetType, FlexDirection, GridPosition, LayoutType,
-    ModelResource, ModelType, Permissions, ResourceSource, Scene, SceneError, SceneLayout,
-    SceneMetadata, SceneTheme, SceneWidget, Threshold, WidgetConfig as SceneWidgetConfig,
-    WidgetType,
+    Binding, BindingAction, ContentItem, DatasetResource, DatasetType, FlexDirection,
+    GlobalKeyBinding, GridPosition, HeaderContent, HeaderFooter, KeyBindings, KeySequence,
+    LayoutType, ModelResource, ModelType, NavItem, Permissions, ResourceSource, Scene, SceneError,
+    SceneLayout, SceneMetadata, SceneTheme, SceneWidget, Threshold,
+    WidgetConfig as SceneWidgetConfig, WidgetType,
 };

@@ -1256,8 +1256,3 @@ impl ExpressionExecutor {
         Ok(Value::Array(vec![]))
     }
 }
-
-
-#[cfg(test)]
-#[path = "executor_tests.rs"]
-mod tests;

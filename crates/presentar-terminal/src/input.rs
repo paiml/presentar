@@ -85,7 +85,10 @@ impl InputHandler {
             shift: key.modifiers.contains(KeyModifiers::SHIFT),
             meta: key.modifiers.contains(KeyModifiers::SUPER),
         };
-        Some(Event::KeyDown { key: presentar_key, modifiers })
+        Some(Event::KeyDown {
+            key: presentar_key,
+            modifiers,
+        })
     }
 
     fn convert_mouse(&self, mouse: crossterm::event::MouseEvent) -> Event {
@@ -206,8 +209,18 @@ fn char_to_key(ch: char) -> Option<Key> {
 /// Convert function key number to presentar Key.
 fn fn_key(n: u8) -> Option<Key> {
     static FN_KEYS: [Key; 12] = [
-        Key::F1, Key::F2, Key::F3, Key::F4, Key::F5, Key::F6,
-        Key::F7, Key::F8, Key::F9, Key::F10, Key::F11, Key::F12,
+        Key::F1,
+        Key::F2,
+        Key::F3,
+        Key::F4,
+        Key::F5,
+        Key::F6,
+        Key::F7,
+        Key::F8,
+        Key::F9,
+        Key::F10,
+        Key::F11,
+        Key::F12,
     ];
     FN_KEYS.get(n.wrapping_sub(1) as usize).copied()
 }

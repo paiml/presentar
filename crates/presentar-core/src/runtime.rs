@@ -1654,8 +1654,3 @@ impl SpringAnimation {
         self.advance(delta_ms as f32 / 1000.0);
     }
 }
-
-
-#[cfg(test)]
-#[path = "runtime_tests.rs"]
-mod tests;

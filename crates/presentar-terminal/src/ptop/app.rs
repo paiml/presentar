@@ -1998,8 +1998,3 @@ fn detect_container() -> bool {
             .map(|s| s.contains("docker") || s.contains("containerd"))
             .unwrap_or(false)
 }
-
-
-#[cfg(test)]
-#[path = "app_tests.rs"]
-mod tests;

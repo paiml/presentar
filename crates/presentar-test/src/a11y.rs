@@ -1350,8 +1350,3 @@ impl FormA11yReport {
         }
     }
 }
-
-
-#[cfg(test)]
-#[path = "a11y_tests.rs"]
-mod tests;

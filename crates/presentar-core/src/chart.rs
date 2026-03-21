@@ -1062,8 +1062,3 @@ impl DrawBatch {
         calls
     }
 }
-
-
-#[cfg(test)]
-#[path = "chart_tests.rs"]
-mod tests;

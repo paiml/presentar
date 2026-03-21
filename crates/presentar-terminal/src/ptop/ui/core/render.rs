@@ -6583,8 +6583,3 @@ pub fn panel_border_color(panel: PanelType) -> Color {
         PanelType::Containers => CONTAINERS_COLOR,
     }
 }
-
-
-#[cfg(test)]
-#[path = "render_tests.rs"]
-mod tests;

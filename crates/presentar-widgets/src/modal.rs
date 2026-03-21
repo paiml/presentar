@@ -408,7 +408,9 @@ impl Widget for Modal {
         }
 
         match event {
-            Event::KeyDown { key: Key::Escape, .. } if self.close_on_escape => {
+            Event::KeyDown {
+                key: Key::Escape, ..
+            } if self.close_on_escape => {
                 self.hide();
                 return Some(Box::new(ModalClosed {
                     reason: CloseReason::Escape,
