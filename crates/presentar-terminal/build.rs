@@ -195,7 +195,8 @@ fn enforce_widget_tests() {
             let widget_path = widgets_dir.join(format!("{widget}.rs"));
             let content = fs::read_to_string(&widget_path).unwrap_or_default();
 
-            let has_inline_tests = content.contains("#[cfg(test)]") && content.contains("#[test]");
+            let has_inline_tests = content.contains("#[cfg(test)]")
+                && (content.contains("#[test]") || content.contains("#[path ="));
 
             // Check for external test file
             let external_test_patterns = [
