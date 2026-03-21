@@ -361,6 +361,7 @@ impl Widget for ContainersPanel {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
 
@@ -569,8 +570,7 @@ mod tests {
             .with_containers(containers)
             .running_only(true);
 
-        let visible: Vec<_> = panel.visible_containers().collect();
-        assert_eq!(visible.len(), 2); // Only running containers
+        assert_eq!(panel.visible_containers().count(), 2);
     }
 
     #[test]
@@ -584,8 +584,7 @@ mod tests {
             .with_containers(containers)
             .running_only(false);
 
-        let visible: Vec<_> = panel.visible_containers().collect();
-        assert_eq!(visible.len(), 2); // All containers
+        assert_eq!(panel.visible_containers().count(), 2);
     }
 
     #[test]
@@ -612,7 +611,6 @@ mod tests {
             .with_containers(containers)
             .max_containers(3);
 
-        let visible: Vec<_> = panel.visible_containers().collect();
-        assert_eq!(visible.len(), 3);
+        assert_eq!(panel.visible_containers().count(), 3);
     }
 }

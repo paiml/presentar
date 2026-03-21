@@ -176,6 +176,7 @@ impl Default for Constraints {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
 
@@ -314,7 +315,7 @@ mod tests {
     #[test]
     fn test_constraints_debug() {
         let c = Constraints::new(10.0, 100.0, 20.0, 200.0);
-        let debug = format!("{:?}", c);
+        let debug = format!("{c:?}");
         assert!(debug.contains("Constraints"));
         assert!(debug.contains("min_width"));
         assert!(debug.contains("max_width"));

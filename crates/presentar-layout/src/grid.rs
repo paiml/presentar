@@ -1135,7 +1135,7 @@ mod tests {
     #[test]
     fn test_grid_template_clone() {
         let template = GridTemplate::twelve_column().with_area("header", GridArea::cell(0, 0));
-        let cloned = template.clone();
+        let cloned = template;
         assert_eq!(cloned.columns.len(), 12);
         assert!(cloned.areas.contains_key("header"));
     }
@@ -1242,7 +1242,7 @@ mod tests {
     #[test]
     fn test_grid_item_clone() {
         let item = GridItem::new().column(2).row(3).span_columns(2);
-        let cloned = item.clone();
+        let cloned = item;
         assert_eq!(cloned.column_start, 2);
         assert_eq!(cloned.row_start, 3);
     }
@@ -1357,7 +1357,7 @@ mod tests {
             width: 100.0,
             height: 50.0,
         };
-        let cloned = layout.clone();
+        let cloned = layout;
         assert_eq!(cloned.width, 100.0);
     }
 

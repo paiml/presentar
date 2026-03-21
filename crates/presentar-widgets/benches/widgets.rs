@@ -6,13 +6,13 @@ use presentar_widgets::{Button, Text};
 
 fn bench_button_creation(c: &mut Criterion) {
     c.bench_function("button_new", |b| {
-        b.iter(|| Button::new(black_box("Click me")))
+        b.iter(|| Button::new(black_box("Click me")));
     });
 }
 
 fn bench_text_creation(c: &mut Criterion) {
     c.bench_function("text_new", |b| {
-        b.iter(|| Text::new(black_box("Hello, World!")))
+        b.iter(|| Text::new(black_box("Hello, World!")));
     });
 }
 
@@ -21,7 +21,7 @@ fn bench_button_measure(c: &mut Criterion) {
     let constraints = Constraints::new(0.0, 200.0, 0.0, 50.0);
 
     c.bench_function("button_measure", |b| {
-        b.iter(|| button.measure(black_box(constraints)))
+        b.iter(|| button.measure(black_box(constraints)));
     });
 }
 
@@ -30,7 +30,7 @@ fn bench_text_measure(c: &mut Criterion) {
     let constraints = Constraints::new(0.0, 200.0, 0.0, 50.0);
 
     c.bench_function("text_measure", |b| {
-        b.iter(|| text.measure(black_box(constraints)))
+        b.iter(|| text.measure(black_box(constraints)));
     });
 }
 
@@ -42,7 +42,7 @@ fn bench_constraints_constrain(c: &mut Criterion) {
         b.iter(|| {
             let s = black_box(size);
             constraints.constrain(s)
-        })
+        });
     });
 }
 
@@ -55,7 +55,7 @@ fn bench_list_creation(c: &mut Criterion) {
                 .map(|i| ListItem::new(format!("item_{i}")))
                 .collect();
             List::new().items(black_box(items))
-        })
+        });
     });
 }
 
@@ -70,7 +70,7 @@ fn bench_list_scroll(c: &mut Criterion) {
     c.bench_function("list_scroll_to_item", |b| {
         b.iter(|| {
             list.scroll_to(black_box(500));
-        })
+        });
     });
 }
 
@@ -78,7 +78,7 @@ fn bench_modal_creation(c: &mut Criterion) {
     use presentar_widgets::Modal;
 
     c.bench_function("modal_new_with_title", |b| {
-        b.iter(|| Modal::new().title(black_box("Confirm Action")))
+        b.iter(|| Modal::new().title(black_box("Confirm Action")));
     });
 }
 
@@ -91,7 +91,7 @@ fn bench_menu_creation(c: &mut Criterion) {
                 .map(|i| MenuItem::action(format!("Action {i}"), format!("action_{i}")))
                 .collect();
             Menu::new().items(black_box(items))
-        })
+        });
     });
 }
 
@@ -100,7 +100,7 @@ fn bench_reactive_cell(c: &mut Criterion) {
 
     c.bench_function("reactive_cell_get", |b| {
         let cell = ReactiveCell::new(42);
-        b.iter(|| black_box(cell.get()))
+        b.iter(|| black_box(cell.get()));
     });
 
     c.bench_function("reactive_cell_set", |b| {
@@ -108,8 +108,8 @@ fn bench_reactive_cell(c: &mut Criterion) {
         let mut val = 0;
         b.iter(|| {
             val += 1;
-            cell.set(black_box(val))
-        })
+            cell.set(black_box(val));
+        });
     });
 }
 

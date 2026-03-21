@@ -330,7 +330,7 @@ mod tests {
 
     #[test]
     fn test_horizon_implements_widget() {
-        let mut graph = HorizonGraph::new(vec![0.5, 0.6, 0.7]);
+        let graph = HorizonGraph::new(vec![0.5, 0.6, 0.7]);
         let size = graph.measure(Constraints {
             min_width: 0.0,
             min_height: 0.0,

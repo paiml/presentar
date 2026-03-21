@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::disallowed_methods)]
 //! Integration tests for presentar-yaml.
 //!
 //! These tests verify YAML manifest parsing and expression execution end-to-end.

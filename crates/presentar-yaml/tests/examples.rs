@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::disallowed_methods)]
 //! Example YAML validation tests.
 //!
 //! EXTREME TDD: These tests validate all 50 examples from the spec.
@@ -386,16 +387,13 @@ fn test_dsh_002_dataset_explorer() {
     assert_eq!(manifest.name, "dataset-explorer");
 
     // Must have interactive widgets
-    let widget_types: Vec<_> = manifest
-        .layout
-        .sections
-        .iter()
-        .flat_map(|s| &s.widgets)
-        .map(|w| w.widget_type.as_str())
-        .collect();
-
     assert!(
-        widget_types.contains(&"data_table"),
+        manifest
+            .layout
+            .sections
+            .iter()
+            .flat_map(|s| &s.widgets)
+            .any(|w| w.widget_type == "data_table"),
         "DSH-002 must have data_table"
     );
 }
@@ -522,7 +520,7 @@ fn test_all_apr_examples_exist() {
 
     for file in &required {
         let path = apr_dir.join(file);
-        assert!(path.exists(), "Required APR example missing: {}", file);
+        assert!(path.exists(), "Required APR example missing: {file}");
     }
 }
 
@@ -542,7 +540,7 @@ fn test_all_ald_examples_exist() {
 
     for file in &required {
         let path = ald_dir.join(file);
-        assert!(path.exists(), "Required ALD example missing: {}", file);
+        assert!(path.exists(), "Required ALD example missing: {file}");
     }
 }
 
@@ -559,7 +557,7 @@ fn test_all_chart_examples_exist() {
 
     for file in &required {
         let path = charts_dir.join(file);
-        assert!(path.exists(), "Required chart example missing: {}", file);
+        assert!(path.exists(), "Required chart example missing: {file}");
     }
 }
 
@@ -581,11 +579,7 @@ fn test_all_dashboard_examples_exist() {
 
     for file in &required {
         let path = dashboards_dir.join(file);
-        assert!(
-            path.exists(),
-            "Required dashboard example missing: {}",
-            file
-        );
+        assert!(path.exists(), "Required dashboard example missing: {file}");
     }
 }
 
@@ -601,10 +595,6 @@ fn test_all_edge_case_examples_exist() {
 
     for file in &required {
         let path = edge_dir.join(file);
-        assert!(
-            path.exists(),
-            "Required edge case example missing: {}",
-            file
-        );
+        assert!(path.exists(), "Required edge case example missing: {file}");
     }
 }

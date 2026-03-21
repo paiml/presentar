@@ -1,4 +1,4 @@
-//! SPEC-024 Section 30: ExplodedView Interface Tests
+//! SPEC-024 Section 30: `ExplodedView` Interface Tests
 //!
 //! TESTS DEFINE INTERFACE. IMPLEMENTATION FOLLOWS.
 //!
@@ -15,7 +15,7 @@ use presentar_core::Rect;
 // INTERFACE DEFINITION: ExplodedView must fill screen
 // =============================================================================
 
-/// Test: ExplodedView dimensions match terminal dimensions
+/// Test: `ExplodedView` dimensions match terminal dimensions
 #[test]
 fn test_exploded_view_fills_terminal_width() {
     // ExplodedView MUST use 100% of available width
@@ -30,7 +30,7 @@ fn test_exploded_view_fills_terminal_width() {
     assert!(exploded_bounds.height >= terminal_height - 2.0);
 }
 
-/// Test: ExplodedView hides all other panels
+/// Test: `ExplodedView` hides all other panels
 #[test]
 fn test_exploded_view_is_exclusive() {
     // When one panel is exploded, NO other panels should render
@@ -44,7 +44,7 @@ fn test_exploded_view_is_exclusive() {
     );
 }
 
-/// Test: ExplodedView has navigation support
+/// Test: `ExplodedView` has navigation support
 #[test]
 fn test_exploded_view_supports_row_navigation() {
     // ExplodedView MUST support j/k or arrow key navigation
@@ -59,7 +59,7 @@ fn test_exploded_view_supports_row_navigation() {
     assert_eq!(prev_row, 4);
 }
 
-/// Test: ExplodedView can be dismissed
+/// Test: `ExplodedView` can be dismissed
 #[test]
 fn test_exploded_view_dismissable() {
     // Escape or Tab MUST return to normal multi-panel view
@@ -76,6 +76,7 @@ fn test_exploded_view_dismissable() {
 
 /// Test: Panel types must have exploded render method
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn test_panel_has_exploded_render() {
     // Each panel type MUST implement render_exploded(bounds: Rect)
     // This test defines the interface - implementation follows
@@ -205,6 +206,7 @@ fn test_tab_toggles_exploded() {
     // Tab again (or Escape) -> collapse back to normal
 
     let focused_panel = 0; // CPU
+    assert_eq!(focused_panel, 0, "CPU panel index");
     let is_exploded = false;
     let tab_pressed = true;
 
@@ -224,6 +226,10 @@ fn test_exploded_preserves_scroll() {
 
     let scroll_before_explode = 10;
     let scroll_in_exploded = 25;
+    assert_ne!(
+        scroll_in_exploded, scroll_before_explode,
+        "Exploded scroll differs"
+    );
     let scroll_after_collapse = scroll_before_explode; // Restored
 
     assert_eq!(

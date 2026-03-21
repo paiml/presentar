@@ -157,7 +157,7 @@ impl DonutChart {
 }
 
 /// Get character for segment index.
-fn segment_char(index: usize) -> char {
+const fn segment_char(index: usize) -> char {
     match index {
         0 => '█',
         1 => '▓',

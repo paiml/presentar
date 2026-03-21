@@ -803,6 +803,7 @@ impl Brick for DataCard {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
 
@@ -1258,7 +1259,7 @@ mod tests {
     #[test]
     fn test_data_quality_debug() {
         let quality = DataQuality::Good;
-        let debug_str = format!("{:?}", quality);
+        let debug_str = format!("{quality:?}");
         assert!(debug_str.contains("Good"));
     }
 
@@ -1290,7 +1291,7 @@ mod tests {
     #[test]
     fn test_data_column_debug() {
         let col = DataColumn::new("id", "int64");
-        let debug_str = format!("{:?}", col);
+        let debug_str = format!("{col:?}");
         assert!(debug_str.contains("id"));
         assert!(debug_str.contains("int64"));
     }
@@ -1300,7 +1301,7 @@ mod tests {
         let col = DataColumn::new("name", "string")
             .nullable()
             .description("User name");
-        let cloned = col.clone();
+        let cloned = col;
         assert_eq!(cloned.name, "name");
         assert_eq!(cloned.dtype, "string");
         assert!(cloned.nullable);
@@ -1323,14 +1324,14 @@ mod tests {
     #[test]
     fn test_data_stats_debug() {
         let stats = DataStats::new().rows(100);
-        let debug_str = format!("{:?}", stats);
+        let debug_str = format!("{stats:?}");
         assert!(debug_str.contains("100"));
     }
 
     #[test]
     fn test_data_stats_clone() {
         let stats = DataStats::new().rows(1000).columns(10).size_bytes(50000);
-        let cloned = stats.clone();
+        let cloned = stats;
         assert_eq!(cloned.rows, Some(1000));
         assert_eq!(cloned.columns, Some(10));
         assert_eq!(cloned.size_bytes, Some(50000));
@@ -1386,7 +1387,7 @@ mod tests {
     #[test]
     fn test_data_card_debug() {
         let card = DataCard::new("test");
-        let debug_str = format!("{:?}", card);
+        let debug_str = format!("{card:?}");
         assert!(debug_str.contains("test"));
     }
 
@@ -1395,7 +1396,7 @@ mod tests {
         let card = DataCard::new("original")
             .version("2.0.0")
             .quality(DataQuality::Good);
-        let cloned = card.clone();
+        let cloned = card;
         assert_eq!(cloned.get_name(), "original");
         assert_eq!(cloned.get_version(), "2.0.0");
         assert_eq!(cloned.get_quality(), DataQuality::Good);

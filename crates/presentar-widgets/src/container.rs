@@ -251,6 +251,7 @@ impl Brick for Container {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
 
@@ -591,7 +592,7 @@ mod tests {
 
     #[test]
     fn test_container_deserialize() {
-        let json = r##"{"background":{"r":1.0,"g":0.0,"b":0.0,"a":1.0},"corner_radius":{"top_left":0.0,"top_right":0.0,"bottom_left":0.0,"bottom_right":0.0},"padding":10.0,"min_width":50.0,"min_height":null,"max_width":null,"max_height":null,"test_id_value":null}"##;
+        let json = r#"{"background":{"r":1.0,"g":0.0,"b":0.0,"a":1.0},"corner_radius":{"top_left":0.0,"top_right":0.0,"bottom_left":0.0,"bottom_right":0.0},"padding":10.0,"min_width":50.0,"min_height":null,"max_width":null,"max_height":null,"test_id_value":null}"#;
         let c: Container = serde_json::from_str(json).unwrap();
         assert_eq!(c.padding, 10.0);
         assert_eq!(c.min_width, Some(50.0));

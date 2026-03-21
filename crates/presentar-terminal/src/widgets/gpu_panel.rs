@@ -617,6 +617,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::identity_op)]
     fn test_gpu_panel_paint_full() {
         use crate::direct::{CellBuffer, DirectTerminalCanvas};
 

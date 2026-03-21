@@ -1102,7 +1102,7 @@ mod tests {
         graph.paint(&mut canvas);
         // Should render y-axis labels (min and max values)
         let has_max_label = canvas.texts.iter().any(|(t, _)| t.contains("100"));
-        let has_min_label = canvas.texts.iter().any(|(t, _)| t.contains("0"));
+        let has_min_label = canvas.texts.iter().any(|(t, _)| t.contains('0'));
         assert!(has_max_label || has_min_label);
     }
 
@@ -1311,7 +1311,7 @@ mod tests {
         let margins = AxisMargins::WIDE;
         let debug_str = format!("{:?}", margins);
         assert!(debug_str.contains("10")); // y_axis_width
-        assert!(debug_str.contains("2")); // x_axis_height
+        assert!(debug_str.contains('2')); // x_axis_height
     }
 
     #[test]

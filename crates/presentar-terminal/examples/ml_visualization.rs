@@ -1,13 +1,13 @@
 //! ML Visualization Example
 //!
 //! Demonstrates the SIMD/WGPU-first ML visualization widgets:
-//! - ViolinPlot: Distribution visualization with KDE
-//! - RocPrCurve: ROC and Precision-Recall curves
-//! - LossCurve: Training loss with EMA smoothing
-//! - ForceGraph: Network/graph visualization
+//! - `ViolinPlot`: Distribution visualization with KDE
+//! - `RocPrCurve`: ROC and Precision-Recall curves
+//! - `LossCurve`: Training loss with EMA smoothing
+//! - `ForceGraph`: Network/graph visualization
 //! - Treemap: Hierarchical data visualization
 //!
-//! Run with: cargo run --example ml_visualization
+//! Run with: cargo run --example `ml_visualization`
 
 use presentar_core::{Color, Rect, Widget};
 use presentar_terminal::{
@@ -43,17 +43,17 @@ fn demo_violin_plot() {
     // Create sample distributions
     let normal_data: Vec<f64> = (0..100)
         .map(|i| {
-            let x = (i as f64 - 50.0) / 15.0;
-            50.0 + 10.0 * (-x * x / 2.0).exp() * (1.0 + (i as f64 * 0.1).sin())
+            let x = (f64::from(i) - 50.0) / 15.0;
+            (10.0 * (-x * x / 2.0).exp()).mul_add(1.0 + (f64::from(i) * 0.1).sin(), 50.0)
         })
         .collect();
 
     let bimodal_data: Vec<f64> = (0..100)
         .map(|i| {
             if i < 50 {
-                30.0 + 5.0 * (i as f64 * 0.2).sin()
+                5.0f64.mul_add((f64::from(i) * 0.2).sin(), 30.0)
             } else {
-                70.0 + 5.0 * (i as f64 * 0.2).cos()
+                5.0f64.mul_add((f64::from(i) * 0.2).cos(), 70.0)
             }
         })
         .collect();
@@ -86,15 +86,15 @@ fn demo_roc_pr_curve() {
     let y_score_good: Vec<f64> = (0..100)
         .map(|i| {
             if i < 50 {
-                0.2 + 0.2 * (i as f64 / 50.0)
+                0.2f64.mul_add(f64::from(i) / 50.0, 0.2)
             } else {
-                0.6 + 0.3 * ((i - 50) as f64 / 50.0)
+                0.3f64.mul_add(f64::from(i - 50) / 50.0, 0.6)
             }
         })
         .collect();
 
     // Create sample predictions for a random model
-    let y_score_random: Vec<f64> = (0..100).map(|i| (i as f64 * 0.37) % 1.0).collect();
+    let y_score_random: Vec<f64> = (0..100).map(|i| (f64::from(i) * 0.37) % 1.0).collect();
 
     let mut curve = RocPrCurve::new(vec![
         CurveData::new("Good Model", y_true.clone(), y_score_good)
@@ -123,8 +123,8 @@ fn demo_loss_curve() {
     // Create noisy training loss that decreases over time
     let train_loss: Vec<f64> = (0..100)
         .map(|i| {
-            let base = 2.0 * (-i as f64 / 30.0).exp();
-            let noise = 0.1 * ((i as f64 * 0.5).sin() + (i as f64 * 1.3).cos());
+            let base = 2.0 * (f64::from(-i) / 30.0).exp();
+            let noise = 0.1 * ((f64::from(i) * 0.5).sin() + (f64::from(i) * 1.3).cos());
             (base + noise).max(0.01)
         })
         .collect();
@@ -132,10 +132,10 @@ fn demo_loss_curve() {
     // Validation loss with more noise and slight overfitting at end
     let val_loss: Vec<f64> = (0..100)
         .map(|i| {
-            let base = 2.2 * (-i as f64 / 35.0).exp();
-            let noise = 0.15 * ((i as f64 * 0.7).sin() + (i as f64 * 1.1).cos());
+            let base = 2.2 * (f64::from(-i) / 35.0).exp();
+            let noise = 0.15 * ((f64::from(i) * 0.7).sin() + (f64::from(i) * 1.1).cos());
             let overfit = if i > 70 {
-                0.05 * (i - 70) as f64 / 30.0
+                0.05 * f64::from(i - 70) / 30.0
             } else {
                 0.0
             };

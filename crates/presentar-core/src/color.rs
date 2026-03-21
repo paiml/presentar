@@ -260,6 +260,7 @@ impl std::fmt::Display for ColorParseError {
 impl std::error::Error for ColorParseError {}
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
 

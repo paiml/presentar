@@ -936,6 +936,7 @@ impl Default for DeterministicContext {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
     use presentar_core::{
@@ -1258,8 +1259,8 @@ mod tests {
         let mut ctx = DeterministicContext::new();
         let r1 = ctx.rand();
         let r2 = ctx.rand();
-        assert!(r1 >= 0.0 && r1 <= 1.0);
-        assert!(r2 >= 0.0 && r2 <= 1.0);
+        assert!((0.0..=1.0).contains(&r1));
+        assert!((0.0..=1.0).contains(&r2));
         assert_ne!(r1, r2);
     }
 
@@ -1277,7 +1278,7 @@ mod tests {
     fn test_deterministic_context_rand_range() {
         let mut ctx = DeterministicContext::new();
         let r = ctx.rand_range(10.0, 20.0);
-        assert!(r >= 10.0 && r <= 20.0);
+        assert!((10.0..=20.0).contains(&r));
     }
 
     #[test]
@@ -1461,7 +1462,13 @@ mod tests {
     fn test_headless_canvas_fill_arc() {
         let mut canvas = HeadlessCanvas::new(20, 20);
         // fill_arc is a no-op for headless canvas, but should not panic
-        canvas.fill_arc(Point::new(10.0, 10.0), 5.0, 0.0, 3.14, Color::GREEN);
+        canvas.fill_arc(
+            Point::new(10.0, 10.0),
+            5.0,
+            0.0,
+            std::f32::consts::PI,
+            Color::GREEN,
+        );
     }
 
     #[test]

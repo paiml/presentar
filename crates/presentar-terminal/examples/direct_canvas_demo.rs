@@ -1,8 +1,9 @@
+#![allow(clippy::unwrap_used, clippy::disallowed_methods)]
 //! Direct Canvas Demo
 //!
 //! Demonstrates the zero-allocation direct terminal backend.
 //!
-//! Run with: cargo run -p presentar-terminal --example direct_canvas_demo
+//! Run with: cargo run -p presentar-terminal --example `direct_canvas_demo`
 
 use presentar_core::{Canvas, Color, Point, Rect, TextStyle, Transform2D};
 use presentar_terminal::direct::{CellBuffer, DiffRenderer, DirectTerminalCanvas};
@@ -84,7 +85,7 @@ fn main() {
         buffer.height(),
         buffer.len()
     );
-    println!("Cells written: {}", cells_written);
+    println!("Cells written: {cells_written}");
     println!("Cursor moves: {}", renderer.cursor_moves());
     println!("Style changes: {}", renderer.style_changes());
     println!("Output bytes: {}", output.len());
@@ -99,13 +100,14 @@ fn main() {
 }
 
 /// Convert HSV to RGB color
+#[allow(clippy::many_single_char_names)]
 fn hsv_to_rgb(h: f32, s: f32, v: f32) -> Color {
     let h = h * 6.0;
     let i = h.floor() as i32;
     let f = h - i as f32;
     let p = v * (1.0 - s);
-    let q = v * (1.0 - s * f);
-    let t = v * (1.0 - s * (1.0 - f));
+    let q = v * s.mul_add(-f, 1.0);
+    let t = v * s.mul_add(-(1.0 - f), 1.0);
 
     let (r, g, b) = match i % 6 {
         0 => (v, t, p),

@@ -1,3 +1,8 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::disallowed_methods,
+    clippy::assertions_on_constants
+)]
 //! F101-F115 Edge Cases & Boundary Conditions Tests
 //!
 //! Popperian falsification tests for edge cases in presentar-terminal.
@@ -20,7 +25,7 @@ struct TestCanvas {
 }
 
 impl TestCanvas {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
             texts: Vec::new(),
             rects: Vec::new(),
@@ -420,7 +425,7 @@ fn f109_bidi_mixed_text() {
 fn f110_large_data_braille() {
     // BrailleGraph with 100K data points
     let data: Vec<f64> = (0..100_000)
-        .map(|i| (i as f64 / 100_000.0).sin().abs())
+        .map(|i| (f64::from(i) / 100_000.0).sin().abs())
         .collect();
     let mut graph = BrailleGraph::new(data);
     graph.layout(Rect::new(0.0, 0.0, 100.0, 10.0));
@@ -434,7 +439,7 @@ fn f110_large_data_braille() {
 fn f110_large_data_sparkline() {
     // Sparkline with 10K data points
     let data: Vec<f64> = (0..10_000)
-        .map(|i| (i as f64 / 1000.0).sin().abs())
+        .map(|i| (f64::from(i) / 1000.0).sin().abs())
         .collect();
     let mut sparkline = Sparkline::new(data);
     sparkline.layout(Rect::new(0.0, 0.0, 50.0, 1.0));
@@ -454,7 +459,7 @@ fn f110_large_process_table() {
                 "user",
                 (i as f32) % 100.0,
                 (i as f32) % 50.0,
-                format!("cmd_{}", i),
+                format!("cmd_{i}"),
             )
         })
         .collect();
@@ -544,7 +549,7 @@ fn f113_concurrent_update_simulation() {
     // Interleave data updates and paints
     for i in 0..100 {
         let data: Vec<f64> = (0..10)
-            .map(|j| ((i + j) as f64 / 100.0).sin().abs())
+            .map(|j| (f64::from(i + j) / 100.0).sin().abs())
             .collect();
         graph.set_data(data);
         graph.layout(Rect::new(0.0, 0.0, 20.0, 5.0));
@@ -634,9 +639,7 @@ fn f115_cleanup_simulation() {
                 assert_eq!(
                     cell.symbol.as_str(),
                     " ",
-                    "Cell should be space after clear at ({}, {})",
-                    x,
-                    y
+                    "Cell should be space after clear at ({x}, {y})"
                 );
             }
         }

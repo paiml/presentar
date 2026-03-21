@@ -216,7 +216,7 @@ mod tests {
             }
         }
 
-        fn with_child(mut self, child: TestWidget) -> Self {
+        fn with_child(mut self, child: Self) -> Self {
             self.children.push(Box::new(child));
             self
         }

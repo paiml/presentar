@@ -273,6 +273,7 @@ impl DiffRenderer {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
 
@@ -321,6 +322,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::len_zero)]
     fn test_renderer_flush_dirty_cells() {
         let mut renderer = DiffRenderer::new();
         let mut buffer = CellBuffer::new(10, 5);

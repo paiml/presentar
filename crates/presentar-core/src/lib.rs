@@ -185,6 +185,7 @@ pub use widget::{
 pub use brick_widget::{BrickWidgetExt, DefaultBrick, SimpleBrick};
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
 

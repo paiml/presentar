@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::disallowed_methods)]
 //! F061-F075 Text Rendering Tests
 //!
 //! Popperian falsification tests for text rendering in presentar-terminal.
@@ -17,7 +18,7 @@ struct TestCanvas {
 }
 
 impl TestCanvas {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self { texts: Vec::new() }
     }
 
@@ -237,8 +238,7 @@ fn f065_wlan0_interface_visible() {
     // wlan0 should be visible (bold header or light color)
     assert!(
         style.color.r > 0.5 || style.weight == FontWeight::Bold,
-        "wlan0 should be visible: {:?}",
-        style
+        "wlan0 should be visible: {style:?}"
     );
 }
 
@@ -369,8 +369,7 @@ fn f069_text_truncation() {
     // With 80 char width, total text shouldn't be excessively long
     assert!(
         total_len < 500,
-        "Text should be truncated, not overflow: {} chars",
-        total_len
+        "Text should be truncated, not overflow: {total_len} chars"
     );
 }
 
@@ -435,8 +434,7 @@ fn f070_text_alignment_right() {
         let has_padding = text.starts_with(' ') || text.len() > 1;
         assert!(
             has_padding,
-            "PID should be right-aligned with padding: '{}'",
-            text
+            "PID should be right-aligned with padding: '{text}'"
         );
     }
 }
@@ -454,7 +452,7 @@ fn f071_superscript_rendering() {
 
 #[test]
 fn f071_superscript_all_digits() {
-    let result = BrailleSymbols::to_superscript(1234567890);
+    let result = BrailleSymbols::to_superscript(1_234_567_890);
     assert_eq!(
         result, "¹²³⁴⁵⁶⁷⁸⁹⁰",
         "to_superscript should handle all digits"
@@ -474,7 +472,7 @@ fn f072_subscript_rendering() {
 
 #[test]
 fn f072_subscript_all_digits() {
-    let result = BrailleSymbols::to_subscript(1234567890);
+    let result = BrailleSymbols::to_subscript(1_234_567_890);
     assert_eq!(
         result, "₁₂₃₄₅₆₇₈₉₀",
         "to_subscript should handle all digits"
@@ -529,6 +527,7 @@ fn f073_unicode_width_sparkline() {
 // =============================================================================
 
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn f074_empty_string_no_panic() {
     let mut table = ProcessTable::new();
     // Create process with empty command
@@ -542,6 +541,7 @@ fn f074_empty_string_no_panic() {
 }
 
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn f074_empty_data_widgets() {
     // Empty ProcessTable
     let mut table = ProcessTable::new();
@@ -589,17 +589,18 @@ fn f075_newline_handling() {
     for (text, _, _) in &canvas.texts {
         // Text with newlines might be truncated or rendered on single line
         // It should not cause rendering outside bounds
-        let lines: Vec<&str> = text.split('\n').collect();
+        let line_count = text.split('\n').count();
         // Either the newline is preserved in text (for single draw) or stripped
         // The key is it should not cause layout corruption
         assert!(
-            lines.len() <= 3 || text.len() < 100,
+            line_count <= 3 || text.len() < 100,
             "Text with newlines should be handled gracefully"
         );
     }
 }
 
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn f075_newline_in_user() {
     let mut table = ProcessTable::new();
     table.set_processes(vec![ProcessEntry::new(
@@ -622,6 +623,7 @@ fn f075_newline_in_user() {
 // =============================================================================
 
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn text_rendering_with_special_chars() {
     let mut table = ProcessTable::new();
     table.set_processes(vec![ProcessEntry::new(
@@ -641,6 +643,7 @@ fn text_rendering_with_special_chars() {
 }
 
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn text_rendering_zero_bounds() {
     let mut table = ProcessTable::new();
     table.set_processes(vec![ProcessEntry::new(1234, "user", 50.0, 25.0, "cmd")]);
@@ -654,6 +657,7 @@ fn text_rendering_zero_bounds() {
 }
 
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn text_rendering_very_small_bounds() {
     let mut table = ProcessTable::new();
     table.set_processes(vec![ProcessEntry::new(1234, "user", 50.0, 25.0, "cmd")]);

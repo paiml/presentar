@@ -692,6 +692,7 @@ impl Brick for ModelCard {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
 
@@ -1100,7 +1101,7 @@ mod tests {
     #[test]
     fn test_model_status_debug() {
         let status = ModelStatus::Published;
-        let debug_str = format!("{:?}", status);
+        let debug_str = format!("{status:?}");
         assert!(debug_str.contains("Published"));
     }
 
@@ -1156,7 +1157,7 @@ mod tests {
     #[test]
     fn test_model_metric_debug() {
         let metric = ModelMetric::new("Accuracy", 0.95);
-        let debug_str = format!("{:?}", metric);
+        let debug_str = format!("{metric:?}");
         assert!(debug_str.contains("Accuracy"));
         assert!(debug_str.contains("0.95"));
     }
@@ -1164,7 +1165,7 @@ mod tests {
     #[test]
     fn test_model_metric_clone() {
         let metric = ModelMetric::new("F1", 0.88).unit("%").lower_is_better();
-        let cloned = metric.clone();
+        let cloned = metric;
         assert_eq!(cloned.name, "F1");
         assert_eq!(cloned.value, 0.88);
         assert_eq!(cloned.unit, Some("%".to_string()));
@@ -1207,7 +1208,7 @@ mod tests {
     #[test]
     fn test_model_card_debug() {
         let card = ModelCard::new("GPT-4");
-        let debug_str = format!("{:?}", card);
+        let debug_str = format!("{card:?}");
         assert!(debug_str.contains("GPT-4"));
     }
 
@@ -1217,7 +1218,7 @@ mod tests {
             .version("2.0.0")
             .status(ModelStatus::Published)
             .framework("PyTorch");
-        let cloned = card.clone();
+        let cloned = card;
         assert_eq!(cloned.get_name(), "BERT");
         assert_eq!(cloned.get_version(), "2.0.0");
         assert_eq!(cloned.get_status(), ModelStatus::Published);
@@ -1298,7 +1299,7 @@ mod tests {
     #[test]
     fn test_model_card_many_metrics() {
         let metrics: Vec<ModelMetric> = (0..5)
-            .map(|i| ModelMetric::new(format!("metric_{i}"), i as f64 * 0.1))
+            .map(|i| ModelMetric::new(format!("metric_{i}"), f64::from(i) * 0.1))
             .collect();
         let card = ModelCard::new("test").metrics(metrics);
         assert!(card.has_metrics());

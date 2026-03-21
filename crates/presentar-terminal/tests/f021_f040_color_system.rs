@@ -50,10 +50,7 @@ fn f021_lab_interpolation_differs_from_rgb() {
     // For red→blue, the difference should be noticeable
     assert!(
         total_delta > 0.01 || lab_mid.g > 0.01,
-        "F021 FAILED: LAB interpolation should differ from RGB. LAB={:?}, RGB={:?}, delta={}",
-        lab_mid,
-        rgb_mid,
-        total_delta
+        "F021 FAILED: LAB interpolation should differ from RGB. LAB={lab_mid:?}, RGB={rgb_mid:?}, delta={total_delta}"
     );
 }
 
@@ -171,17 +168,8 @@ fn f025_256_color_grayscale_mapping() {
 
         // Verify result is valid AnsiValue
         match result {
-            crossterm::style::Color::AnsiValue(v) => {
-                // For pure grays, should be in grayscale range (232-255) or black/white
-                // Black (0,0,0) maps to 16, White (255,255,255) maps to 231
-                assert!(
-                    v <= 255,
-                    "F025 FAILED: 256-color gray mapping invalid. r={}, g={}, b={}, ansi={}",
-                    r,
-                    g,
-                    b,
-                    v
-                );
+            crossterm::style::Color::AnsiValue(_v) => {
+                // Valid AnsiValue (u8 range is always 0-255)
             }
             _ => panic!("F025 FAILED: Color256 mode should return AnsiValue"),
         }
@@ -212,12 +200,8 @@ fn f026_256_color_cube_mapping() {
             crossterm::style::Color::AnsiValue(v) => {
                 // Pure colors should be in the 6x6x6 cube (16-231)
                 assert!(
-                    v >= 16 && v <= 231,
-                    "F026 FAILED: Pure color ({},{},{}) should map to cube (16-231), got {}",
-                    r,
-                    g,
-                    b,
-                    v
+                    (16..=231).contains(&v),
+                    "F026 FAILED: Pure color ({r},{g},{b}) should map to cube (16-231), got {v}"
                 );
             }
             _ => panic!("F026 FAILED: Color256 mode should return AnsiValue"),
@@ -265,7 +249,7 @@ fn f027_16_color_distinguishes_bright() {
 // F028-F030: ColorMode Detection Tests
 // =============================================================================
 
-/// F028: ColorMode detection TrueColor
+/// F028: `ColorMode` detection `TrueColor`
 /// Falsification criterion: `COLORTERM=truecolor` not detected
 #[test]
 fn f028_colormode_detects_truecolor() {
@@ -284,7 +268,7 @@ fn f028_colormode_detects_truecolor() {
     );
 }
 
-/// F029: ColorMode detection 256
+/// F029: `ColorMode` detection 256
 /// Falsification criterion: `TERM=xterm-256color` not detected
 #[test]
 fn f029_colormode_detects_256color() {
@@ -303,7 +287,7 @@ fn f029_colormode_detects_256color() {
     );
 }
 
-/// F030: ColorMode fallback
+/// F030: `ColorMode` fallback
 /// Falsification criterion: Missing TERM defaults to Mono; Unknown TERM defaults to Color16
 #[test]
 fn f030_colormode_fallback_behavior() {
@@ -312,8 +296,7 @@ fn f030_colormode_fallback_behavior() {
     assert_eq!(
         mode_none,
         ColorMode::Mono,
-        "F030 FAILED: Missing TERM should default to Mono, got {:?}",
-        mode_none
+        "F030 FAILED: Missing TERM should default to Mono, got {mode_none:?}"
     );
 
     // "dumb" TERM should be Mono
@@ -321,8 +304,7 @@ fn f030_colormode_fallback_behavior() {
     assert_eq!(
         mode_dumb,
         ColorMode::Mono,
-        "F030 FAILED: TERM=dumb should default to Mono, got {:?}",
-        mode_dumb
+        "F030 FAILED: TERM=dumb should default to Mono, got {mode_dumb:?}"
     );
 
     // Unknown TERM should default to Color16
@@ -330,8 +312,7 @@ fn f030_colormode_fallback_behavior() {
     assert_eq!(
         mode_unknown,
         ColorMode::Color16,
-        "F030 FAILED: Unknown TERM (vt100) should default to Color16, got {:?}",
-        mode_unknown
+        "F030 FAILED: Unknown TERM (vt100) should default to Color16, got {mode_unknown:?}"
     );
 }
 
@@ -352,18 +333,11 @@ fn f031_rgb_to_ansi_escape_correct() {
     // Should be RGB { r: 255, g: 0, b: 0 }
     match result {
         CtColor::Rgb { r, g, b } => {
-            assert_eq!(
-                r, 255,
-                "F031 FAILED: Red component should be 255, got {}",
-                r
-            );
-            assert_eq!(g, 0, "F031 FAILED: Green component should be 0, got {}", g);
-            assert_eq!(b, 0, "F031 FAILED: Blue component should be 0, got {}", b);
+            assert_eq!(r, 255, "F031 FAILED: Red component should be 255, got {r}");
+            assert_eq!(g, 0, "F031 FAILED: Green component should be 0, got {g}");
+            assert_eq!(b, 0, "F031 FAILED: Blue component should be 0, got {b}");
         }
-        _ => panic!(
-            "F031 FAILED: TrueColor mode should return Rgb, got {:?}",
-            result
-        ),
+        _ => panic!("F031 FAILED: TrueColor mode should return Rgb, got {result:?}"),
     }
 
     // Test green
@@ -383,7 +357,7 @@ fn f031_rgb_to_ansi_escape_correct() {
 // F032-F035: Theme Color Verification Tests
 // =============================================================================
 
-/// F032: Theme tokyo_night colors
+/// F032: Theme `tokyo_night` colors
 /// Falsification criterion: Any color != spec
 #[test]
 fn f032_theme_tokyo_night_colors_match_spec() {
@@ -500,7 +474,7 @@ fn f036_cpu_gradient_interpolation_order() {
     let at_0 = theme.cpu_color(0.0);
 
     // At 50%, should be close to yellow (#e0af68)
-    let at_50 = theme.cpu_color(50.0);
+    let _at_50 = theme.cpu_color(50.0);
 
     // At 100%, should be close to red (#f7768e)
     let at_100 = theme.cpu_color(100.0);
@@ -533,12 +507,11 @@ fn f037_memory_gradient_distinct_from_cpu() {
 
     assert!(
         total_diff > 0.1,
-        "F037 FAILED: CPU and Memory gradients should be distinct. diff={}",
-        total_diff
+        "F037 FAILED: CPU and Memory gradients should be distinct. diff={total_diff}"
     );
 }
 
-/// F038: Gradient for_percent(50) returns middle
+/// F038: Gradient `for_percent(50)` returns middle
 /// Falsification criterion: Returns wrong color
 #[test]
 fn f038_gradient_for_percent_50_returns_middle() {
@@ -565,16 +538,18 @@ fn f039_gradient_three_stop_midpoint() {
 
     // At 0.5, should be very close to the middle stop (GREEN)
     // Due to LAB interpolation, there's some tolerance needed
-    let delta_e = ((mid.r - Color::GREEN.r).powi(2)
-        + (mid.g - Color::GREEN.g).powi(2)
-        + (mid.b - Color::GREEN.b).powi(2))
-    .sqrt();
+    let delta_e = (mid.b - Color::GREEN.b)
+        .mul_add(
+            mid.b - Color::GREEN.b,
+            (mid.g - Color::GREEN.g)
+                .mul_add(mid.g - Color::GREEN.g, (mid.r - Color::GREEN.r).powi(2)),
+        )
+        .sqrt();
 
     // ΔE should be small (we use normalized RGB delta as proxy)
     assert!(
         delta_e < 0.1,
-        "F039 FAILED: Three-stop gradient midpoint should be close to middle color. ΔE={}",
-        delta_e
+        "F039 FAILED: Three-stop gradient midpoint should be close to middle color. ΔE={delta_e}"
     );
 }
 
@@ -638,10 +613,7 @@ fn lab_roundtrip_preserves_colors() {
 
         assert!(
             diff < 0.1,
-            "LAB roundtrip failed for {:?}. Got {:?}, diff={}",
-            original,
-            sampled,
-            diff
+            "LAB roundtrip failed for {original:?}. Got {sampled:?}, diff={diff}"
         );
     }
 }
@@ -655,7 +627,7 @@ fn gradient_produces_monotonic_progression() {
 
     // Sample at 10% intervals
     for i in 0..=10 {
-        let t = i as f64 / 10.0;
+        let t = f64::from(i) / 10.0;
         let color = gradient.sample(t);
 
         // Red component should generally increase
@@ -703,7 +675,7 @@ fn all_themes_have_valid_colors() {
     }
 }
 
-/// Verify ColorMode default is TrueColor
+/// Verify `ColorMode` default is `TrueColor`
 #[test]
 fn colormode_default_is_truecolor() {
     assert_eq!(
@@ -733,8 +705,7 @@ fn mono_mode_always_returns_white() {
         assert_eq!(
             result,
             CtColor::White,
-            "Mono mode should always return White for {:?}",
-            color
+            "Mono mode should always return White for {color:?}"
         );
     }
 }

@@ -1,9 +1,10 @@
-//! IoT Sensor Dashboard Example
+#![allow(clippy::unwrap_used, clippy::disallowed_methods)]
+//! `IoT` Sensor Dashboard Example
 //!
-//! Demonstrates real-time sensor data visualization for IoT
+//! Demonstrates real-time sensor data visualization for `IoT`
 //! monitoring applications with temperature, humidity, and pressure.
 //!
-//! Run with: cargo run -p presentar-terminal --example sensor_dashboard
+//! Run with: cargo run -p presentar-terminal --example `sensor_dashboard`
 
 use presentar_core::{Canvas, Color, Point, Rect, TextStyle, Widget};
 use presentar_terminal::direct::{CellBuffer, DiffRenderer, DirectTerminalCanvas};
@@ -106,7 +107,7 @@ fn main() {
     let cells_written = renderer.flush(&mut buffer, &mut output).unwrap();
 
     println!("Buffer: {}x{}", buffer.width(), buffer.height());
-    println!("Cells written: {}", cells_written);
+    println!("Cells written: {cells_written}");
     println!("Output bytes: {}\n", output.len());
 
     println!("Rendered output:");
@@ -177,7 +178,7 @@ fn draw_sensor_graph(
         ..Default::default()
     };
     canvas.draw_text(
-        &format!("{:.1}", current),
+        &format!("{current:.1}"),
         Point::new(bounds.x + bounds.width - 8.0, bounds.y),
         &value_style,
     );
@@ -333,7 +334,7 @@ fn draw_alerts(canvas: &mut DirectTerminalCanvas<'_>, sensors: &[Sensor], x: f32
 fn simulate_temperature(count: usize) -> Vec<f64> {
     (0..count)
         .map(|i| {
-            let base = 22.0 + 3.0 * (i as f64 / 20.0).sin();
+            let base = 3.0f64.mul_add((i as f64 / 20.0).sin(), 22.0);
             let noise = ((i * 7919) % 20) as f64 / 20.0;
             base + noise
         })
@@ -343,7 +344,7 @@ fn simulate_temperature(count: usize) -> Vec<f64> {
 fn simulate_humidity(count: usize) -> Vec<f64> {
     (0..count)
         .map(|i| {
-            let base = 45.0 + 10.0 * (i as f64 / 15.0).cos();
+            let base = 10.0f64.mul_add((i as f64 / 15.0).cos(), 45.0);
             let noise = ((i * 6971) % 30) as f64 / 10.0;
             (base + noise).clamp(30.0, 70.0)
         })
@@ -353,7 +354,7 @@ fn simulate_humidity(count: usize) -> Vec<f64> {
 fn simulate_pressure(count: usize) -> Vec<f64> {
     (0..count)
         .map(|i| {
-            let base = 1013.25 + 2.0 * (i as f64 / 30.0).sin();
+            let base = 2.0f64.mul_add((i as f64 / 30.0).sin(), 1013.25);
             let noise = ((i * 1103) % 10) as f64 / 10.0;
             base + noise
         })
@@ -363,7 +364,7 @@ fn simulate_pressure(count: usize) -> Vec<f64> {
 fn simulate_co2(count: usize) -> Vec<f64> {
     (0..count)
         .map(|i| {
-            let base = 420.0 + 100.0 * (i as f64 / 12.0).sin();
+            let base = 100.0f64.mul_add((i as f64 / 12.0).sin(), 420.0);
             let spike = if i % 15 == 0 { 80.0 } else { 0.0 };
             let noise = ((i * 7717) % 50) as f64;
             (base + spike + noise).max(300.0)

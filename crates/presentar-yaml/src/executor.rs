@@ -2177,16 +2177,17 @@ mod tests {
         let arr = result.as_array().unwrap();
 
         // Count orders for customer 100 (should have 2 orders: id 1 and id 3)
-        let alice_orders: Vec<_> = arr
-            .iter()
-            .filter(|v| {
-                v.as_object()
-                    .and_then(|o| o.get("name"))
-                    .and_then(|n| n.as_str())
-                    == Some("Alice")
-            })
-            .collect();
-        assert_eq!(alice_orders.len(), 2);
+        assert_eq!(
+            arr.iter()
+                .filter(|v| {
+                    v.as_object()
+                        .and_then(|o| o.get("name"))
+                        .and_then(|n| n.as_str())
+                        == Some("Alice")
+                })
+                .count(),
+            2
+        );
     }
 
     #[test]
@@ -2637,19 +2638,19 @@ mod tests {
     #[test]
     fn test_parse_window_minutes() {
         let executor = ExpressionExecutor::new();
-        assert_eq!(executor.parse_window("2m").unwrap(), 120000);
+        assert_eq!(executor.parse_window("2m").unwrap(), 120_000);
     }
 
     #[test]
     fn test_parse_window_hours() {
         let executor = ExpressionExecutor::new();
-        assert_eq!(executor.parse_window("1h").unwrap(), 3600000);
+        assert_eq!(executor.parse_window("1h").unwrap(), 3_600_000);
     }
 
     #[test]
     fn test_parse_window_days() {
         let executor = ExpressionExecutor::new();
-        assert_eq!(executor.parse_window("1d").unwrap(), 86400000);
+        assert_eq!(executor.parse_window("1d").unwrap(), 86_400_000);
     }
 
     #[test]

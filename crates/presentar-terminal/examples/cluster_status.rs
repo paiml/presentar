@@ -1,9 +1,10 @@
+#![allow(clippy::unwrap_used, clippy::disallowed_methods)]
 //! Kubernetes Cluster Status Monitor
 //!
 //! Demonstrates monitoring a Kubernetes cluster with node status,
 //! pod health, and resource utilization.
 //!
-//! Run with: cargo run -p presentar-terminal --example cluster_status
+//! Run with: cargo run -p presentar-terminal --example `cluster_status`
 
 use presentar_core::{Canvas, Color, Point, Rect, TextStyle, Widget};
 use presentar_terminal::direct::{CellBuffer, DiffRenderer, DirectTerminalCanvas};
@@ -84,7 +85,7 @@ fn main() {
     let cells_written = renderer.flush(&mut buffer, &mut output).unwrap();
 
     println!("Buffer: {}x{}", buffer.width(), buffer.height());
-    println!("Cells written: {}", cells_written);
+    println!("Cells written: {cells_written}");
     println!("Output bytes: {}\n", output.len());
 
     println!("Rendered output:");
@@ -166,7 +167,7 @@ fn draw_resource_graph(
         ..Default::default()
     };
     canvas.draw_text(
-        &format!("{:5.1}%", current),
+        &format!("{current:5.1}%"),
         Point::new(bounds.x + bounds.width - 8.0, bounds.y),
         &value_style,
     );
@@ -271,12 +272,13 @@ fn draw_inline_meter(
     width: usize,
     color: Color,
 ) {
+    use std::fmt::Write;
     let filled = ((pct / 100.0) * width as f64).round() as usize;
     let mut bar = String::with_capacity(width + 8);
     for i in 0..width {
         bar.push(if i < filled { '█' } else { '░' });
     }
-    bar.push_str(&format!(" {:>3.0}%", pct));
+    let _ = write!(bar, " {pct:>3.0}%");
 
     let style = TextStyle {
         color,
@@ -306,7 +308,7 @@ fn draw_pod_summary(canvas: &mut DirectTerminalCanvas<'_>, x: f32, y: f32) {
             ..Default::default()
         };
         canvas.draw_text(
-            &format!("{}:{}", name, count),
+            &format!("{name}:{count}"),
             Point::new(x + offset, y),
             &style,
         );
@@ -337,17 +339,13 @@ fn draw_namespace_breakdown(canvas: &mut DirectTerminalCanvas<'_>, x: f32, y: f3
 
     for (i, (ns, pods, color)) in namespaces.iter().enumerate() {
         let row_y = y + 1.0 + (i / 2) as f32;
-        let col_x = x + (i % 2) as f32 * 18.0;
+        let col_x = ((i % 2) as f32).mul_add(18.0, x);
 
         let style = TextStyle {
             color: *color,
             ..Default::default()
         };
-        canvas.draw_text(
-            &format!("{}: {}", ns, pods),
-            Point::new(col_x, row_y),
-            &style,
-        );
+        canvas.draw_text(&format!("{ns}: {pods}"), Point::new(col_x, row_y), &style);
     }
 }
 
@@ -371,7 +369,7 @@ fn draw_footer(canvas: &mut DirectTerminalCanvas<'_>) {
 fn simulate_cluster_cpu(count: usize) -> Vec<f64> {
     (0..count)
         .map(|i| {
-            let base = 65.0 + 15.0 * (i as f64 / 12.0).sin();
+            let base = 15.0f64.mul_add((i as f64 / 12.0).sin(), 65.0);
             let noise = ((i * 7919) % 20) as f64;
             (base + noise).clamp(20.0, 95.0)
         })
@@ -381,7 +379,7 @@ fn simulate_cluster_cpu(count: usize) -> Vec<f64> {
 fn simulate_cluster_mem(count: usize) -> Vec<f64> {
     (0..count)
         .map(|i| {
-            let base = 72.0 + 10.0 * (i as f64 / 15.0).cos();
+            let base = 10.0f64.mul_add((i as f64 / 15.0).cos(), 72.0);
             let noise = ((i * 6971) % 15) as f64;
             (base + noise).clamp(40.0, 95.0)
         })

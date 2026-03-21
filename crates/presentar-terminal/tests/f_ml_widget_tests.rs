@@ -14,7 +14,7 @@ struct TestCanvas {
 }
 
 impl TestCanvas {
-    fn new(_width: usize, _height: usize) -> Self {
+    const fn new(_width: usize, _height: usize) -> Self {
         Self { texts: vec![] }
     }
 
@@ -353,12 +353,12 @@ fn f_ml_034_feature_importance_truncate() {
 // F-ML-035 to F-ML-040: Additional tests
 #[test]
 fn f_ml_035_ml_widgets_clone() {
-    let _ = DataFrame::new().clone();
-    let _ = ClusterPlot::new(vec![], vec![]).clone();
-    let _ = PCAPlot::new(vec![]).clone();
-    let _ = ParallelCoordinates::new(vec![], vec![]).clone();
-    let _ = RadarPlot::new(vec![]).clone();
-    let _ = FeatureImportance::default().clone();
+    let _ = DataFrame::new();
+    let _ = ClusterPlot::new(vec![], vec![]);
+    let _ = PCAPlot::new(vec![]);
+    let _ = ParallelCoordinates::new(vec![], vec![]);
+    let _ = RadarPlot::new(vec![]);
+    let _ = FeatureImportance::default();
 }
 
 #[test]
@@ -478,8 +478,8 @@ fn f_ml_048_radar_labels() {
 
 #[test]
 fn f_ml_049_feature_importance_max() {
-    let f: Vec<String> = (0..50).map(|i| format!("f{}", i)).collect();
-    let v: Vec<f64> = (0..50).map(|i| i as f64 / 50.0).collect();
+    let f: Vec<String> = (0..50).map(|i| format!("f{i}")).collect();
+    let v: Vec<f64> = (0..50).map(|i| f64::from(i) / 50.0).collect();
     let mut plot = FeatureImportance::new(f, v).with_max_features(10);
     let mut canvas = TestCanvas::new(60, 15);
     plot.layout(Rect::new(0.0, 0.0, 60.0, 15.0));

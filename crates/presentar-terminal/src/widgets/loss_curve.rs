@@ -841,6 +841,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn test_loss_curve_verify_valid() {
         let mut curve = LossCurve::default();
         curve.bounds = Rect::new(0.0, 0.0, 80.0, 20.0);
@@ -848,6 +849,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn test_loss_curve_verify_invalid() {
         let mut curve = LossCurve::default();
         curve.bounds = Rect::new(0.0, 0.0, 10.0, 3.0);

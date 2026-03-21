@@ -1192,7 +1192,7 @@ mod tests {
             pan_threshold: 25.0,
             ..Default::default()
         };
-        let cloned = config.clone();
+        let cloned = config;
         assert_eq!(cloned.pan_threshold, 25.0);
     }
 
@@ -1235,7 +1235,7 @@ mod tests {
             velocity: Point::new(100.0, 200.0),
             state: GestureState::Started,
         };
-        let cloned = gesture.clone();
+        let cloned = gesture;
         assert!(matches!(cloned, RecognizedGesture::Pan { .. }));
     }
 

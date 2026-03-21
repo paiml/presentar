@@ -153,7 +153,7 @@ impl StackedAreaChart {
 }
 
 /// Get character for series index.
-fn series_char(idx: usize) -> char {
+const fn series_char(idx: usize) -> char {
     match idx {
         0 => '█',
         1 => '▓',

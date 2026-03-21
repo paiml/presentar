@@ -526,6 +526,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn test_scatter_verify() {
         let mut scatter = ScatterPlot::default();
         scatter.bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
@@ -533,6 +534,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn test_scatter_verify_small_bounds() {
         let mut scatter = ScatterPlot::default();
         scatter.bounds = Rect::new(0.0, 0.0, 5.0, 3.0);
@@ -879,7 +881,7 @@ mod tests {
         let original = ScatterPlot::new(vec![(1.0, 2.0), (3.0, 4.0)])
             .with_marker(MarkerStyle::Star)
             .with_color(Color::GREEN);
-        let cloned = original.clone();
+        let cloned = original;
         assert_eq!(cloned.points.len(), 2);
         assert_eq!(cloned.color, Color::GREEN);
         assert!(matches!(cloned.marker, MarkerStyle::Star));

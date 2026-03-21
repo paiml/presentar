@@ -911,13 +911,13 @@ mod tests {
     #[test]
     fn test_parse_refresh_minutes() {
         assert_eq!(parse_refresh_interval("1m"), Some(60000));
-        assert_eq!(parse_refresh_interval("5m"), Some(300000));
+        assert_eq!(parse_refresh_interval("5m"), Some(300_000));
     }
 
     #[test]
     fn test_parse_refresh_hours() {
-        assert_eq!(parse_refresh_interval("1h"), Some(3600000));
-        assert_eq!(parse_refresh_interval("2h"), Some(7200000));
+        assert_eq!(parse_refresh_interval("1h"), Some(3_600_000));
+        assert_eq!(parse_refresh_interval("2h"), Some(7_200_000));
     }
 
     #[test]
@@ -1297,7 +1297,7 @@ mod tests {
 
     #[test]
     fn test_loader_cache_operations() {
-        let mut loader = PachaLoader::new(PathBuf::from("/tmp"));
+        let loader = PachaLoader::new(PathBuf::from("/tmp"));
         assert!(!loader.is_cached("pacha://data/test"));
         assert!(loader.get_cached("pacha://data/test").is_none());
     }
@@ -1319,7 +1319,7 @@ mod tests {
     #[test]
     fn test_pacha_uri_clone() {
         let uri = PachaUri::parse("pacha://data/test").unwrap();
-        let cloned = uri.clone();
+        let cloned = uri;
         assert_eq!(cloned.path, "/data/test");
     }
 
@@ -1331,7 +1331,7 @@ mod tests {
             content_type: ContentType::Json,
             last_modified: Some(12345),
         };
-        let cloned = resource.clone();
+        let cloned = resource;
         assert_eq!(cloned.uri, "pacha://data/test");
         assert_eq!(cloned.data, vec![1, 2, 3]);
         assert_eq!(cloned.content_type, ContentType::Json);
@@ -1378,7 +1378,7 @@ mod tests {
 
     #[test]
     fn test_noop_http_client_default() {
-        let client = NoopHttpClient::default();
+        let client = NoopHttpClient;
         let req = HttpRequest::get("http://test.com");
         assert!(client.request(req).is_err());
     }
@@ -1402,7 +1402,7 @@ mod tests {
         let req = HttpRequest::get("http://test.com")
             .with_header("X-Test", "value")
             .with_timeout(5000);
-        let cloned = req.clone();
+        let cloned = req;
         assert_eq!(cloned.url, "http://test.com");
         assert_eq!(cloned.timeout_ms, Some(5000));
     }
@@ -1413,7 +1413,7 @@ mod tests {
             max_attempts: 5,
             ..RetryConfig::default()
         };
-        let cloned = config.clone();
+        let cloned = config;
         assert_eq!(cloned.max_attempts, 5);
     }
 

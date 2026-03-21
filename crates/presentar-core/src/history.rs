@@ -682,7 +682,7 @@ impl<T: Clone + Send + Sync + 'static> Command for SetValueCommand<T> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicI32, Ordering};
@@ -704,7 +704,7 @@ mod tests {
             CommandResult::Success
         }
 
-        fn description(&self) -> &str {
+        fn description(&self) -> &'static str {
             "Increment counter"
         }
     }
@@ -727,7 +727,7 @@ mod tests {
             CommandResult::Success
         }
 
-        fn description(&self) -> &str {
+        fn description(&self) -> &'static str {
             "Failing command"
         }
     }
@@ -822,10 +822,7 @@ mod tests {
         assert!(!history.can_undo());
         assert!(!history.can_redo());
 
-        history.execute(Box::new(IncrementCommand {
-            counter: counter.clone(),
-            amount: 1,
-        }));
+        history.execute(Box::new(IncrementCommand { counter, amount: 1 }));
 
         assert!(history.can_undo());
         assert!(!history.can_redo());
@@ -853,10 +850,7 @@ mod tests {
         assert!(history.can_redo());
 
         // New command clears redo stack
-        history.execute(Box::new(IncrementCommand {
-            counter: counter.clone(),
-            amount: 5,
-        }));
+        history.execute(Box::new(IncrementCommand { counter, amount: 5 }));
 
         assert!(!history.can_redo());
     }
@@ -877,10 +871,7 @@ mod tests {
 
         assert!(history.undo_description().is_none());
 
-        history.execute(Box::new(IncrementCommand {
-            counter: counter.clone(),
-            amount: 1,
-        }));
+        history.execute(Box::new(IncrementCommand { counter, amount: 1 }));
 
         assert_eq!(history.undo_description(), Some("Increment counter"));
     }
@@ -929,7 +920,7 @@ mod tests {
         ];
 
         let results = history.execute_group(commands);
-        assert!(results.iter().all(|r| r.is_success()));
+        assert!(results.iter().all(super::CommandResult::is_success));
         assert_eq!(counter.load(Ordering::SeqCst), 3);
     }
 
@@ -981,8 +972,7 @@ mod tests {
         history.create_checkpoint("Second");
         history.create_checkpoint("Third");
 
-        let checkpoints: Vec<_> = history.checkpoints().collect();
-        assert_eq!(checkpoints.len(), 3);
+        assert_eq!(history.checkpoints().count(), 3);
     }
 
     #[test]
@@ -994,10 +984,7 @@ mod tests {
             counter: counter.clone(),
             amount: 1,
         }));
-        history.execute(Box::new(IncrementCommand {
-            counter: counter.clone(),
-            amount: 2,
-        }));
+        history.execute(Box::new(IncrementCommand { counter, amount: 2 }));
         history.create_checkpoint("Test");
 
         history.clear();
@@ -1051,10 +1038,7 @@ mod tests {
         history.resume();
         assert!(history.is_recording());
 
-        history.execute(Box::new(IncrementCommand {
-            counter: counter.clone(),
-            amount: 3,
-        }));
+        history.execute(Box::new(IncrementCommand { counter, amount: 3 }));
         assert_eq!(history.undo_count(), 2);
     }
 
@@ -1071,10 +1055,7 @@ mod tests {
             ec.fetch_add(1, Ordering::SeqCst);
         }));
 
-        history.execute(Box::new(IncrementCommand {
-            counter: counter.clone(),
-            amount: 1,
-        }));
+        history.execute(Box::new(IncrementCommand { counter, amount: 1 }));
         history.undo();
         history.redo();
 
@@ -1088,10 +1069,7 @@ mod tests {
 
         assert_eq!(history.memory_usage(), 0);
 
-        history.execute(Box::new(IncrementCommand {
-            counter: counter.clone(),
-            amount: 1,
-        }));
+        history.execute(Box::new(IncrementCommand { counter, amount: 1 }));
 
         assert!(history.memory_usage() > 0);
     }
@@ -1260,10 +1238,7 @@ mod tests {
 
         assert!(history.redo_description().is_none());
 
-        history.execute(Box::new(IncrementCommand {
-            counter: counter.clone(),
-            amount: 1,
-        }));
+        history.execute(Box::new(IncrementCommand { counter, amount: 1 }));
         history.undo();
 
         assert_eq!(history.redo_description(), Some("Increment counter"));
@@ -1280,10 +1255,7 @@ mod tests {
             counter: counter.clone(),
             amount: 1,
         }));
-        history.execute(Box::new(IncrementCommand {
-            counter: counter.clone(),
-            amount: 2,
-        }));
+        history.execute(Box::new(IncrementCommand { counter, amount: 2 }));
 
         history.undo();
         assert_eq!(history.redo_count(), 1);
@@ -1297,10 +1269,7 @@ mod tests {
         let counter = Arc::new(AtomicI32::new(0));
 
         let composite = CompositeCommand::new("My Composite")
-            .with_command(Box::new(IncrementCommand {
-                counter: counter.clone(),
-                amount: 1,
-            }))
+            .with_command(Box::new(IncrementCommand { counter, amount: 1 }))
             .build();
 
         assert_eq!(composite.description(), "My Composite");
@@ -1418,7 +1387,7 @@ mod tests {
             enable_merging: false,
             auto_group_interval_ms: 1000,
         };
-        let cloned = config.clone();
+        let cloned = config;
         assert_eq!(cloned.max_commands, 500);
         assert!(!cloned.enable_merging);
     }
@@ -1443,7 +1412,7 @@ mod tests {
             position: 5,
             timestamp: 1000,
         };
-        let cloned = checkpoint.clone();
+        let cloned = checkpoint;
         assert_eq!(cloned.name, "Test");
         assert_eq!(cloned.position, 5);
     }
@@ -1487,10 +1456,7 @@ mod tests {
     #[test]
     fn test_default_command_methods() {
         let counter = Arc::new(AtomicI32::new(0));
-        let cmd = IncrementCommand {
-            counter: counter.clone(),
-            amount: 1,
-        };
+        let cmd = IncrementCommand { counter, amount: 1 };
 
         // Test default implementations
         assert!(!cmd.can_merge(&cmd));
@@ -1507,10 +1473,7 @@ mod tests {
                 counter: counter.clone(),
                 amount: 1,
             }))
-            .with_command(Box::new(IncrementCommand {
-                counter: counter.clone(),
-                amount: 2,
-            }))
+            .with_command(Box::new(IncrementCommand { counter, amount: 2 }))
             .build();
 
         let memory = composite.memory_size();
@@ -1590,10 +1553,7 @@ mod tests {
             ec2.fetch_add(1, Ordering::SeqCst);
         }));
 
-        history.execute(Box::new(IncrementCommand {
-            counter: counter.clone(),
-            amount: 1,
-        }));
+        history.execute(Box::new(IncrementCommand { counter, amount: 1 }));
 
         assert_eq!(event_count1.load(Ordering::SeqCst), 1);
         assert_eq!(event_count2.load(Ordering::SeqCst), 1);
@@ -1609,7 +1569,7 @@ mod tests {
     #[test]
     fn test_undo_without_old_value() {
         let value = Arc::new(std::sync::RwLock::new(10));
-        let mut cmd = SetValueCommand::new("Set", value.clone(), 42);
+        let mut cmd = SetValueCommand::new("Set", value, 42);
 
         // Try undo without execute first
         let result = cmd.undo();
@@ -1638,10 +1598,7 @@ mod tests {
         let mut history = CommandHistory::default();
         let counter = Arc::new(AtomicI32::new(0));
 
-        history.execute(Box::new(IncrementCommand {
-            counter: counter.clone(),
-            amount: 1,
-        }));
+        history.execute(Box::new(IncrementCommand { counter, amount: 1 }));
 
         assert!(history.memory_usage() > 0);
 
@@ -1666,7 +1623,7 @@ mod tests {
             CommandResult::Success
         }
 
-        fn description(&self) -> &str {
+        fn description(&self) -> &'static str {
             "Mergeable increment"
         }
 
@@ -1697,7 +1654,7 @@ mod tests {
         }));
 
         history.execute(Box::new(MergeableIncrement {
-            counter: counter.clone(),
+            counter,
             total_amount: 3,
         }));
 
@@ -1718,10 +1675,7 @@ mod tests {
         history.undo();
         assert_eq!(history.redo_count(), 1);
 
-        history.execute(Box::new(IncrementCommand {
-            counter: counter.clone(),
-            amount: 2,
-        }));
+        history.execute(Box::new(IncrementCommand { counter, amount: 2 }));
 
         assert_eq!(history.redo_count(), 0);
     }

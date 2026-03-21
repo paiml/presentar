@@ -1296,7 +1296,7 @@ mod tests {
         let mut limiter = RateLimiter::new(5, Duration::from_secs(1));
 
         for i in 0..5 {
-            assert!(limiter.check(i * 100), "message {} should be allowed", i);
+            assert!(limiter.check(i * 100), "message {i} should be allowed");
         }
     }
 
@@ -1487,7 +1487,7 @@ mod tests {
         let sub = StreamSubscription::with_id("sub1", "metrics")
             .with_interval(1000)
             .with_transform("rate()");
-        let cloned = sub.clone();
+        let cloned = sub;
         assert_eq!(cloned.id, "sub1");
         assert_eq!(cloned.source, "metrics");
         assert_eq!(cloned.transform, Some("rate()".to_string()));
@@ -1527,7 +1527,7 @@ mod tests {
         let config = StreamConfig::new("ws://test")
             .with_buffer_size(2048)
             .with_heartbeat(Duration::from_secs(60));
-        let cloned = config.clone();
+        let cloned = config;
         assert_eq!(cloned.url, "ws://test");
         assert_eq!(cloned.buffer_size, 2048);
     }
@@ -1557,7 +1557,7 @@ mod tests {
             max_attempts: Some(10),
             ..Default::default()
         };
-        let cloned = config.clone();
+        let cloned = config;
         assert_eq!(cloned.max_attempts, Some(10));
     }
 

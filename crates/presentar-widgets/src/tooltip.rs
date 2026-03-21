@@ -583,6 +583,7 @@ impl Brick for Tooltip {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
 
@@ -1062,7 +1063,7 @@ mod tests {
         // Width should be capped at max_width
         assert!(size.width <= 100.0);
         // Height should increase due to wrapping
-        assert!(size.height > 12.0 * 1.2 + 16.0); // More than single line
+        assert!(size.height > 12.0f32.mul_add(1.2, 16.0)); // More than single line
     }
 
     // ===== Paint Tests =====
@@ -1397,7 +1398,7 @@ mod tests {
     #[test]
     fn test_tooltip_placement_debug() {
         let placement = TooltipPlacement::Right;
-        let debug = format!("{:?}", placement);
+        let debug = format!("{placement:?}");
         assert!(debug.contains("Right"));
     }
 
@@ -1406,7 +1407,7 @@ mod tests {
         let tooltip = Tooltip::new("Text")
             .placement(TooltipPlacement::Left)
             .delay_ms(500);
-        let cloned = tooltip.clone();
+        let cloned = tooltip;
         assert_eq!(cloned.get_content(), "Text");
         assert_eq!(cloned.get_placement(), TooltipPlacement::Left);
         assert_eq!(cloned.get_delay_ms(), 500);

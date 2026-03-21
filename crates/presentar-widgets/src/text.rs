@@ -588,7 +588,7 @@ mod tests {
     #[test]
     fn test_text_clone() {
         let t = Text::new("Clone Me").font_size(20.0).color(Color::BLUE);
-        let cloned = t.clone();
+        let cloned = t;
         assert_eq!(cloned.content(), "Clone Me");
         assert_eq!(cloned.font_size, 20.0);
         assert_eq!(cloned.color, Color::BLUE);

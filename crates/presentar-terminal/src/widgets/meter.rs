@@ -553,7 +553,7 @@ mod tests {
         let meter = Meter::percentage(75.0)
             .with_label("Clone Test")
             .with_color(Color::BLUE);
-        let cloned = meter.clone();
+        let cloned = meter;
         assert_eq!(cloned.value, 75.0);
         assert_eq!(cloned.label, "Clone Test");
         assert_eq!(cloned.fill_color, Color::BLUE);

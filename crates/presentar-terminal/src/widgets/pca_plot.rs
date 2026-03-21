@@ -558,7 +558,7 @@ mod tests {
     #[test]
     fn test_pca_plot_scree() {
         let eigenvalues = vec![4.0, 2.0, 1.0, 0.5];
-        let plot = PCAPlot::scree(eigenvalues.clone());
+        let plot = PCAPlot::scree(eigenvalues);
         assert_eq!(plot.eigenvalues.len(), 4);
     }
 
@@ -704,6 +704,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::overly_complex_bool_expr)]
     fn test_get_point_color_with_labels() {
         let plot = PCAPlot::new(vec![(0.0, 0.0), (1.0, 1.0)]).with_labels(vec![0, 1]);
         let color0 = plot.get_point_color(0);

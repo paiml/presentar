@@ -383,6 +383,7 @@ impl Brick for Button {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
     use presentar_core::draw::DrawCommand;

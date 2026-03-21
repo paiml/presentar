@@ -414,6 +414,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::len_zero)]
     fn test_sparkline_paint_with_trend() {
         let mut spark = Sparkline::new(vec![1.0, 2.0, 3.0, 4.0, 5.0]).with_trend(true);
         spark.bounds = Rect::new(0.0, 0.0, 10.0, 1.0);
@@ -593,6 +594,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::literal_string_with_formatting_args)]
     fn test_sparkline_with_y_format() {
         let spark = Sparkline::new(vec![1.0, 2.0]).with_y_format("{:.0}%");
         assert!(spark.show_y_axis);
@@ -613,6 +615,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::literal_string_with_formatting_args)]
     fn test_sparkline_y_axis_width_with_format() {
         let spark = Sparkline::new(vec![1.0, 100.0]).with_y_format("{:.0}%");
         let width = spark.y_axis_width();
@@ -620,6 +623,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::literal_string_with_formatting_args)]
     fn test_sparkline_y_axis_width_with_format_decimal() {
         let spark = Sparkline::new(vec![1.0, 100.0]).with_y_format("{:.1}ms");
         let width = spark.y_axis_width();

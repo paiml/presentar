@@ -321,7 +321,7 @@ mod tests {
     fn test_parallel_coords_new() {
         let columns = vec!["A".to_string(), "B".to_string(), "C".to_string()];
         let data = vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]];
-        let plot = ParallelCoordinates::new(columns.clone(), data.clone());
+        let plot = ParallelCoordinates::new(columns, data);
         assert_eq!(plot.columns.len(), 3);
         assert_eq!(plot.data.len(), 2);
     }
@@ -649,7 +649,7 @@ mod tests {
         let columns = vec!["A".to_string(), "B".to_string()];
         let data = vec![vec![1.0, 2.0]];
         let plot = ParallelCoordinates::new(columns, data).with_alpha(0.8);
-        let cloned = plot.clone();
+        let cloned = plot;
         assert_eq!(cloned.columns.len(), 2);
         assert!((cloned.alpha - 0.8).abs() < 0.01);
     }

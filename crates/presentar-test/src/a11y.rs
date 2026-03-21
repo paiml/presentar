@@ -3307,6 +3307,7 @@ mod tests {
             }
         }
 
+        #[allow(dead_code)]
         fn with_child(mut self, child: impl Widget + 'static) -> Self {
             self.children.push(Box::new(child));
             self
@@ -3528,7 +3529,7 @@ mod tests {
             wcag: "1.1.1".to_string(),
             impact: Impact::Minor,
         };
-        let cloned = violation.clone();
+        let cloned = violation;
         assert_eq!(cloned.rule, "test");
         assert_eq!(cloned.impact, Impact::Minor);
     }
@@ -3543,7 +3544,7 @@ mod tests {
             wcag: "1.3.1".to_string(),
             impact: Impact::Critical,
         };
-        let cloned = violation.clone();
+        let cloned = violation;
         assert_eq!(cloned.field_id, "test");
         assert_eq!(cloned.rule, FormA11yRule::MissingLabel);
     }
@@ -3570,7 +3571,7 @@ mod tests {
             passes_aa: true,
             passes_aaa: false,
         };
-        let cloned = result.clone();
+        let cloned = result;
         assert!((cloned.ratio - 4.5).abs() < f32::EPSILON);
         assert!(cloned.passes_aa);
         assert!(!cloned.passes_aaa);

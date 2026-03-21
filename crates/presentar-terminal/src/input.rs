@@ -205,6 +205,7 @@ impl InputHandler {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
     use crossterm::event::{MouseButton as CtMouseButton, MouseEvent, MouseEventKind};

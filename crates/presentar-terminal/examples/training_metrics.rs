@@ -1,9 +1,10 @@
+#![allow(clippy::unwrap_used, clippy::disallowed_methods)]
 //! ML Training Metrics Example
 //!
 //! Demonstrates real-time training loss/accuracy visualization.
-//! Similar to TensorBoard but in the terminal.
+//! Similar to `TensorBoard` but in the terminal.
 //!
-//! Run with: cargo run -p presentar-terminal --example training_metrics
+//! Run with: cargo run -p presentar-terminal --example `training_metrics`
 
 use presentar_core::{Canvas, Color, Point, Rect, TextStyle, Widget};
 use presentar_terminal::direct::{CellBuffer, DiffRenderer, DirectTerminalCanvas};
@@ -96,7 +97,7 @@ fn main() {
     let cells_written = renderer.flush(&mut buffer, &mut output).unwrap();
 
     println!("Buffer: {}x{}", buffer.width(), buffer.height());
-    println!("Cells written: {}", cells_written);
+    println!("Cells written: {cells_written}");
     println!("Output bytes: {}\n", output.len());
 
     println!("Rendered output:");
@@ -219,7 +220,7 @@ fn draw_lr_graph(canvas: &mut DirectTerminalCanvas<'_>, lr: &[f64], bounds: Rect
         ..Default::default()
     };
     canvas.draw_text(
-        &format!("lr={:.2e}", current_lr),
+        &format!("lr={current_lr:.2e}"),
         Point::new(bounds.x + 24.0, bounds.y),
         &lr_style,
     );
@@ -266,22 +267,22 @@ fn draw_training_stats(
     let best_val_acc = val_acc.iter().fold(0.0_f64, |a, &b| a.max(b));
 
     canvas.draw_text(
-        &format!("Best Train Loss: {:.4}", best_train_loss),
+        &format!("Best Train Loss: {best_train_loss:.4}"),
         Point::new(x, y + 1.0),
         &value_style,
     );
     canvas.draw_text(
-        &format!("Best Val Loss:   {:.4}", best_val_loss),
+        &format!("Best Val Loss:   {best_val_loss:.4}"),
         Point::new(x, y + 2.0),
         &value_style,
     );
     canvas.draw_text(
-        &format!("Best Train Acc:  {:.2}%", best_train_acc),
+        &format!("Best Train Acc:  {best_train_acc:.2}%"),
         Point::new(x, y + 3.0),
         &value_style,
     );
     canvas.draw_text(
-        &format!("Best Val Acc:    {:.2}%", best_val_acc),
+        &format!("Best Val Acc:    {best_val_acc:.2}%"),
         Point::new(x, y + 4.0),
         &value_style,
     );
@@ -342,12 +343,12 @@ fn draw_current_metrics(
     };
 
     canvas.draw_text(
-        &format!("Loss:     {:.4} / {:.4}", curr_train_loss, curr_val_loss),
+        &format!("Loss:     {curr_train_loss:.4} / {curr_val_loss:.4}"),
         Point::new(x, y + 1.0),
         &good_style,
     );
     canvas.draw_text(
-        &format!("Accuracy: {:.2}% / {:.2}%", curr_train_acc, curr_val_acc),
+        &format!("Accuracy: {curr_train_acc:.2}% / {curr_val_acc:.2}%"),
         Point::new(x, y + 2.0),
         &good_style,
     );
@@ -368,7 +369,7 @@ fn simulate_training_loss(epochs: usize) -> (Vec<f64>, Vec<f64>) {
     let train: Vec<f64> = (0..epochs)
         .map(|e| {
             let t = e as f64 / epochs as f64;
-            let base = 2.5 * (-3.0 * t).exp() + 0.05;
+            let base = 2.5f64.mul_add((-3.0 * t).exp(), 0.05);
             let noise = ((e * 7919) % 100) as f64 / 500.0;
             (base + noise).max(0.05)
         })
@@ -377,7 +378,7 @@ fn simulate_training_loss(epochs: usize) -> (Vec<f64>, Vec<f64>) {
     let val: Vec<f64> = (0..epochs)
         .map(|e| {
             let t = e as f64 / epochs as f64;
-            let base = 2.5 * (-2.8 * t).exp() + 0.08;
+            let base = 2.5f64.mul_add((-2.8 * t).exp(), 0.08);
             let overfit = if t > 0.7 { (t - 0.7) * 0.3 } else { 0.0 };
             let noise = ((e * 6971) % 100) as f64 / 400.0;
             (base + noise + overfit).max(0.08)
@@ -391,7 +392,7 @@ fn simulate_accuracy(epochs: usize) -> (Vec<f64>, Vec<f64>) {
     let train: Vec<f64> = (0..epochs)
         .map(|e| {
             let t = e as f64 / epochs as f64;
-            let base = 50.0 + 48.0 * (1.0 - (-4.0 * t).exp());
+            let base = 48.0f64.mul_add(1.0 - (-4.0 * t).exp(), 50.0);
             let noise = ((e * 7919) % 50) as f64 / 25.0;
             (base + noise).clamp(50.0, 99.5)
         })
@@ -400,7 +401,7 @@ fn simulate_accuracy(epochs: usize) -> (Vec<f64>, Vec<f64>) {
     let val: Vec<f64> = (0..epochs)
         .map(|e| {
             let t = e as f64 / epochs as f64;
-            let base = 50.0 + 45.0 * (1.0 - (-3.5 * t).exp());
+            let base = 45.0f64.mul_add(1.0 - (-3.5 * t).exp(), 50.0);
             let noise = ((e * 6971) % 60) as f64 / 30.0;
             (base + noise).clamp(50.0, 97.0)
         })

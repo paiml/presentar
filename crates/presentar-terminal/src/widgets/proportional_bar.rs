@@ -265,6 +265,7 @@ mod tests {
 
     // F-ATOM-001: Bar never exceeds bounds
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn test_f_atom_001_no_bleed() {
         let mut bar = ProportionalBar::new()
             .with_segment(0.6, Color::RED)
@@ -330,7 +331,7 @@ mod tests {
             value: 0.75,
             color: Color::BLUE,
         };
-        let cloned = seg.clone();
+        let cloned = seg;
         assert!((cloned.value - 0.75).abs() < f64::EPSILON);
     }
 
@@ -359,7 +360,7 @@ mod tests {
         let bar = ProportionalBar::new()
             .with_segment(0.3, Color::RED)
             .with_background(Color::BLACK);
-        let cloned = bar.clone();
+        let cloned = bar;
         assert_eq!(cloned.segments.len(), 1);
         assert!(cloned.background_color.is_some());
     }

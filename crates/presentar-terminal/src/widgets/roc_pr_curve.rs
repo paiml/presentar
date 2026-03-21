@@ -706,7 +706,7 @@ mod tests {
         assert!(data.auc_roc.is_some());
         // AUC should be between 0 and 1
         let auc = data.auc_roc.expect("computed above");
-        assert!(auc >= 0.0 && auc <= 1.0);
+        assert!((0.0..=1.0).contains(&auc));
     }
 
     #[test]
@@ -998,6 +998,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn test_roc_pr_curve_verify_valid() {
         let mut curve = RocPrCurve::default();
         curve.bounds = Rect::new(0.0, 0.0, 40.0, 20.0);
@@ -1005,6 +1006,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn test_roc_pr_curve_verify_invalid() {
         let mut curve = RocPrCurve::default();
         curve.bounds = Rect::new(0.0, 0.0, 5.0, 3.0);

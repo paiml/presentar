@@ -1,9 +1,10 @@
+#![allow(clippy::unwrap_used, clippy::disallowed_methods)]
 //! CPU Monitor Example
 //!
 //! Demonstrates real-time CPU usage monitoring with braille graphs.
 //! Similar to btop/htop CPU visualization.
 //!
-//! Run with: cargo run -p presentar-terminal --example cpu_monitor
+//! Run with: cargo run -p presentar-terminal --example `cpu_monitor`
 
 use presentar_core::{Canvas, Color, Point, Rect, TextStyle, Widget};
 use presentar_terminal::direct::{CellBuffer, DiffRenderer, DirectTerminalCanvas};
@@ -65,7 +66,7 @@ fn main() {
         buffer.height(),
         buffer.len()
     );
-    println!("Cells written: {}", cells_written);
+    println!("Cells written: {cells_written}");
     println!("Output bytes: {}\n", output.len());
 
     // Display rendered output
@@ -89,7 +90,7 @@ fn draw_cpu_graph(canvas: &mut DirectTerminalCanvas<'_>, history: &[f64], bounds
         ..Default::default()
     };
     canvas.draw_text(
-        &format!("{:5.1}%", current),
+        &format!("{current:5.1}%"),
         Point::new(bounds.x + 11.0, bounds.y),
         &pct_style,
     );
@@ -111,6 +112,8 @@ fn draw_cpu_graph(canvas: &mut DirectTerminalCanvas<'_>, history: &[f64], bounds
 }
 
 fn draw_core_meters(canvas: &mut DirectTerminalCanvas<'_>, per_core: &[f64], x: f32, y: f32) {
+    use std::fmt::Write;
+
     let label_style = TextStyle {
         color: Color::new(0.7, 0.7, 0.7, 1.0),
         ..Default::default()
@@ -122,7 +125,7 @@ fn draw_core_meters(canvas: &mut DirectTerminalCanvas<'_>, per_core: &[f64], x: 
         let color = cpu_color(usage);
 
         // Draw mini bar
-        let label = format!("Core {}: ", i);
+        let label = format!("Core {i}: ");
         canvas.draw_text(&label, Point::new(x, core_y), &label_style);
 
         let bar_width = 12;
@@ -132,7 +135,7 @@ fn draw_core_meters(canvas: &mut DirectTerminalCanvas<'_>, per_core: &[f64], x: 
         for j in 0..bar_width {
             bar.push(if j < filled { '█' } else { '░' });
         }
-        bar.push_str(&format!("] {:5.1}%", usage));
+        let _ = write!(bar, "] {usage:5.1}%");
 
         let bar_style = TextStyle {
             color,
@@ -158,17 +161,17 @@ fn draw_statistics(canvas: &mut DirectTerminalCanvas<'_>, history: &[f64], x: f3
 
     canvas.draw_text("Statistics:", Point::new(x, y), &label_style);
     canvas.draw_text(
-        &format!("Average: {:5.1}%", avg),
+        &format!("Average: {avg:5.1}%"),
         Point::new(x, y + 1.0),
         &value_style,
     );
     canvas.draw_text(
-        &format!("Maximum: {:5.1}%", max),
+        &format!("Maximum: {max:5.1}%"),
         Point::new(x, y + 2.0),
         &value_style,
     );
     canvas.draw_text(
-        &format!("Minimum: {:5.1}%", min),
+        &format!("Minimum: {min:5.1}%"),
         Point::new(x, y + 3.0),
         &value_style,
     );
@@ -179,7 +182,7 @@ fn draw_statistics(canvas: &mut DirectTerminalCanvas<'_>, history: &[f64], x: f3
         &value_style,
     );
     canvas.draw_text(
-        &format!("Interval:  1.0s"),
+        "Interval:  1.0s",
         Point::new(x + 25.0, y + 2.0),
         &value_style,
     );
@@ -203,10 +206,7 @@ fn draw_load_average(canvas: &mut DirectTerminalCanvas<'_>, x: f32, y: f32) {
         ..Default::default()
     };
     canvas.draw_text(
-        &format!(
-            "1min: {:.2}  5min: {:.2}  15min: {:.2}",
-            load_1, load_5, load_15
-        ),
+        &format!("1min: {load_1:.2}  5min: {load_5:.2}  15min: {load_15:.2}"),
         Point::new(x, y + 1.0),
         &load_style,
     );
@@ -235,8 +235,8 @@ fn simulate_cpu_history(count: usize) -> Vec<f64> {
     (0..count)
         .map(|i| {
             let t = i as f64 / count as f64;
-            let base = 35.0 + 20.0 * (t * 3.0).sin();
-            let noise = ((i * 7919 + 104729) % 100) as f64 / 5.0;
+            let base = 20.0f64.mul_add((t * 3.0).sin(), 35.0);
+            let noise = ((i * 7919 + 104_729) % 100) as f64 / 5.0;
             (base + noise).clamp(5.0, 95.0)
         })
         .collect()
@@ -245,7 +245,7 @@ fn simulate_cpu_history(count: usize) -> Vec<f64> {
 fn simulate_per_core_usage(cores: usize) -> Vec<f64> {
     (0..cores)
         .map(|i| {
-            let base = 20.0 + (i as f64 * 10.0);
+            let base = (i as f64).mul_add(10.0, 20.0);
             let noise = ((i * 6971 + 7723) % 40) as f64;
             (base + noise).clamp(5.0, 95.0)
         })

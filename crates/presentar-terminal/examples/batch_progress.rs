@@ -1,9 +1,10 @@
+#![allow(clippy::unwrap_used, clippy::disallowed_methods)]
 //! Batch Job Progress Monitor
 //!
 //! Demonstrates monitoring multiple batch jobs with progress bars
 //! and completion estimates. Useful for data pipelines and ETL jobs.
 //!
-//! Run with: cargo run -p presentar-terminal --example batch_progress
+//! Run with: cargo run -p presentar-terminal --example `batch_progress`
 
 use presentar_core::{Canvas, Color, Point, Rect, TextStyle};
 use presentar_terminal::direct::{CellBuffer, DiffRenderer, DirectTerminalCanvas};
@@ -78,7 +79,7 @@ fn main() {
     let cells_written = renderer.flush(&mut buffer, &mut output).unwrap();
 
     println!("Buffer: {}x{}", buffer.width(), buffer.height());
-    println!("Cells written: {}", cells_written);
+    println!("Cells written: {cells_written}");
     println!("Output bytes: {}\n", output.len());
 
     println!("Rendered output:");
@@ -96,8 +97,9 @@ enum JobStatus {
     Failed,
 }
 
+#[allow(clippy::trivially_copy_pass_by_ref)]
 impl JobStatus {
-    fn symbol(&self) -> &'static str {
+    const fn symbol(&self) -> &'static str {
         match self {
             Self::Pending => "○",
             Self::Running => "◐",
@@ -179,7 +181,7 @@ fn draw_status_summary(canvas: &mut DirectTerminalCanvas<'_>, jobs: &[Job], x: f
             ..Default::default()
         };
         canvas.draw_text(
-            &format!("{}:{}", name, count),
+            &format!("{name}:{count}"),
             Point::new(x + offset, y),
             &style,
         );
@@ -308,7 +310,7 @@ fn draw_overall_progress(canvas: &mut DirectTerminalCanvas<'_>, jobs: &[Job], x:
     };
     canvas.draw_text(&bar, Point::new(x, y + 1.0), &bar_style);
     canvas.draw_text(
-        &format!("{:5.1}%", overall_pct),
+        &format!("{overall_pct:5.1}%"),
         Point::new(x + 54.0, y + 1.0),
         &bar_style,
     );
@@ -345,6 +347,6 @@ fn format_count(processed: u64, total: u64) -> String {
     } else if total >= 1_000 {
         format!("{:.1}K/{:.1}K", processed as f64 / 1e3, total as f64 / 1e3)
     } else {
-        format!("{}/{}", processed, total)
+        format!("{processed}/{total}")
     }
 }

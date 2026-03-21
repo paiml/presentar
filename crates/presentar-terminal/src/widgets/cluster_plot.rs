@@ -377,7 +377,7 @@ mod tests {
     fn test_cluster_plot_new() {
         let points = vec![(0.0, 0.0), (1.0, 1.0), (2.0, 2.0)];
         let labels = vec![0, 0, 1];
-        let plot = ClusterPlot::new(points.clone(), labels.clone());
+        let plot = ClusterPlot::new(points, labels);
         assert_eq!(plot.points.len(), 3);
         assert_eq!(plot.labels.len(), 3);
     }
@@ -479,7 +479,7 @@ mod tests {
     #[test]
     fn test_with_colors() {
         let custom_colors = vec![Color::RED, Color::GREEN, Color::BLUE];
-        let plot = ClusterPlot::default().with_colors(custom_colors.clone());
+        let plot = ClusterPlot::default().with_colors(custom_colors);
         assert_eq!(plot.colors.len(), 3);
     }
 
@@ -840,7 +840,7 @@ mod tests {
             .with_show_centroids(true)
             .with_colors(vec![Color::RED]);
 
-        let cloned = plot.clone();
+        let cloned = plot;
         assert_eq!(cloned.points.len(), 1);
         assert_eq!(cloned.centroids.len(), 1);
         assert!(cloned.show_centroids);
@@ -866,7 +866,7 @@ mod tests {
             eps: 0.5,
             min_samples: 3,
         };
-        let cloned = algo.clone();
+        let cloned = algo;
         assert!(matches!(
             cloned,
             ClusterAlgorithm::DBSCAN {

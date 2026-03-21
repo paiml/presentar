@@ -1428,7 +1428,7 @@ mod tests {
     fn test_generate_badge_colors() {
         let make_score = |overall: f64| QualityScore {
             overall,
-            grade: "".to_string(),
+            grade: String::new(),
             structural: 0.0,
             performance: 0.0,
             accessibility: 0.0,
@@ -1669,7 +1669,7 @@ layout:
 
         fs::write(temp_dir.join("index.html"), "<!DOCTYPE html>").unwrap();
         fs::write(temp_dir.join("pkg/app.js"), "// JS").unwrap();
-        fs::write(temp_dir.join("pkg/app.wasm"), &[0u8; 100]).unwrap();
+        fs::write(temp_dir.join("pkg/app.wasm"), [0u8; 100]).unwrap();
 
         let files = collect_deploy_files(&temp_dir);
 

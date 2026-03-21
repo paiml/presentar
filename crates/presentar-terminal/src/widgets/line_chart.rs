@@ -794,6 +794,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn test_line_chart_verify() {
         let mut chart = LineChart::default();
         chart.bounds = Rect::new(0.0, 0.0, 80.0, 20.0);
@@ -1101,6 +1102,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn test_line_chart_verify_small_width() {
         let mut chart = LineChart::default();
         chart.bounds = Rect::new(0.0, 0.0, 5.0, 20.0); // Width < 10

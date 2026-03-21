@@ -585,6 +585,7 @@ mod tests {
     use std::sync::Arc;
 
     // Modifiers tests
+    #[allow(clippy::assertions_on_constants)]
     #[test]
     fn test_modifiers_constants() {
         assert!(!Modifiers::NONE.any());
@@ -953,8 +954,7 @@ mod tests {
             "Open",
         );
 
-        let shortcuts: Vec<_> = manager.shortcuts().collect();
-        assert_eq!(shortcuts.len(), 2);
+        assert_eq!(manager.shortcuts().count(), 2);
     }
 
     #[test]

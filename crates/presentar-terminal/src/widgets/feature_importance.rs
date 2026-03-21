@@ -275,7 +275,7 @@ mod tests {
     fn test_feature_importance_new() {
         let features = vec!["A".to_string(), "B".to_string(), "C".to_string()];
         let importances = vec![0.5, 0.3, 0.2];
-        let plot = FeatureImportance::new(features.clone(), importances.clone());
+        let plot = FeatureImportance::new(features, importances);
         assert_eq!(plot.features.len(), 3);
         assert_eq!(plot.importances.len(), 3);
     }
@@ -621,7 +621,7 @@ mod tests {
             .with_color(Color::GREEN)
             .with_max_features(5);
 
-        let cloned = plot.clone();
+        let cloned = plot;
         assert_eq!(cloned.features.len(), 2);
         assert!(cloned.sorted);
         assert!(!cloned.show_values);

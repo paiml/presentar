@@ -516,7 +516,7 @@ mod tests {
     #[test]
     fn test_stack_alignment_debug() {
         let alignment = StackAlignment::Center;
-        let debug_str = format!("{:?}", alignment);
+        let debug_str = format!("{alignment:?}");
         assert!(debug_str.contains("Center"));
     }
 
@@ -546,7 +546,7 @@ mod tests {
     #[test]
     fn test_stack_fit_debug() {
         let fit = StackFit::Expand;
-        let debug_str = format!("{:?}", fit);
+        let debug_str = format!("{fit:?}");
         assert!(debug_str.contains("Expand"));
     }
 

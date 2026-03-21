@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::disallowed_methods)]
 //! F076-F085 Performance Tests
 //!
 //! Popperian falsification tests for performance requirements.
@@ -9,7 +10,7 @@
 //! - P1 (frame budget): 50ms threshold with coverage (16ms target)
 //! - P2 (large data): 500ms threshold with coverage (100ms target)
 
-use presentar_core::{Canvas, Color, Constraints, Point, Rect, Size, TextStyle, Widget};
+use presentar_core::{Canvas, Color, Constraints, Point, Rect, TextStyle, Widget};
 use presentar_terminal::{
     BrailleGraph, CellBuffer, CpuGrid, Gauge, MemoryBar, NetworkInterface, NetworkPanel,
     ProcessEntry, ProcessTable, Sparkline,
@@ -23,7 +24,7 @@ struct TestCanvas {
 }
 
 impl TestCanvas {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
             texts: Vec::new(),
             rects: Vec::new(),
@@ -117,9 +118,7 @@ fn f076_frame_budget_80x24() {
     let threshold = 16.0 * COVERAGE_TOLERANCE;
     assert!(
         avg_frame_ms < threshold,
-        "F076 FALSIFIED: Average frame time {:.2}ms exceeds {}ms threshold",
-        avg_frame_ms,
-        threshold
+        "F076 FALSIFIED: Average frame time {avg_frame_ms:.2}ms exceeds {threshold}ms threshold"
     );
 }
 
@@ -150,6 +149,7 @@ fn f077_steady_state_buffer_reuse() {
 }
 
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn f077_widget_reuse_no_realloc() {
     // Verify widgets can be reused without internal reallocation
     let mut graph = BrailleGraph::new(vec![0.5; 100]);
@@ -162,7 +162,7 @@ fn f077_widget_reuse_no_realloc() {
     // Update data and re-render (should reuse internal structures)
     for i in 0..100 {
         let data: Vec<f64> = (0..100)
-            .map(|j| ((i + j) as f64 / 100.0).sin().abs())
+            .map(|j| (f64::from(i + j) / 100.0).sin().abs())
             .collect();
         graph.set_data(data);
         canvas.clear();
@@ -178,6 +178,7 @@ fn f077_widget_reuse_no_realloc() {
 // =============================================================================
 
 #[test]
+#[allow(clippy::unnecessary_unwrap)]
 fn f078_diff_render_efficiency() {
     // Verify that re-rendering unchanged content is efficient
     let mut buffer1 = CellBuffer::new(80, 24);
@@ -205,7 +206,7 @@ fn f078_diff_render_efficiency() {
         }
     }
 
-    let identical_ratio = identical_cells as f64 / total_cells as f64;
+    let identical_ratio = f64::from(identical_cells) / f64::from(total_cells);
     assert!(
         identical_ratio >= 0.9,
         "F078 FALSIFIED: Only {:.1}% cells identical (expected >=90%)",
@@ -221,7 +222,7 @@ fn f078_diff_render_efficiency() {
 #[test]
 fn f079_large_data_braille_10k() {
     let data: Vec<f64> = (0..10_000)
-        .map(|i| (i as f64 / 1000.0).sin().abs())
+        .map(|i| (f64::from(i) / 1000.0).sin().abs())
         .collect();
     let mut graph = BrailleGraph::new(data);
     graph.layout(Rect::new(0.0, 0.0, 100.0, 20.0));
@@ -239,9 +240,7 @@ fn f079_large_data_braille_10k() {
     let threshold = 100.0 * if cfg!(debug_assertions) { 5.0 } else { 1.0 };
     assert!(
         avg_ms < threshold,
-        "F079 FALSIFIED: BrailleGraph(10K) paint avg {:.2}ms exceeds {}ms",
-        avg_ms,
-        threshold
+        "F079 FALSIFIED: BrailleGraph(10K) paint avg {avg_ms:.2}ms exceeds {threshold}ms"
     );
 }
 
@@ -259,7 +258,7 @@ fn f080_process_table_1000_rows() {
                 "user",
                 (i as f32) % 100.0,
                 (i as f32) % 50.0,
-                format!("process_{}", i),
+                format!("process_{i}"),
             )
         })
         .collect();
@@ -281,9 +280,7 @@ fn f080_process_table_1000_rows() {
     let threshold = 100.0 * if cfg!(debug_assertions) { 5.0 } else { 1.0 };
     assert!(
         avg_ms < threshold,
-        "F080 FALSIFIED: ProcessTable(1000) paint avg {:.2}ms exceeds {}ms",
-        avg_ms,
-        threshold
+        "F080 FALSIFIED: ProcessTable(1000) paint avg {avg_ms:.2}ms exceeds {threshold}ms"
     );
 }
 
@@ -317,7 +314,7 @@ fn f081_cellbuffer_reuse_pattern() {
     // Verify buffer is still the same dimensions (wasn't recreated)
     assert_eq!(buffer.width(), 80);
     assert_eq!(buffer.height(), 24);
-    assert!(true, "F081: CellBuffer reuse pattern verified");
+    // F081: CellBuffer reuse pattern verified
 }
 
 // =============================================================================
@@ -378,9 +375,7 @@ fn f083_string_formatting_efficiency() {
     let threshold_us = 100.0 * if cfg!(debug_assertions) { 1000.0 } else { 1.0 };
     assert!(
         avg_us < threshold_us,
-        "F083 FALSIFIED: Gauge paint avg {:.2}µs (threshold: {}µs) - possible format! overhead",
-        avg_us,
-        threshold_us
+        "F083 FALSIFIED: Gauge paint avg {avg_us:.2}µs (threshold: {threshold_us}µs) - possible format! overhead"
     );
 }
 
@@ -420,9 +415,7 @@ fn f084_widget_measure_cost() {
         let threshold_us = 10.0 * if cfg!(debug_assertions) { 100.0 } else { 1.0 };
         assert!(
             avg_us < threshold_us,
-            "F084 FALSIFIED: Widget measure avg {:.2}µs exceeds {}µs",
-            avg_us,
-            threshold_us
+            "F084 FALSIFIED: Widget measure avg {avg_us:.2}µs exceeds {threshold_us}µs"
         );
     }
 }
@@ -446,14 +439,18 @@ fn f085_full_screen_paint_cost() {
     let mut process_table = ProcessTable::new();
     process_table.set_processes(
         (0..50)
-            .map(|i| ProcessEntry::new(i as u32, "user", (i as f32) * 2.0, (i as f32), "command"))
+            .map(|i| ProcessEntry::new(i as u32, "user", (i as f32) * 2.0, i as f32, "command"))
             .collect(),
     );
     let mut network_panel = NetworkPanel::new();
     let mut eth0 = NetworkInterface::new("eth0");
     eth0.update(1_000_000.0, 500_000.0);
     network_panel.add_interface(eth0);
-    let mut graph = BrailleGraph::new((0..100).map(|i| (i as f64 / 100.0).sin().abs()).collect());
+    let mut graph = BrailleGraph::new(
+        (0..100)
+            .map(|i| (f64::from(i) / 100.0).sin().abs())
+            .collect(),
+    );
     let mut sparkline = Sparkline::new(vec![0.1, 0.3, 0.5, 0.7, 0.9, 0.6, 0.4, 0.2]);
 
     // Layout all widgets for 80x24 terminal
@@ -483,9 +480,7 @@ fn f085_full_screen_paint_cost() {
     let threshold = 8.0 * if cfg!(debug_assertions) { 5.0 } else { 1.0 };
     assert!(
         avg_ms < threshold,
-        "F085 FALSIFIED: Full screen paint avg {:.2}ms exceeds {}ms threshold",
-        avg_ms,
-        threshold
+        "F085 FALSIFIED: Full screen paint avg {avg_ms:.2}ms exceeds {threshold}ms threshold"
     );
 }
 
@@ -497,7 +492,7 @@ fn f085_full_screen_paint_cost() {
 fn perf_100k_braille_points_within_budget() {
     // Verify 100K points can be rendered within reasonable time
     let data: Vec<f64> = (0..100_000)
-        .map(|i| (i as f64 / 10000.0).sin().abs())
+        .map(|i| (f64::from(i) / 10000.0).sin().abs())
         .collect();
     let mut graph = BrailleGraph::new(data);
     graph.layout(Rect::new(0.0, 0.0, 200.0, 50.0));
@@ -511,9 +506,7 @@ fn perf_100k_braille_points_within_budget() {
     let threshold = Duration::from_millis(if cfg!(debug_assertions) { 1000 } else { 100 });
     assert!(
         elapsed < threshold,
-        "100K BrailleGraph paint took {:?} (threshold: {:?})",
-        elapsed,
-        threshold
+        "100K BrailleGraph paint took {elapsed:?} (threshold: {threshold:?})"
     );
 }
 
@@ -529,7 +522,7 @@ fn perf_sparkline_rapid_update() {
     for i in 0..1000 {
         // Shift data and add new point
         let new_data: Vec<f64> = (0..100)
-            .map(|j| ((i + j) as f64 / 100.0).sin().abs())
+            .map(|j| (f64::from(i + j) / 100.0).sin().abs())
             .collect();
         sparkline.set_data(new_data);
         canvas.clear();
@@ -540,8 +533,6 @@ fn perf_sparkline_rapid_update() {
     let threshold = Duration::from_millis(if cfg!(debug_assertions) { 500 } else { 50 });
     assert!(
         elapsed < threshold,
-        "1000 sparkline updates took {:?} (threshold: {:?})",
-        elapsed,
-        threshold
+        "1000 sparkline updates took {elapsed:?} (threshold: {threshold:?})"
     );
 }

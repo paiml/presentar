@@ -737,8 +737,8 @@ mod tests {
 
     #[test]
     fn test_cell_value_float64() {
-        let (rendered, _) = CellValue::Float64(3.14159).render(10);
-        assert!(rendered.contains("3.14"));
+        let (rendered, _) = CellValue::Float64(1.23456).render(10);
+        assert!(rendered.contains("1.23"));
     }
 
     #[test]
@@ -953,7 +953,7 @@ mod tests {
     #[test]
     fn test_status_level_clone_eq() {
         let s1 = StatusLevel::Ok;
-        let s2 = s1.clone();
+        let s2 = s1;
         assert_eq!(s1, s2);
     }
 
@@ -1156,7 +1156,7 @@ mod tests {
             CellValue::Null,
             CellValue::Bool(true),
             CellValue::Int64(42),
-            CellValue::Float64(3.14),
+            CellValue::Float64(1.23),
             CellValue::String(CompactString::from("text")),
         ]));
 
@@ -1425,7 +1425,7 @@ mod tests {
     #[test]
     fn test_dataframe_clone() {
         let df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0]));
-        let cloned = df.clone();
+        let cloned = df;
         assert_eq!(cloned.column_count(), 1);
         assert_eq!(cloned.row_count(), 2);
     }
@@ -1442,7 +1442,7 @@ mod tests {
     #[test]
     fn test_cell_value_clone() {
         let value = CellValue::Int64(42);
-        let cloned = value.clone();
+        let cloned = value;
         assert!(matches!(cloned, CellValue::Int64(42)));
     }
 

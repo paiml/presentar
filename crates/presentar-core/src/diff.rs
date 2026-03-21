@@ -515,12 +515,10 @@ mod tests {
         let result = diff_trees(&old, &new);
 
         // Should have move operations
-        let move_ops: Vec<_> = result
+        assert!(result
             .operations
             .iter()
-            .filter(|op| matches!(op, DiffOp::Move { .. }))
-            .collect();
-        assert!(!move_ops.is_empty());
+            .any(|op| matches!(op, DiffOp::Move { .. })));
     }
 
     #[test]
@@ -532,12 +530,14 @@ mod tests {
 
         let result = diff_trees(&old, &new);
 
-        let update_ops: Vec<_> = result
-            .operations
-            .iter()
-            .filter(|op| matches!(op, DiffOp::Update { .. }))
-            .collect();
-        assert_eq!(update_ops.len(), 1);
+        assert_eq!(
+            result
+                .operations
+                .iter()
+                .filter(|op| matches!(op, DiffOp::Update { .. }))
+                .count(),
+            1
+        );
     }
 
     #[test]
@@ -553,12 +553,14 @@ mod tests {
         let result = diff_trees(&old, &new);
 
         // Should have update at path [0, 0]
-        let update_ops: Vec<_> = result
-            .operations
-            .iter()
-            .filter(|op| matches!(op, DiffOp::Update { path, .. } if *path == vec![0, 0]))
-            .collect();
-        assert_eq!(update_ops.len(), 1);
+        assert_eq!(
+            result
+                .operations
+                .iter()
+                .filter(|op| matches!(op, DiffOp::Update { path, .. } if *path == vec![0, 0]))
+                .count(),
+            1
+        );
     }
 
     #[test]
@@ -578,12 +580,10 @@ mod tests {
         let result = diff_trees(&old, &new);
 
         // Should have remove operations for removed children
-        let remove_ops: Vec<_> = result
+        assert!(result
             .operations
             .iter()
-            .filter(|op| matches!(op, DiffOp::Remove { .. }))
-            .collect();
-        assert!(!remove_ops.is_empty());
+            .any(|op| matches!(op, DiffOp::Remove { .. })));
     }
 
     #[test]
@@ -614,12 +614,14 @@ mod tests {
 
         let result = diff_trees(&old, &new);
 
-        let insert_ops: Vec<_> = result
-            .operations
-            .iter()
-            .filter(|op| matches!(op, DiffOp::Insert { .. }))
-            .collect();
-        assert_eq!(insert_ops.len(), 2);
+        assert_eq!(
+            result
+                .operations
+                .iter()
+                .filter(|op| matches!(op, DiffOp::Insert { .. }))
+                .count(),
+            2
+        );
     }
 
     #[test]
@@ -633,12 +635,14 @@ mod tests {
 
         let result = diff_trees(&old, &new);
 
-        let remove_ops: Vec<_> = result
-            .operations
-            .iter()
-            .filter(|op| matches!(op, DiffOp::Remove { .. }))
-            .collect();
-        assert_eq!(remove_ops.len(), 2);
+        assert_eq!(
+            result
+                .operations
+                .iter()
+                .filter(|op| matches!(op, DiffOp::Remove { .. }))
+                .count(),
+            2
+        );
     }
 
     #[test]
@@ -658,14 +662,13 @@ mod tests {
         let result = diff_trees(&old, &new);
 
         // Should update the deeply nested node
-        let update_ops: Vec<_> = result
+        assert_eq!(result
             .operations
             .iter()
             .filter(|op| {
                 matches!(op, DiffOp::Update { path, new_props_hash: 99 } if *path == vec![0, 0, 0])
             })
-            .collect();
-        assert_eq!(update_ops.len(), 1);
+            .count(), 1);
     }
 
     #[test]

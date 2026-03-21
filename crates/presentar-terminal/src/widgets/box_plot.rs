@@ -701,7 +701,7 @@ mod tests {
         bp.paint(&mut canvas);
 
         // Should have value text
-        assert!(canvas.texts.iter().any(|(t, _)| t.contains("[")));
+        assert!(canvas.texts.iter().any(|(t, _)| t.contains('[')));
     }
 
     #[test]

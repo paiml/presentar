@@ -279,6 +279,7 @@ impl Widget for MultiBarGraph {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
 
@@ -384,8 +385,7 @@ mod tests {
         graph.paint(&mut canvas);
 
         // Different values should produce different colors
-        let colors: Vec<Color> = canvas.texts.iter().map(|(_, _, c)| *c).collect();
-        assert!(!colors.is_empty());
+        assert!(canvas.texts.iter().map(|(_, _, c)| *c).next().is_some());
     }
 
     #[test]

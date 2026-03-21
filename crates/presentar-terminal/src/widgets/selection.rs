@@ -313,6 +313,7 @@ impl Cursor {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
 
@@ -321,6 +322,7 @@ mod tests {
     // =========================================================================
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn test_row_highlight_colors() {
         // Selection background should be subtle dark purple (ttop-style)
         // Just slightly different from DIMMED_BG, barely visible
@@ -332,6 +334,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn test_selection_accent_is_green() {
         // ttop uses bright green for the ▶ indicator
         assert!(SELECTION_ACCENT.g > 0.8, "Accent should be bright green");
@@ -350,6 +353,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn test_dimmed_bg_is_dark() {
         assert!(DIMMED_BG.r < 0.15);
         assert!(DIMMED_BG.g < 0.15);

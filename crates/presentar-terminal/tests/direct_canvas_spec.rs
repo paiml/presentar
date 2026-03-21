@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::disallowed_methods)]
 //! Popperian Falsification Tests for Direct TUI Backend
 //!
 //! This test file implements the falsification checklist from
@@ -45,7 +46,7 @@ fn p1_full_redraw_80x24_under_1ms() {
     }
 
     let elapsed = start.elapsed();
-    let avg_ms = elapsed.as_secs_f64() * 1000.0 / iterations as f64;
+    let avg_ms = elapsed.as_secs_f64() * 1000.0 / f64::from(iterations);
 
     // Allow significant headroom for CI variance and coverage instrumentation
     // Coverage mode can add 10-50x overhead
@@ -82,7 +83,7 @@ fn p2_differential_update_10_percent_under_100us() {
     }
 
     let elapsed = start.elapsed();
-    let avg_us = elapsed.as_secs_f64() * 1_000_000.0 / iterations as f64;
+    let avg_us = elapsed.as_secs_f64() * 1_000_000.0 / f64::from(iterations);
 
     // Allow headroom for CI and coverage instrumentation
     assert!(
@@ -139,7 +140,7 @@ fn p4_large_terminal_redraw_under_5ms() {
     }
 
     let elapsed = start.elapsed();
-    let avg_ms = elapsed.as_secs_f64() * 1000.0 / iterations as f64;
+    let avg_ms = elapsed.as_secs_f64() * 1000.0 / f64::from(iterations);
 
     // Allow significant headroom for coverage instrumentation
     assert!(
@@ -164,7 +165,7 @@ fn p6_dirty_bitmap_overhead_under_1_percent() {
 
     // Bitmap size in bits = cell_count
     // Bitmap size in bytes = cell_count / 8
-    let bitmap_bytes = (cell_count + 7) / 8;
+    let bitmap_bytes = cell_count.div_ceil(8);
 
     // Assume ~40 bytes per cell (CompactString + colors + modifiers)
     let estimated_cell_size = 40;
@@ -283,7 +284,7 @@ fn c2_wide_chars_correct_width() {
     assert!(buffer.get(5, 0).unwrap().is_continuation());
 }
 
-/// C5: Color accuracy in TrueColor
+/// C5: Color accuracy in `TrueColor`
 #[test]
 fn c5_truecolor_accuracy() {
     let mode = ColorMode::TrueColor;
@@ -392,6 +393,7 @@ fn c20_resize_clears_buffer() {
 
 /// D2: Only ~4-5 direct dependencies (verified at compile time)
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn d2_minimal_dependencies() {
     // This test verifies that the code compiles with the expected dependencies.
     // The actual dependency count is verified in Cargo.toml.
@@ -411,6 +413,7 @@ fn d2_minimal_dependencies() {
 
 /// D7: No unsafe in direct module (verified at compile time)
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn d7_no_unsafe_code() {
     // The direct module uses #[forbid(unsafe_code)] at crate level
     // via the lint configuration. This test documents that requirement.

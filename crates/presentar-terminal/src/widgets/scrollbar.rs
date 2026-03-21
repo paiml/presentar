@@ -514,6 +514,15 @@ impl Scrollbar {
     }
 }
 
+impl PartialEq for ScrollbarChars {
+    fn eq(&self, other: &Self) -> bool {
+        self.track == other.track
+            && self.thumb == other.thumb
+            && self.arrow_start == other.arrow_start
+            && self.arrow_end == other.arrow_end
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -586,7 +595,7 @@ mod tests {
     #[test]
     fn test_with_chars() {
         let chars = ScrollbarChars::ascii();
-        let sb = Scrollbar::vertical(100, 10).with_chars(chars.clone());
+        let sb = Scrollbar::vertical(100, 10).with_chars(chars);
         assert_eq!(sb.chars.track, '-');
     }
 
@@ -1049,14 +1058,5 @@ mod tests {
     fn test_orientation_eq() {
         assert_eq!(ScrollOrientation::Vertical, ScrollOrientation::Vertical);
         assert_ne!(ScrollOrientation::Vertical, ScrollOrientation::Horizontal);
-    }
-}
-
-impl PartialEq for ScrollbarChars {
-    fn eq(&self, other: &Self) -> bool {
-        self.track == other.track
-            && self.thumb == other.thumb
-            && self.arrow_start == other.arrow_start
-            && self.arrow_end == other.arrow_end
     }
 }

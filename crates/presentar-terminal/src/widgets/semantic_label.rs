@@ -380,6 +380,7 @@ impl Brick for SemanticLabel {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
     use crate::direct::{CellBuffer, DirectTerminalCanvas};
@@ -556,7 +557,7 @@ mod tests {
         let label = SemanticLabel::new("?")
             .with_status(SemanticStatus::Unknown)
             .with_symbol();
-        assert!(label.display_text().starts_with("?"));
+        assert!(label.display_text().starts_with('?'));
     }
 
     // Truncation

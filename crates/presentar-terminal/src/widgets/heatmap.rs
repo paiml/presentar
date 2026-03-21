@@ -514,6 +514,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn test_heatmap_empty() {
         let mut heatmap = Heatmap::default();
         heatmap.bounds = Rect::new(0.0, 0.0, 20.0, 10.0);

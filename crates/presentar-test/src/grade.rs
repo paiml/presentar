@@ -1639,9 +1639,11 @@ mod tests {
 
     #[test]
     fn test_quality_gates_check_fails_score() {
-        let mut gates = QualityGates::default();
-        gates.min_grade = Grade::C; // Lower grade threshold
-        gates.min_score = 95.0; // But require high score
+        let gates = QualityGates {
+            min_grade: Grade::C, // Lower grade threshold
+            min_score: 95.0,     // But require high score
+            ..QualityGates::default()
+        };
 
         let score = QualityScoreBuilder::new()
             .structural(85.0, 85.0, 85.0)

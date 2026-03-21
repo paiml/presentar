@@ -1088,6 +1088,7 @@ impl Widget for ProcessTable {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
 
@@ -2132,7 +2133,7 @@ mod tests {
         assert_eq!(deepest.tree_depth, 15);
 
         // Verify prefix has correct structure (should have 14 "│ " or "  " segments)
-        let prefix_segments =
+        let _prefix_segments =
             deepest.tree_prefix.matches("│").count() + deepest.tree_prefix.matches("  ").count();
         // At depth 15, prefix should have accumulated continuation chars
         assert!(

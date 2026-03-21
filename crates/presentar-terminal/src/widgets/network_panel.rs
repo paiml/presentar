@@ -707,9 +707,11 @@ impl Widget for NetworkPanel {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
 
+    #[allow(dead_code)]
     fn sample_interface() -> NetworkInterface {
         let mut iface = NetworkInterface::new("eth0");
         for i in 0..30 {

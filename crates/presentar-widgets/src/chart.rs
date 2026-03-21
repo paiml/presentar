@@ -1057,6 +1057,7 @@ impl Brick for Chart {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
 
@@ -1843,7 +1844,7 @@ mod tests {
     #[test]
     fn test_data_series_clone() {
         let series = DataSeries::new("Test").point(1.0, 2.0);
-        let cloned = series.clone();
+        let cloned = series;
         assert_eq!(cloned.name, "Test");
         assert_eq!(cloned.points.len(), 1);
     }
@@ -1851,7 +1852,7 @@ mod tests {
     #[test]
     fn test_axis_clone() {
         let axis = Axis::new().label("X").min(0.0).max(100.0);
-        let cloned = axis.clone();
+        let cloned = axis;
         assert_eq!(cloned.label, Some("X".to_string()));
         assert_eq!(cloned.min, Some(0.0));
         assert_eq!(cloned.max, Some(100.0));
@@ -1862,7 +1863,7 @@ mod tests {
         let chart = Chart::new()
             .title("Test")
             .series(DataSeries::new("S1").point(1.0, 2.0));
-        let cloned = chart.clone();
+        let cloned = chart;
         assert_eq!(cloned.get_title(), Some("Test"));
         assert_eq!(cloned.series_count(), 1);
     }
@@ -1870,35 +1871,35 @@ mod tests {
     #[test]
     fn test_chart_type_debug() {
         let ct = ChartType::Pie;
-        let debug_str = format!("{:?}", ct);
+        let debug_str = format!("{ct:?}");
         assert!(debug_str.contains("Pie"));
     }
 
     #[test]
     fn test_legend_position_debug() {
         let lp = LegendPosition::TopRight;
-        let debug_str = format!("{:?}", lp);
+        let debug_str = format!("{lp:?}");
         assert!(debug_str.contains("TopRight"));
     }
 
     #[test]
     fn test_data_series_debug() {
         let series = DataSeries::new("Test");
-        let debug_str = format!("{:?}", series);
+        let debug_str = format!("{series:?}");
         assert!(debug_str.contains("Test"));
     }
 
     #[test]
     fn test_axis_debug() {
         let axis = Axis::new().label("Time");
-        let debug_str = format!("{:?}", axis);
+        let debug_str = format!("{axis:?}");
         assert!(debug_str.contains("Time"));
     }
 
     #[test]
     fn test_chart_debug() {
         let chart = Chart::new().title("Debug Test");
-        let debug_str = format!("{:?}", chart);
+        let debug_str = format!("{chart:?}");
         assert!(debug_str.contains("Debug Test"));
     }
 

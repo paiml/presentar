@@ -867,8 +867,7 @@ mod tests {
         assert_eq!(lines.len(), 6); // header + 5 rows
 
         // Check column count
-        let cols: Vec<&str> = lines[0].split(',').collect();
-        assert_eq!(cols.len(), 4);
+        assert_eq!(lines[0].split(',').count(), 4);
     }
 
     #[test]

@@ -3,7 +3,7 @@
 //! Demonstrates the REAL trained aprender-shell-base.apr model
 //! using N-gram Markov chain for command prediction.
 //!
-//! Run with: cargo run -p presentar --example showcase_shell
+//! Run with: cargo run -p presentar --example `showcase_shell`
 
 use presentar::browser::ShellAutocomplete;
 

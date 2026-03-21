@@ -1,9 +1,10 @@
+#![allow(clippy::unwrap_used, clippy::disallowed_methods)]
 //! Network Traffic Monitor Example
 //!
 //! Demonstrates real-time network RX/TX monitoring with dual graphs.
 //! Similar to btop/nethogs network visualization.
 //!
-//! Run with: cargo run -p presentar-terminal --example network_traffic
+//! Run with: cargo run -p presentar-terminal --example `network_traffic`
 
 use presentar_core::{Canvas, Color, Point, Rect, TextStyle, Widget};
 use presentar_terminal::direct::{CellBuffer, DiffRenderer, DirectTerminalCanvas};
@@ -81,7 +82,7 @@ fn main() {
     let cells_written = renderer.flush(&mut buffer, &mut output).unwrap();
 
     println!("Buffer: {}x{}", buffer.width(), buffer.height());
-    println!("Cells written: {}", cells_written);
+    println!("Cells written: {cells_written}");
     println!("Output bytes: {}\n", output.len());
 
     println!("Rendered output:");
@@ -110,7 +111,7 @@ fn draw_traffic_graph(
     let current = history.last().copied().unwrap_or(0.0);
     canvas.draw_text(title, Point::new(bounds.x, bounds.y), &label_style);
     canvas.draw_text(
-        &format!("{:7.2} MB/s", current),
+        &format!("{current:7.2} MB/s"),
         Point::new(bounds.x + bounds.width - 12.0, bounds.y),
         &value_style,
     );
@@ -173,15 +174,15 @@ fn draw_interface_table(
             ..Default::default()
         };
 
-        canvas.draw_text(&format!("{:<12}", name), Point::new(x, row_y), &name_style);
+        canvas.draw_text(&format!("{name:<12}"), Point::new(x, row_y), &name_style);
         canvas.draw_text(status, Point::new(x + 15.0, row_y), &status_style);
         canvas.draw_text(
-            &format!("{:>10.2}", rx),
+            &format!("{rx:>10.2}"),
             Point::new(x + 26.0, row_y),
             &value_style,
         );
         canvas.draw_text(
-            &format!("{:>10.2}", tx),
+            &format!("{tx:>10.2}"),
             Point::new(x + 39.0, row_y),
             &value_style,
         );
@@ -216,12 +217,12 @@ fn draw_totals(canvas: &mut DirectTerminalCanvas<'_>, rx: &[f64], tx: &[f64], x:
     };
 
     canvas.draw_text(
-        &format!("RX: {:.1} MB (avg: {:.2} MB/s)", total_rx, avg_rx),
+        &format!("RX: {total_rx:.1} MB (avg: {avg_rx:.2} MB/s)"),
         Point::new(x, y + 1.0),
         &rx_style,
     );
     canvas.draw_text(
-        &format!("TX: {:.1} MB (avg: {:.2} MB/s)", total_tx, avg_tx),
+        &format!("TX: {total_tx:.1} MB (avg: {avg_tx:.2} MB/s)"),
         Point::new(x, y + 2.0),
         &tx_style,
     );
@@ -246,7 +247,7 @@ fn draw_connection_stats(canvas: &mut DirectTerminalCanvas<'_>, x: f32, y: f32) 
 fn simulate_rx_history(count: usize) -> Vec<f64> {
     (0..count)
         .map(|i| {
-            let base = 50.0 + 30.0 * (i as f64 / 10.0).sin();
+            let base = 30.0f64.mul_add((i as f64 / 10.0).sin(), 50.0);
             let spike = if i % 15 == 0 { 40.0 } else { 0.0 };
             let noise = ((i * 7919) % 20) as f64;
             (base + spike + noise).max(0.0)
@@ -257,7 +258,7 @@ fn simulate_rx_history(count: usize) -> Vec<f64> {
 fn simulate_tx_history(count: usize) -> Vec<f64> {
     (0..count)
         .map(|i| {
-            let base = 15.0 + 10.0 * (i as f64 / 8.0).cos();
+            let base = 10.0f64.mul_add((i as f64 / 8.0).cos(), 15.0);
             let noise = ((i * 6971) % 15) as f64;
             (base + noise).max(0.0)
         })

@@ -590,6 +590,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::identity_op)]
     fn test_memory_bar_from_usage() {
         let bar = MemoryBar::from_usage(
             50 * 1024 * 1024 * 1024,  // 50G used

@@ -7413,6 +7413,7 @@ impl SemaphoreTracker {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
     use std::thread;
@@ -7619,7 +7620,7 @@ mod tests {
             budget_exceeded: true,
             budget_us: Some(50),
         };
-        let cloned = event.clone();
+        let cloned = event;
         assert_eq!(cloned.name, "test");
         assert!(cloned.budget_exceeded);
     }
@@ -7627,7 +7628,7 @@ mod tests {
     #[test]
     fn test_trace_stats_clone() {
         let stats = TraceStats::new(Duration::from_micros(100), 1000, false);
-        let cloned = stats.clone();
+        let cloned = stats;
         assert_eq!(cloned.count, 1);
     }
 
@@ -7649,7 +7650,7 @@ mod tests {
     #[test]
     fn test_escalation_thresholds_clone() {
         let thresholds = EscalationThresholds::default();
-        let cloned = thresholds.clone();
+        let cloned = thresholds;
         assert_eq!(cloned.cv_percent, 15.0);
     }
 
@@ -7951,7 +7952,7 @@ mod tests {
     #[test]
     fn f_brick_007_brick_type_clone_copy() {
         let original = BrickType::Compute;
-        let cloned = original.clone();
+        let cloned = original;
         let copied = original; // Copy
         assert_eq!(original, cloned);
         assert_eq!(original, copied);
@@ -9455,7 +9456,7 @@ mod tests {
     /// F-CHANGE-002: Absolute change detection
     #[test]
     fn f_change_002_abs_change() {
-        let mut cd = ChangeDetector::new(0.0, 5.0, 100.0);
+        let cd = ChangeDetector::new(0.0, 5.0, 100.0);
         assert!(!cd.has_changed(3.0)); // Below threshold
         assert!(cd.has_changed(6.0)); // Above threshold
     }
@@ -10552,7 +10553,7 @@ mod tests {
             ct.update(i as f64, i as f64 * 2.0);
         }
         let r = ct.correlation();
-        assert!(r >= -1.0 && r <= 1.0);
+        assert!((-1.0..=1.0).contains(&r));
     }
 
     /// F-CORR-012: Weak correlation not flagged as strong
@@ -10664,7 +10665,7 @@ mod tests {
         let s2 = CircuitState::Closed;
         assert_eq!(s1, s2);
         let _ = format!("{:?}", s1);
-        let _ = s1.clone();
+        let _ = s1;
     }
 
     /// F-CIRCUIT-012: Failure in half-open reopens
@@ -10846,7 +10847,7 @@ mod tests {
         }
         // p90 should be around 90
         let p90 = sm.percentile(90);
-        assert!(p90 >= 80.0 && p90 <= 100.0);
+        assert!((80.0..=100.0).contains(&p90));
     }
 
     /// F-MEDIAN-008: Reset clears state
@@ -12609,7 +12610,7 @@ mod tests {
     fn f_lb_006_equal_weights() {
         let mut lb = LoadBalancer::equal_weights(2);
         for _ in 0..10 {
-            lb.select_backend();
+            let _ = lb.select_backend();
         }
         // Both backends should get ~50%
         assert!(lb.distribution(0) > 40.0);
@@ -12620,9 +12621,9 @@ mod tests {
     #[test]
     fn f_lb_007_dispatched() {
         let mut lb = LoadBalancer::equal_weights(2);
-        lb.select_backend();
-        lb.select_backend();
-        lb.select_backend();
+        let _ = lb.select_backend();
+        let _ = lb.select_backend();
+        let _ = lb.select_backend();
         assert_eq!(lb.total_dispatched(), 3);
     }
 
@@ -12631,7 +12632,7 @@ mod tests {
     fn f_lb_008_balanced() {
         let mut lb = LoadBalancer::equal_weights(2);
         for _ in 0..100 {
-            lb.select_backend();
+            let _ = lb.select_backend();
         }
         assert!(lb.is_balanced(20.0));
     }
@@ -12640,7 +12641,7 @@ mod tests {
     #[test]
     fn f_lb_009_distribution() {
         let mut lb = LoadBalancer::equal_weights(1);
-        lb.select_backend();
+        let _ = lb.select_backend();
         assert!((lb.distribution(0) - 100.0).abs() < 0.01);
     }
 
@@ -12648,7 +12649,7 @@ mod tests {
     #[test]
     fn f_lb_010_reset() {
         let mut lb = LoadBalancer::equal_weights(2);
-        lb.select_backend();
+        let _ = lb.select_backend();
         lb.reset();
         assert_eq!(lb.total_dispatched(), 0);
     }
@@ -12665,7 +12666,7 @@ mod tests {
     #[test]
     fn f_lb_012_clone() {
         let mut lb = LoadBalancer::equal_weights(2);
-        lb.select_backend();
+        let _ = lb.select_backend();
         let cloned = lb.clone();
         assert_eq!(lb.total_dispatched(), cloned.total_dispatched());
     }
@@ -27947,7 +27948,7 @@ mod block_layer_tests {
     fn f_blk_012_clone() {
         let mut blk = BlockLayerTracker::new();
         blk.read(4096);
-        let cloned = blk.clone();
+        let cloned = blk;
         assert_eq!(blk.read_bytes, cloned.read_bytes);
     }
 }
@@ -28163,7 +28164,7 @@ mod nvme_tests {
     fn f_nvme_012_clone() {
         let mut nvme = NvmeTracker::new();
         nvme.submit(10);
-        let cloned = nvme.clone();
+        let cloned = nvme;
         assert_eq!(nvme.submissions, cloned.submissions);
     }
 }
@@ -28380,7 +28381,7 @@ mod scsi_tests {
     fn f_scsi_012_clone() {
         let mut scsi = ScsiTracker::new();
         scsi.command();
-        let cloned = scsi.clone();
+        let cloned = scsi;
         assert_eq!(scsi.commands, cloned.commands);
     }
 }
@@ -28592,7 +28593,7 @@ mod md_tests {
     fn f_md_012_clone() {
         let mut md = MdTracker::new();
         md.set_members(4, 4);
-        let cloned = md.clone();
+        let cloned = md;
         assert_eq!(md.total_members, cloned.total_members);
     }
 }
@@ -28805,7 +28806,7 @@ mod vfs_tests {
     fn f_vfs_012_clone() {
         let mut vfs = VfsTracker::new();
         vfs.lookup();
-        let cloned = vfs.clone();
+        let cloned = vfs;
         assert_eq!(vfs.lookups, cloned.lookups);
     }
 }
@@ -29015,7 +29016,7 @@ mod inode_tests {
     fn f_inode_012_clone() {
         let mut inode = InodeTracker::new();
         inode.alloc();
-        let cloned = inode.clone();
+        let cloned = inode;
         assert_eq!(inode.allocs, cloned.allocs);
     }
 }
@@ -29223,7 +29224,7 @@ mod dentry_tests {
     fn f_dentry_012_clone() {
         let mut dentry = DentryTracker::new();
         dentry.lookup_hit();
-        let cloned = dentry.clone();
+        let cloned = dentry;
         assert_eq!(dentry.hits, cloned.hits);
     }
 }
@@ -29432,7 +29433,7 @@ mod extent_tests {
     fn f_extent_012_clone() {
         let mut extent = ExtentTracker::new();
         extent.alloc(16);
-        let cloned = extent.clone();
+        let cloned = extent;
         assert_eq!(extent.allocs, cloned.allocs);
     }
 }
@@ -29647,7 +29648,7 @@ mod tcp_tests {
     fn f_tcp_012_clone() {
         let mut tcp = TcpTracker::new();
         tcp.connect();
-        let cloned = tcp.clone();
+        let cloned = tcp;
         assert_eq!(tcp.connections, cloned.connections);
     }
 }
@@ -29856,7 +29857,7 @@ mod udp_tests {
     fn f_udp_012_clone() {
         let mut udp = UdpTracker::new();
         udp.send(1000);
-        let cloned = udp.clone();
+        let cloned = udp;
         assert_eq!(udp.packets_tx, cloned.packets_tx);
     }
 }
@@ -30068,7 +30069,7 @@ mod skb_tests {
     fn f_skb_012_clone() {
         let mut skb = SkbTracker::new();
         skb.alloc(1500);
-        let cloned = skb.clone();
+        let cloned = skb;
         assert_eq!(skb.allocs, cloned.allocs);
     }
 }
@@ -30289,7 +30290,7 @@ mod netdev_tests {
     fn f_netdev_012_clone() {
         let mut netdev = NetDevTracker::new();
         netdev.rx(1500);
-        let cloned = netdev.clone();
+        let cloned = netdev;
         assert_eq!(netdev.rx_packets, cloned.rx_packets);
     }
 }
@@ -30506,7 +30507,7 @@ mod timer_tests {
     fn f_timer_012_clone() {
         let mut timer = TimerTracker::new();
         timer.start();
-        let cloned = timer.clone();
+        let cloned = timer;
         assert_eq!(timer.starts, cloned.starts);
     }
 }
@@ -30716,7 +30717,7 @@ mod hrtimer_tests {
     fn f_hrt_012_clone() {
         let mut hrt = HrTimerTracker::new();
         hrt.start();
-        let cloned = hrt.clone();
+        let cloned = hrt;
         assert_eq!(hrt.starts, cloned.starts);
     }
 }
@@ -30914,7 +30915,7 @@ mod clock_tests {
     fn f_clock_012_clone() {
         let mut clock = ClockTracker::new();
         clock.read();
-        let cloned = clock.clone();
+        let cloned = clock;
         assert_eq!(clock.reads, cloned.reads);
     }
 }
@@ -31116,7 +31117,7 @@ mod timekeeping_tests {
     fn f_tk_012_clone() {
         let mut tk = TimeKeepingTracker::new();
         tk.update();
-        let cloned = tk.clone();
+        let cloned = tk;
         assert_eq!(tk.updates, cloned.updates);
     }
 }
@@ -31332,7 +31333,7 @@ mod aio_tests {
     fn f_aio_012_clone() {
         let mut aio = AioTracker::new();
         aio.submit(4);
-        let cloned = aio.clone();
+        let cloned = aio;
         assert_eq!(aio.submissions, cloned.submissions);
     }
 }
@@ -31542,7 +31543,7 @@ mod dio_tests {
     fn f_dio_012_clone() {
         let mut dio = DirectIoTracker::new();
         dio.read(4096);
-        let cloned = dio.clone();
+        let cloned = dio;
         assert_eq!(dio.reads, cloned.reads);
     }
 }
@@ -31751,7 +31752,7 @@ mod buffered_io_tests {
     fn f_bio_012_clone() {
         let mut bio = BufferedIoTracker::new();
         bio.read_hit(4096);
-        let cloned = bio.clone();
+        let cloned = bio;
         assert_eq!(bio.cache_hits, cloned.cache_hits);
     }
 }
@@ -31962,7 +31963,7 @@ mod splice_tests {
     fn f_splice_012_clone() {
         let mut splice = SpliceTracker::new();
         splice.splice(1024);
-        let cloned = splice.clone();
+        let cloned = splice;
         assert_eq!(splice.splices, cloned.splices);
     }
 }
@@ -32352,7 +32353,7 @@ mod task_acct_tests {
     #[test]
     fn f_tacct_012_clone() {
         let tracker = TaskAccountingTracker::for_proc(100, 50);
-        let cloned = tracker.clone();
+        let cloned = tracker;
         assert_eq!(tracker.utime, cloned.utime);
     }
 }
@@ -32453,7 +32454,7 @@ mod io_acct_tests {
     #[test]
     fn f_ioacct_012_clone() {
         let tracker = IoAccountingTracker::for_proc_io(1000, 500);
-        let cloned = tracker.clone();
+        let cloned = tracker;
         assert_eq!(tracker.read_bytes, cloned.read_bytes);
     }
 }
@@ -32553,7 +32554,7 @@ mod sched_acct_tests {
     #[test]
     fn f_schedacct_012_clone() {
         let tracker = SchedAccountingTracker::for_sched(100, 1_000_000);
-        let cloned = tracker.clone();
+        let cloned = tracker;
         assert_eq!(tracker.nr_switches, cloned.nr_switches);
     }
 }
@@ -32656,7 +32657,7 @@ mod mem_acct_tests {
     #[test]
     fn f_memacct_012_clone() {
         let tracker = MemAccountingTracker::for_statm(1000, 500);
-        let cloned = tracker.clone();
+        let cloned = tracker;
         assert_eq!(tracker.rss, cloned.rss);
     }
 }
@@ -33046,7 +33047,7 @@ mod pid_tests {
     #[test]
     fn f_pid_012_clone() {
         let tracker = PidTracker::for_namespace(100);
-        let cloned = tracker.clone();
+        let cloned = tracker;
         assert_eq!(tracker.active_pids, cloned.active_pids);
     }
 }
@@ -33153,7 +33154,7 @@ mod uid_tests {
     #[test]
     fn f_uid_012_clone() {
         let tracker = UidTracker::for_userns(5);
-        let cloned = tracker.clone();
+        let cloned = tracker;
         assert_eq!(tracker.mappings, cloned.mappings);
     }
 }
@@ -33259,7 +33260,7 @@ mod namespace_tests {
     #[test]
     fn f_ns_012_clone() {
         let tracker = NamespaceTracker::for_system(10);
-        let cloned = tracker.clone();
+        let cloned = tracker;
         assert_eq!(tracker.active, cloned.active);
     }
 }
@@ -33362,7 +33363,7 @@ mod seccomp_tests {
     #[test]
     fn f_seccomp_012_clone() {
         let tracker = SeccompTracker::for_process(3);
-        let cloned = tracker.clone();
+        let cloned = tracker;
         assert_eq!(tracker.filters, cloned.filters);
     }
 }
@@ -33755,7 +33756,7 @@ mod cap_tests {
     fn f_cap_012_clone() {
         let mut tracker = CapabilitiesTracker::new();
         tracker.check(true);
-        let cloned = tracker.clone();
+        let cloned = tracker;
         assert_eq!(tracker.checks, cloned.checks);
     }
 }
@@ -33858,7 +33859,7 @@ mod lsm_tests {
     fn f_lsm_012_clone() {
         let mut tracker = LsmTracker::new();
         tracker.hook(true);
-        let cloned = tracker.clone();
+        let cloned = tracker;
         assert_eq!(tracker.hooks, cloned.hooks);
     }
 }
@@ -33964,7 +33965,7 @@ mod audit_tests {
     #[test]
     fn f_audit_012_clone() {
         let tracker = AuditTracker::for_auditd(10);
-        let cloned = tracker.clone();
+        let cloned = tracker;
         assert_eq!(tracker.rules, cloned.rules);
     }
 }
@@ -34066,7 +34067,7 @@ mod integrity_tests {
     fn f_integrity_012_clone() {
         let mut tracker = IntegrityTracker::new();
         tracker.measure();
-        let cloned = tracker.clone();
+        let cloned = tracker;
         assert_eq!(tracker.measurements, cloned.measurements);
     }
 }

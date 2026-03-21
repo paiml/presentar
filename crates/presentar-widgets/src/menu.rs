@@ -1075,7 +1075,8 @@ mod tests {
 
     #[test]
     fn test_menu_closed_message() {
-        let _msg = MenuClosed;
+        let msg = MenuClosed;
+        assert_eq!(format!("{msg:?}"), "MenuClosed");
     }
 
     // =========================================================================
@@ -1745,7 +1746,8 @@ mod tests {
     #[test]
     fn test_menu_closed_clone() {
         let msg = MenuClosed;
-        let _cloned = msg.clone();
+        let cloned = msg;
+        assert_eq!(format!("{cloned:?}"), "MenuClosed");
     }
 
     // =========================================================================
@@ -1786,14 +1788,14 @@ mod tests {
     #[test]
     fn test_menu_debug() {
         let item = MenuItem::action("Test", "test");
-        let debug_str = format!("{:?}", item);
+        let debug_str = format!("{item:?}");
         assert!(debug_str.contains("Test"));
     }
 
     #[test]
     fn test_menu_toggled_debug() {
         let msg = MenuToggled { open: true };
-        let debug_str = format!("{:?}", msg);
+        let debug_str = format!("{msg:?}");
         assert!(debug_str.contains("true"));
     }
 }

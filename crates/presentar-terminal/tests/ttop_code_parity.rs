@@ -33,7 +33,7 @@ mod theme_parity {
         assert_eq!(format_uptime(86400.0), "1d 0h");
         assert_eq!(format_uptime(90000.0), "1d 1h");
         // ttop deterministic mode: 5d 3h 47m
-        let five_days_3h_47m = (5.0 * 86400.0) + (3.0 * 3600.0) + (47.0 * 60.0);
+        let five_days_3h_47m = 47.0f64.mul_add(60.0, 5.0f64.mul_add(86400.0, 3.0 * 3600.0));
         assert_eq!(format_uptime(five_days_3h_47m), "5d 3h");
     }
 
@@ -43,14 +43,14 @@ mod theme_parity {
         // Low (0-25): cyan-ish
         let low = percent_color(10.0);
         if let Color::Rgb(_r, g, b) = low {
-            assert!(b > 150, "Low percent should have blue tint, got b={}", b);
-            assert!(g > 150, "Low percent should have green tint, got g={}", g);
+            assert!(b > 150, "Low percent should have blue tint, got b={b}");
+            assert!(g > 150, "Low percent should have green tint, got g={g}");
         }
 
         // Medium-low (25-50): green-yellow
         let med_low = percent_color(35.0);
         if let Color::Rgb(_r, g, _b) = med_low {
-            assert!(g > 200, "Medium-low should have high green, got g={}", g);
+            assert!(g > 200, "Medium-low should have high green, got g={g}");
         }
 
         // Medium (50-75): yellow-orange
@@ -284,8 +284,7 @@ mod ring_buffer_parity {
         let mean = rb.mean();
         assert!(
             (mean - 20.0).abs() < 0.001,
-            "Mean should be 20.0, got {}",
-            mean
+            "Mean should be 20.0, got {mean}"
         );
     }
 }

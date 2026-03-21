@@ -449,7 +449,7 @@ mod tests {
     #[test]
     fn test_cursor_style_clone() {
         let style = CursorStyle::Arrow;
-        let cloned = style.clone();
+        let cloned = style;
         assert_eq!(style, cloned);
     }
 
@@ -469,7 +469,7 @@ mod tests {
     #[test]
     fn test_selection_state_clone() {
         let state = SelectionState::Selected;
-        let cloned = state.clone();
+        let cloned = state;
         assert_eq!(state, cloned);
     }
 
@@ -490,7 +490,7 @@ mod tests {
     #[test]
     fn test_gutter_cursor_clone() {
         let cursor = GutterCursor::new().with_selected(5).with_visible_rows(10);
-        let cloned = cursor.clone();
+        let cloned = cursor;
         assert_eq!(cloned.selected_row, Some(5));
         assert_eq!(cloned.visible_rows, 10);
     }
@@ -624,12 +624,14 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::nonminimal_bool)]
     fn test_brick_budget() {
         let cursor = GutterCursor::new();
         let budget = cursor.budget();
         // Budget is uniform(1), so total should be some positive value
         let total = budget.paint_ms + budget.layout_ms + budget.measure_ms;
-        assert!(total > 0 || total == 0); // Just verify it doesn't panic
+        // Just verify budget computation doesn't panic
+        let _ = total;
     }
 
     #[test]
@@ -637,7 +639,7 @@ mod tests {
         let cursor = GutterCursor::new().with_selected(5);
         let html = cursor.to_html();
         assert!(html.contains("gutter-cursor"));
-        assert!(html.contains("5"));
+        assert!(html.contains('5'));
     }
 
     #[test]

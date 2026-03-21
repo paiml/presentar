@@ -998,6 +998,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn test_force_graph_verify_valid() {
         let mut graph = ForceGraph::default();
         graph.bounds = Rect::new(0.0, 0.0, 60.0, 30.0);
@@ -1005,6 +1006,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn test_force_graph_verify_invalid() {
         let mut graph = ForceGraph::default();
         graph.bounds = Rect::new(0.0, 0.0, 5.0, 3.0);
@@ -1240,6 +1242,6 @@ mod tests {
     #[test]
     fn test_rand_float() {
         let val = rand_float();
-        assert!(val >= 0.0 && val <= 1.0);
+        assert!((0.0..=1.0).contains(&val));
     }
 }

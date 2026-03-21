@@ -792,8 +792,8 @@ mod tests {
 
     #[test]
     fn test_modal_opened_message() {
-        let _msg = ModalOpened;
-        // Just ensure it compiles
+        let msg = ModalOpened;
+        assert_eq!(format!("{msg:?}"), "ModalOpened");
     }
 
     // =========================================================================
@@ -1176,14 +1176,15 @@ mod tests {
         let msg = ModalClosed {
             reason: CloseReason::Escape,
         };
-        let cloned = msg.clone();
+        let cloned = msg;
         assert_eq!(cloned.reason, CloseReason::Escape);
     }
 
     #[test]
     fn test_modal_opened_clone() {
         let msg = ModalOpened;
-        let _cloned = msg.clone();
+        let cloned = msg;
+        assert_eq!(format!("{cloned:?}"), "ModalOpened");
     }
 
     #[test]
@@ -1191,14 +1192,14 @@ mod tests {
         let msg = ModalClosed {
             reason: CloseReason::Backdrop,
         };
-        let debug_str = format!("{:?}", msg);
+        let debug_str = format!("{msg:?}");
         assert!(debug_str.contains("Backdrop"));
     }
 
     #[test]
     fn test_modal_opened_debug() {
         let msg = ModalOpened;
-        let debug_str = format!("{:?}", msg);
+        let debug_str = format!("{msg:?}");
         assert!(debug_str.contains("ModalOpened"));
     }
 
@@ -1272,7 +1273,7 @@ mod tests {
     #[test]
     fn test_close_reason_debug() {
         let reason = CloseReason::CloseButton;
-        let debug_str = format!("{:?}", reason);
+        let debug_str = format!("{reason:?}");
         assert!(debug_str.contains("CloseButton"));
     }
 }

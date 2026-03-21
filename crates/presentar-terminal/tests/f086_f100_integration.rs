@@ -20,7 +20,7 @@ struct TestCanvas {
 }
 
 impl TestCanvas {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
             texts: Vec::new(),
             rects: Vec::new(),
@@ -110,6 +110,7 @@ fn f086_system_dashboard_widget_composition() {
 // =============================================================================
 
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn f087_all_widget_types_constructible() {
     // Verify all widget types can be instantiated without panic
     let _cpu_grid = CpuGrid::new(vec![50.0; 8]);
@@ -259,6 +260,8 @@ fn f090_colormode_detection() {
 }
 
 #[test]
+#[allow(clippy::assertions_on_constants)]
+#[allow(clippy::no_effect_underscore_binding)]
 fn f090_colormode_conversion() {
     // Test color conversion for different modes
     let color = Color::new(0.5, 0.25, 0.75, 1.0);
@@ -302,10 +305,11 @@ fn f091_terminal_resize_handling() {
     table.layout(Rect::new(0.0, 0.0, 80.0, 24.0));
     table.paint(&mut canvas);
 
-    assert!(true, "Multiple resizes should not cause crashes");
+    // Multiple resizes should not cause crashes - verified by no panic above
 }
 
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn f091_resize_event_handling() {
     // Test resize event processing
     let resize_event = Event::Resize {
@@ -327,6 +331,7 @@ fn f091_resize_event_handling() {
 // =============================================================================
 
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn f092_empty_terminal_zero_size() {
     // Test widgets with zero-size bounds
     let mut table = ProcessTable::new();
@@ -374,7 +379,7 @@ fn f093_minimum_terminal_size() {
     gauge.paint(&mut canvas);
 
     assert!(
-        canvas.texts.len() > 0,
+        !canvas.texts.is_empty(),
         "Widgets should render at minimum size"
     );
 }
@@ -389,7 +394,7 @@ fn f093_cell_buffer_minimum_size() {
     for y in 0..10 {
         for x in 0..20 {
             let cell = buffer.get(x, y);
-            assert!(cell.is_some(), "Cell at ({}, {}) should exist", x, y);
+            assert!(cell.is_some(), "Cell at ({x}, {y}) should exist");
         }
     }
 }
@@ -475,7 +480,7 @@ fn f095_mouse_event_no_crash() {
     let _ = table.event(&mouse_up);
     let _ = table.event(&mouse_move);
 
-    assert!(true, "Mouse events should not crash");
+    // Mouse events should not crash - verified by no panic above
 }
 
 // =============================================================================
@@ -484,6 +489,7 @@ fn f095_mouse_event_no_crash() {
 // =============================================================================
 
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn f096_sigwinch_event_simulation() {
     // Simulate SIGWINCH via resize event
     let resize = Event::Resize {
@@ -590,9 +596,7 @@ fn f099_all_widgets_from_presentar_terminal() {
     for (type_path, name) in widgets {
         assert!(
             type_path.contains("presentar_terminal"),
-            "{} should be from presentar_terminal, got: {}",
-            name,
-            type_path
+            "{name} should be from presentar_terminal, got: {type_path}"
         );
     }
 }
@@ -629,9 +633,9 @@ fn f100_pixel_baseline_structure() {
     for (i, ((text1, pos1, style1), (text2, pos2, style2))) in
         canvas1.texts.iter().zip(canvas2.texts.iter()).enumerate()
     {
-        assert_eq!(text1, text2, "Text {} content should match", i);
-        assert_eq!(pos1, pos2, "Text {} position should match", i);
-        assert_eq!(style1.color, style2.color, "Text {} color should match", i);
+        assert_eq!(text1, text2, "Text {i} content should match");
+        assert_eq!(pos1, pos2, "Text {i} position should match");
+        assert_eq!(style1.color, style2.color, "Text {i} color should match");
     }
 }
 

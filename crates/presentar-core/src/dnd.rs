@@ -534,6 +534,7 @@ impl std::fmt::Debug for DragDropManager {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
 

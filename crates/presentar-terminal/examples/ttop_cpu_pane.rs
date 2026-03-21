@@ -1,6 +1,7 @@
+#![allow(clippy::unwrap_used, clippy::disallowed_methods)]
 //! Real-time ttop-style CPU pane demo.
 //!
-//! Run with: cargo run -p presentar-terminal --example ttop_cpu_pane
+//! Run with: cargo run -p presentar-terminal --example `ttop_cpu_pane`
 
 use presentar_core::{Canvas, Color, Point, Rect, TextStyle, Widget};
 use presentar_terminal::direct::{CellBuffer, DiffRenderer, DirectTerminalCanvas};
@@ -33,8 +34,8 @@ fn main() {
         // Simulate varying CPU loads per core
         for (i, usage) in core_usage.iter_mut().enumerate() {
             let phase = i as f64 * 0.5;
-            let base = 20.0 + (i as f64 * 8.0);
-            *usage = base + 30.0 * (elapsed * 0.5 + phase).sin().abs();
+            let base = (i as f64).mul_add(8.0, 20.0);
+            *usage = 30.0f64.mul_add(elapsed.mul_add(0.5, phase).sin().abs(), base);
             *usage = usage.clamp(5.0, 95.0);
         }
 
@@ -53,7 +54,7 @@ fn main() {
             draw_panel(
                 &mut canvas,
                 "CPU",
-                Rect::new(0.0, 0.0, width as f32, height as f32),
+                Rect::new(0.0, 0.0, f32::from(width), f32::from(height)),
             );
 
             // Draw CPU grid (per-core sparklines)
@@ -71,7 +72,7 @@ fn main() {
             graph.paint(&mut canvas);
 
             // Draw average percentage
-            let avg_text = format!("Avg: {:5.1}%", avg);
+            let avg_text = format!("Avg: {avg:5.1}%");
             canvas.draw_text(
                 &avg_text,
                 Point::new(2.0, 10.0),
@@ -82,7 +83,7 @@ fn main() {
             );
 
             // Draw uptime
-            let uptime = format!("Uptime: {:.1}s", elapsed);
+            let uptime = format!("Uptime: {elapsed:.1}s");
             canvas.draw_text(
                 &uptime,
                 Point::new(45.0, 10.0),
@@ -135,7 +136,7 @@ fn draw_panel(canvas: &mut DirectTerminalCanvas, title: &str, bounds: Rect) {
     canvas.draw_text("╭", Point::new(bounds.x, bounds.y), &style);
     canvas.draw_text("─", Point::new(bounds.x + 1.0, bounds.y), &style);
     canvas.draw_text(
-        &format!(" {} ", title),
+        &format!(" {title} "),
         Point::new(bounds.x + 2.0, bounds.y),
         &title_style,
     );

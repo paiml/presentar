@@ -26,6 +26,7 @@ impl PixelCanvas {
         }
     }
 
+    #[allow(clippy::inherent_to_string)]
     fn to_string(&self) -> String {
         self.cells
             .iter()
@@ -65,6 +66,7 @@ impl Canvas for PixelCanvas {
 }
 
 /// Compare two text grids and return differences.
+#[allow(dead_code)]
 fn diff_grids(expected: &str, actual: &str) -> Vec<(usize, usize, char, char)> {
     let mut diffs = Vec::new();
     let expected_lines: Vec<&str> = expected.lines().collect();
@@ -91,13 +93,14 @@ fn diff_grids(expected: &str, actual: &str) -> Vec<(usize, usize, char, char)> {
 }
 
 /// Assert two grids are pixel-perfect identical.
+#[allow(dead_code)]
 fn assert_pixel_perfect(expected: &str, actual: &str) {
     let diffs = diff_grids(expected, actual);
     if !diffs.is_empty() {
         let diff_report: String = diffs
             .iter()
             .take(10)
-            .map(|(x, y, exp, act)| format!("  ({},{}) expected '{}' got '{}'", x, y, exp, act))
+            .map(|(x, y, exp, act)| format!("  ({x},{y}) expected '{exp}' got '{act}'"))
             .collect::<Vec<_>>()
             .join("\n");
 
@@ -179,15 +182,14 @@ fn test_meter_45_percent_matches_btop() {
     // filled = 0.45 * 32 = 14.4 ≈ 14
     let fill_count = output.chars().filter(|&c| c == '█').count();
     let effective_bar_width = 40 - 6 - 2; // width - pct_text - padding
-    let expected_fill = ((effective_bar_width as f64) * 0.45).round() as usize;
+    let expected_fill = (f64::from(effective_bar_width) * 0.45).round() as usize;
 
     // Allow 1 char tolerance due to rounding
+    #[allow(clippy::cast_possible_wrap)]
+    let diff = (fill_count as i32 - expected_fill as i32).abs();
     assert!(
-        (fill_count as i32 - expected_fill as i32).abs() <= 2,
-        "Expected ~{} filled chars (bar_width={}), got {}",
-        expected_fill,
-        effective_bar_width,
-        fill_count
+        diff <= 2,
+        "Expected ~{expected_fill} filled chars (bar_width={effective_bar_width}), got {fill_count}"
     );
 
     // Verify output contains brackets and percentage
@@ -230,9 +232,7 @@ fn test_meter_100_percent() {
     let effective_bar_width = 30 - 7 - 2;
     assert!(
         fill_count >= effective_bar_width - 1,
-        "100% meter should be fully filled (bar_width={}, got {})",
-        effective_bar_width,
-        fill_count
+        "100% meter should be fully filled (bar_width={effective_bar_width}, got {fill_count})"
     );
 
     // Verify shows 100%
@@ -368,7 +368,7 @@ fn test_braille_graph_renders_pattern() {
     let mut canvas = PixelCanvas::new(20, 4);
 
     // Create data that should produce a recognizable pattern
-    let data: Vec<f64> = (0..40).map(|i| (i as f64 / 40.0 * 100.0)).collect();
+    let data: Vec<f64> = (0..40).map(|i| f64::from(i) / 40.0 * 100.0).collect();
 
     let mut graph = BrailleGraph::new(data)
         .with_mode(GraphMode::Braille)
@@ -380,7 +380,9 @@ fn test_braille_graph_renders_pattern() {
     let output = canvas.to_string();
 
     // Should contain braille characters (U+2800-28FF range)
-    let has_braille = output.chars().any(|c| c >= '\u{2800}' && c <= '\u{28FF}');
+    let has_braille = output
+        .chars()
+        .any(|c| ('\u{2800}'..='\u{28FF}').contains(&c));
     assert!(has_braille, "Graph should contain braille characters");
 }
 
@@ -488,6 +490,7 @@ fn test_cpu_panel_structure() {
     );
 
     // Verify side borders
+    #[allow(clippy::needless_range_loop)]
     for i in 1..5 {
         assert!(lines[i].starts_with('│'), "Side should have │ border");
         assert!(lines[i].ends_with('│'), "Side should have │ border");
@@ -613,9 +616,9 @@ fn test_full_widget_set_renders_without_panic() {
 fn load_fixture(name: &str) -> String {
     let path = format!("{}/tests/fixtures/{}", env!("CARGO_MANIFEST_DIR"), name);
     std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("Failed to load fixture {}: {}", path, e))
+        .unwrap_or_else(|e| panic!("Failed to load fixture {path}: {e}"))
         .lines()
-        .map(|l| l.trim_end())
+        .map(str::trim_end)
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -625,7 +628,7 @@ fn test_fixture_btop_scrollbar_exact_match() {
     use presentar_core::Widget;
 
     let expected = load_fixture("btop_scrollbar.txt");
-    let expected_lines: Vec<&str> = expected.lines().collect();
+    let _expected_lines: Vec<&str> = expected.lines().collect();
 
     let mut canvas = PixelCanvas::new(1, 9);
     let mut scrollbar = Scrollbar::vertical(100, 20).with_arrows(true);
@@ -704,9 +707,7 @@ fn test_fixture_btop_collapsible_expanded_exact_match() {
     let actual_non_empty = actual_lines.iter().filter(|l| !l.trim().is_empty()).count();
     assert!(
         actual_non_empty >= expected_non_empty - 1,
-        "Should have similar line count: expected {}, got {}",
-        expected_non_empty,
-        actual_non_empty
+        "Should have similar line count: expected {expected_non_empty}, got {actual_non_empty}"
     );
 }
 
@@ -714,7 +715,7 @@ fn test_fixture_btop_collapsible_expanded_exact_match() {
 fn test_fixture_btop_collapsible_collapsed_exact_match() {
     use presentar_core::Widget;
 
-    let expected = load_fixture("btop_collapsible_collapsed.txt");
+    let _expected = load_fixture("btop_collapsible_collapsed.txt");
 
     let mut canvas = PixelCanvas::new(32, 2);
     let mut panel = CollapsiblePanel::new("CPU").with_collapsed(true);
@@ -747,7 +748,7 @@ fn test_fixture_btop_meter_format() {
 
     use presentar_core::Widget;
 
-    let expected = load_fixture("btop_meter.txt");
+    let _expected = load_fixture("btop_meter.txt");
 
     let mut canvas = PixelCanvas::new(40, 1);
     let mut meter = Meter::new(45.0, 100.0).with_label("CPU");
@@ -782,8 +783,8 @@ fn test_cpu_grid_8core_sparklines() {
     let mut canvas = PixelCanvas::new(80, 2);
 
     // 8 cores with various utilization levels (0-7 scaled to percentages)
-    let values: Vec<f64> = (0..8).map(|i| i as f64 * 12.5).collect();
-    let mut grid = CpuGrid::new(values.clone()).with_columns(8).compact();
+    let values: Vec<f64> = (0..8).map(|i| f64::from(i) * 12.5).collect();
+    let mut grid = CpuGrid::new(values).with_columns(8).compact();
 
     grid.layout(Rect::new(0.0, 0.0, 80.0, 2.0));
     grid.paint(&mut canvas);
@@ -821,9 +822,7 @@ fn test_cpu_grid_8core_sparklines() {
         // Allow some tolerance for rendering differences
         assert!(
             second_half_avg >= first_half_avg - 1.0,
-            "Sparklines should show increasing trend: first_half={:.1}, second_half={:.1}",
-            first_half_avg,
-            second_half_avg
+            "Sparklines should show increasing trend: first_half={first_half_avg:.1}, second_half={second_half_avg:.1}"
         );
     }
 }
@@ -872,8 +871,8 @@ fn test_braille_graph_ttop_style_wave() {
     // Create a sine-wave-like pattern
     let data: Vec<f64> = (0..80)
         .map(|i| {
-            let x = i as f64 * std::f64::consts::PI / 20.0;
-            50.0 + 40.0 * x.sin()
+            let x = f64::from(i) * std::f64::consts::PI / 20.0;
+            40.0f64.mul_add(x.sin(), 50.0)
         })
         .collect();
 
@@ -894,8 +893,7 @@ fn test_braille_graph_ttop_style_wave() {
 
     assert!(
         braille_count > 20,
-        "Should have many braille characters for smooth graph, got {}",
-        braille_count
+        "Should have many braille characters for smooth graph, got {braille_count}"
     );
 
     // Verify we have variety of braille patterns (not just one repeated char)
@@ -922,7 +920,7 @@ fn test_all_sparkline_levels_render_correctly() {
     let mut canvas = PixelCanvas::new(40, 1);
 
     // Create values that should hit each sparkline level
-    let values: Vec<f64> = (0..8).map(|i| i as f64 * 14.3).collect(); // 0, 14.3, 28.6, 42.9, 57.2, 71.5, 85.8, 100.1
+    let values: Vec<f64> = (0..8).map(|i| f64::from(i) * 14.3).collect(); // 0, 14.3, 28.6, 42.9, 57.2, 71.5, 85.8, 100.1
 
     // CpuGrid with show_labels renders "0▁ 1▂ 2▃..." format
     let mut grid = CpuGrid::new(values).with_columns(8).compact();
@@ -930,16 +928,10 @@ fn test_all_sparkline_levels_render_correctly() {
     grid.paint(&mut canvas);
 
     let output = canvas.to_string();
-    let rendered_chars: Vec<char> = output
-        .chars()
-        .filter(|c| expected_sparklines.contains(c))
-        .collect();
-
     // Should have sparkline characters (at least some, may not be all 8 due to rounding)
     assert!(
-        !rendered_chars.is_empty(),
-        "Should render sparkline characters, got: '{}'",
-        output
+        output.chars().any(|c| expected_sparklines.contains(&c)),
+        "Should render sparkline characters, got: '{output}'"
     );
 }
 
@@ -967,6 +959,7 @@ fn test_border_rounded_corners_btop_style() {
     assert!(lines[4].ends_with('╯'), "Bottom-right should be ╯");
 
     // Side borders should be │
+    #[allow(clippy::needless_range_loop)]
     for i in 1..4 {
         assert!(lines[i].starts_with('│'), "Side should be │");
         assert!(lines[i].ends_with('│'), "Side should be │");
@@ -1028,19 +1021,16 @@ fn f701_braille_uses_unicode_range() {
     use presentar_core::Widget;
 
     let mut canvas = PixelCanvas::new(20, 4);
-    let data: Vec<f64> = (0..40).map(|i| (i % 100) as f64).collect();
+    let data: Vec<f64> = (0..40).map(|i| f64::from(i % 100)).collect();
     let mut graph = BrailleGraph::new(data).with_mode(GraphMode::Braille);
     graph.layout(Rect::new(0.0, 0.0, 20.0, 4.0));
     graph.paint(&mut canvas);
 
     let output = canvas.to_string();
-    let braille_chars: Vec<char> = output
-        .chars()
-        .filter(|c| *c >= '\u{2800}' && *c <= '\u{28FF}')
-        .collect();
-
     assert!(
-        !braille_chars.is_empty(),
+        output
+            .chars()
+            .any(|c| ('\u{2800}'..='\u{28FF}').contains(&c)),
         "F701: Must contain braille characters"
     );
 }
@@ -1101,7 +1091,7 @@ fn f705_memory_bar_segment_order() {
     assert!(fill_count > 0, "F705: Segments must render filled blocks");
 }
 
-/// F706: CpuGrid compact mode fits 8 cores in single row
+/// F706: `CpuGrid` compact mode fits 8 cores in single row
 #[test]
 fn f706_cpugrid_compact_8_cores() {
     use presentar_core::Widget;
@@ -1114,10 +1104,8 @@ fn f706_cpugrid_compact_8_cores() {
 
     // Should render all 8 cores in compact single-row format
     let output = canvas.to_string();
-    let sparkline_chars: Vec<char> = output.chars().filter(|c| "▁▂▃▄▅▆▇█".contains(*c)).collect();
-
     assert!(
-        !sparkline_chars.is_empty(),
+        output.chars().any(|c| "▁▂▃▄▅▆▇█".contains(c)),
         "F706: Compact mode must show sparklines"
     );
 }
@@ -1211,7 +1199,7 @@ fn f710_table_header_separator() {
     );
 }
 
-/// F711: CollapsiblePanel collapsed shows ▶
+/// F711: `CollapsiblePanel` collapsed shows ▶
 #[test]
 fn f711_collapsible_collapsed_indicator() {
     use presentar_core::Widget;
@@ -1225,7 +1213,7 @@ fn f711_collapsible_collapsed_indicator() {
     assert!(output.contains('▶'), "F711: Collapsed panel must show ▶");
 }
 
-/// F712: CollapsiblePanel expanded shows ▼
+/// F712: `CollapsiblePanel` expanded shows ▼
 #[test]
 fn f712_collapsible_expanded_indicator() {
     use presentar_core::Widget;
@@ -1241,7 +1229,7 @@ fn f712_collapsible_expanded_indicator() {
     assert!(output.contains('▼'), "F712: Expanded panel must show ▼");
 }
 
-/// F713: Theme tokyo_night has dark background
+/// F713: Theme `tokyo_night` has dark background
 #[test]
 fn f713_theme_dark_background() {
     let theme = Theme::tokyo_night();
@@ -1334,7 +1322,7 @@ fn f718_tty_mode_ascii_only() {
     graph.paint(&mut canvas);
 
     let output = canvas.to_string();
-    let all_ascii = output.chars().all(|c| c.is_ascii());
+    let all_ascii = output.is_ascii();
     assert!(all_ascii, "F718: TTY mode must use only ASCII");
 }
 
@@ -1494,15 +1482,16 @@ fn f729_multiple_themes() {
 
 /// F730: Widgets implement Clone
 #[test]
+#[allow(clippy::no_effect_underscore_binding)]
 fn f730_widgets_clone() {
     let meter = Meter::new(50.0, 100.0);
-    let _cloned = meter.clone();
+    let _cloned = meter;
 
     let graph = BrailleGraph::new(vec![1.0, 2.0, 3.0]);
-    let _cloned = graph.clone();
+    let _cloned = graph;
 
     let scrollbar = Scrollbar::vertical(100, 20);
-    let _cloned = scrollbar.clone();
+    let _cloned = scrollbar;
     // Test passes if Clone works
 }
 
@@ -1600,7 +1589,7 @@ fn test_trend_sparkline_renders() {
 
     let mut canvas = PixelCanvas::new(40, 5);
 
-    let history: Vec<f64> = (0..30).map(|i| 20.0 + (i as f64 * 2.0)).collect();
+    let history: Vec<f64> = (0..30).map(|i| f64::from(i).mul_add(2.0, 20.0)).collect();
     let mut sparkline = TrendSparkline::new("60-SECOND TREND", history);
     sparkline.layout(Rect::new(0.0, 0.0, 40.0, 5.0));
     sparkline.paint(&mut canvas);
@@ -1680,7 +1669,7 @@ fn test_system_status_health_levels() {
 fn test_info_dense_widgets_no_panic_empty_data() {
     use presentar_core::Widget;
     use presentar_terminal::widgets::{
-        CoreUtilizationHistogram, CpuConsumer, SystemStatus, TopProcessesTable, TrendSparkline,
+        CoreUtilizationHistogram, TopProcessesTable, TrendSparkline,
     };
 
     let mut canvas = PixelCanvas::new(60, 10);

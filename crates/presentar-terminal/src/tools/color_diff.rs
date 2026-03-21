@@ -503,7 +503,7 @@ mod tests {
     #[test]
     fn test_lab_clone() {
         let lab1 = Lab::new(50.0, 25.0, -30.0);
-        let lab2 = lab1.clone();
+        let lab2 = lab1;
         assert_eq!(lab1, lab2);
     }
 
@@ -525,7 +525,7 @@ mod tests {
     #[test]
     fn test_rgb_clone() {
         let rgb1 = Rgb::new(100, 150, 200);
-        let rgb2 = rgb1.clone();
+        let rgb2 = rgb1;
         assert_eq!(rgb1, rgb2);
     }
 
@@ -604,7 +604,7 @@ mod tests {
     #[test]
     fn test_delta_e_category_clone() {
         let cat1 = DeltaECategory::Distinct;
-        let cat2 = cat1.clone();
+        let cat2 = cat1;
         assert_eq!(cat1, cat2);
     }
 

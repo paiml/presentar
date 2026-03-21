@@ -730,7 +730,7 @@ mod tests {
         let cc = cleanup_counter.clone();
 
         let mut effect = Effect::new(move || {
-            let cc = cc.clone();
+            let cc = cc;
             Some(Box::new(move || {
                 cc.fetch_add(1, Ordering::SeqCst);
             }) as Box<dyn FnOnce() + Send>)
@@ -796,7 +796,7 @@ mod tests {
         manager.add(
             widget_id,
             Effect::new(move || {
-                let cc = cc.clone();
+                let cc = cc;
                 Some(Box::new(move || {
                     cc.fetch_add(1, Ordering::SeqCst);
                 }) as Box<dyn FnOnce() + Send>)

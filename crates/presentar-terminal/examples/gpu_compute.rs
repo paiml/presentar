@@ -1,9 +1,10 @@
+#![allow(clippy::unwrap_used, clippy::disallowed_methods)]
 //! GPU Compute Monitor Example
 //!
 //! Demonstrates GPU utilization monitoring for CUDA/ML workloads
 //! with memory, compute, and temperature visualization.
 //!
-//! Run with: cargo run -p presentar-terminal --example gpu_compute
+//! Run with: cargo run -p presentar-terminal --example `gpu_compute`
 
 use presentar_core::{Canvas, Color, Point, Rect, TextStyle, Widget};
 use presentar_terminal::direct::{CellBuffer, DiffRenderer, DirectTerminalCanvas};
@@ -80,7 +81,7 @@ fn main() {
     let cells_written = renderer.flush(&mut buffer, &mut output).unwrap();
 
     println!("Buffer: {}x{}", buffer.width(), buffer.height());
-    println!("Cells written: {}", cells_written);
+    println!("Cells written: {cells_written}");
     println!("Output bytes: {}\n", output.len());
 
     println!("Rendered output:");
@@ -103,6 +104,7 @@ struct GpuInfo {
 }
 
 impl GpuInfo {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         id: u32,
         name: &str,
@@ -175,7 +177,7 @@ fn draw_utilization_graph(canvas: &mut DirectTerminalCanvas<'_>, history: &[f64]
         ..Default::default()
     };
     canvas.draw_text(
-        &format!("{:5.1}%", current),
+        &format!("{current:5.1}%"),
         Point::new(bounds.x + 30.0, bounds.y),
         &value_style,
     );
@@ -194,6 +196,7 @@ fn draw_utilization_graph(canvas: &mut DirectTerminalCanvas<'_>, history: &[f64]
     graph.paint(canvas);
 }
 
+#[allow(clippy::no_effect_underscore_binding)]
 fn draw_memory_graph(canvas: &mut DirectTerminalCanvas<'_>, history: &[f64], bounds: Rect) {
     let label_style = TextStyle {
         color: Color::new(0.6, 0.6, 0.6, 1.0),
@@ -211,7 +214,7 @@ fn draw_memory_graph(canvas: &mut DirectTerminalCanvas<'_>, history: &[f64], bou
         ..Default::default()
     };
     canvas.draw_text(
-        &format!("{:.0}/{:.0}GB", current, total),
+        &format!("{current:.0}/{total:.0}GB"),
         Point::new(bounds.x + 6.0, bounds.y),
         &value_style,
     );
@@ -260,7 +263,7 @@ fn draw_gpu_cards(canvas: &mut DirectTerminalCanvas<'_>, gpus: &[GpuInfo], x: f3
         };
         let short_name: String = gpu.name.chars().take(16).collect();
         canvas.draw_text(
-            &format!("{:<16}", short_name),
+            &format!("{short_name:<16}"),
             Point::new(x + 5.0, row_y),
             &name_style,
         );
@@ -284,6 +287,7 @@ fn draw_gpu_cards(canvas: &mut DirectTerminalCanvas<'_>, gpus: &[GpuInfo], x: f3
         );
 
         // Memory
+        #[allow(clippy::no_effect_underscore_binding)]
         let _mem_pct = (gpu.mem_used / gpu.mem_total) * 100.0;
         let mem_style = TextStyle {
             color: Color::new(0.6, 0.3, 1.0, 1.0),
@@ -350,7 +354,7 @@ fn draw_power_graph(canvas: &mut DirectTerminalCanvas<'_>, history: &[f64], boun
         ..Default::default()
     };
     canvas.draw_text(
-        &format!("{:.0}W / {:.0}W", current, max_power),
+        &format!("{current:.0}W / {max_power:.0}W"),
         Point::new(bounds.x + 20.0, bounds.y),
         &value_style,
     );
@@ -386,22 +390,22 @@ fn draw_cluster_summary(canvas: &mut DirectTerminalCanvas<'_>, gpus: &[GpuInfo],
 
     canvas.draw_text("Cluster Stats:", Point::new(x, y), &label_style);
     canvas.draw_text(
-        &format!("Avg Util: {:.0}%", avg_compute),
+        &format!("Avg Util: {avg_compute:.0}%"),
         Point::new(x, y + 1.0),
         &value_style,
     );
     canvas.draw_text(
-        &format!("VRAM: {:.0} GB", total_mem),
+        &format!("VRAM: {total_mem:.0} GB"),
         Point::new(x, y + 2.0),
         &value_style,
     );
     canvas.draw_text(
-        &format!("Max Temp: {}°C", max_temp),
+        &format!("Max Temp: {max_temp}°C"),
         Point::new(x, y + 3.0),
         &value_style,
     );
     canvas.draw_text(
-        &format!("Power: {} W", total_power),
+        &format!("Power: {total_power} W"),
         Point::new(x, y + 4.0),
         &value_style,
     );
@@ -422,7 +426,7 @@ fn draw_footer(canvas: &mut DirectTerminalCanvas<'_>) {
 fn simulate_compute_usage(count: usize) -> Vec<f64> {
     (0..count)
         .map(|i| {
-            let base = 75.0 + 15.0 * (i as f64 / 10.0).sin();
+            let base = 15.0f64.mul_add((i as f64 / 10.0).sin(), 75.0);
             let noise = ((i * 7919) % 20) as f64;
             (base + noise).clamp(20.0, 98.0)
         })
@@ -432,7 +436,7 @@ fn simulate_compute_usage(count: usize) -> Vec<f64> {
 fn simulate_memory_usage(count: usize) -> Vec<f64> {
     (0..count)
         .map(|i| {
-            let base = 65.0 + 10.0 * (i as f64 / 15.0).sin();
+            let base = 10.0f64.mul_add((i as f64 / 15.0).sin(), 65.0);
             let noise = ((i * 6971) % 10) as f64;
             base + noise
         })
@@ -442,7 +446,7 @@ fn simulate_memory_usage(count: usize) -> Vec<f64> {
 fn simulate_power(count: usize) -> Vec<f64> {
     (0..count)
         .map(|i| {
-            let base = 1200.0 + 200.0 * (i as f64 / 12.0).sin();
+            let base = 200.0f64.mul_add((i as f64 / 12.0).sin(), 1200.0);
             let noise = ((i * 1103) % 100) as f64;
             (base + noise).clamp(400.0, 1700.0)
         })

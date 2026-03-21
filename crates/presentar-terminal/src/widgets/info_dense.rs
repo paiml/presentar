@@ -1074,21 +1074,21 @@ mod tests {
     fn test_cpu_consumer_memory_display_gb() {
         let proc = CpuConsumer::new(1, 10.0, 2_000_000_000, "test");
         let display = proc.memory_display();
-        assert!(display.contains("G"));
+        assert!(display.contains('G'));
     }
 
     #[test]
     fn test_cpu_consumer_memory_display_mb() {
         let proc = CpuConsumer::new(1, 10.0, 500_000_000, "test");
         let display = proc.memory_display();
-        assert!(display.contains("M"));
+        assert!(display.contains('M'));
     }
 
     #[test]
     fn test_cpu_consumer_memory_display_kb() {
         let proc = CpuConsumer::new(1, 10.0, 500_000, "test");
         let display = proc.memory_display();
-        assert!(display.contains("K"));
+        assert!(display.contains('K'));
     }
 
     // TopProcessesTable tests
@@ -1524,7 +1524,7 @@ mod tests {
     #[test]
     fn test_top_processes_table_clone() {
         let table = TopProcessesTable::new(vec![CpuConsumer::new(1, 10.0, 100, "test")], 10.0);
-        let cloned = table.clone();
+        let cloned = table;
         assert_eq!(cloned.processes.len(), 1);
     }
 
@@ -1591,7 +1591,7 @@ mod tests {
     #[test]
     fn test_core_histogram_clone() {
         let hist = CoreUtilizationHistogram::new(vec![50.0, 60.0]);
-        let cloned = hist.clone();
+        let cloned = hist;
         assert_eq!(cloned.core_percentages.len(), 2);
     }
 
@@ -1687,7 +1687,7 @@ mod tests {
     #[test]
     fn test_trend_sparkline_clone() {
         let trend = TrendSparkline::new("Test", vec![1.0, 2.0, 3.0]);
-        let cloned = trend.clone();
+        let cloned = trend;
         assert_eq!(cloned.history.len(), 3);
         assert_eq!(cloned.title, "Test");
     }
@@ -1791,7 +1791,7 @@ mod tests {
     #[test]
     fn test_system_status_clone() {
         let status = SystemStatus::new(1.0, 2.0, 3.0, 4).with_thermal(50.0, 60.0);
-        let cloned = status.clone();
+        let cloned = status;
         assert!((cloned.load_1m - 1.0).abs() < 0.01);
         assert_eq!(cloned.core_count, 4);
         assert!(cloned.thermal.is_some());
@@ -1835,7 +1835,7 @@ mod tests {
     #[test]
     fn test_cpu_consumer_clone() {
         let proc = CpuConsumer::new(123, 50.0, 1_000_000, "test");
-        let cloned = proc.clone();
+        let cloned = proc;
         assert_eq!(cloned.pid, 123);
     }
 
@@ -1850,7 +1850,7 @@ mod tests {
     #[test]
     fn test_health_level_clone() {
         let level = HealthLevel::Critical;
-        let cloned = level.clone();
+        let cloned = level;
         assert_eq!(cloned, HealthLevel::Critical);
     }
 

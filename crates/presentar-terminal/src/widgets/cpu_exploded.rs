@@ -965,6 +965,7 @@ impl Widget for LoadAverageTimeline {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
     use crate::direct::{CellBuffer, DirectTerminalCanvas};
@@ -1134,7 +1135,7 @@ mod tests {
     #[test]
     fn test_per_core_sparkline_grid_clone() {
         let grid = PerCoreSparklineGrid::new(vec![vec![10.0, 20.0]]);
-        let cloned = grid.clone();
+        let cloned = grid;
         assert_eq!(cloned.core_histories.len(), 1);
     }
 
@@ -1256,7 +1257,7 @@ mod tests {
     #[test]
     fn test_cpu_state_breakdown_clone() {
         let breakdown = CpuStateBreakdown::new(vec![CpuCoreState::default()]);
-        let cloned = breakdown.clone();
+        let cloned = breakdown;
         assert_eq!(cloned.core_states.len(), 1);
     }
 
@@ -1292,7 +1293,7 @@ mod tests {
     #[test]
     fn test_cpu_core_state_clone() {
         let state = CpuCoreState::new(50.0, 10.0, 35.0, 5.0, 0.0, 0.0);
-        let cloned = state.clone();
+        let cloned = state;
         assert!((cloned.user - 50.0).abs() < 0.001);
     }
 
@@ -1423,7 +1424,7 @@ mod tests {
     #[test]
     fn test_top_processes_mini_clone() {
         let top = TopProcessesMini::new(vec![TopProcess::new(1234, 45.2, "firefox")]);
-        let cloned = top.clone();
+        let cloned = top;
         assert_eq!(cloned.processes.len(), 1);
     }
 
@@ -1447,7 +1448,7 @@ mod tests {
     #[test]
     fn test_top_process_clone() {
         let proc = TopProcess::new(1234, 45.2, "firefox");
-        let cloned = proc.clone();
+        let cloned = proc;
         assert_eq!(cloned.pid, 1234);
         assert_eq!(cloned.name, "firefox");
     }
@@ -1596,7 +1597,7 @@ mod tests {
     #[test]
     fn test_freq_temp_heatmap_clone() {
         let heatmap = FreqTempHeatmap::new(vec![3600], vec![4000]);
-        let cloned = heatmap.clone();
+        let cloned = heatmap;
         assert_eq!(cloned.frequencies.len(), 1);
     }
 

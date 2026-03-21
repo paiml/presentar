@@ -1423,7 +1423,7 @@ mod tests {
 
     #[test]
     fn test_histogram_uniform() {
-        let data: Vec<f64> = (0..100).map(|i| i as f64).collect();
+        let data: Vec<f64> = (0..100).map(f64::from).collect();
         let hist = HistogramBins::from_data(&data, 10);
 
         assert_eq!(hist.num_bins(), 10);
@@ -1431,7 +1431,7 @@ mod tests {
 
         // Each bin should have approximately 10 values
         for &count in &hist.counts {
-            assert!(count >= 9 && count <= 11);
+            assert!((9..=11).contains(&count));
         }
     }
 
@@ -1487,7 +1487,7 @@ mod tests {
     #[test]
     fn test_arc_circle() {
         let circle = ArcGeometry::circle(Point2D::new(5.0, 5.0), 3.0);
-        assert!((circle.sweep() - 2.0 * PI).abs() < 1e-10);
+        assert!(2.0f64.mul_add(-PI, circle.sweep()).abs() < 1e-10);
     }
 
     #[test]
@@ -1533,7 +1533,7 @@ mod tests {
         assert!((semicircle.arc_length() - PI).abs() < 1e-10);
 
         let full = ArcGeometry::circle(Point2D::ORIGIN, 1.0);
-        assert!((full.arc_length() - 2.0 * PI).abs() < 1e-10);
+        assert!(2.0f64.mul_add(-PI, full.arc_length()).abs() < 1e-10);
     }
 
     #[test]
@@ -1868,13 +1868,13 @@ mod tests {
 
     #[test]
     fn test_point2d_default() {
-        let p: Point2D = Default::default();
+        let p: Point2D = Point2D::default();
         assert_eq!(p, Point2D::ORIGIN);
     }
 
     #[test]
     fn test_point2d_clone() {
-        let p1 = Point2D::new(3.14, 2.71);
+        let p1 = Point2D::new(2.5, 2.71);
         let p2 = p1;
         assert_eq!(p1, p2);
     }
@@ -2241,7 +2241,12 @@ mod tests {
     #[test]
     fn test_arc_contains_angle_wrap() {
         // Arc that wraps around 0/2π
-        let arc = ArcGeometry::new(Point2D::ORIGIN, 1.0, 3.0 * PI / 2.0, PI / 2.0 + 2.0 * PI);
+        let arc = ArcGeometry::new(
+            Point2D::ORIGIN,
+            1.0,
+            3.0 * PI / 2.0,
+            2.0f64.mul_add(PI, PI / 2.0),
+        );
         assert!(arc.contains_angle(0.0));
     }
 
@@ -2344,7 +2349,7 @@ mod tests {
 
     #[test]
     fn test_tessellator_default_trait() {
-        let tess: PathTessellator = Default::default();
+        let tess = PathTessellator::default();
         assert!(tess.vertices.is_empty());
     }
 
@@ -2354,7 +2359,7 @@ mod tests {
 
     #[test]
     fn test_batch_default_trait() {
-        let batch: DrawBatch = Default::default();
+        let batch = DrawBatch::default();
         assert!(batch.circles.is_empty());
         assert!(batch.rects.is_empty());
         assert!(batch.lines.is_empty());

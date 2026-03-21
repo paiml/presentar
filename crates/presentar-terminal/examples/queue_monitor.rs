@@ -1,9 +1,10 @@
+#![allow(clippy::unwrap_used, clippy::disallowed_methods)]
 //! Message Queue Monitor Example
 //!
 //! Demonstrates real-time monitoring of message queues with
 //! depth, throughput, and latency visualization.
 //!
-//! Run with: cargo run -p presentar-terminal --example queue_monitor
+//! Run with: cargo run -p presentar-terminal --example `queue_monitor`
 
 use presentar_core::{Canvas, Color, Point, Rect, TextStyle, Widget};
 use presentar_terminal::direct::{CellBuffer, DiffRenderer, DirectTerminalCanvas};
@@ -78,7 +79,7 @@ fn main() {
     let cells_written = renderer.flush(&mut buffer, &mut output).unwrap();
 
     println!("Buffer: {}x{}", buffer.width(), buffer.height());
-    println!("Cells written: {}", cells_written);
+    println!("Cells written: {cells_written}");
     println!("Output bytes: {}\n", output.len());
 
     println!("Rendered output:");
@@ -228,7 +229,7 @@ fn draw_throughput_graph(canvas: &mut DirectTerminalCanvas<'_>, history: &[f64],
         ..Default::default()
     };
     canvas.draw_text(
-        &format!("{:.0}", current),
+        &format!("{current:.0}"),
         Point::new(bounds.x + 24.0, bounds.y),
         &value_style,
     );
@@ -273,7 +274,7 @@ fn draw_latency_graph(canvas: &mut DirectTerminalCanvas<'_>, history: &[f64], bo
         ..Default::default()
     };
     canvas.draw_text(
-        &format!("{:.1}ms", current),
+        &format!("{current:.1}ms"),
         Point::new(bounds.x + 20.0, bounds.y),
         &value_style,
     );
@@ -317,8 +318,7 @@ fn draw_summary(canvas: &mut DirectTerminalCanvas<'_>, queues: &[QueueMetrics], 
     };
     canvas.draw_text(
         &format!(
-            "Total Depth: {}  |  Total Rate: {:.0} msg/s  |  Avg Latency: {:.1}ms  |  DLQ: {}",
-            total_depth, total_rate, avg_latency, dlq_depth
+            "Total Depth: {total_depth}  |  Total Rate: {total_rate:.0} msg/s  |  Avg Latency: {avg_latency:.1}ms  |  DLQ: {dlq_depth}"
         ),
         Point::new(x, y + 1.0),
         &value_style,
@@ -346,7 +346,7 @@ fn draw_connection_info(canvas: &mut DirectTerminalCanvas<'_>, x: f32, y: f32) {
 fn simulate_throughput(count: usize) -> Vec<f64> {
     (0..count)
         .map(|i| {
-            let base = 3000.0 + 500.0 * (i as f64 / 10.0).sin();
+            let base = 500.0f64.mul_add((i as f64 / 10.0).sin(), 3000.0);
             let noise = ((i * 7919) % 300) as f64;
             (base + noise).max(100.0)
         })
@@ -356,7 +356,7 @@ fn simulate_throughput(count: usize) -> Vec<f64> {
 fn simulate_latency(count: usize) -> Vec<f64> {
     (0..count)
         .map(|i| {
-            let base = 25.0 + 15.0 * (i as f64 / 8.0).sin();
+            let base = 15.0f64.mul_add((i as f64 / 8.0).sin(), 25.0);
             let spike = if i % 20 == 0 { 40.0 } else { 0.0 };
             let noise = ((i * 6971) % 20) as f64;
             (base + spike + noise).max(5.0)

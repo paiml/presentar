@@ -782,6 +782,7 @@ impl<W: Widget> TuiApp<W> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
     use presentar_core::{
@@ -1011,6 +1012,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::nonminimal_bool)]
     fn test_render_frame() {
         let widget = TestWidget::new();
         let mut app = TuiApp::new(widget).unwrap();
@@ -1019,9 +1021,7 @@ mod tests {
         // Render a frame and verify metrics are updated
         app.render_frame(&mut buffer);
 
-        assert!(
-            app.metrics.measure_time > Duration::ZERO || app.metrics.measure_time == Duration::ZERO
-        );
+        assert!(app.metrics.measure_time >= Duration::ZERO);
         assert!(app.metrics.layout_time >= Duration::ZERO);
         assert!(app.metrics.paint_time >= Duration::ZERO);
     }
@@ -1069,7 +1069,7 @@ mod tests {
             frame_count: 100,
         };
 
-        let cloned = metrics.clone();
+        let cloned = metrics;
         assert_eq!(cloned.frame_count, 100);
         assert_eq!(cloned.verify_time, Duration::from_millis(1));
     }
@@ -1085,7 +1085,7 @@ mod tests {
     #[test]
     fn test_tui_config_clone() {
         let config = TuiConfig::high_performance();
-        let cloned = config.clone();
+        let cloned = config;
         assert_eq!(cloned.tick_rate_ms, 16);
         assert_eq!(cloned.target_fps, 60);
     }
@@ -1399,7 +1399,7 @@ mod tests {
             self.events
                 .borrow_mut()
                 .pop_front()
-                .ok_or_else(|| TuiError::Io(io::Error::new(io::ErrorKind::Other, "no event")))
+                .ok_or_else(|| TuiError::Io(io::Error::other("no event")))
         }
 
         fn flush(
@@ -1638,7 +1638,7 @@ mod tests {
             self.events
                 .borrow_mut()
                 .pop_front()
-                .ok_or_else(|| TuiError::Io(io::Error::new(io::ErrorKind::Other, "no event")))
+                .ok_or_else(|| TuiError::Io(io::Error::other("no event")))
         }
         fn write_flush(
             &mut self,

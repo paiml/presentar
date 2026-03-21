@@ -354,7 +354,7 @@ mod tests {
     #[test]
     fn test_radar_plot_new() {
         let axes = vec!["A".to_string(), "B".to_string(), "C".to_string()];
-        let plot = RadarPlot::new(axes.clone());
+        let plot = RadarPlot::new(axes);
         assert_eq!(plot.axes.len(), 3);
     }
 
@@ -656,7 +656,7 @@ mod tests {
             .with_labels(false)
             .with_fill_alpha(0.5);
 
-        let cloned = plot.clone();
+        let cloned = plot;
         assert_eq!(cloned.axes.len(), 2);
         assert_eq!(cloned.series.len(), 1);
         assert!(!cloned.fill);
@@ -674,7 +674,7 @@ mod tests {
     #[test]
     fn test_radar_series_clone() {
         let series = RadarSeries::new("Test", vec![1.0, 2.0], Color::RED);
-        let cloned = series.clone();
+        let cloned = series;
         assert_eq!(cloned.name, "Test");
         assert_eq!(cloned.values.len(), 2);
     }

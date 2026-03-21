@@ -517,7 +517,7 @@ mod tests {
     #[test]
     fn test_expect_float_close_to() {
         expect(0.1 + 0.2_f32).to_be_close_to(0.3, 0.001);
-        expect(3.14159_f64).to_be_close_to(3.14, 0.01);
+        expect(1.23456_f64).to_be_close_to(1.23, 0.01);
     }
 
     #[test]

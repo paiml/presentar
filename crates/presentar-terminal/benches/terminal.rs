@@ -4,11 +4,11 @@
 //!
 //! # Statistical Rigor (D1/D2 Popperian Criteria)
 //!
-//! - Sample size: 1000 iterations per benchmark (configurable via CRITERION_SAMPLE_SIZE)
+//! - Sample size: 1000 iterations per benchmark (configurable via `CRITERION_SAMPLE_SIZE`)
 //! - Warmup: 100 iterations (discarded)
 //! - Confidence interval: 95% (default Criterion setting)
 //! - Effect size: Cohen's d reported for comparisons
-//! - Random seed: Fixed via CRITERION_SEED=42 for reproducibility
+//! - Random seed: Fixed via `CRITERION_SEED=42` for reproducibility
 //!
 //! ## Sample Size Justification
 //!
@@ -244,7 +244,7 @@ fn bench_direct_canvas(c: &mut Criterion) {
 // THROUGHPUT BENCHMARKS
 // =============================================================================
 
-/// Helper to draw a string using DirectTerminalCanvas
+/// Helper to draw a string using `DirectTerminalCanvas`
 fn draw_string(buffer: &mut CellBuffer, x: f32, y: f32, text: &str) {
     let mut canvas = DirectTerminalCanvas::new(buffer);
     canvas.draw_text(text, Point::new(x, y), &TextStyle::default());

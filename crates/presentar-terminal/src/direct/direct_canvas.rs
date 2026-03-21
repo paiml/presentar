@@ -588,6 +588,7 @@ impl Canvas for DirectTerminalCanvas<'_> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
     use presentar_core::{FontStyle, FontWeight};

@@ -769,8 +769,7 @@ mod tests {
             .show_listening(false)
             .show_established(true);
 
-        let visible: Vec<_> = panel.visible_connections().collect();
-        assert_eq!(visible.len(), 1); // Only established
+        assert_eq!(panel.visible_connections().count(), 1);
     }
 
     #[test]
@@ -785,8 +784,7 @@ mod tests {
             .show_listening(true)
             .show_established(false);
 
-        let visible: Vec<_> = panel.visible_connections().collect();
-        assert_eq!(visible.len(), 1); // Only listening
+        assert_eq!(panel.visible_connections().count(), 1);
     }
 
     #[test]
@@ -817,8 +815,7 @@ mod tests {
             .show_listening(false)
             .show_established(false);
 
-        let visible: Vec<_> = panel.visible_connections().collect();
-        assert_eq!(visible.len(), 2); // Both TIME_WAIT and CLOSE_WAIT visible
+        assert_eq!(panel.visible_connections().count(), 2);
     }
 
     #[test]

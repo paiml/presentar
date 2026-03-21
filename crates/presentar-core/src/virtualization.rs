@@ -726,7 +726,7 @@ impl VirtualGrid {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
 

@@ -979,7 +979,7 @@ mod tests {
         let result = truncate(long_cmd, 50, TruncateStrategy::Command);
         assert!(result.starts_with("firefox"));
         assert!(result.contains("…"));
-        assert!(result.contains("5"));
+        assert!(result.contains('5'));
 
         assert_eq!(
             truncate("command arg1 arg2", 8, TruncateStrategy::Command),
@@ -1063,7 +1063,7 @@ mod tests {
 
     #[test]
     fn test_format_number_column() {
-        let result = format_number_column(3.14159, 8, 2);
+        let result = format_number_column(1.23456, 8, 2);
         assert_eq!(result.chars().count(), 8);
     }
 
@@ -1722,7 +1722,7 @@ mod display_rules_tests {
             has_psi: true,
             ..Default::default()
         };
-        let cloned = caps.clone();
+        let cloned = caps;
         assert!(cloned.has_battery);
         assert!(cloned.has_nvidia);
     }
@@ -1742,7 +1742,7 @@ mod display_rules_tests {
             width: 120,
             height: 40,
         };
-        let cloned = size.clone();
+        let cloned = size;
         assert_eq!(cloned.width, 120);
         assert_eq!(cloned.height, 40);
     }
@@ -1768,7 +1768,7 @@ mod display_rules_tests {
             sensor_count: 10,
             ..Default::default()
         };
-        let cloned = data.clone();
+        let cloned = data;
         assert_eq!(cloned.sensor_count, 10);
     }
 
@@ -1954,7 +1954,7 @@ mod display_rules_tests {
     #[test]
     fn test_format_percent_clamped() {
         assert!(format_percent_clamped(150.0).contains("100"));
-        assert!(format_percent_clamped(-10.0).contains("0"));
+        assert!(format_percent_clamped(-10.0).contains('0'));
     }
 
     #[test]
@@ -1973,7 +1973,7 @@ mod display_rules_tests {
     #[test]
     fn test_truncate_strategy_clone() {
         let strategy = TruncateStrategy::Middle;
-        let cloned = strategy.clone();
+        let cloned = strategy;
         assert_eq!(strategy, cloned);
     }
 }

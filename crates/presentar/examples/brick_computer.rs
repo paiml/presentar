@@ -7,7 +7,7 @@
 //! - Parallel test execution with varying durations
 //! - Inspired by trueno-viz and btop polish
 //!
-//! Run with: cargo run --example brick_computer -p presentar
+//! Run with: cargo run --example `brick_computer` -p presentar
 
 use std::io::{self, Write};
 use std::thread;
@@ -116,29 +116,30 @@ enum TestKind {
 }
 
 impl TestKind {
-    fn name(&self) -> &'static str {
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    const fn name(&self) -> &'static str {
         match self {
-            TestKind::DotProduct => "dot",
-            TestKind::MatVec => "mvec",
-            TestKind::Reduce => "red",
-            TestKind::Softmax => "soft",
-            TestKind::Attention => "attn",
-            TestKind::LayerNorm => "norm",
-            TestKind::Gelu => "gelu",
-            TestKind::Transpose => "T",
+            Self::DotProduct => "dot",
+            Self::MatVec => "mvec",
+            Self::Reduce => "red",
+            Self::Softmax => "soft",
+            Self::Attention => "attn",
+            Self::LayerNorm => "norm",
+            Self::Gelu => "gelu",
+            Self::Transpose => "T",
         }
     }
 
-    fn from_index(i: usize) -> Self {
+    const fn from_index(i: usize) -> Self {
         match i % 8 {
-            0 => TestKind::DotProduct,
-            1 => TestKind::MatVec,
-            2 => TestKind::Reduce,
-            3 => TestKind::Softmax,
-            4 => TestKind::Attention,
-            5 => TestKind::LayerNorm,
-            6 => TestKind::Gelu,
-            _ => TestKind::Transpose,
+            0 => Self::DotProduct,
+            1 => Self::MatVec,
+            2 => Self::Reduce,
+            3 => Self::Softmax,
+            4 => Self::Attention,
+            5 => Self::LayerNorm,
+            6 => Self::Gelu,
+            _ => Self::Transpose,
         }
     }
 }
@@ -158,7 +159,7 @@ struct TestBrick {
 }
 
 impl TestBrick {
-    fn new(id: usize) -> Self {
+    const fn new(id: usize) -> Self {
         let kind = TestKind::from_index(id);
         Self {
             id,
@@ -263,7 +264,7 @@ impl TestBrick {
             }
             TestKind::Softmax => {
                 // Simplified softmax check
-                let max_val = a.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+                let max_val = a.iter().copied().fold(f32::NEG_INFINITY, f32::max);
                 let sum: f32 = a.iter().map(|x| (x - max_val).exp()).sum();
                 (sum, sum) // Always passes
             }
@@ -279,7 +280,8 @@ impl TestBrick {
             }
             TestKind::Gelu => {
                 let x = a[0];
-                let gelu = 0.5 * x * (1.0 + (0.7978845608 * (x + 0.044715 * x.powi(3))).tanh());
+                let gelu =
+                    0.5 * x * (1.0 + (0.797_884_6 * 0.044_715_f32.mul_add(x.powi(3), x)).tanh());
                 (gelu, gelu)
             }
             TestKind::Transpose => {
@@ -291,7 +293,7 @@ impl TestBrick {
 }
 
 /// Simple PRNG for animation variation
-fn pseudo_random(seed: u64) -> u64 {
+const fn pseudo_random(seed: u64) -> u64 {
     let mut x = seed;
     x ^= x << 13;
     x ^= x >> 7;
@@ -398,7 +400,7 @@ fn clear_screen() {
 }
 
 fn move_to(x: usize, y: usize) {
-    print!("\x1b[{};{}H", y, x);
+    print!("\x1b[{y};{x}H");
 }
 
 fn draw_box(title: &str, x: usize, y: usize, w: usize, h: usize, color: &str) {
@@ -407,14 +409,14 @@ fn draw_box(title: &str, x: usize, y: usize, w: usize, h: usize, color: &str) {
 
     if !title.is_empty() {
         move_to(x + 2, y);
-        print!("{}{} {} {}", BOLD, color, title, RESET);
+        print!("{BOLD}{color} {title} {RESET}");
     }
 
     for row in 1..h - 1 {
         move_to(x, y + row);
-        print!("{}{}", color, BOX_V);
+        print!("{color}{BOX_V}");
         move_to(x + w - 1, y + row);
-        print!("{}{}", color, BOX_V);
+        print!("{color}{BOX_V}");
     }
 
     move_to(x, y + h - 1);
@@ -436,16 +438,16 @@ fn draw_brick(brick: &TestBrick, x: usize, y: usize, frame: u64) {
         TestState::Idle => (
             BG_DARKER,
             GRAY,
-            format!("  {}  ", BLOCK_LIGHT),
+            format!("  {BLOCK_LIGHT}  "),
             format!(" {:^4}", brick.kind.name()),
-            format!("  {}  ", BLOCK_LIGHT),
+            format!("  {BLOCK_LIGHT}  "),
         ),
         TestState::Queued => (
             BG_DARK,
             YELLOW,
-            format!("  ◌  "),
+            "  ◌  ".to_string(),
             format!(" {:^4}", brick.kind.name()),
-            format!(" wait"),
+            " wait".to_string(),
         ),
         TestState::Running => (
             BG_BLUE,
@@ -457,23 +459,23 @@ fn draw_brick(brick: &TestBrick, x: usize, y: usize, frame: u64) {
         TestState::Pass => (
             BG_GREEN,
             WHITE,
-            format!("  ✓  "),
+            "  ✓  ".to_string(),
             format!(" {:^4}", brick.kind.name()),
-            format!(" PASS"),
+            " PASS".to_string(),
         ),
         TestState::Fail => (
             BG_RED,
             WHITE,
-            format!("  ✗  "),
+            "  ✗  ".to_string(),
             format!(" {:^4}", brick.kind.name()),
-            format!(" FAIL"),
+            " FAIL".to_string(),
         ),
         TestState::Flaky => (
             BG_YELLOW,
             WHITE,
-            format!("  ⚡ "),
+            "  ⚡ ".to_string(),
             format!(" {:^4}", brick.kind.name()),
-            format!("FLAKY"),
+            "FLAKY".to_string(),
         ),
     };
 
@@ -489,24 +491,25 @@ fn draw_brick(brick: &TestBrick, x: usize, y: usize, frame: u64) {
     };
 
     move_to(x, y);
-    print!("{}{}{}{}{}", bg, fg, pulse, line1, RESET);
+    print!("{bg}{fg}{pulse}{line1}{RESET}");
     move_to(x, y + 1);
-    print!("{}{}{}{}{}", bg, fg, pulse, line2, RESET);
+    print!("{bg}{fg}{pulse}{line2}{RESET}");
     move_to(x, y + 2);
-    print!("{}{}{}{}{}", bg, fg, pulse, line3, RESET);
+    print!("{bg}{fg}{pulse}{line3}{RESET}");
 
     // Progress bar under brick when running
+    #[allow(clippy::branches_sharing_code)]
     if brick.state == TestState::Running {
         move_to(x, y + 3);
-        print!("{}", CYAN);
+        print!("{CYAN}");
         for i in 0..6 {
             if i * 100 / 6 < brick.progress as usize {
                 print!("{}", PROGRESS[progress_idx]);
             } else {
-                print!("{}", BLOCK_LIGHT);
+                print!("{BLOCK_LIGHT}");
             }
         }
-        print!("{}", RESET);
+        print!("{RESET}");
     } else {
         move_to(x, y + 3);
         print!("      ");
@@ -547,16 +550,16 @@ fn draw_meter(label: &str, value: f64, max: f64, x: usize, y: usize, width: usiz
     let bar_w = width - 12;
     let filled = ((value / max) * bar_w as f64).min(bar_w as f64) as usize;
 
-    print!("{}{:>8}{} ", BOLD, label, RESET);
-    print!("{}", color);
+    print!("{BOLD}{label:>8}{RESET} ");
+    print!("{color}");
     for i in 0..bar_w {
         if i < filled {
-            print!("{}", BLOCK_FULL);
+            print!("{BLOCK_FULL}");
         } else {
-            print!("{}{}", GRAY, BLOCK_LIGHT);
+            print!("{GRAY}{BLOCK_LIGHT}");
         }
     }
-    print!("{}", RESET);
+    print!("{RESET}");
 }
 
 fn draw_stats(computer: &BrickComputer, x: usize, y: usize, frame: u64) {
@@ -582,11 +585,11 @@ fn draw_stats(computer: &BrickComputer, x: usize, y: usize, frame: u64) {
 
     move_to(x, y + 3);
     let spinner = SPINNER[((frame / 2) % 8) as usize];
-    print!("{}Running:{} ", BOLD, RESET);
+    print!("{BOLD}Running:{RESET} ");
     if running > 0 {
-        print!("{}{} {}{}", CYAN, spinner, running, RESET);
+        print!("{CYAN}{spinner} {running}{RESET}");
     } else {
-        print!("{}0{}", GRAY, RESET);
+        print!("{GRAY}0{RESET}");
     }
 
     move_to(x, y + 4);
@@ -619,31 +622,28 @@ fn draw_stats(computer: &BrickComputer, x: usize, y: usize, frame: u64) {
     } else {
         RED
     };
-    print!(
-        "{}Pass Rate:{} {}{:.1}%{}",
-        BOLD, RESET, rate_color, rate, RESET
-    );
+    print!("{BOLD}Pass Rate:{RESET} {rate_color}{rate:.1}%{RESET}");
 }
 
 fn draw_header(frame: u64) {
     move_to(1, 1);
     let pulse = if (frame / 8) % 2 == 0 { BOLD } else { "" };
-    print!("{}{}  BRICK COMPUTER  {}", pulse, MAGENTA, RESET);
-    print!("{}  SIMD Test Runner  {}", DIM, RESET);
-    print!("{}  presentar v0.2  {}", CYAN, RESET);
+    print!("{pulse}{MAGENTA}  BRICK COMPUTER  {RESET}");
+    print!("{DIM}  SIMD Test Runner  {RESET}");
+    print!("{CYAN}  presentar v0.2  {RESET}");
 }
 
 fn draw_legend(y: usize, frame: u64) {
     move_to(2, y);
-    print!("{}Legend:{} ", BOLD, RESET);
+    print!("{BOLD}Legend:{RESET} ");
 
     let spinner = SPINNER[((frame / 2) % 8) as usize];
 
-    print!("{}{} ◌ {} Queue ", BG_DARK, YELLOW, RESET);
-    print!("{}{} {} {} Run ", BG_BLUE, WHITE, spinner, RESET);
-    print!("{}{} ✓ {} Pass ", BG_GREEN, WHITE, RESET);
-    print!("{}{} ✗ {} Fail ", BG_RED, WHITE, RESET);
-    print!("{}{} ⚡{} Flaky", BG_YELLOW, WHITE, RESET);
+    print!("{BG_DARK}{YELLOW} ◌ {RESET} Queue ");
+    print!("{BG_BLUE}{WHITE} {spinner} {RESET} Run ");
+    print!("{BG_GREEN}{WHITE} ✓ {RESET} Pass ");
+    print!("{BG_RED}{WHITE} ✗ {RESET} Fail ");
+    print!("{BG_YELLOW}{WHITE} ⚡{RESET} Flaky");
 }
 
 fn draw_jidoka(computer: &BrickComputer, x: usize, y: usize, frame: u64) {
@@ -653,10 +653,7 @@ fn draw_jidoka(computer: &BrickComputer, x: usize, y: usize, frame: u64) {
     move_to(x, y);
     if any_fail {
         let blink = if (frame / 4) % 2 == 0 { BLINK } else { "" };
-        print!(
-            "{}{}● JIDOKA HALT{} - Test failure detected, investigating...",
-            blink, RED, RESET
-        );
+        print!("{blink}{RED}● JIDOKA HALT{RESET} - Test failure detected, investigating...");
     } else if any_running {
         let spinner = SPINNER[((frame / 2) % 8) as usize];
         print!(
@@ -667,15 +664,12 @@ fn draw_jidoka(computer: &BrickComputer, x: usize, y: usize, frame: u64) {
             computer.running_count()
         );
     } else {
-        print!(
-            "{}{}● JIDOKA PASS{} - All bricks lit, render allowed",
-            BOLD, GREEN, RESET
-        );
+        print!("{BOLD}{GREEN}● JIDOKA PASS{RESET} - All bricks lit, render allowed");
     }
 
     // Show what SIMD ops are running
     move_to(x, y + 1);
-    print!("{}SIMD Ops:{} ", DIM, RESET);
+    print!("{DIM}SIMD Ops:{RESET} ");
     for brick in &computer.bricks {
         if brick.state == TestState::Running {
             print!("{}{}{} ", ORANGE, brick.kind.name(), RESET);
@@ -728,7 +722,7 @@ fn main() {
         // Sparkline panel
         draw_box("PASS RATE HISTORY", 2, 16, 84, 4, BLUE);
         move_to(4, 18);
-        print!("{}Rate:{} ", DIM, RESET);
+        print!("{DIM}Rate:{RESET} ");
         draw_sparkline(&computer.history, 11, 18, 70);
 
         // JIDOKA status
@@ -740,7 +734,7 @@ fn main() {
 
         // Footer
         move_to(2, 28);
-        print!("{}Frame {} │ Press Ctrl+C to exit{}", DIM, frame, RESET);
+        print!("{DIM}Frame {frame} │ Press Ctrl+C to exit{RESET}");
 
         io::stdout().flush().ok();
 
@@ -748,6 +742,6 @@ fn main() {
         computer.tick(tick_ms);
         frame += 1;
 
-        thread::sleep(Duration::from_millis(tick_ms as u64));
+        thread::sleep(Duration::from_millis(u64::from(tick_ms)));
     }
 }

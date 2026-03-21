@@ -422,6 +422,7 @@ impl Brick for Checkbox {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
     use presentar_core::Widget;

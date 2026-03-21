@@ -997,6 +997,7 @@ impl ValueConverter for NumberFormatConverter {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
 
@@ -1619,7 +1620,7 @@ mod tests {
     #[test]
     fn test_property_path_debug() {
         let path = PropertyPath::new("user.name");
-        let debug = format!("{:?}", path);
+        let debug = format!("{path:?}");
         assert!(debug.contains("PropertyPath"));
     }
 
@@ -1664,7 +1665,7 @@ mod tests {
     #[test]
     fn test_binding_direction_debug() {
         let dir = BindingDirection::OneTime;
-        let debug = format!("{:?}", dir);
+        let debug = format!("{dir:?}");
         assert!(debug.contains("OneTime"));
     }
 
@@ -1685,14 +1686,14 @@ mod tests {
     #[test]
     fn test_binding_config_clone() {
         let config = BindingConfig::two_way("user.name", "value");
-        let cloned = config.clone();
+        let cloned = config;
         assert_eq!(cloned.direction, BindingDirection::TwoWay);
     }
 
     #[test]
     fn test_binding_config_debug() {
         let config = BindingConfig::one_way("path", "prop");
-        let debug = format!("{:?}", config);
+        let debug = format!("{config:?}");
         assert!(debug.contains("BindingConfig"));
     }
 
@@ -1725,7 +1726,7 @@ mod tests {
     #[test]
     fn test_reactive_cell_debug() {
         let cell = ReactiveCell::new(42);
-        let debug = format!("{:?}", cell);
+        let debug = format!("{cell:?}");
         assert!(debug.contains("ReactiveCell"));
         assert!(debug.contains("42"));
     }
@@ -1752,7 +1753,7 @@ mod tests {
     fn test_computed_debug() {
         let computed = Computed::new(|| 42);
         computed.get(); // Populate cache
-        let debug = format!("{:?}", computed);
+        let debug = format!("{computed:?}");
         assert!(debug.contains("Computed"));
     }
 
@@ -1761,7 +1762,7 @@ mod tests {
         use std::sync::atomic::{AtomicI32, Ordering};
 
         let counter = Arc::new(AtomicI32::new(0));
-        let counter_clone = counter.clone();
+        let counter_clone = counter;
 
         let computed = Computed::new(move || counter_clone.fetch_add(1, Ordering::SeqCst) + 1);
 
@@ -1805,7 +1806,7 @@ mod tests {
     #[test]
     fn test_binding_expression_debug() {
         let expr = BindingExpression::new("{{ test }}");
-        let debug = format!("{:?}", expr);
+        let debug = format!("{expr:?}");
         assert!(debug.contains("BindingExpression"));
     }
 
@@ -1823,14 +1824,14 @@ mod tests {
     #[test]
     fn test_event_binding_clone() {
         let binding = EventBinding::on_click(ActionBinding::toggle("visible"));
-        let cloned = binding.clone();
+        let cloned = binding;
         assert_eq!(cloned.event, "click");
     }
 
     #[test]
     fn test_event_binding_debug() {
         let binding = EventBinding::new("submit", ActionBinding::dispatch("send"));
-        let debug = format!("{:?}", binding);
+        let debug = format!("{binding:?}");
         assert!(debug.contains("EventBinding"));
     }
 
@@ -1858,7 +1859,7 @@ mod tests {
     #[test]
     fn test_action_binding_clone() {
         let action = ActionBinding::set("path", "value");
-        let cloned = action.clone();
+        let cloned = action;
         if let ActionBinding::SetProperty { path, .. } = cloned {
             assert_eq!(path.to_string_path(), "path");
         }
@@ -1867,7 +1868,7 @@ mod tests {
     #[test]
     fn test_action_binding_debug() {
         let action = ActionBinding::toggle("flag");
-        let debug = format!("{:?}", action);
+        let debug = format!("{action:?}");
         assert!(debug.contains("ToggleProperty"));
     }
 
@@ -1967,7 +1968,7 @@ mod tests {
     #[test]
     fn test_binding_manager_debug() {
         let manager = BindingManager::new();
-        let debug = format!("{:?}", manager);
+        let debug = format!("{manager:?}");
         assert!(debug.contains("BindingManager"));
     }
 
@@ -1984,7 +1985,7 @@ mod tests {
             current_value: Some("value".to_string()),
             active: true,
         };
-        let cloned = binding.clone();
+        let cloned = binding;
         assert_eq!(cloned.id, BindingId(1));
     }
 
@@ -1997,7 +1998,7 @@ mod tests {
             current_value: None,
             active: true,
         };
-        let debug = format!("{:?}", binding);
+        let debug = format!("{binding:?}");
         assert!(debug.contains("ActiveBinding"));
     }
 
@@ -2013,7 +2014,7 @@ mod tests {
             value: "42".to_string(),
             timestamp: 12345,
         };
-        let cloned = update.clone();
+        let cloned = update;
         assert_eq!(cloned.timestamp, 12345);
     }
 
@@ -2025,7 +2026,7 @@ mod tests {
             value: "val".to_string(),
             timestamp: 0,
         };
-        let debug = format!("{:?}", update);
+        let debug = format!("{update:?}");
         assert!(debug.contains("PendingUpdate"));
     }
 
@@ -2038,7 +2039,7 @@ mod tests {
         let err = ConversionError {
             message: "test".to_string(),
         };
-        let debug = format!("{:?}", err);
+        let debug = format!("{err:?}");
         assert!(debug.contains("ConversionError"));
     }
 
@@ -2047,7 +2048,7 @@ mod tests {
         let err = ConversionError {
             message: "original".to_string(),
         };
-        let cloned = err.clone();
+        let cloned = err;
         assert_eq!(cloned.message, "original");
     }
 
@@ -2057,14 +2058,14 @@ mod tests {
 
     #[test]
     fn test_identity_converter_default() {
-        let converter = IdentityConverter::default();
+        let converter = IdentityConverter;
         assert_eq!(converter.convert("test").unwrap(), "test");
     }
 
     #[test]
     fn test_identity_converter_debug() {
         let converter = IdentityConverter;
-        let debug = format!("{:?}", converter);
+        let debug = format!("{converter:?}");
         assert!(debug.contains("IdentityConverter"));
     }
 
@@ -2085,7 +2086,7 @@ mod tests {
     #[test]
     fn test_bool_converter_debug() {
         let converter = BoolToStringConverter::new();
-        let debug = format!("{:?}", converter);
+        let debug = format!("{converter:?}");
         assert!(debug.contains("BoolToStringConverter"));
     }
 
@@ -2106,7 +2107,7 @@ mod tests {
     #[test]
     fn test_number_format_debug() {
         let converter = NumberFormatConverter::new().decimals(2);
-        let debug = format!("{:?}", converter);
+        let debug = format!("{converter:?}");
         assert!(debug.contains("NumberFormatConverter"));
     }
 

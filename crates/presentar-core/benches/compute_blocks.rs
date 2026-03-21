@@ -1,4 +1,4 @@
-//! Benchmark tests for ComputeBlock aggregation primitives.
+//! Benchmark tests for `ComputeBlock` aggregation primitives.
 //!
 //! Tests SIMD-friendly aggregation functions across different data sizes
 //! to verify auto-vectorization performance.
@@ -16,8 +16,8 @@ use presentar_core::simd::{
 fn bench_batch_sum_f64(c: &mut Criterion) {
     let mut group = c.benchmark_group("batch_sum_f64");
 
-    for size in [8, 64, 128, 256, 1024].iter() {
-        let data: Vec<f64> = (0..*size).map(|i| i as f64).collect();
+    for size in &[8, 64, 128, 256, 1024] {
+        let data: Vec<f64> = (0..*size).map(f64::from).collect();
 
         group.bench_with_input(BenchmarkId::from_parameter(size), &data, |b, data| {
             b.iter(|| batch_sum_f64(black_box(data)));
@@ -30,8 +30,8 @@ fn bench_batch_sum_f64(c: &mut Criterion) {
 fn bench_scalar_sum_baseline(c: &mut Criterion) {
     let mut group = c.benchmark_group("scalar_sum_baseline");
 
-    for size in [8, 64, 128, 256, 1024].iter() {
-        let data: Vec<f64> = (0..*size).map(|i| i as f64).collect();
+    for size in &[8, 64, 128, 256, 1024] {
+        let data: Vec<f64> = (0..*size).map(f64::from).collect();
 
         group.bench_with_input(BenchmarkId::from_parameter(size), &data, |b, data| {
             b.iter(|| {
@@ -51,8 +51,8 @@ fn bench_scalar_sum_baseline(c: &mut Criterion) {
 fn bench_batch_mean_f64(c: &mut Criterion) {
     let mut group = c.benchmark_group("batch_mean_f64");
 
-    for size in [8, 64, 128, 256, 1024].iter() {
-        let data: Vec<f64> = (0..*size).map(|i| i as f64).collect();
+    for size in &[8, 64, 128, 256, 1024] {
+        let data: Vec<f64> = (0..*size).map(f64::from).collect();
 
         group.bench_with_input(BenchmarkId::from_parameter(size), &data, |b, data| {
             b.iter(|| batch_mean_f64(black_box(data)));
@@ -69,8 +69,8 @@ fn bench_batch_mean_f64(c: &mut Criterion) {
 fn bench_batch_min_max_f64(c: &mut Criterion) {
     let mut group = c.benchmark_group("batch_min_max_f64");
 
-    for size in [8, 64, 128, 256, 1024].iter() {
-        let data: Vec<f64> = (0..*size).map(|i| (i % 100) as f64).collect();
+    for size in &[8, 64, 128, 256, 1024] {
+        let data: Vec<f64> = (0..*size).map(|i| f64::from(i % 100)).collect();
 
         group.bench_with_input(BenchmarkId::from_parameter(size), &data, |b, data| {
             b.iter(|| batch_min_max_f64(black_box(data)));
@@ -83,8 +83,8 @@ fn bench_batch_min_max_f64(c: &mut Criterion) {
 fn bench_scalar_min_max_baseline(c: &mut Criterion) {
     let mut group = c.benchmark_group("scalar_min_max_baseline");
 
-    for size in [8, 64, 128, 256, 1024].iter() {
-        let data: Vec<f64> = (0..*size).map(|i| (i % 100) as f64).collect();
+    for size in &[8, 64, 128, 256, 1024] {
+        let data: Vec<f64> = (0..*size).map(|i| f64::from(i % 100)).collect();
 
         group.bench_with_input(BenchmarkId::from_parameter(size), &data, |b, data| {
             b.iter(|| {
@@ -106,8 +106,8 @@ fn bench_scalar_min_max_baseline(c: &mut Criterion) {
 fn bench_normalize_f64(c: &mut Criterion) {
     let mut group = c.benchmark_group("normalize_f64");
 
-    for size in [64, 256, 1024].iter() {
-        let data: Vec<f64> = (0..*size).map(|i| i as f64).collect();
+    for size in &[64, 256, 1024] {
+        let data: Vec<f64> = (0..*size).map(f64::from).collect();
 
         group.bench_with_input(BenchmarkId::from_parameter(size), &data, |b, data| {
             b.iter(|| normalize_f64(black_box(data)));
@@ -124,8 +124,8 @@ fn bench_normalize_f64(c: &mut Criterion) {
 fn bench_batch_scale_f64(c: &mut Criterion) {
     let mut group = c.benchmark_group("batch_scale_f64");
 
-    for size in [64, 256, 1024].iter() {
-        let data: Vec<f64> = (0..*size).map(|i| i as f64).collect();
+    for size in &[64, 256, 1024] {
+        let data: Vec<f64> = (0..*size).map(f64::from).collect();
 
         group.bench_with_input(BenchmarkId::from_parameter(size), &data, |b, data| {
             b.iter(|| batch_scale_f64(black_box(data), 2.0));
@@ -142,8 +142,8 @@ fn bench_batch_scale_f64(c: &mut Criterion) {
 fn bench_batch_variance_f64(c: &mut Criterion) {
     let mut group = c.benchmark_group("batch_variance_f64");
 
-    for size in [64, 256, 1024].iter() {
-        let data: Vec<f64> = (0..*size).map(|i| (i % 100) as f64).collect();
+    for size in &[64, 256, 1024] {
+        let data: Vec<f64> = (0..*size).map(|i| f64::from(i % 100)).collect();
 
         group.bench_with_input(BenchmarkId::from_parameter(size), &data, |b, data| {
             b.iter(|| batch_variance_f64(black_box(data)));
@@ -160,9 +160,9 @@ fn bench_batch_variance_f64(c: &mut Criterion) {
 fn bench_weighted_sum_f64(c: &mut Criterion) {
     let mut group = c.benchmark_group("weighted_sum_f64");
 
-    for size in [64, 256, 1024].iter() {
-        let values: Vec<f64> = (0..*size).map(|i| i as f64).collect();
-        let weights: Vec<f64> = (0..*size).map(|i| 1.0 / (i + 1) as f64).collect();
+    for size in &[64, 256, 1024] {
+        let values: Vec<f64> = (0..*size).map(f64::from).collect();
+        let weights: Vec<f64> = (0..*size).map(|i| 1.0 / f64::from(i + 1)).collect();
 
         group.bench_with_input(
             BenchmarkId::from_parameter(size),
@@ -183,8 +183,8 @@ fn bench_weighted_sum_f64(c: &mut Criterion) {
 fn bench_histogram_f64(c: &mut Criterion) {
     let mut group = c.benchmark_group("histogram_f64");
 
-    for size in [256, 1024, 4096].iter() {
-        let data: Vec<f64> = (0..*size).map(|i| (i % 100) as f64).collect();
+    for size in &[256, 1024, 4096] {
+        let data: Vec<f64> = (0..*size).map(|i| f64::from(i % 100)).collect();
 
         group.bench_with_input(BenchmarkId::from_parameter(size), &data, |b, data| {
             b.iter(|| histogram_f64(black_box(data), 0.0, 100.0, 10));

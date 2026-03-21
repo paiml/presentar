@@ -622,8 +622,7 @@ mod tests {
         data.set_text("text");
         data.set_html("<p>html</p>");
 
-        let formats: Vec<_> = data.formats().collect();
-        assert_eq!(formats.len(), 2);
+        assert_eq!(data.formats().count(), 2);
     }
 
     // ClipboardResult tests

@@ -1,8 +1,9 @@
+#![allow(clippy::unwrap_used, clippy::disallowed_methods)]
 //! System Dashboard Example - cbtop/ttop Clone
 //!
 //! Pixel-perfect recreation of the cbtop/ttop terminal interface.
 //!
-//! Run with: cargo run -p presentar-terminal --example system_dashboard
+//! Run with: cargo run -p presentar-terminal --example `system_dashboard`
 
 use presentar_core::{Canvas, Color, Point, Rect, TextStyle, Widget};
 use presentar_terminal::direct::{CellBuffer, DiffRenderer, DirectTerminalCanvas};
@@ -111,7 +112,7 @@ fn draw_cpu_panel(canvas: &mut DirectTerminalCanvas<'_>, history: &[f64], bounds
         ..Default::default()
     };
     canvas.draw_text(
-        &format!("{:.1}%", current),
+        &format!("{current:.1}%"),
         Point::new(bounds.x + 6.0, bounds.y), // Right of "CPU" title
         &pct_style,
     );
@@ -127,8 +128,11 @@ fn draw_cpu_panel(canvas: &mut DirectTerminalCanvas<'_>, history: &[f64], bounds
     // CPU Grid
     let core_usage: Vec<f64> = (0..16)
         .map(|i| {
-            let base = 45.0 + 35.0 * ((i as f64 * 0.7) + history.len() as f64 / 10.0).sin();
-            let noise = ((i * 7919) % 40) as f64;
+            let base = 35.0f64.mul_add(
+                f64::from(i).mul_add(0.7, history.len() as f64 / 10.0).sin(),
+                45.0,
+            );
+            let noise = f64::from((i * 7919) % 40);
             (base + noise).clamp(5.0, 98.0)
         })
         .collect();
@@ -160,7 +164,7 @@ fn draw_memory_panel(canvas: &mut DirectTerminalCanvas<'_>, history: &[f64], bou
         ..Default::default()
     };
     canvas.draw_text(
-        &format!("{:.1}/{:.0} GB", used_gb, total_gb),
+        &format!("{used_gb:.1}/{total_gb:.0} GB"),
         Point::new(bounds.x + 9.0, bounds.y),
         &info_style,
     );
@@ -236,7 +240,7 @@ fn draw_disk_panel(canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
     for (i, (mount, pct)) in disks.iter().enumerate() {
         let y = inner.y + i as f32;
         // Label
-        canvas.draw_text(&format!("{:<6}", mount), Point::new(inner.x, y), &style);
+        canvas.draw_text(&format!("{mount:<6}"), Point::new(inner.x, y), &style);
 
         // Bar
         let bar_width = 15;
@@ -260,7 +264,7 @@ fn draw_disk_panel(canvas: &mut DirectTerminalCanvas<'_>, bounds: Rect) {
         );
 
         // Pct
-        canvas.draw_text(&format!("{}%", pct), Point::new(inner.x + 23.0, y), &style);
+        canvas.draw_text(&format!("{pct}%"), Point::new(inner.x + 23.0, y), &style);
     }
 }
 
@@ -327,21 +331,21 @@ fn cpu_usage_color(usage: f64) -> Color {
 // Simple simulation helpers
 fn simulate_cpu(n: usize) -> Vec<f64> {
     (0..n)
-        .map(|i| 45.0 + 35.0 * (i as f64 / 10.0).sin())
+        .map(|i| 35.0f64.mul_add((i as f64 / 10.0).sin(), 45.0))
         .collect()
 }
 fn simulate_memory(n: usize) -> Vec<f64> {
     (0..n)
-        .map(|i| 65.0 + 10.0 * (i as f64 / 20.0).sin())
+        .map(|i| 10.0f64.mul_add((i as f64 / 20.0).sin(), 65.0))
         .collect()
 }
 fn simulate_network_rx(n: usize) -> Vec<f64> {
     (0..n)
-        .map(|i| 40.0 + 30.0 * (i as f64 / 8.0).sin())
+        .map(|i| 30.0f64.mul_add((i as f64 / 8.0).sin(), 40.0))
         .collect()
 }
 fn simulate_network_tx(n: usize) -> Vec<f64> {
     (0..n)
-        .map(|i| 15.0 + 10.0 * (i as f64 / 6.0).cos())
+        .map(|i| 10.0f64.mul_add((i as f64 / 6.0).cos(), 15.0))
         .collect()
 }

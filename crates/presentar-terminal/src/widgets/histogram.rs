@@ -572,6 +572,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn test_histogram_verify() {
         let mut hist = Histogram::default();
         hist.bounds = Rect::new(0.0, 0.0, 60.0, 15.0);
@@ -790,6 +791,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn test_histogram_verify_small_bounds() {
         let mut hist = Histogram::default();
         hist.bounds = Rect::new(0.0, 0.0, 2.0, 1.0);

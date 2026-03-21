@@ -1,9 +1,10 @@
+#![allow(clippy::unwrap_used, clippy::disallowed_methods)]
 //! ML Inference Server Monitor
 //!
 //! Demonstrates monitoring an ML inference server with request
 //! latency, throughput, and model performance metrics.
 //!
-//! Run with: cargo run -p presentar-terminal --example inference_server
+//! Run with: cargo run -p presentar-terminal --example `inference_server`
 
 use presentar_core::{Canvas, Color, Point, Rect, TextStyle, Widget};
 use presentar_terminal::direct::{CellBuffer, DiffRenderer, DirectTerminalCanvas};
@@ -80,7 +81,7 @@ fn main() {
     let cells_written = renderer.flush(&mut buffer, &mut output).unwrap();
 
     println!("Buffer: {}x{}", buffer.width(), buffer.height());
-    println!("Cells written: {}", cells_written);
+    println!("Cells written: {cells_written}");
     println!("Output bytes: {}\n", output.len());
 
     println!("Rendered output:");
@@ -146,12 +147,12 @@ fn draw_latency_panel(canvas: &mut DirectTerminalCanvas<'_>, history: &[f64], bo
     };
 
     canvas.draw_text(
-        &format!("P50:{:.0}", p50),
+        &format!("P50:{p50:.0}"),
         Point::new(bounds.x + 22.0, bounds.y),
         &p50_style,
     );
     canvas.draw_text(
-        &format!("P99:{:.0}", p99),
+        &format!("P99:{p99:.0}"),
         Point::new(bounds.x + 30.0, bounds.y),
         &p99_style,
     );
@@ -195,7 +196,7 @@ fn draw_throughput_panel(canvas: &mut DirectTerminalCanvas<'_>, history: &[f64],
         ..Default::default()
     };
     canvas.draw_text(
-        &format!("{:.0}", current),
+        &format!("{current:.0}"),
         Point::new(bounds.x + 22.0, bounds.y),
         &value_style,
     );
@@ -240,7 +241,7 @@ fn draw_queue_panel(canvas: &mut DirectTerminalCanvas<'_>, history: &[f64], boun
         ..Default::default()
     };
     canvas.draw_text(
-        &format!("{:.0}", current),
+        &format!("{current:.0}"),
         Point::new(bounds.x + 22.0, bounds.y),
         &value_style,
     );
@@ -275,14 +276,14 @@ fn draw_request_breakdown(canvas: &mut DirectTerminalCanvas<'_>, x: f32, y: f32)
 
     for (i, (name, count, color)) in items.iter().enumerate() {
         let row_y = y + 1.0 + (i / 2) as f32;
-        let col_x = x + (i % 2) as f32 * 18.0;
+        let col_x = ((i % 2) as f32).mul_add(18.0, x);
 
         let style = TextStyle {
             color: *color,
             ..Default::default()
         };
         canvas.draw_text(
-            &format!("{}: {}", name, count),
+            &format!("{name}: {count}"),
             Point::new(col_x, row_y),
             &style,
         );
@@ -407,7 +408,7 @@ fn draw_footer(canvas: &mut DirectTerminalCanvas<'_>) {
 fn simulate_latency(count: usize) -> Vec<f64> {
     (0..count)
         .map(|i| {
-            let base = 45.0 + 30.0 * (i as f64 / 15.0).sin();
+            let base = 30.0f64.mul_add((i as f64 / 15.0).sin(), 45.0);
             let spike = if i % 18 == 0 { 80.0 } else { 0.0 };
             let noise = ((i * 7919) % 30) as f64;
             (base + spike + noise).max(10.0)
@@ -418,7 +419,7 @@ fn simulate_latency(count: usize) -> Vec<f64> {
 fn simulate_throughput(count: usize) -> Vec<f64> {
     (0..count)
         .map(|i| {
-            let base = 100.0 + 30.0 * (i as f64 / 12.0).cos();
+            let base = 30.0f64.mul_add((i as f64 / 12.0).cos(), 100.0);
             let noise = ((i * 6971) % 40) as f64;
             (base + noise).max(20.0)
         })
@@ -428,7 +429,7 @@ fn simulate_throughput(count: usize) -> Vec<f64> {
 fn simulate_queue_depth(count: usize) -> Vec<f64> {
     (0..count)
         .map(|i| {
-            let base = 25.0 + 20.0 * (i as f64 / 8.0).sin();
+            let base = 20.0f64.mul_add((i as f64 / 8.0).sin(), 25.0);
             let spike = if i % 12 == 0 { 50.0 } else { 0.0 };
             let noise = ((i * 1103) % 20) as f64;
             (base + spike + noise).max(0.0)

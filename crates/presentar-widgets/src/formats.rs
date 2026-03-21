@@ -183,6 +183,7 @@ pub fn load_ald_as_card(data: &[u8], name: &str) -> Result<DataCard, presentar_y
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
     use presentar_yaml::formats::{DType, ModelLayer, Tensor};
@@ -227,8 +228,8 @@ mod tests {
         assert_eq!(format_bytes(500), "500 B");
         assert_eq!(format_bytes(1024), "1.0 KB");
         assert_eq!(format_bytes(1536), "1.5 KB");
-        assert_eq!(format_bytes(1048576), "1.0 MB");
-        assert_eq!(format_bytes(1073741824), "1.0 GB");
+        assert_eq!(format_bytes(1_048_576), "1.0 MB");
+        assert_eq!(format_bytes(1_073_741_824), "1.0 GB");
     }
 
     #[test]
@@ -263,12 +264,13 @@ mod tests {
     #[test]
     fn test_apr_model_with_all_metrics() {
         let mut model = AprModel::new("Classifier");
+        let kernel_data = vec![0.0_f32; 73_728];
         model.layers.push(ModelLayer {
             layer_type: "conv2d".to_string(),
             parameters: vec![Tensor::from_f32(
                 "kernel",
                 vec![3, 3, 64, 128],
-                &[0.0; 73728],
+                &kernel_data,
             )],
         });
         model
@@ -329,10 +331,11 @@ mod tests {
     #[test]
     fn test_apr_model_multiple_layers() {
         let mut model = AprModel::new("DeepNet");
+        let w1_data = vec![0.0_f32; 200_704];
         model.layers.push(ModelLayer {
             layer_type: "dense".to_string(),
             parameters: vec![
-                Tensor::from_f32("w1", vec![784, 256], &[0.0; 200704]),
+                Tensor::from_f32("w1", vec![784, 256], &w1_data),
                 Tensor::from_f32("b1", vec![256], &[0.0; 256]),
             ],
         });
@@ -351,7 +354,7 @@ mod tests {
         let card = model.to_model_card();
 
         // 200704 + 256 + 2560 + 10 = 203530
-        assert_eq!(card.get_parameters(), Some(203530));
+        assert_eq!(card.get_parameters(), Some(203_530));
     }
 
     #[test]
@@ -395,9 +398,11 @@ mod tests {
     #[test]
     fn test_ald_multiple_tensors() {
         let mut dataset = AldDataset::new();
-        dataset.add_tensor(Tensor::from_f32("train_x", vec![1000, 784], &[0.0; 784000]));
+        let train_x = vec![0.0_f32; 784_000];
+        let test_x = vec![0.0_f32; 78_400];
+        dataset.add_tensor(Tensor::from_f32("train_x", vec![1000, 784], &train_x));
         dataset.add_tensor(Tensor::from_f32("train_y", vec![1000], &[0.0; 1000]));
-        dataset.add_tensor(Tensor::from_f32("test_x", vec![100, 784], &[0.0; 78400]));
+        dataset.add_tensor(Tensor::from_f32("test_x", vec![100, 784], &test_x));
         dataset.add_tensor(Tensor::from_f32("test_y", vec![100], &[0.0; 100]));
 
         let card = dataset.to_data_card("mnist");
@@ -468,9 +473,9 @@ mod tests {
         // 1.5 KB = 1536 bytes
         assert_eq!(format_bytes(1536), "1.5 KB");
         // 2.5 MB
-        assert_eq!(format_bytes(2621440), "2.5 MB");
+        assert_eq!(format_bytes(2_621_440), "2.5 MB");
         // 3.25 GB
-        assert_eq!(format_bytes(3489660928), "3.2 GB");
+        assert_eq!(format_bytes(3_489_660_928), "3.2 GB");
     }
 
     // =========================================================================

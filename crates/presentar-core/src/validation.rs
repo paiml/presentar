@@ -1088,7 +1088,7 @@ mod tests {
     #[test]
     fn test_validation_result_debug() {
         let result = ValidationResult::Valid;
-        let debug = format!("{:?}", result);
+        let debug = format!("{result:?}");
         assert!(debug.contains("Valid"));
     }
 
@@ -1130,7 +1130,7 @@ mod tests {
     #[test]
     fn test_required_clone() {
         let validator = Required::with_message("custom");
-        let cloned = validator.clone();
+        let cloned = validator;
         assert_eq!(cloned.message, "custom");
     }
 
@@ -1171,7 +1171,7 @@ mod tests {
     #[test]
     fn test_min_length_clone() {
         let validator = MinLength::new(5);
-        let cloned = validator.clone();
+        let cloned = validator;
         assert_eq!(cloned.min, 5);
     }
 
@@ -1219,7 +1219,7 @@ mod tests {
     #[test]
     fn test_max_length_clone() {
         let validator = MaxLength::new(10);
-        let cloned = validator.clone();
+        let cloned = validator;
         assert_eq!(cloned.max, 10);
     }
 
@@ -1273,7 +1273,7 @@ mod tests {
     #[test]
     fn test_range_clone() {
         let validator = Range::new(0.0, 100.0);
-        let cloned = validator.clone();
+        let cloned = validator;
         assert_eq!(cloned.min, 0.0);
         assert_eq!(cloned.max, 100.0);
     }
@@ -1362,7 +1362,7 @@ mod tests {
     #[test]
     fn test_pattern_clone() {
         let validator = Pattern::email();
-        let cloned = validator.clone();
+        let cloned = validator;
         assert!(cloned.validate("test@example.com").is_valid());
     }
 
@@ -1413,7 +1413,7 @@ mod tests {
     #[test]
     fn test_pattern_custom_glob_empty() {
         let pattern = Pattern {
-            pattern: PatternType::Custom("".to_string()),
+            pattern: PatternType::Custom(String::new()),
             message: "error".to_string(),
         };
         // Empty pattern matches anything
@@ -1440,7 +1440,7 @@ mod tests {
     #[test]
     fn test_custom_validator_debug() {
         let validator = Custom::new("test", |_| ValidationResult::Valid);
-        let debug = format!("{:?}", validator);
+        let debug = format!("{validator:?}");
         assert!(debug.contains("Custom"));
         assert!(debug.contains("test"));
     }
@@ -1535,7 +1535,7 @@ mod tests {
     #[test]
     fn test_field_config_debug() {
         let config = FieldConfig::new().required().min_length(3);
-        let debug = format!("{:?}", config);
+        let debug = format!("{config:?}");
         assert!(debug.contains("FieldConfig"));
         assert!(debug.contains("validator_count"));
     }
@@ -1567,7 +1567,7 @@ mod tests {
     #[test]
     fn test_validate_on_debug() {
         let trigger = ValidateOn::Submit;
-        let debug = format!("{:?}", trigger);
+        let debug = format!("{trigger:?}");
         assert!(debug.contains("Submit"));
     }
 
@@ -1675,7 +1675,7 @@ mod tests {
     #[test]
     fn test_form_validator_debug() {
         let form = FormValidator::new();
-        let debug = format!("{:?}", form);
+        let debug = format!("{form:?}");
         assert!(debug.contains("FormValidator"));
     }
 

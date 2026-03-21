@@ -2,7 +2,7 @@
 //!
 //! Validates that widget text uses visible colors (not black on dark background).
 
-use presentar_core::{Color, Rect, TextStyle};
+use presentar_core::{Color, Rect};
 use presentar_terminal::{
     CellBuffer, DirectTerminalCanvas, NetworkInterface, NetworkPanel, ProcessEntry, ProcessState,
     ProcessTable,
@@ -19,6 +19,7 @@ fn contains_pid_digit(sym: &str) -> bool {
 }
 
 /// Check if symbol could be part of username.
+#[allow(dead_code)]
 fn is_username_char(sym: &str) -> bool {
     sym == "t" || sym == "e" || sym == "s"
 }
@@ -44,7 +45,7 @@ fn create_test_process() -> ProcessEntry {
     }
 }
 
-/// Test that ProcessTable renders with proper colors.
+/// Test that `ProcessTable` renders with proper colors.
 #[test]
 fn test_process_table_renders_visible_text() {
     use presentar_core::Widget;
@@ -77,9 +78,11 @@ fn test_process_table_renders_visible_text() {
     assert!(found_pid, "Should find PID digits in rendered output");
 }
 
-/// Test that NetworkPanel renders interface names with visible colors.
+/// Test that `NetworkPanel` renders interface names with visible colors.
 #[test]
 fn test_network_panel_renders_visible_text() {
+    use presentar_core::Widget;
+
     // Create a network panel with test data
     let mut panel = NetworkPanel::new().compact();
     let mut iface = NetworkInterface::new("eth0");
@@ -91,7 +94,6 @@ fn test_network_panel_renders_visible_text() {
     let mut canvas = DirectTerminalCanvas::new(&mut buffer);
 
     // Layout and paint
-    use presentar_core::Widget;
     panel.layout(Rect::new(0.0, 0.0, 80.0, 5.0));
     panel.paint(&mut canvas);
 

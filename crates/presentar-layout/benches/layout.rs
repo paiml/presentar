@@ -218,7 +218,7 @@ fn bench_grid_auto_placement(c: &mut Criterion) {
         let items: Vec<GridItem> = (0..24).map(|_| GridItem::new()).collect();
 
         b.iter(|| {
-            auto_place_items(
+            let _ = auto_place_items(
                 black_box(&template),
                 black_box(&items),
                 black_box(GridAutoFlow::RowDense),

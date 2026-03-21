@@ -7,8 +7,8 @@
 //! means the falsification criterion was NOT met (i.e., the implementation is correct).
 
 use presentar_terminal::widgets::{
-    BorderStyle, BrailleSymbols, CustomSymbols, SymbolSet, BLOCK_DOWN, BLOCK_UP, BRAILLE_DOWN,
-    BRAILLE_UP, SPARKLINE, SUBSCRIPT, SUPERSCRIPT, TTY_DOWN, TTY_UP,
+    BorderStyle, BrailleSymbols, CustomSymbols, SymbolSet, BLOCK_UP, BRAILLE_DOWN, BRAILLE_UP,
+    SPARKLINE, SUBSCRIPT, SUPERSCRIPT, TTY_DOWN, TTY_UP,
 };
 
 // =============================================================================
@@ -151,8 +151,7 @@ fn f009_sparkline_range_is_correct() {
     let expected = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
     assert_eq!(
         SPARKLINE, expected,
-        "F009 FAILED: SPARKLINE should be {:?}, got {:?}",
-        expected, SPARKLINE
+        "F009 FAILED: SPARKLINE should be {expected:?}, got {SPARKLINE:?}"
     );
 }
 
@@ -175,8 +174,7 @@ fn f010_superscript_has_10_digits() {
     let expected = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹'];
     assert_eq!(
         SUPERSCRIPT, expected,
-        "F010 FAILED: SUPERSCRIPT should be {:?}, got {:?}",
-        expected, SUPERSCRIPT
+        "F010 FAILED: SUPERSCRIPT should be {expected:?}, got {SUPERSCRIPT:?}"
     );
 }
 
@@ -195,8 +193,7 @@ fn f011_subscript_has_10_digits() {
     let expected = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'];
     assert_eq!(
         SUBSCRIPT, expected,
-        "F011 FAILED: SUBSCRIPT should be {:?}, got {:?}",
-        expected, SUBSCRIPT
+        "F011 FAILED: SUBSCRIPT should be {expected:?}, got {SUBSCRIPT:?}"
     );
 }
 
@@ -218,8 +215,7 @@ fn f012_braille_index_formula_correct() {
             let actual = sym.char_pair(left, right);
             assert_eq!(
                 actual, expected,
-                "F012 FAILED: char_pair({}, {}) should be '{}', got '{}'",
-                left, right, expected, actual
+                "F012 FAILED: char_pair({left}, {right}) should be '{expected}', got '{actual}'"
             );
         }
     }
@@ -229,7 +225,7 @@ fn f012_braille_index_formula_correct() {
 /// Falsification criterion: `BRAILLE_UP[20] != '⡇'`
 #[test]
 fn f013_braille_left_4_right_0() {
-    let idx = 4 * 5 + 0; // left=4, right=0
+    let idx = 4 * 5; // left=4, right=0
     assert_eq!(
         BRAILLE_UP[idx], '⡇',
         "F013 FAILED: BRAILLE_UP[{}] (left=4,right=0) should be '⡇', got '{}'",
@@ -241,7 +237,7 @@ fn f013_braille_left_4_right_0() {
 /// Falsification criterion: `BRAILLE_UP[4] != '⢸'`
 #[test]
 fn f014_braille_left_0_right_4() {
-    let idx = 0 * 5 + 4; // left=0, right=4
+    let idx = 4; // left=0, right=4
     assert_eq!(
         BRAILLE_UP[idx], '⢸',
         "F014 FAILED: BRAILLE_UP[{}] (left=0,right=4) should be '⢸', got '{}'",
@@ -254,7 +250,7 @@ fn f014_braille_left_0_right_4() {
 // =============================================================================
 
 /// F015: Block chars progressive
-/// Falsification criterion: BLOCK_UP not monotonically increasing
+/// Falsification criterion: `BLOCK_UP` not monotonically increasing
 #[test]
 fn f015_block_chars_progressive() {
     // First row (left=0): ' ', '▁', '▂', '▃', '▄'
@@ -296,10 +292,7 @@ fn f016_unicode_braille_range() {
         let codepoint = ch as u32;
         assert!(
             (0x2800..=0x28FF).contains(&codepoint),
-            "F016 FAILED: BRAILLE_UP[{}] = '{}' (U+{:04X}) is outside U+2800-U+28FF",
-            i,
-            ch,
-            codepoint
+            "F016 FAILED: BRAILLE_UP[{i}] = '{ch}' (U+{codepoint:04X}) is outside U+2800-U+28FF"
         );
     }
 
@@ -310,10 +303,7 @@ fn f016_unicode_braille_range() {
         let codepoint = ch as u32;
         assert!(
             (0x2800..=0x28FF).contains(&codepoint),
-            "F016 FAILED: BRAILLE_DOWN[{}] = '{}' (U+{:04X}) is outside U+2800-U+28FF",
-            i,
-            ch,
-            codepoint
+            "F016 FAILED: BRAILLE_DOWN[{i}] = '{ch}' (U+{codepoint:04X}) is outside U+2800-U+28FF"
         );
     }
 }
@@ -323,7 +313,7 @@ fn f016_unicode_braille_range() {
 // =============================================================================
 
 /// F017: Braille down inverted
-/// Falsification criterion: BRAILLE_DOWN[24] != '⣿'
+/// Falsification criterion: `BRAILLE_DOWN`[24] != '⣿'
 #[test]
 fn f017_braille_down_full_is_full() {
     assert_eq!(
@@ -410,6 +400,10 @@ fn f020_box_drawing_chars_present() {
     let required_rounded = ['─', '│', '╭', '╮', '╰', '╯'];
     let required_double = ['═', '║', '╔', '╗', '╚', '╝'];
     let required_heavy = ['━', '┃', '┏', '┓', '┗', '┛'];
+    assert_eq!(required_single.len(), 6);
+    assert_eq!(required_rounded.len(), 6);
+    assert_eq!(required_double.len(), 6);
+    assert_eq!(required_heavy.len(), 6);
 
     // BorderStyle::Single
     let (tl, top, tr, left, right, bl, bottom, br) = BorderStyle::Single.chars();
@@ -423,14 +417,14 @@ fn f020_box_drawing_chars_present() {
     assert_eq!(right, '│', "F020: Single right");
 
     // BorderStyle::Rounded
-    let (tl, top, tr, left, right, bl, bottom, br) = BorderStyle::Rounded.chars();
+    let (tl, _top, tr, _left, _right, bl, _bottom, br) = BorderStyle::Rounded.chars();
     assert_eq!(tl, '╭', "F020: Rounded top-left");
     assert_eq!(tr, '╮', "F020: Rounded top-right");
     assert_eq!(bl, '╰', "F020: Rounded bottom-left");
     assert_eq!(br, '╯', "F020: Rounded bottom-right");
 
     // BorderStyle::Double
-    let (tl, top, tr, left, right, bl, bottom, br) = BorderStyle::Double.chars();
+    let (tl, top, tr, left, _right, bl, _bottom, br) = BorderStyle::Double.chars();
     assert_eq!(tl, '╔', "F020: Double top-left");
     assert_eq!(tr, '╗', "F020: Double top-right");
     assert_eq!(bl, '╚', "F020: Double bottom-left");
@@ -439,7 +433,7 @@ fn f020_box_drawing_chars_present() {
     assert_eq!(left, '║', "F020: Double left");
 
     // BorderStyle::Heavy
-    let (tl, top, tr, left, right, bl, bottom, br) = BorderStyle::Heavy.chars();
+    let (tl, top, tr, left, _right, bl, _bottom, br) = BorderStyle::Heavy.chars();
     assert_eq!(tl, '┏', "F020: Heavy top-left");
     assert_eq!(tr, '┓', "F020: Heavy top-right");
     assert_eq!(bl, '┗', "F020: Heavy bottom-left");
@@ -448,13 +442,13 @@ fn f020_box_drawing_chars_present() {
     assert_eq!(left, '┃', "F020: Heavy left");
 
     // BorderStyle::Ascii
-    let (tl, top, tr, left, right, bl, bottom, br) = BorderStyle::Ascii.chars();
+    let (tl, top, _tr, left, _right, _bl, _bottom, _br) = BorderStyle::Ascii.chars();
     assert_eq!(tl, '+', "F020: Ascii corner");
     assert_eq!(top, '-', "F020: Ascii horizontal");
     assert_eq!(left, '|', "F020: Ascii vertical");
 
     // BorderStyle::None
-    let (tl, top, tr, left, right, bl, bottom, br) = BorderStyle::None.chars();
+    let (tl, top, _tr, _left, _right, _bl, _bottom, _br) = BorderStyle::None.chars();
     assert_eq!(tl, ' ', "F020: None should be spaces");
     assert_eq!(top, ' ', "F020: None should be spaces");
 }
@@ -463,15 +457,15 @@ fn f020_box_drawing_chars_present() {
 // Additional Symbol Validation Tests
 // =============================================================================
 
-/// Verify BRAILLE_UP and BRAILLE_DOWN have unique non-space characters
+/// Verify `BRAILLE_UP` and `BRAILLE_DOWN` have unique non-space characters
 #[test]
 fn braille_arrays_have_unique_chars() {
     use std::collections::HashSet;
 
     let mut up_set: HashSet<char> = HashSet::new();
-    for &ch in BRAILLE_UP.iter() {
+    for &ch in &BRAILLE_UP {
         if ch != ' ' {
-            assert!(up_set.insert(ch), "Duplicate in BRAILLE_UP: '{}'", ch);
+            assert!(up_set.insert(ch), "Duplicate in BRAILLE_UP: '{ch}'");
         }
     }
     assert_eq!(
@@ -481,9 +475,9 @@ fn braille_arrays_have_unique_chars() {
     );
 
     let mut down_set: HashSet<char> = HashSet::new();
-    for &ch in BRAILLE_DOWN.iter() {
+    for &ch in &BRAILLE_DOWN {
         if ch != ' ' {
-            assert!(down_set.insert(ch), "Duplicate in BRAILLE_DOWN: '{}'", ch);
+            assert!(down_set.insert(ch), "Duplicate in BRAILLE_DOWN: '{ch}'");
         }
     }
     assert_eq!(
@@ -507,10 +501,7 @@ fn block_chars_in_unicode_range() {
         let cp = ch as u32;
         assert!(
             block_range.contains(&cp),
-            "BLOCK_UP[{}] = '{}' (U+{:04X}) outside block elements range",
-            i,
-            ch,
-            cp
+            "BLOCK_UP[{i}] = '{ch}' (U+{cp:04X}) outside block elements range"
         );
     }
 }
@@ -552,24 +543,23 @@ fn subscript_chars_in_unicode_range() {
         let expected = 0x2080 + i as u32;
         assert_eq!(
             cp, expected,
-            "SUBSCRIPT[{}] = '{}' (U+{:04X}) should be U+{:04X}",
-            i, ch, cp, expected
+            "SUBSCRIPT[{i}] = '{ch}' (U+{cp:04X}) should be U+{expected:04X}"
         );
     }
 }
 
-/// Verify BrailleSymbols helper functions work correctly
+/// Verify `BrailleSymbols` helper functions work correctly
 #[test]
 fn braille_symbols_helpers_correct() {
     // to_superscript
     assert_eq!(BrailleSymbols::to_superscript(0), "⁰");
     assert_eq!(BrailleSymbols::to_superscript(123), "¹²³");
-    assert_eq!(BrailleSymbols::to_superscript(1234567890), "¹²³⁴⁵⁶⁷⁸⁹⁰");
+    assert_eq!(BrailleSymbols::to_superscript(1_234_567_890), "¹²³⁴⁵⁶⁷⁸⁹⁰");
 
     // to_subscript
     assert_eq!(BrailleSymbols::to_subscript(0), "₀");
     assert_eq!(BrailleSymbols::to_subscript(123), "₁₂₃");
-    assert_eq!(BrailleSymbols::to_subscript(1234567890), "₁₂₃₄₅₆₇₈₉₀");
+    assert_eq!(BrailleSymbols::to_subscript(1_234_567_890), "₁₂₃₄₅₆₇₈₉₀");
 
     // sparkline_char
     assert_eq!(BrailleSymbols::sparkline_char(0.0), '▁');

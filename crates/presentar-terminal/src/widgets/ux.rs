@@ -403,7 +403,7 @@ mod tests {
 
         let unknown = HealthStatus::Unknown.colored_symbol();
         assert!(unknown.contains("\x1b[90m")); // Gray
-        assert!(unknown.contains("?"));
+        assert!(unknown.contains('?'));
     }
 
     #[test]

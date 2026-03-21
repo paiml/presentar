@@ -1,9 +1,10 @@
+#![allow(clippy::unwrap_used, clippy::disallowed_methods)]
 //! Memory Monitor Example
 //!
 //! Demonstrates memory usage visualization with meters and graphs.
 //! Similar to btop/htop memory panels.
 //!
-//! Run with: cargo run -p presentar-terminal --example memory_monitor
+//! Run with: cargo run -p presentar-terminal --example `memory_monitor`
 
 use presentar_core::{Canvas, Color, Point, Rect, TextStyle, Widget};
 use presentar_terminal::direct::{CellBuffer, DiffRenderer, DirectTerminalCanvas};
@@ -93,7 +94,7 @@ fn main() {
     let cells_written = renderer.flush(&mut buffer, &mut output).unwrap();
 
     println!("Buffer: {}x{}", buffer.width(), buffer.height());
-    println!("Cells written: {}", cells_written);
+    println!("Cells written: {cells_written}");
     println!("Output bytes: {}\n", output.len());
 
     println!("Rendered output:");
@@ -123,7 +124,7 @@ fn draw_memory_section(
 
     let pct = (used / total) * 100.0;
     canvas.draw_text(
-        &format!("{} [{:5.1}% - {:.1}/{:.1} GB]", label, pct, used, total),
+        &format!("{label} [{pct:5.1}% - {used:.1}/{total:.1} GB]"),
         Point::new(bounds.x, bounds.y),
         &label_style,
     );
@@ -164,6 +165,7 @@ fn draw_memory_section(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_memory_breakdown(
     canvas: &mut DirectTerminalCanvas<'_>,
     used: f64,
@@ -199,7 +201,7 @@ fn draw_memory_breakdown(
 
         let pct = (value / total) * 100.0;
         canvas.draw_text(
-            &format!("{:>10}: {:6.2} GB ({:5.1}%)", name, value, pct),
+            &format!("{name:>10}: {value:6.2} GB ({pct:5.1}%)"),
             Point::new(x + col, y + 1.0 + row),
             &item_style,
         );
@@ -227,7 +229,7 @@ fn draw_top_processes(canvas: &mut DirectTerminalCanvas<'_>, x: f32, y: f32) {
 fn simulate_memory_history(count: usize) -> Vec<f64> {
     (0..count)
         .map(|i| {
-            let base = 16.0 + 4.0 * (i as f64 / 20.0).sin();
+            let base = 4.0f64.mul_add((i as f64 / 20.0).sin(), 16.0);
             let noise = ((i * 7919) % 20) as f64 / 10.0;
             base + noise
         })
@@ -237,7 +239,7 @@ fn simulate_memory_history(count: usize) -> Vec<f64> {
 fn simulate_swap_history(count: usize) -> Vec<f64> {
     (0..count)
         .map(|i| {
-            let base = 0.8 + 0.5 * (i as f64 / 15.0).sin();
+            let base = 0.5f64.mul_add((i as f64 / 15.0).sin(), 0.8);
             let noise = ((i * 6971) % 10) as f64 / 20.0;
             base + noise
         })

@@ -1656,6 +1656,7 @@ impl SpringAnimation {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
 
@@ -3450,6 +3451,6 @@ mod tests {
 
         // With 100ms interval over 1000ms, should refresh ~10 times
         // (at 0, 100, 200, 300, 400, 500, 600, 700, 800, 900)
-        assert!(refresh_count >= 9 && refresh_count <= 11);
+        assert!((9..=11).contains(&refresh_count));
     }
 }

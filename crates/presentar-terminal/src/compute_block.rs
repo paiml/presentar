@@ -540,6 +540,7 @@ impl TrendDirection {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
 
@@ -1402,6 +1403,7 @@ impl ComputeBlock for GpuVramBlock {
 
 // Additional tests for new blocks
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod new_block_tests {
     use super::*;
 
@@ -2111,6 +2113,7 @@ impl ComputeBlock for MetricsCacheBlock {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod metrics_cache_tests {
     use super::*;
 

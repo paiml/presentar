@@ -125,7 +125,7 @@ mod tests {
 
         for _ in 0..100 {
             let v = rng.next_f64_range(0.0, 100.0);
-            assert!(v >= 0.0 && v < 100.0);
+            assert!((0.0..100.0).contains(&v));
         }
     }
 
@@ -172,7 +172,7 @@ mod tests {
         let mut rng = DeterministicRng::new(12345);
         for _ in 0..100 {
             let val = rng.next_f64();
-            assert!(val >= 0.0 && val < 1.0);
+            assert!((0.0..1.0).contains(&val));
         }
     }
 
@@ -181,7 +181,7 @@ mod tests {
         let mut rng = DeterministicRng::new(42);
         for _ in 0..100 {
             let val = rng.next_f64_range(-50.0, 50.0);
-            assert!(val >= -50.0 && val < 50.0);
+            assert!((-50.0..50.0).contains(&val));
         }
     }
 
@@ -210,10 +210,10 @@ mod tests {
     fn test_deterministic_rng_clone() {
         let mut rng1 = DeterministicRng::new(42);
         let _ = rng1.next_u64();
-        let rng2 = rng1.clone();
+        let mut rng2 = rng1.clone();
 
         // Both should produce same value now
-        assert_eq!(rng1.next_u64(), rng2.clone().next_u64());
+        assert_eq!(rng1.next_u64(), rng2.next_u64());
     }
 
     #[test]

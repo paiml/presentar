@@ -14,8 +14,8 @@
 //!
 //! # The Fix This Test Enforces
 //!
-//! 1. `MetricsSnapshot` MUST include per_core_freq and per_core_temp
-//! 2. `App` MUST have per_core_freq and per_core_temp fields
+//! 1. `MetricsSnapshot` MUST include `per_core_freq` and `per_core_temp`
+//! 2. `App` MUST have `per_core_freq` and `per_core_temp` fields
 //! 3. `apply_snapshot()` MUST transfer freq/temp data to App
 //! 4. `draw_cpu_exploded` MUST read from App fields, not app.system
 

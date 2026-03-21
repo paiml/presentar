@@ -841,7 +841,7 @@ mod tests {
 
         let diff = snap1.diff(&snap2);
         assert!(!diff.matches);
-        assert!(diff.differences.len() > 0);
+        assert!(!diff.differences.is_empty());
     }
 
     #[test]
@@ -930,7 +930,7 @@ mod tests {
     ///
     /// The implementation MUST satisfy this interface.
     #[test]
-    #[ignore] // Enable when implementing
+    #[ignore = "Enable when MetricsSnapshot includes freq/temp"]
     fn test_exploded_cpu_receives_async_freq_temp_updates() {
         // This test will fail until MetricsSnapshot includes freq/temp
         // and apply_snapshot transfers them to App fields

@@ -625,7 +625,7 @@ mod tests {
         let densities = data.densities.as_ref().expect("computed above");
         assert_eq!(densities.len(), 20);
         // Should be normalized to [0, 1]
-        assert!(densities.iter().all(|&d| d >= 0.0 && d <= 1.0));
+        assert!(densities.iter().all(|&d| (0.0..=1.0).contains(&d)));
     }
 
     #[test]
@@ -809,6 +809,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn test_violin_plot_verify_valid() {
         let mut plot = ViolinPlot::default();
         plot.bounds = Rect::new(0.0, 0.0, 60.0, 20.0);
@@ -816,6 +817,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn test_violin_plot_verify_invalid() {
         let mut plot = ViolinPlot::default();
         plot.bounds = Rect::new(0.0, 0.0, 3.0, 3.0);
@@ -947,7 +949,7 @@ mod tests {
     fn test_violin_kde_scalar_and_simd_match() {
         // Test that both paths produce similar results
         let values: Vec<f64> = (0..150).map(|i| i as f64 / 10.0).collect();
-        let data = ViolinData::new("Test", values.clone());
+        let data = ViolinData::new("Test", values);
 
         let x = 7.5;
         let bandwidth = 0.5;

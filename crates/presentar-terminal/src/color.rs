@@ -187,19 +187,19 @@ mod tests {
     fn test_256_color_cube() {
         // Pure red (should be in color cube)
         let red = ColorMode::rgb_to_256(255, 0, 0);
-        assert!(red >= 16 && red <= 231);
+        assert!((16..=231).contains(&red));
 
         // Pure green
         let green = ColorMode::rgb_to_256(0, 255, 0);
-        assert!(green >= 16 && green <= 231);
+        assert!((16..=231).contains(&green));
 
         // Pure blue
         let blue = ColorMode::rgb_to_256(0, 0, 255);
-        assert!(blue >= 16 && blue <= 231);
+        assert!((16..=231).contains(&blue));
 
         // Magenta
         let magenta = ColorMode::rgb_to_256(255, 0, 255);
-        assert!(magenta >= 16 && magenta <= 231);
+        assert!((16..=231).contains(&magenta));
     }
 
     #[test]
@@ -389,15 +389,15 @@ mod tests {
     fn test_256_mixed_colors() {
         // Orange-ish
         let orange = ColorMode::rgb_to_256(255, 128, 0);
-        assert!(orange >= 16 && orange <= 231);
+        assert!((16..=231).contains(&orange));
 
         // Purple-ish
         let purple = ColorMode::rgb_to_256(128, 0, 255);
-        assert!(purple >= 16 && purple <= 231);
+        assert!((16..=231).contains(&purple));
 
         // Teal-ish
         let teal = ColorMode::rgb_to_256(0, 128, 128);
-        assert!(teal >= 16 && teal <= 231);
+        assert!((16..=231).contains(&teal));
     }
 
     // Additional tests for better coverage
@@ -521,11 +521,11 @@ mod tests {
         // Test color cube corner values
         // (0,0,0) in cube
         let c000 = ColorMode::rgb_to_256(1, 1, 2); // Not grayscale, maps to cube
-        assert!(c000 >= 16 && c000 <= 231);
+        assert!((16..=231).contains(&c000));
 
         // (5,5,5) in cube = 16 + 36*5 + 6*5 + 5 = 16 + 180 + 30 + 5 = 231
         let c555 = ColorMode::rgb_to_256(254, 254, 255); // Max non-grayscale
-        assert!(c555 >= 16 && c555 <= 231);
+        assert!((16..=231).contains(&c555));
     }
 
     #[test]
@@ -566,19 +566,20 @@ mod tests {
         // Mid gray
         let gray = mode.to_crossterm(Color::new(0.5, 0.5, 0.5, 1.0));
         if let CrosstermColor::AnsiValue(v) = gray {
-            assert!(v >= 232 || (v >= 16 && v <= 231));
+            assert!(v >= 232 || ((16..=231).contains(&v)));
         }
     }
 
     #[test]
+    #[allow(clippy::absurd_extreme_comparisons)]
     fn test_rgb_to_256_extensive() {
         // Test various color combinations to ensure full cube coverage
         for r in [0, 51, 102, 153, 204, 255] {
             for g in [0, 51, 102, 153, 204, 255] {
                 for b in [0, 51, 102, 153, 204, 255] {
                     let result = ColorMode::rgb_to_256(r, g, b);
-                    // Result should always be in valid range
-                    assert!(result <= 255);
+                    // Result should be a valid ANSI color (u8)
+                    let _ = result;
                 }
             }
         }
@@ -625,16 +626,18 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::absurd_extreme_comparisons)]
     fn test_grayscale_ramp_comprehensive() {
         // Test the full grayscale ramp
         for gray in 0..=255 {
             let result = ColorMode::rgb_to_256(gray, gray, gray);
             // Should be either 16 (black), 231 (white), or in grayscale range 232-255
-            assert!(result == 16 || result == 231 || (result >= 232 && result <= 255));
+            assert!(result == 16 || result == 231 || ((232..=255).contains(&result)));
         }
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn test_detect_returns_valid() {
         // Calling detect() should return one of the valid modes
         // The exact result depends on the environment
@@ -728,6 +731,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::manual_string_new)]
     fn test_detect_colorterm_empty_string() {
         // Empty COLORTERM string should fall through
         let mode = ColorMode::detect_with_env(Some("".to_string()), None);

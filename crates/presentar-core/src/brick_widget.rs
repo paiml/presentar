@@ -191,6 +191,7 @@ pub trait BrickWidgetExt: Brick {
 impl<T: Brick> BrickWidgetExt for T {}
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
 

@@ -1,6 +1,6 @@
 //! Test display rules capabilities detection
 //!
-//! Run with: cargo run -p presentar-terminal --features ptop --example test_display_rules
+//! Run with: cargo run -p presentar-terminal --features ptop --example `test_display_rules`
 
 use presentar_terminal::widgets::{
     BatteryDisplayRules, DataAvailability, DisplayContext, DisplayRules, DisplayTerminalSize,
@@ -57,7 +57,7 @@ fn main() {
             data,
         };
         let action = SensorsDisplayRules.evaluate(&ctx);
-        println!("  {} sensors -> {:?}", count, action);
+        println!("  {count} sensors -> {action:?}");
     }
     println!();
 
@@ -119,9 +119,9 @@ fn main() {
         })
     );
 
-    if !caps.has_battery {
-        println!("PASS: Battery correctly detected as absent");
-    } else {
+    if caps.has_battery {
         println!("UNEXPECTED: Battery detected on desktop system");
+    } else {
+        println!("PASS: Battery correctly detected as absent");
     }
 }

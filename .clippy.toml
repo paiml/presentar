@@ -15,3 +15,9 @@ too-many-lines-threshold = 100
 
 # Maximum number of arguments per function
 too-many-arguments-threshold = 7
+
+# Stack size threshold for large_stack_frames lint
+stack-size-threshold = 1000000
+
+# Large array threshold
+array-size-threshold = 262144

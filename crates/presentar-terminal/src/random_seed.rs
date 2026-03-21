@@ -158,7 +158,11 @@ mod tests {
         let mut rng = SeededRng::new(42);
         for _ in 0..1000 {
             let val = rng.next_f64();
-            assert!(val >= 0.0 && val < 1.0, "Value {} out of range [0, 1)", val);
+            assert!(
+                (0.0..1.0).contains(&val),
+                "Value {} out of range [0, 1)",
+                val
+            );
         }
     }
 

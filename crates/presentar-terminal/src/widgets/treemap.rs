@@ -884,6 +884,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn test_treemap_verify_valid() {
         let mut treemap = Treemap::default();
         treemap.bounds = Rect::new(0.0, 0.0, 80.0, 40.0);
@@ -891,6 +892,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn test_treemap_verify_invalid_small() {
         let mut treemap = Treemap::default();
         treemap.bounds = Rect::new(0.0, 0.0, 2.0, 1.0);

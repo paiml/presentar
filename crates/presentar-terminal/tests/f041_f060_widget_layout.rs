@@ -8,12 +8,13 @@
 
 use presentar_core::{Canvas, Color, Constraints, Point, Rect, Size, TextStyle, Widget};
 use presentar_terminal::widgets::{
-    Border, BorderStyle, BrailleGraph, CollapsiblePanel, CpuGrid, Gauge, GaugeMode, GraphMode,
-    Heatmap, HeatmapCell, MemoryBar, MemorySegment, NetworkInterface, NetworkPanel, ProcessEntry,
-    ProcessSort, ProcessState, ProcessTable, Scrollbar, Sparkline, Tree, TreeNode,
+    Border, BorderStyle, BrailleGraph, CpuGrid, Gauge, Heatmap, HeatmapCell, MemoryBar,
+    MemorySegment, NetworkInterface, NetworkPanel, ProcessEntry, ProcessSort, ProcessState,
+    ProcessTable, Scrollbar, Sparkline, Tree, TreeNode,
 };
 
 /// Mock canvas for testing layout
+#[allow(dead_code)]
 struct TestCanvas {
     texts: Vec<(String, Point)>,
     width: usize,
@@ -21,7 +22,7 @@ struct TestCanvas {
 }
 
 impl TestCanvas {
-    fn new(width: usize, height: usize) -> Self {
+    const fn new(width: usize, height: usize) -> Self {
         Self {
             texts: vec![],
             width,
@@ -60,7 +61,7 @@ impl Canvas for TestCanvas {
 // F041-F043: CpuGrid Tests
 // =============================================================================
 
-/// F041: CpuGrid 8 columns
+/// F041: `CpuGrid` 8 columns
 /// Falsification criterion: Default columns != 8
 #[test]
 fn f041_cpugrid_supports_8_columns() {
@@ -80,7 +81,7 @@ fn f041_cpugrid_supports_8_columns() {
     );
 }
 
-/// F042: CpuGrid compact mode
+/// F042: `CpuGrid` compact mode
 /// Falsification criterion: Compact not reducing height
 #[test]
 fn f042_cpugrid_compact_mode() {
@@ -93,8 +94,8 @@ fn f042_cpugrid_compact_mode() {
     let mut canvas_normal = TestCanvas::new(40, 4);
     let mut canvas_compact = TestCanvas::new(40, 2);
 
-    let mut normal_mut = normal.clone();
-    let mut compact_mut = compact.clone();
+    let mut normal_mut = normal;
+    let mut compact_mut = compact;
 
     normal_mut.layout(Rect::new(0.0, 0.0, 40.0, 4.0));
     compact_mut.layout(Rect::new(0.0, 0.0, 40.0, 2.0));
@@ -103,13 +104,11 @@ fn f042_cpugrid_compact_mode() {
     compact_mut.paint(&mut canvas_compact);
 
     // Both should render
-    assert!(
-        canvas_compact.texts.len() > 0 || true, // Compact should work
-        "F042 FAILED: Compact mode should render"
-    );
+    // Compact mode should render (or be intentionally empty for no-data)
+    let _ = &canvas_compact;
 }
 
-/// F043: CpuGrid empty data
+/// F043: `CpuGrid` empty data
 /// Falsification criterion: Empty data causes panic
 #[test]
 fn f043_cpugrid_handles_empty_data() {
@@ -133,7 +132,7 @@ fn f043_cpugrid_handles_empty_data() {
 // F044-F045: MemoryBar Tests
 // =============================================================================
 
-/// F044: MemoryBar segments sum
+/// F044: `MemoryBar` segments sum
 /// Falsification criterion: Segments don't sum to 100%
 #[test]
 fn f044_memorybar_segments_can_sum_to_100() {
@@ -172,7 +171,7 @@ fn f044_memorybar_segments_can_sum_to_100() {
     bar_mut.paint(&mut canvas);
 }
 
-/// F045: MemoryBar labels visible
+/// F045: `MemoryBar` labels visible
 /// Falsification criterion: Labels outside bounds
 #[test]
 fn f045_memorybar_labels_render() {
@@ -185,10 +184,10 @@ fn f045_memorybar_labels_render() {
     bar_mut.paint(&mut canvas);
 
     // Should render some text
-    let rendered = canvas.rendered_text();
+    let _rendered = canvas.rendered_text();
     // Labels or values should appear
     assert!(
-        canvas.texts.len() > 0,
+        !canvas.texts.is_empty(),
         "F045 FAILED: MemoryBar should render labels/values"
     );
 }
@@ -197,7 +196,7 @@ fn f045_memorybar_labels_render() {
 // F046-F050: ProcessTable Tests
 // =============================================================================
 
-/// F046: ProcessTable header row
+/// F046: `ProcessTable` header row
 /// Falsification criterion: No header row rendered
 #[test]
 fn f046_processtable_has_header() {
@@ -233,7 +232,7 @@ fn f046_processtable_has_header() {
     );
 }
 
-/// F047: ProcessTable separator
+/// F047: `ProcessTable` separator
 /// Falsification criterion: No separator line after header
 #[test]
 fn f047_processtable_has_separator() {
@@ -271,7 +270,7 @@ fn f047_processtable_has_separator() {
     );
 }
 
-/// F048: ProcessTable selection
+/// F048: `ProcessTable` selection
 /// Falsification criterion: Selected row not highlighted
 #[test]
 fn f048_processtable_selection_works() {
@@ -322,7 +321,7 @@ fn f048_processtable_selection_works() {
     // Test passes if no panic
 }
 
-/// F049: ProcessTable sorting
+/// F049: `ProcessTable` sorting
 /// Falsification criterion: Sort not affecting order
 #[test]
 fn f049_processtable_sorting() {
@@ -371,7 +370,7 @@ fn f049_processtable_sorting() {
     table.paint(&mut canvas);
 }
 
-/// F050: ProcessTable scrolling
+/// F050: `ProcessTable` scrolling
 /// Falsification criterion: Scroll offset incorrect
 #[test]
 fn f050_processtable_scrolling() {
@@ -381,10 +380,10 @@ fn f050_processtable_scrolling() {
     for i in 0..100 {
         table.add_process(ProcessEntry {
             pid: i,
-            user: format!("user{}", i),
+            user: format!("user{i}"),
             cpu_percent: i as f32,
             mem_percent: i as f32 / 2.0,
-            command: format!("cmd{}", i),
+            command: format!("cmd{i}"),
             cmdline: None,
             state: ProcessState::Running,
             oom_score: None,
@@ -413,7 +412,7 @@ fn f050_processtable_scrolling() {
 // F051-F052: NetworkPanel Tests
 // =============================================================================
 
-/// F051: NetworkPanel compact
+/// F051: `NetworkPanel` compact
 /// Falsification criterion: Compact mode not single line
 #[test]
 fn f051_networkpanel_compact_mode() {
@@ -427,14 +426,14 @@ fn f051_networkpanel_compact_mode() {
     panel.paint(&mut canvas);
 
     // Should render in compact mode
-    let rendered = canvas.rendered_text();
+    let _rendered = canvas.rendered_text();
     assert!(
-        canvas.texts.len() > 0,
+        !canvas.texts.is_empty(),
         "F051 FAILED: NetworkPanel compact should render"
     );
 }
 
-/// F052: NetworkPanel RX/TX colors
+/// F052: `NetworkPanel` RX/TX colors
 /// Falsification criterion: RX not green, TX not red
 #[test]
 fn f052_networkpanel_renders_interfaces() {
@@ -459,7 +458,7 @@ fn f052_networkpanel_renders_interfaces() {
 // F053-F054: BrailleGraph Tests
 // =============================================================================
 
-/// F053: BrailleGraph range
+/// F053: `BrailleGraph` range
 /// Falsification criterion: Data outside range clips
 #[test]
 fn f053_braillegraph_clips_data() {
@@ -468,23 +467,23 @@ fn f053_braillegraph_clips_data() {
     let graph = BrailleGraph::new(data).with_range(0.0, 100.0);
 
     let mut canvas = TestCanvas::new(20, 4);
-    let mut graph_mut = graph.clone();
+    let mut graph_mut = graph;
     graph_mut.layout(Rect::new(0.0, 0.0, 20.0, 4.0));
 
     // Should not panic with out-of-range data
     graph_mut.paint(&mut canvas);
 }
 
-/// F054: BrailleGraph width
+/// F054: `BrailleGraph` width
 /// Falsification criterion: Graph exceeds bounds
 #[test]
 fn f054_braillegraph_respects_bounds() {
-    let data: Vec<f64> = (0..100).map(|i| i as f64).collect();
+    let data: Vec<f64> = (0..100).map(f64::from).collect();
     let graph = BrailleGraph::new(data);
 
     let bounds = Rect::new(0.0, 0.0, 20.0, 4.0);
     let mut canvas = TestCanvas::new(20, 4);
-    let mut graph_mut = graph.clone();
+    let mut graph_mut = graph;
     graph_mut.layout(bounds);
     graph_mut.paint(&mut canvas);
 
@@ -520,7 +519,7 @@ fn f055_sparkline_normalizes_max_to_full() {
     let sparkline = Sparkline::new(data);
 
     let mut canvas = TestCanvas::new(20, 1);
-    let mut sparkline_mut = sparkline.clone();
+    let mut sparkline_mut = sparkline;
     sparkline_mut.layout(Rect::new(0.0, 0.0, 20.0, 1.0));
     sparkline_mut.paint(&mut canvas);
 
@@ -532,8 +531,7 @@ fn f055_sparkline_normalizes_max_to_full() {
 
     assert!(
         has_sparkline_chars,
-        "F055 FAILED: Sparkline should render block characters. Got: '{}'",
-        rendered
+        "F055 FAILED: Sparkline should render block characters. Got: '{rendered}'"
     );
 }
 
@@ -544,7 +542,7 @@ fn f056_gauge_100_percent_is_full() {
     let gauge = Gauge::new(100.0, 100.0);
 
     let mut canvas = TestCanvas::new(20, 3);
-    let mut gauge_mut = gauge.clone();
+    let mut gauge_mut = gauge;
     gauge_mut.layout(Rect::new(0.0, 0.0, 20.0, 3.0));
     gauge_mut.paint(&mut canvas);
 
@@ -562,7 +560,7 @@ fn f056_gauge_100_percent_is_full() {
 // =============================================================================
 
 /// F057: Border styles
-/// Falsification criterion: All BorderStyle variants render
+/// Falsification criterion: All `BorderStyle` variants render
 #[test]
 fn f057_all_border_styles_render() {
     let styles = [
@@ -595,7 +593,7 @@ fn f058_tree_indents_children() {
     let tree = Tree::new().with_root(root);
 
     let mut canvas = TestCanvas::new(40, 10);
-    let mut tree_mut = tree.clone();
+    let mut tree_mut = tree;
     tree_mut.layout(Rect::new(0.0, 0.0, 40.0, 10.0));
     tree_mut.paint(&mut canvas);
 
@@ -616,9 +614,7 @@ fn f058_tree_indents_children() {
     if let (Some(rx), Some(cx)) = (root_x, child_x) {
         assert!(
             cx >= rx,
-            "F058 FAILED: Child x ({}) should be >= Root x ({})",
-            cx,
-            rx
+            "F058 FAILED: Child x ({cx}) should be >= Root x ({rx})"
         );
     }
 }
@@ -644,10 +640,8 @@ fn f059_scrollbar_position_correct() {
     scrollbar2.paint(&mut canvas2);
 
     // Both should render without panic
-    assert!(
-        canvas1.texts.len() > 0 || true,
-        "F059: Scrollbar at start should render"
-    );
+    // Both should render without panic
+    let _ = &canvas1;
 }
 
 /// F060: Heatmap cell bounds
@@ -675,7 +669,7 @@ fn f060_heatmap_cells_within_bounds() {
 
     let bounds = Rect::new(0.0, 0.0, 20.0, 10.0);
     let mut canvas = TestCanvas::new(20, 10);
-    let mut heatmap_mut = heatmap.clone();
+    let mut heatmap_mut = heatmap;
     heatmap_mut.layout(bounds);
     heatmap_mut.paint(&mut canvas);
 

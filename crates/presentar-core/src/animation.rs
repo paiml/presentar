@@ -829,6 +829,7 @@ mod tests {
     // -------------------------------------------------------------------------
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn test_spring_config_presets() {
         assert!(SpringConfig::GENTLE.stiffness < SpringConfig::STIFF.stiffness);
         assert!(SpringConfig::WOBBLY.damping < SpringConfig::STIFF.damping);
@@ -1183,7 +1184,7 @@ mod tests {
         ];
         for easing in easings {
             let val = easing.apply(0.0);
-            assert!(val.abs() < 0.01, "{:?} at 0.0 = {}", easing, val);
+            assert!(val.abs() < 0.01, "{easing:?} at 0.0 = {val}");
         }
     }
 
@@ -1205,7 +1206,7 @@ mod tests {
         ];
         for easing in easings {
             let val = easing.apply(1.0);
-            assert!((val - 1.0).abs() < 0.01, "{:?} at 1.0 = {}", easing, val);
+            assert!((val - 1.0).abs() < 0.01, "{easing:?} at 1.0 = {val}");
         }
     }
 
@@ -1261,7 +1262,7 @@ mod tests {
     #[test]
     fn test_easing_debug() {
         let e = Easing::ElasticOut;
-        let debug = format!("{:?}", e);
+        let debug = format!("{e:?}");
         assert!(debug.contains("ElasticOut"));
     }
 
@@ -1322,7 +1323,7 @@ mod tests {
     #[test]
     fn test_spring_config_debug() {
         let config = SpringConfig::WOBBLY;
-        let debug = format!("{:?}", config);
+        let debug = format!("{config:?}");
         assert!(debug.contains("SpringConfig"));
     }
 
@@ -1373,14 +1374,14 @@ mod tests {
     #[test]
     fn test_spring_clone() {
         let spring = Spring::new(50.0);
-        let cloned = spring.clone();
+        let cloned = spring;
         assert!((cloned.value - 50.0).abs() < 0.001);
     }
 
     #[test]
     fn test_spring_debug() {
         let spring = Spring::new(0.0);
-        let debug = format!("{:?}", spring);
+        let debug = format!("{spring:?}");
         assert!(debug.contains("Spring"));
     }
 
@@ -1424,7 +1425,7 @@ mod tests {
     #[test]
     fn test_eased_value_clone() {
         let eased = EasedValue::new(10.0, 90.0, 2.0);
-        let cloned = eased.clone();
+        let cloned = eased;
         assert!((cloned.from - 10.0).abs() < 0.001);
         assert!((cloned.to - 90.0).abs() < 0.001);
     }
@@ -1432,7 +1433,7 @@ mod tests {
     #[test]
     fn test_eased_value_debug() {
         let eased = EasedValue::new(0.0, 100.0, 1.0);
-        let debug = format!("{:?}", eased);
+        let debug = format!("{eased:?}");
         assert!(debug.contains("EasedValue"));
     }
 
@@ -1484,7 +1485,7 @@ mod tests {
     #[test]
     fn test_keyframe_clone() {
         let kf: Keyframe<f64> = Keyframe::new(0.5, 75.0);
-        let cloned = kf.clone();
+        let cloned = kf;
         assert!((cloned.time - 0.5).abs() < 0.001);
         assert!((cloned.value - 75.0).abs() < 0.001);
     }
@@ -1492,7 +1493,7 @@ mod tests {
     #[test]
     fn test_keyframe_debug() {
         let kf: Keyframe<f64> = Keyframe::new(0.5, 50.0);
-        let debug = format!("{:?}", kf);
+        let debug = format!("{kf:?}");
         assert!(debug.contains("Keyframe"));
     }
 
@@ -1589,7 +1590,7 @@ mod tests {
     #[test]
     fn test_keyframe_track_debug() {
         let track: KeyframeTrack<f64> = KeyframeTrack::new(1.0);
-        let debug = format!("{:?}", track);
+        let debug = format!("{track:?}");
         assert!(debug.contains("KeyframeTrack"));
     }
 
@@ -1631,7 +1632,7 @@ mod tests {
     #[test]
     fn test_anim_color_debug() {
         let color = AnimColor::WHITE;
-        let debug = format!("{:?}", color);
+        let debug = format!("{color:?}");
         assert!(debug.contains("AnimColor"));
     }
 
@@ -1677,7 +1678,7 @@ mod tests {
     #[test]
     fn test_controller_debug() {
         let controller = AnimationController::new();
-        let debug = format!("{:?}", controller);
+        let debug = format!("{controller:?}");
         assert!(debug.contains("AnimationController"));
     }
 

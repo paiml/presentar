@@ -1186,7 +1186,7 @@ mod tests {
             size_bytes: 256,
             tags: vec!["test".to_string()],
         };
-        let cloned = meta.clone();
+        let cloned = meta;
         assert_eq!(cloned.created_at, 100);
         assert_eq!(cloned.tags, vec!["test"]);
     }
@@ -1226,7 +1226,7 @@ mod tests {
     #[test]
     fn test_cache_config_clone() {
         let config = CacheConfig::default();
-        let cloned = config.clone();
+        let cloned = config;
         assert_eq!(cloned.max_entries, 1000);
     }
 
@@ -1270,7 +1270,7 @@ mod tests {
         let options = CacheOptions::new()
             .with_ttl(Duration::from_secs(60))
             .with_tag("test");
-        let cloned = options.clone();
+        let cloned = options;
         assert_eq!(cloned.ttl, Some(Duration::from_secs(60)));
         assert_eq!(cloned.tags, vec!["test"]);
     }
@@ -1297,7 +1297,7 @@ mod tests {
     #[test]
     fn test_cache_event_clone() {
         let event = CacheEvent::TagInvalidated("test".to_string(), 10);
-        let cloned = event.clone();
+        let cloned = event;
         if let CacheEvent::TagInvalidated(tag, count) = cloned {
             assert_eq!(tag, "test");
             assert_eq!(count, 10);
@@ -1576,25 +1576,31 @@ mod tests {
 
     #[test]
     fn test_cache_stats_hit_rate_all_hits() {
-        let mut stats = CacheStats::default();
-        stats.hits = 100;
-        stats.misses = 0;
+        let stats = CacheStats {
+            hits: 100,
+            misses: 0,
+            ..CacheStats::default()
+        };
         assert_eq!(stats.hit_rate(), 1.0);
     }
 
     #[test]
     fn test_cache_stats_hit_rate_all_misses() {
-        let mut stats = CacheStats::default();
-        stats.hits = 0;
-        stats.misses = 100;
+        let stats = CacheStats {
+            hits: 0,
+            misses: 100,
+            ..CacheStats::default()
+        };
         assert_eq!(stats.hit_rate(), 0.0);
     }
 
     #[test]
     fn test_cache_stats_hit_rate_half() {
-        let mut stats = CacheStats::default();
-        stats.hits = 50;
-        stats.misses = 50;
+        let stats = CacheStats {
+            hits: 50,
+            misses: 50,
+            ..CacheStats::default()
+        };
         assert!((stats.hit_rate() - 0.5).abs() < 0.001);
     }
 
@@ -1608,10 +1614,12 @@ mod tests {
 
     #[test]
     fn test_cache_stats_clone() {
-        let mut stats = CacheStats::default();
-        stats.hits = 42;
-        stats.evictions = 5;
-        let cloned = stats.clone();
+        let stats = CacheStats {
+            hits: 42,
+            evictions: 5,
+            ..CacheStats::default()
+        };
+        let cloned = stats;
         assert_eq!(cloned.hits, 42);
         assert_eq!(cloned.evictions, 5);
     }
@@ -1632,13 +1640,13 @@ mod tests {
 
     #[test]
     fn test_cache_size_f32() {
-        let n: f32 = 3.14;
+        let n: f32 = 1.23;
         assert_eq!(n.cache_size(), 4);
     }
 
     #[test]
     fn test_cache_size_f64() {
-        let n: f64 = 3.14159;
+        let n: f64 = 1.23456;
         assert_eq!(n.cache_size(), 8);
     }
 

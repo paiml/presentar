@@ -1040,7 +1040,7 @@ mod tests {
 
     #[test]
     fn test_vec4_default() {
-        let v: Vec4 = Default::default();
+        let v = Vec4::default();
         assert_eq!(v, Vec4::zero());
     }
 
@@ -1062,7 +1062,10 @@ mod tests {
     fn test_vec4_dot() {
         let a = Vec4::new(1.0, 2.0, 3.0, 4.0);
         let b = Vec4::new(2.0, 3.0, 4.0, 5.0);
-        assert_eq!(a.dot(b), 1.0 * 2.0 + 2.0 * 3.0 + 3.0 * 4.0 + 4.0 * 5.0);
+        assert_eq!(
+            a.dot(b),
+            4.0f32.mul_add(5.0, 3.0f32.mul_add(4.0, 1.0f32.mul_add(2.0, 2.0 * 3.0)))
+        );
     }
 
     #[test]
@@ -1150,7 +1153,7 @@ mod tests {
 
     #[test]
     fn test_mat4_default() {
-        let m: Mat4 = Default::default();
+        let m = Mat4::default();
         assert_eq!(m, Mat4::identity());
     }
 
@@ -1504,7 +1507,7 @@ mod tests {
 
         #[test]
         fn test_batch_sum_f64_large() {
-            let values: Vec<f64> = (1..=100).map(|i| i as f64).collect();
+            let values: Vec<f64> = (1..=100).map(f64::from).collect();
             assert_eq!(batch_sum_f64(&values), 5050.0);
         }
 
@@ -1542,7 +1545,7 @@ mod tests {
 
         #[test]
         fn test_batch_min_max_f64_large() {
-            let values: Vec<f64> = (1..=256).map(|i| i as f64).collect();
+            let values: Vec<f64> = (1..=256).map(f64::from).collect();
             assert_eq!(batch_min_max_f64(&values), Some((1.0, 256.0)));
         }
 
@@ -1667,7 +1670,7 @@ mod tests {
         #[test]
         fn test_histogram_f64_uniform() {
             // Uniform distribution across bins
-            let values: Vec<f64> = (0..100).map(|i| i as f64).collect();
+            let values: Vec<f64> = (0..100).map(f64::from).collect();
             let counts = histogram_f64(&values, 0.0, 100.0, 10);
             // Each bin should have 10 values
             assert!(counts.iter().all(|&c| c == 10));

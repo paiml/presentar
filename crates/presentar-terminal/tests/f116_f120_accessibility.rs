@@ -18,7 +18,7 @@ struct TestCanvas {
 }
 
 impl TestCanvas {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
             texts: Vec::new(),
             rects: Vec::new(),
@@ -55,10 +55,10 @@ impl Canvas for TestCanvas {
 }
 
 /// Calculate relative luminance according to WCAG 2.1
-/// Reference: https://www.w3.org/TR/WCAG21/#dfn-relative-luminance
+/// Reference: <https://www.w3.org/TR/WCAG21/#dfn-relative-luminance>
 fn relative_luminance(color: Color) -> f64 {
     fn linearize(c: f32) -> f64 {
-        let c = c as f64;
+        let c = f64::from(c);
         if c <= 0.03928 {
             c / 12.92
         } else {
@@ -70,11 +70,11 @@ fn relative_luminance(color: Color) -> f64 {
     let g = linearize(color.g);
     let b = linearize(color.b);
 
-    0.2126 * r + 0.7152 * g + 0.0722 * b
+    0.0722f64.mul_add(b, 0.2126f64.mul_add(r, 0.7152 * g))
 }
 
 /// Calculate contrast ratio according to WCAG 2.1
-/// Reference: https://www.w3.org/TR/WCAG21/#dfn-contrast-ratio
+/// Reference: <https://www.w3.org/TR/WCAG21/#dfn-contrast-ratio>
 fn contrast_ratio(fg: Color, bg: Color) -> f64 {
     let l1 = relative_luminance(fg);
     let l2 = relative_luminance(bg);
@@ -96,8 +96,7 @@ fn f116_tokyo_night_contrast() {
     // WCAG 2.1 AA requires at least 4.5:1 contrast for normal text
     assert!(
         ratio >= 4.5,
-        "Tokyo Night theme contrast ratio {} is below WCAG AA minimum 4.5:1",
-        ratio
+        "Tokyo Night theme contrast ratio {ratio} is below WCAG AA minimum 4.5:1"
     );
 }
 
@@ -109,8 +108,7 @@ fn f116_dracula_contrast() {
 
     assert!(
         ratio >= 4.5,
-        "Dracula theme contrast ratio {} is below WCAG AA minimum 4.5:1",
-        ratio
+        "Dracula theme contrast ratio {ratio} is below WCAG AA minimum 4.5:1"
     );
 }
 
@@ -122,8 +120,7 @@ fn f116_nord_contrast() {
 
     assert!(
         ratio >= 4.5,
-        "Nord theme contrast ratio {} is below WCAG AA minimum 4.5:1",
-        ratio
+        "Nord theme contrast ratio {ratio} is below WCAG AA minimum 4.5:1"
     );
 }
 
@@ -135,8 +132,7 @@ fn f116_monokai_contrast() {
 
     assert!(
         ratio >= 4.5,
-        "Monokai theme contrast ratio {} is below WCAG AA minimum 4.5:1",
-        ratio
+        "Monokai theme contrast ratio {ratio} is below WCAG AA minimum 4.5:1"
     );
 }
 
@@ -151,8 +147,7 @@ fn f116_high_contrast_verification() {
     // Allow small floating-point error
     assert!(
         (ratio - 21.0).abs() < 0.5,
-        "White on black contrast should be ~21:1, got {}",
-        ratio
+        "White on black contrast should be ~21:1, got {ratio}"
     );
 }
 
@@ -166,8 +161,7 @@ fn f116_low_contrast_detection() {
 
     assert!(
         ratio < 4.5,
-        "Low contrast colors should be detected, got ratio {}",
-        ratio
+        "Low contrast colors should be detected, got ratio {ratio}"
     );
 }
 
@@ -241,7 +235,7 @@ fn f117_cpugrid_has_numeric_labels() {
 
     // This test verifies that CPU info isn't ONLY conveyed through color
     assert!(
-        has_text || canvas.rects.len() > 0,
+        has_text || !canvas.rects.is_empty(),
         "CpuGrid should provide non-color information"
     );
 }
@@ -299,7 +293,7 @@ fn f118_process_table_selection_visible() {
         .collect();
 
     assert!(
-        unique_styles.len() >= 1,
+        !unique_styles.is_empty(),
         "ProcessTable should have distinct styles for selected vs unselected rows"
     );
 }
@@ -387,6 +381,7 @@ fn f119_keyboard_boundary_handling() {
 }
 
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn f119_empty_table_keyboard() {
     // Empty table should handle keyboard events without panic
     use presentar_core::{Event, Key};
@@ -411,28 +406,20 @@ fn f119_empty_table_keyboard() {
 // =============================================================================
 
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn f120_widgets_have_type_info() {
     // Verify widgets have type information that could be used for accessibility
-    // (Full accessibility() implementation may not exist yet)
+    fn assert_widget<W: Widget>(_: &W) {}
 
     let graph = BrailleGraph::new(vec![0.5, 0.7, 0.3]);
     let table = ProcessTable::new();
     let gauge = Gauge::new(50.0, 100.0);
     let sparkline = Sparkline::new(vec![0.1, 0.5, 0.9]);
 
-    // Verify widgets implement Widget trait (which could include accessibility)
-    fn assert_widget<W: Widget>(_: &W) {}
-
     assert_widget(&graph);
     assert_widget(&table);
     assert_widget(&gauge);
     assert_widget(&sparkline);
-
-    // These widgets are valid Widget implementations
-    assert!(
-        true,
-        "Widgets implement Widget trait for potential accessibility"
-    );
 }
 
 #[test]
