@@ -1,5 +1,5 @@
 //! Demonstrates basic presentar-core types: geometry, colors, constraints,
-//! and the RecordingCanvas.
+//! and the `RecordingCanvas`.
 //!
 //! This example runs in native Rust (no WASM required) and shows how the
 //! core building blocks fit together.

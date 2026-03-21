@@ -618,7 +618,7 @@ fn default_prefix_timeout() -> u32 {
 /// A two-key sequence binding.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KeySequence {
-    /// Key sequence (e.g., ["ctrl+b", "0"])
+    /// Key sequence (e.g., `["ctrl+b", "0"]`)
     pub keys: Vec<String>,
     /// Action to perform
     pub action: serde_yaml_ng::Value,

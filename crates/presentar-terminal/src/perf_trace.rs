@@ -966,6 +966,7 @@ impl LatencyHistogram {
 
 /// Generates a tracker struct with all-zero `new()`, `Default`, `Clone`, and `reset()`.
 /// Domain-specific methods are added via separate `impl` blocks.
+#[allow(unused_macros)]
 macro_rules! define_tracker {
     (
         $(#[$meta:meta])*
