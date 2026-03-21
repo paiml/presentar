@@ -1034,9 +1034,7 @@ mod tests {
     #[test]
     fn test_network_panel_event() {
         let mut panel = NetworkPanel::new();
-        let result = panel.event(&Event::KeyDown {
-            key: presentar_core::Key::Enter,
-        });
+        let result = panel.event(&Event::key_down(presentar_core::Key::Enter));
         assert!(result.is_none());
     }
 

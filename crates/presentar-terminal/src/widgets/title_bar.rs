@@ -426,16 +426,22 @@ impl Widget for TitleBar {
 
     fn event(&mut self, event: &Event) -> Option<Box<dyn Any + Send>> {
         match event {
-            Event::KeyDown { key: Key::Slash, .. } if !self.search_active => {
+            Event::KeyDown {
+                key: Key::Slash, ..
+            } if !self.search_active => {
                 self.search_active = true;
                 None
             }
-            Event::KeyDown { key: Key::Escape, .. } if self.search_active => {
+            Event::KeyDown {
+                key: Key::Escape, ..
+            } if self.search_active => {
                 self.search_active = false;
                 self.search_text.clear();
                 None
             }
-            Event::KeyDown { key: Key::Enter, .. } if self.search_active => {
+            Event::KeyDown {
+                key: Key::Enter, ..
+            } if self.search_active => {
                 self.search_active = false;
                 None
             }
@@ -845,9 +851,7 @@ mod tests {
             .with_search_active(true)
             .with_search_text("filter");
 
-        let event = Event::KeyDown {
-            key: Key::Backspace,
-        };
+        let event = Event::key_down(Key::Backspace);
         bar.event(&event);
         assert_eq!(bar.search_text, "filte");
     }
@@ -856,9 +860,7 @@ mod tests {
     fn test_title_bar_event_backspace_on_empty() {
         let mut bar = TitleBar::new("test").with_search_active(true);
 
-        let event = Event::KeyDown {
-            key: Key::Backspace,
-        };
+        let event = Event::key_down(Key::Backspace);
         bar.event(&event);
         assert!(bar.search_text.is_empty());
     }

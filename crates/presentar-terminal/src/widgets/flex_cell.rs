@@ -539,9 +539,7 @@ mod tests {
     #[test]
     fn test_flex_cell_event() {
         let mut cell = FlexCell::new("Test");
-        let event = Event::KeyDown {
-            key: presentar_core::Key::Enter,
-        };
+        let event = Event::key_down(presentar_core::Key::Enter);
         let result = cell.event(&event);
         assert!(result.is_none());
     }

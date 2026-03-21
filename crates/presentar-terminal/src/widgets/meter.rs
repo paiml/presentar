@@ -457,9 +457,7 @@ mod tests {
     #[test]
     fn test_meter_event() {
         let mut meter = Meter::percentage(50.0);
-        let event = Event::KeyDown {
-            key: presentar_core::Key::Enter,
-        };
+        let event = Event::key_down(presentar_core::Key::Enter);
         assert!(meter.event(&event).is_none());
     }
 

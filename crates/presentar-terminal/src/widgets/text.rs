@@ -439,9 +439,7 @@ mod tests {
     #[test]
     fn test_text_event() {
         let mut text = Text::new("Test");
-        let event = Event::KeyDown {
-            key: presentar_core::Key::Enter,
-        };
+        let event = Event::key_down(presentar_core::Key::Enter);
         assert!(text.event(&event).is_none());
     }
 

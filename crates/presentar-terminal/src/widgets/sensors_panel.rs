@@ -580,9 +580,7 @@ mod tests {
 
         // Event
         assert!(panel
-            .event(&Event::KeyDown {
-                key: presentar_core::Key::Enter
-            })
+            .event(&Event::key_down(presentar_core::Key::Enter))
             .is_none());
 
         // Children

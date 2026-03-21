@@ -706,9 +706,7 @@ mod tests {
     #[test]
     fn test_tree_event() {
         let mut tree = Tree::new();
-        let event = Event::KeyDown {
-            key: presentar_core::Key::Enter,
-        };
+        let event = Event::key_down(presentar_core::Key::Enter);
         assert!(tree.event(&event).is_none());
     }
 

@@ -874,9 +874,7 @@ mod tests {
     #[test]
     fn test_gauge_event() {
         let mut gauge = Gauge::default();
-        let event = Event::KeyDown {
-            key: presentar_core::Key::Enter,
-        };
+        let event = Event::key_down(presentar_core::Key::Enter);
         assert!(gauge.event(&event).is_none());
     }
 

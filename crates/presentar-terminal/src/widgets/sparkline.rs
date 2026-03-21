@@ -504,9 +504,7 @@ mod tests {
     #[test]
     fn test_sparkline_event() {
         let mut spark = Sparkline::new(vec![]);
-        let event = Event::KeyDown {
-            key: presentar_core::Key::Enter,
-        };
+        let event = Event::key_down(presentar_core::Key::Enter);
         assert!(spark.event(&event).is_none());
     }
 

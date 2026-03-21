@@ -1313,9 +1313,7 @@ mod tests {
         assert_eq!(result.size.height, 25.0);
 
         // event
-        let event = Event::KeyDown {
-            key: presentar_core::Key::Enter,
-        };
+        let event = Event::key_down(presentar_core::Key::Enter);
         assert!(widget.event(&event).is_none());
 
         // children

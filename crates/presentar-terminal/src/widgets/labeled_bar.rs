@@ -722,9 +722,7 @@ mod tests {
     #[test]
     fn test_event() {
         let mut bar = LabeledBar::new("Test", 0.5);
-        let event = Event::KeyDown {
-            key: presentar_core::Key::Enter,
-        };
+        let event = Event::key_down(presentar_core::Key::Enter);
         let result = bar.event(&event);
         assert!(result.is_none());
     }

@@ -351,9 +351,7 @@ mod tests {
     #[test]
     fn test_horizon_event() {
         let mut graph = HorizonGraph::new(vec![]);
-        let event = Event::KeyDown {
-            key: presentar_core::Key::Enter,
-        };
+        let event = Event::key_down(presentar_core::Key::Enter);
         assert!(graph.event(&event).is_none());
     }
 

@@ -1252,13 +1252,13 @@ mod tests {
         let mut table = ProcessTable::new();
         table.set_processes(sample_processes());
 
-        table.event(&Event::KeyDown { key: Key::J });
+        table.event(&Event::key_down(Key::J));
         assert_eq!(table.selected(), 1);
 
-        table.event(&Event::KeyDown { key: Key::K });
+        table.event(&Event::key_down(Key::K));
         assert_eq!(table.selected(), 0);
 
-        table.event(&Event::KeyDown { key: Key::P });
+        table.event(&Event::key_down(Key::P));
         assert_eq!(table.current_sort(), ProcessSort::Pid);
     }
 
@@ -1689,7 +1689,7 @@ mod tests {
         let mut table = ProcessTable::new();
         table.set_processes(sample_processes());
 
-        table.event(&Event::KeyDown { key: Key::Down });
+        table.event(&Event::key_down(Key::Down));
         assert_eq!(table.selected(), 1);
     }
 
@@ -1699,7 +1699,7 @@ mod tests {
         table.set_processes(sample_processes());
         table.select(2);
 
-        table.event(&Event::KeyDown { key: Key::Up });
+        table.event(&Event::key_down(Key::Up));
         assert_eq!(table.selected(), 1);
     }
 
@@ -1710,7 +1710,7 @@ mod tests {
         // First sort by something else
         table.sort_by(ProcessSort::Pid);
 
-        table.event(&Event::KeyDown { key: Key::C });
+        table.event(&Event::key_down(Key::C));
         assert_eq!(table.current_sort(), ProcessSort::Cpu);
     }
 
@@ -1719,7 +1719,7 @@ mod tests {
         let mut table = ProcessTable::new();
         table.set_processes(sample_processes());
 
-        table.event(&Event::KeyDown { key: Key::M });
+        table.event(&Event::key_down(Key::M));
         assert_eq!(table.current_sort(), ProcessSort::Memory);
     }
 
@@ -1728,7 +1728,7 @@ mod tests {
         let mut table = ProcessTable::new();
         table.set_processes(sample_processes());
 
-        table.event(&Event::KeyDown { key: Key::N });
+        table.event(&Event::key_down(Key::N));
         assert_eq!(table.current_sort(), ProcessSort::Command);
     }
 
@@ -1737,7 +1737,7 @@ mod tests {
         let mut table = ProcessTable::new();
         table.set_processes(sample_processes());
 
-        table.event(&Event::KeyDown { key: Key::O });
+        table.event(&Event::key_down(Key::O));
         assert_eq!(table.current_sort(), ProcessSort::Oom);
     }
 
@@ -1748,7 +1748,7 @@ mod tests {
         let prev_selected = table.selected();
 
         // Event that doesn't match any key
-        table.event(&Event::KeyDown { key: Key::A });
+        table.event(&Event::key_down(Key::A));
         assert_eq!(table.selected(), prev_selected);
     }
 
@@ -1965,10 +1965,10 @@ mod tests {
         table.set_processes(sample_processes());
         assert!(!table.is_tree_view());
 
-        table.event(&Event::KeyDown { key: Key::T });
+        table.event(&Event::key_down(Key::T));
         assert!(table.is_tree_view());
 
-        table.event(&Event::KeyDown { key: Key::T });
+        table.event(&Event::key_down(Key::T));
         assert!(!table.is_tree_view());
     }
 

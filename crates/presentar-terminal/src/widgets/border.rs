@@ -709,9 +709,7 @@ mod tests {
     #[test]
     fn test_border_event() {
         let mut border = Border::new();
-        let event = Event::KeyDown {
-            key: presentar_core::Key::Enter,
-        };
+        let event = Event::key_down(presentar_core::Key::Enter);
         assert!(border.event(&event).is_none());
     }
 

@@ -1279,7 +1279,7 @@ mod tests {
     #[test]
     fn test_event_not_focused() {
         let mut input = TextInput::new();
-        let event = Event::KeyDown { key: Key::Left };
+        let event = Event::key_down(Key::Left);
         assert!(input.event(&event).is_none());
         // Should not process event when not focused
     }
@@ -1287,9 +1287,7 @@ mod tests {
     #[test]
     fn test_event_backspace() {
         let mut input = TextInput::new().with_text("hello").with_focused(true);
-        let event = Event::KeyDown {
-            key: Key::Backspace,
-        };
+        let event = Event::key_down(Key::Backspace);
         input.event(&event);
         assert_eq!(input.text(), "hell");
     }
@@ -1298,7 +1296,7 @@ mod tests {
     fn test_event_delete() {
         let mut input = TextInput::new().with_text("hello").with_focused(true);
         input.cursor = 0;
-        let event = Event::KeyDown { key: Key::Delete };
+        let event = Event::key_down(Key::Delete);
         input.event(&event);
         assert_eq!(input.text(), "ello");
     }
@@ -1306,7 +1304,7 @@ mod tests {
     #[test]
     fn test_event_left() {
         let mut input = TextInput::new().with_text("hello").with_focused(true);
-        let event = Event::KeyDown { key: Key::Left };
+        let event = Event::key_down(Key::Left);
         input.event(&event);
         assert_eq!(input.cursor(), 4);
     }
@@ -1315,7 +1313,7 @@ mod tests {
     fn test_event_right() {
         let mut input = TextInput::new().with_text("hello").with_focused(true);
         input.cursor = 0;
-        let event = Event::KeyDown { key: Key::Right };
+        let event = Event::key_down(Key::Right);
         input.event(&event);
         assert_eq!(input.cursor(), 1);
     }
@@ -1323,7 +1321,7 @@ mod tests {
     #[test]
     fn test_event_home() {
         let mut input = TextInput::new().with_text("hello").with_focused(true);
-        let event = Event::KeyDown { key: Key::Home };
+        let event = Event::key_down(Key::Home);
         input.event(&event);
         assert_eq!(input.cursor(), 0);
     }
@@ -1332,7 +1330,7 @@ mod tests {
     fn test_event_end() {
         let mut input = TextInput::new().with_text("hello").with_focused(true);
         input.cursor = 0;
-        let event = Event::KeyDown { key: Key::End };
+        let event = Event::key_down(Key::End);
         input.event(&event);
         assert_eq!(input.cursor(), 5);
     }

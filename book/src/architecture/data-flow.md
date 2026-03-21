@@ -20,7 +20,7 @@ User generates input:
 
 ```rust
 Event::MouseDown { position, button: MouseButton::Left }
-Event::KeyDown { key: Key::Enter }
+Event::key_down(Key::Enter)
 Event::TextInput { text: "hello" }
 ```
 

@@ -826,9 +826,7 @@ mod tests {
     #[test]
     fn test_graph_event() {
         let mut graph = BrailleGraph::new(vec![1.0]);
-        let event = Event::KeyDown {
-            key: presentar_core::Key::Enter,
-        };
+        let event = Event::key_down(presentar_core::Key::Enter);
         assert!(graph.event(&event).is_none());
     }
 

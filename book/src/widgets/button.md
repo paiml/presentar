@@ -60,7 +60,7 @@ if let Some(msg) = button.event(&Event::MouseUp { position, button: MouseButton:
 }
 
 // Keyboard activation (Enter or Space)
-if let Some(msg) = button.event(&Event::KeyUp { key: Key::Enter }) {
+if let Some(msg) = button.event(&Event::key_up(Key::Enter)) {
     // Handle keyboard activation
 }
 ```

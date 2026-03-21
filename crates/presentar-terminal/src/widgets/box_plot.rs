@@ -774,9 +774,7 @@ mod tests {
     #[test]
     fn test_box_plot_event() {
         let mut bp = BoxPlot::new(vec![]);
-        let event = Event::KeyDown {
-            key: presentar_core::Key::Enter,
-        };
+        let event = Event::key_down(presentar_core::Key::Enter);
         assert!(bp.event(&event).is_none());
     }
 

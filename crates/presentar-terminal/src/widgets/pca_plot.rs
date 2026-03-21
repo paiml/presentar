@@ -759,9 +759,7 @@ mod tests {
     #[test]
     fn test_pca_plot_event() {
         let mut plot = PCAPlot::new(vec![]);
-        let event = Event::KeyDown {
-            key: presentar_core::Key::Enter,
-        };
+        let event = Event::key_down(presentar_core::Key::Enter);
         assert!(plot.event(&event).is_none());
     }
 

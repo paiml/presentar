@@ -987,9 +987,7 @@ mod tests {
     #[test]
     fn test_event() {
         let mut sb = Scrollbar::vertical(100, 10);
-        let event = Event::KeyDown {
-            key: presentar_core::Key::Enter,
-        };
+        let event = Event::key_down(presentar_core::Key::Enter);
         assert!(sb.event(&event).is_none());
     }
 

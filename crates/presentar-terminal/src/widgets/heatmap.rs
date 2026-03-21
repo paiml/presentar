@@ -607,9 +607,7 @@ mod tests {
     #[test]
     fn test_heatmap_event() {
         let mut heatmap = Heatmap::default();
-        let event = Event::KeyDown {
-            key: presentar_core::Key::Enter,
-        };
+        let event = Event::key_down(presentar_core::Key::Enter);
         assert!(heatmap.event(&event).is_none());
     }
 

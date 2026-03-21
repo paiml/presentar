@@ -649,7 +649,7 @@ mod tests {
     fn test_table_event_up() {
         let mut table = sample_table();
         table.select(1);
-        let event = Event::KeyDown { key: Key::Up };
+        let event = Event::key_down(Key::Up);
         table.event(&event);
         assert_eq!(table.selected(), 0);
     }
@@ -657,7 +657,7 @@ mod tests {
     #[test]
     fn test_table_event_down() {
         let mut table = sample_table();
-        let event = Event::KeyDown { key: Key::Down };
+        let event = Event::key_down(Key::Down);
         table.event(&event);
         assert_eq!(table.selected(), 1);
     }
@@ -666,7 +666,7 @@ mod tests {
     fn test_table_event_k() {
         let mut table = sample_table();
         table.select(1);
-        let event = Event::KeyDown { key: Key::K };
+        let event = Event::key_down(Key::K);
         table.event(&event);
         assert_eq!(table.selected(), 0);
     }
@@ -674,7 +674,7 @@ mod tests {
     #[test]
     fn test_table_event_j() {
         let mut table = sample_table();
-        let event = Event::KeyDown { key: Key::J };
+        let event = Event::key_down(Key::J);
         table.event(&event);
         assert_eq!(table.selected(), 1);
     }
@@ -682,7 +682,7 @@ mod tests {
     #[test]
     fn test_table_event_other() {
         let mut table = sample_table();
-        let event = Event::KeyDown { key: Key::Enter };
+        let event = Event::key_down(Key::Enter);
         assert!(table.event(&event).is_none());
     }
 

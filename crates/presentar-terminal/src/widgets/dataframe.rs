@@ -1209,7 +1209,7 @@ mod tests {
         let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
         df.select_row(Some(2));
 
-        let result = df.event(&Event::KeyDown { key: Key::Up });
+        let result = df.event(&Event::key_down(Key::Up));
         assert!(result.is_none());
         assert_eq!(df.selected_row, Some(1));
     }
@@ -1219,7 +1219,7 @@ mod tests {
         let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
         df.select_row(Some(0));
 
-        let result = df.event(&Event::KeyDown { key: Key::Down });
+        let result = df.event(&Event::key_down(Key::Down));
         assert!(result.is_none());
         assert_eq!(df.selected_row, Some(1));
     }
@@ -1229,7 +1229,7 @@ mod tests {
         let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
         df.select_row(Some(2));
 
-        let _ = df.event(&Event::KeyDown { key: Key::K });
+        let _ = df.event(&Event::key_down(Key::K));
         assert_eq!(df.selected_row, Some(1));
     }
 
@@ -1238,7 +1238,7 @@ mod tests {
         let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
         df.select_row(Some(0));
 
-        let _ = df.event(&Event::KeyDown { key: Key::J });
+        let _ = df.event(&Event::key_down(Key::J));
         assert_eq!(df.selected_row, Some(1));
     }
 
@@ -1247,7 +1247,7 @@ mod tests {
         let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
         df.select_row(Some(0));
 
-        let _ = df.event(&Event::KeyDown { key: Key::Up });
+        let _ = df.event(&Event::key_down(Key::Up));
         assert_eq!(df.selected_row, Some(0)); // Should stay at top
     }
 
@@ -1256,7 +1256,7 @@ mod tests {
         let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
         df.select_row(Some(2));
 
-        let _ = df.event(&Event::KeyDown { key: Key::Down });
+        let _ = df.event(&Event::key_down(Key::Down));
         assert_eq!(df.selected_row, Some(2)); // Should stay at bottom
     }
 
@@ -1265,7 +1265,7 @@ mod tests {
         let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
         df.select_row(None);
 
-        let _ = df.event(&Event::KeyDown { key: Key::Up });
+        let _ = df.event(&Event::key_down(Key::Up));
         assert_eq!(df.selected_row, Some(0)); // Should select first row
     }
 
@@ -1274,7 +1274,7 @@ mod tests {
         let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0, 3.0]));
         df.select_row(None);
 
-        let _ = df.event(&Event::KeyDown { key: Key::Down });
+        let _ = df.event(&Event::key_down(Key::Down));
         assert_eq!(df.selected_row, Some(0)); // Should select first row
     }
 
@@ -1288,7 +1288,7 @@ mod tests {
         df.scroll_offset = 30;
         df.select_row(Some(35));
 
-        let _ = df.event(&Event::KeyDown { key: Key::PageUp });
+        let _ = df.event(&Event::key_down(Key::PageUp));
         assert!(df.scroll_offset < 30);
     }
 
@@ -1302,7 +1302,7 @@ mod tests {
         df.scroll_offset = 0;
         df.select_row(Some(5));
 
-        let _ = df.event(&Event::KeyDown { key: Key::PageDown });
+        let _ = df.event(&Event::key_down(Key::PageDown));
         assert!(df.scroll_offset > 0);
     }
 
@@ -1311,7 +1311,7 @@ mod tests {
         let mut df = DataFrame::new().with_column(Column::from_f64("A", &[1.0, 2.0]));
         df.select_row(Some(0));
 
-        let _ = df.event(&Event::KeyDown { key: Key::A });
+        let _ = df.event(&Event::key_down(Key::A));
         // Other keys should not change selection
         assert_eq!(df.selected_row, Some(0));
     }
