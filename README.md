@@ -302,7 +302,7 @@ cargo bench -p presentar-core
 
 ## See Also
 
-- [Sovereign AI Cookbook](https://github.com/paiml/sovereign-ai-cookbook) — recipes and examples
+- [Cookbook](examples/) — runnable examples for all crates
 
 ## License
 
