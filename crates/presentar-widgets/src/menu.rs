@@ -649,7 +649,7 @@ impl Widget for Menu {
                     }
                 }
             }
-            Event::KeyDown { key } if self.open => match key {
+            Event::KeyDown { key, .. } if self.open => match key {
                 Key::Escape => {
                     self.hide();
                     return Some(Box::new(MenuClosed));
@@ -1025,7 +1025,7 @@ mod tests {
         let mut menu = Menu::new().items(vec![MenuItem::action("Cut", "cut")]);
         menu.show();
 
-        let result = menu.event(&Event::KeyDown { key: Key::Escape });
+        let result = menu.event(&Event::key_down(Key::Escape));
         assert!(result.is_some());
         assert!(!menu.is_open());
     }
@@ -1038,10 +1038,10 @@ mod tests {
         ]);
         menu.show();
 
-        menu.event(&Event::KeyDown { key: Key::Down });
+        menu.event(&Event::key_down(Key::Down));
         assert_eq!(menu.highlighted_index, Some(0));
 
-        menu.event(&Event::KeyDown { key: Key::Down });
+        menu.event(&Event::key_down(Key::Down));
         assert_eq!(menu.highlighted_index, Some(1));
     }
 
@@ -1213,7 +1213,7 @@ mod tests {
     fn test_menu_event_closed_returns_none() {
         let mut menu = Menu::new();
         // Event on closed menu should return None
-        let result = menu.event(&Event::KeyDown { key: Key::Down });
+        let result = menu.event(&Event::key_down(Key::Down));
         assert!(result.is_none());
     }
 
@@ -1224,7 +1224,7 @@ mod tests {
         menu.highlighted_index = Some(0);
         menu.layout(Rect::new(0.0, 0.0, 200.0, 32.0));
 
-        let result = menu.event(&Event::KeyDown { key: Key::Enter });
+        let result = menu.event(&Event::key_down(Key::Enter));
         assert!(result.is_some());
         assert!(!menu.is_open());
     }
@@ -1236,7 +1236,7 @@ mod tests {
         menu.highlighted_index = Some(0);
         menu.layout(Rect::new(0.0, 0.0, 200.0, 32.0));
 
-        let result = menu.event(&Event::KeyDown { key: Key::Space });
+        let result = menu.event(&Event::key_down(Key::Space));
         assert!(result.is_some());
     }
 
@@ -1247,7 +1247,7 @@ mod tests {
         menu.highlighted_index = Some(0);
         menu.layout(Rect::new(0.0, 0.0, 200.0, 32.0));
 
-        let result = menu.event(&Event::KeyDown { key: Key::Enter });
+        let result = menu.event(&Event::key_down(Key::Enter));
         assert!(result.is_some());
         // Menu stays open for checkbox
         assert!(menu.is_open());
@@ -1260,7 +1260,7 @@ mod tests {
         menu.highlighted_index = Some(0);
         menu.layout(Rect::new(0.0, 0.0, 200.0, 32.0));
 
-        let result = menu.event(&Event::KeyDown { key: Key::Enter });
+        let result = menu.event(&Event::key_down(Key::Enter));
         assert!(result.is_none());
         assert!(menu.is_open()); // Still open
     }
@@ -1272,7 +1272,7 @@ mod tests {
         menu.show();
         menu.highlighted_index = Some(1);
 
-        menu.event(&Event::KeyDown { key: Key::Up });
+        menu.event(&Event::key_down(Key::Up));
         assert_eq!(menu.highlighted_index, Some(0));
     }
 
@@ -1546,7 +1546,7 @@ mod tests {
             Menu::new().items(vec![MenuItem::action("A", "a"), MenuItem::action("B", "b")]);
         menu.show();
 
-        menu.event(&Event::KeyDown { key: Key::Up });
+        menu.event(&Event::key_down(Key::Up));
         assert_eq!(menu.highlighted_index, Some(1)); // Wraps to last
     }
 
@@ -1557,7 +1557,7 @@ mod tests {
         menu.show();
         menu.highlighted_index = Some(1);
 
-        menu.event(&Event::KeyDown { key: Key::Down });
+        menu.event(&Event::key_down(Key::Down));
         assert_eq!(menu.highlighted_index, Some(0)); // Wraps to first
     }
 
@@ -1571,7 +1571,7 @@ mod tests {
         menu.show();
         menu.highlighted_index = Some(2);
 
-        menu.event(&Event::KeyDown { key: Key::Up });
+        menu.event(&Event::key_down(Key::Up));
         assert_eq!(menu.highlighted_index, Some(0)); // Skips separator
     }
 
@@ -1585,7 +1585,7 @@ mod tests {
         menu.show();
         menu.highlighted_index = Some(0);
 
-        menu.event(&Event::KeyDown { key: Key::Down });
+        menu.event(&Event::key_down(Key::Down));
         assert_eq!(menu.highlighted_index, Some(2)); // Skips disabled
     }
 
@@ -1595,7 +1595,7 @@ mod tests {
         menu.show();
         menu.highlighted_index = Some(0);
 
-        let result = menu.event(&Event::KeyDown { key: Key::Tab });
+        let result = menu.event(&Event::key_down(Key::Tab));
         assert!(result.is_none());
         assert_eq!(menu.highlighted_index, Some(0));
     }
@@ -1606,7 +1606,7 @@ mod tests {
         menu.show();
         menu.highlighted_index = Some(0); // Manually set to separator (shouldn't happen in practice)
 
-        let result = menu.event(&Event::KeyDown { key: Key::Enter });
+        let result = menu.event(&Event::key_down(Key::Enter));
         assert!(result.is_none());
         assert!(menu.is_open());
     }
@@ -1620,7 +1620,7 @@ mod tests {
         menu.show();
         menu.highlighted_index = Some(0);
 
-        let result = menu.event(&Event::KeyDown { key: Key::Enter });
+        let result = menu.event(&Event::key_down(Key::Enter));
         assert!(result.is_none());
         assert!(menu.is_open());
     }
@@ -1632,7 +1632,7 @@ mod tests {
         menu.highlighted_index = Some(0);
         menu.layout(Rect::new(0.0, 0.0, 200.0, 32.0));
 
-        let result = menu.event(&Event::KeyDown { key: Key::Space });
+        let result = menu.event(&Event::key_down(Key::Space));
         assert!(result.is_some());
         // Checkbox should be toggled
         if let MenuItem::Checkbox { checked, .. } = &menu.items[0] {

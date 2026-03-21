@@ -1115,9 +1115,7 @@ mod tests {
         let mut table = DataTable::new();
         table.layout(Rect::new(0.0, 0.0, 200.0, 100.0));
 
-        let result = table.event(&Event::KeyDown {
-            key: presentar_core::Key::Enter,
-        });
+        let result = table.event(&Event::key_down(presentar_core::Key::Enter));
         assert!(result.is_none());
     }
 

@@ -32,11 +32,17 @@ pub fn mouse_event_to_presentar(event: &MouseEvent, event_type: &str) -> Event {
 /// Convert a web_sys KeyboardEvent to a presentar Event.
 pub fn keyboard_event_to_presentar(event: &KeyboardEvent, event_type: &str) -> Event {
     let key = code_to_key(&event.code());
+    let modifiers = presentar_core::Modifiers {
+        ctrl: event.ctrl_key(),
+        alt: event.alt_key(),
+        shift: event.shift_key(),
+        meta: event.meta_key(),
+    };
 
     match event_type {
-        "keydown" => Event::KeyDown { key },
-        "keyup" => Event::KeyUp { key },
-        _ => Event::KeyDown { key },
+        "keydown" => Event::KeyDown { key, modifiers },
+        "keyup" => Event::KeyUp { key, modifiers },
+        _ => Event::KeyDown { key, modifiers },
     }
 }
 

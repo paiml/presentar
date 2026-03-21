@@ -635,7 +635,7 @@ impl Widget for TextInput {
         }
 
         match event {
-            Event::KeyDown { key } => match key {
+            Event::KeyDown { key, .. } => match key {
                 Key::Backspace => {
                     self.backspace();
                 }

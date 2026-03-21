@@ -477,7 +477,7 @@ impl Widget for List {
                     offset: self.scroll_offset,
                 }))
             }
-            Event::KeyDown { key } => {
+            Event::KeyDown { key, .. } => {
                 if let Some(focused) = self.focused_index {
                     match key {
                         Key::Up | Key::Left => {
@@ -960,7 +960,7 @@ mod tests {
     fn test_list_event_returns_none_when_empty() {
         let mut list = List::new();
         list.layout(Rect::new(0.0, 0.0, 300.0, 200.0));
-        let result = list.event(&Event::KeyDown { key: Key::Down });
+        let result = list.event(&Event::key_down(Key::Down));
         assert!(result.is_none());
     }
 
@@ -1009,11 +1009,11 @@ mod tests {
         list.focused_index = Some(5);
 
         // Press Down
-        let _ = list.event(&Event::KeyDown { key: Key::Down });
+        let _ = list.event(&Event::key_down(Key::Down));
         assert_eq!(list.focused_index, Some(6));
 
         // Press Up
-        let _ = list.event(&Event::KeyDown { key: Key::Up });
+        let _ = list.event(&Event::key_down(Key::Up));
         assert_eq!(list.focused_index, Some(5));
     }
 
@@ -1029,11 +1029,11 @@ mod tests {
         list.focused_index = Some(5);
 
         // Press Right
-        let _ = list.event(&Event::KeyDown { key: Key::Right });
+        let _ = list.event(&Event::key_down(Key::Right));
         assert_eq!(list.focused_index, Some(6));
 
         // Press Left
-        let _ = list.event(&Event::KeyDown { key: Key::Left });
+        let _ = list.event(&Event::key_down(Key::Left));
         assert_eq!(list.focused_index, Some(5));
     }
 
@@ -1048,11 +1048,11 @@ mod tests {
         list.focused_index = Some(5);
 
         // Press Home
-        let _ = list.event(&Event::KeyDown { key: Key::Home });
+        let _ = list.event(&Event::key_down(Key::Home));
         assert_eq!(list.focused_index, Some(0));
 
         // Press End
-        let _ = list.event(&Event::KeyDown { key: Key::End });
+        let _ = list.event(&Event::key_down(Key::End));
         assert_eq!(list.focused_index, Some(9));
     }
 
@@ -1066,7 +1066,7 @@ mod tests {
         list.layout(Rect::new(0.0, 0.0, 300.0, 200.0));
         list.focused_index = Some(2);
 
-        let result = list.event(&Event::KeyDown { key: Key::Enter });
+        let result = list.event(&Event::key_down(Key::Enter));
         assert!(result.is_some());
         assert_eq!(list.selected_indices(), &[2]);
     }
@@ -1081,7 +1081,7 @@ mod tests {
         list.layout(Rect::new(0.0, 0.0, 300.0, 200.0));
         list.focused_index = Some(3);
 
-        let result = list.event(&Event::KeyDown { key: Key::Space });
+        let result = list.event(&Event::key_down(Key::Space));
         assert!(result.is_some());
         assert_eq!(list.selected_indices(), &[3]);
     }
@@ -1342,12 +1342,12 @@ mod tests {
 
         // At first item, press Up
         list.focused_index = Some(0);
-        let _ = list.event(&Event::KeyDown { key: Key::Up });
+        let _ = list.event(&Event::key_down(Key::Up));
         assert_eq!(list.focused_index, Some(0)); // Should stay at 0
 
         // At last item, press Down
         list.focused_index = Some(2);
-        let _ = list.event(&Event::KeyDown { key: Key::Down });
+        let _ = list.event(&Event::key_down(Key::Down));
         assert_eq!(list.focused_index, Some(2)); // Should stay at 2
     }
 
@@ -1362,7 +1362,7 @@ mod tests {
         list.focused_index = Some(1);
 
         // Press a key that's not handled
-        let result = list.event(&Event::KeyDown { key: Key::Tab });
+        let result = list.event(&Event::key_down(Key::Tab));
         assert!(result.is_none());
         assert_eq!(list.focused_index, Some(1));
     }

@@ -408,7 +408,7 @@ impl Widget for Modal {
         }
 
         match event {
-            Event::KeyDown { key: Key::Escape } if self.close_on_escape => {
+            Event::KeyDown { key: Key::Escape, .. } if self.close_on_escape => {
                 self.hide();
                 return Some(Box::new(ModalClosed {
                     reason: CloseReason::Escape,
@@ -738,7 +738,7 @@ mod tests {
         let mut modal = Modal::new().open(true);
         modal.layout(Rect::new(0.0, 0.0, 1024.0, 768.0));
 
-        let result = modal.event(&Event::KeyDown { key: Key::Escape });
+        let result = modal.event(&Event::key_down(Key::Escape));
         assert!(result.is_some());
         assert!(!modal.is_open());
     }
@@ -748,7 +748,7 @@ mod tests {
         let mut modal = Modal::new().open(true).close_on_escape(false);
         modal.layout(Rect::new(0.0, 0.0, 1024.0, 768.0));
 
-        let result = modal.event(&Event::KeyDown { key: Key::Escape });
+        let result = modal.event(&Event::key_down(Key::Escape));
         assert!(result.is_none());
         assert!(modal.is_open());
     }
@@ -851,7 +851,7 @@ mod tests {
     #[test]
     fn test_modal_event_not_open_returns_none() {
         let mut modal = Modal::new();
-        let result = modal.event(&Event::KeyDown { key: Key::Escape });
+        let result = modal.event(&Event::key_down(Key::Escape));
         assert!(result.is_none());
     }
 
@@ -859,7 +859,7 @@ mod tests {
     fn test_modal_other_key_does_nothing() {
         let mut modal = Modal::new().open(true);
         modal.layout(Rect::new(0.0, 0.0, 1024.0, 768.0));
-        let result = modal.event(&Event::KeyDown { key: Key::Tab });
+        let result = modal.event(&Event::key_down(Key::Tab));
         assert!(result.is_none());
         assert!(modal.is_open());
     }

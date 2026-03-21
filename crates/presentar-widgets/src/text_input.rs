@@ -377,7 +377,7 @@ impl Widget for TextInput {
                     }));
                 }
             }
-            Event::KeyDown { key } if self.focused => match key {
+            Event::KeyDown { key, .. } if self.focused => match key {
                 Key::Backspace => {
                     if self.backspace() {
                         return Some(Box::new(TextChanged {
@@ -939,9 +939,7 @@ mod tests {
         input.event(&Event::FocusIn);
         input.cursor = 5;
 
-        let result = input.event(&Event::KeyDown {
-            key: Key::Backspace,
-        });
+        let result = input.event(&Event::key_down(Key::Backspace));
         assert_eq!(input.get_value(), "hell");
         assert!(result.is_some());
 
@@ -956,7 +954,7 @@ mod tests {
         input.event(&Event::FocusIn);
         input.cursor = 0;
 
-        let result = input.event(&Event::KeyDown { key: Key::Delete });
+        let result = input.event(&Event::key_down(Key::Delete));
         assert_eq!(input.get_value(), "ello");
         assert!(result.is_some());
     }
@@ -968,7 +966,7 @@ mod tests {
         input.event(&Event::FocusIn);
         input.cursor = 3;
 
-        let result = input.event(&Event::KeyDown { key: Key::Left });
+        let result = input.event(&Event::key_down(Key::Left));
         assert_eq!(input.cursor, 2);
         assert!(result.is_none()); // No text change
     }
@@ -980,7 +978,7 @@ mod tests {
         input.event(&Event::FocusIn);
         input.cursor = 2;
 
-        let result = input.event(&Event::KeyDown { key: Key::Right });
+        let result = input.event(&Event::key_down(Key::Right));
         assert_eq!(input.cursor, 3);
         assert!(result.is_none());
     }
@@ -992,7 +990,7 @@ mod tests {
         input.event(&Event::FocusIn);
         input.cursor = 5;
 
-        let result = input.event(&Event::KeyDown { key: Key::Home });
+        let result = input.event(&Event::key_down(Key::Home));
         assert_eq!(input.cursor, 0);
         assert!(result.is_none());
     }
@@ -1004,7 +1002,7 @@ mod tests {
         input.event(&Event::FocusIn);
         input.cursor = 0;
 
-        let result = input.event(&Event::KeyDown { key: Key::End });
+        let result = input.event(&Event::key_down(Key::End));
         assert_eq!(input.cursor, 5);
         assert!(result.is_none());
     }
@@ -1015,7 +1013,7 @@ mod tests {
         input.layout(Rect::new(0.0, 0.0, 200.0, 30.0));
         input.event(&Event::FocusIn);
 
-        let result = input.event(&Event::KeyDown { key: Key::Enter });
+        let result = input.event(&Event::key_down(Key::Enter));
         assert!(result.is_some());
 
         let msg = result.unwrap().downcast::<TextSubmitted>().unwrap();
@@ -1028,9 +1026,7 @@ mod tests {
         input.layout(Rect::new(0.0, 0.0, 200.0, 30.0));
         // Not focused
 
-        let result = input.event(&Event::KeyDown {
-            key: Key::Backspace,
-        });
+        let result = input.event(&Event::key_down(Key::Backspace));
         assert_eq!(input.get_value(), "hello"); // Unchanged
         assert!(result.is_none());
     }
@@ -1077,9 +1073,7 @@ mod tests {
         input.layout(Rect::new(0.0, 0.0, 200.0, 30.0));
         input.focused = true;
 
-        let result = input.event(&Event::KeyDown {
-            key: Key::Backspace,
-        });
+        let result = input.event(&Event::key_down(Key::Backspace));
         assert_eq!(input.get_value(), "hello");
         assert!(result.is_none());
     }
@@ -1104,14 +1098,12 @@ mod tests {
         assert_eq!(input.cursor, 5);
 
         // 3. Backspace
-        input.event(&Event::KeyDown {
-            key: Key::Backspace,
-        });
+        input.event(&Event::key_down(Key::Backspace));
         assert_eq!(input.get_value(), "Hell");
         assert_eq!(input.cursor, 4);
 
         // 4. Navigate home
-        input.event(&Event::KeyDown { key: Key::Home });
+        input.event(&Event::key_down(Key::Home));
         assert_eq!(input.cursor, 0);
 
         // 5. Type "Say "
@@ -1122,7 +1114,7 @@ mod tests {
         assert_eq!(input.cursor, 4);
 
         // 6. Navigate end
-        input.event(&Event::KeyDown { key: Key::End });
+        input.event(&Event::key_down(Key::End));
         assert_eq!(input.cursor, 8);
 
         // 7. Type "o"
@@ -1132,7 +1124,7 @@ mod tests {
         assert_eq!(input.get_value(), "Say Hello");
 
         // 8. Submit
-        let result = input.event(&Event::KeyDown { key: Key::Enter });
+        let result = input.event(&Event::key_down(Key::Enter));
         let msg = result.unwrap().downcast::<TextSubmitted>().unwrap();
         assert_eq!(msg.value, "Say Hello");
 
@@ -1152,14 +1144,14 @@ mod tests {
         input.cursor = 2;
 
         // Left boundary
-        input.event(&Event::KeyDown { key: Key::Left });
-        input.event(&Event::KeyDown { key: Key::Left });
-        input.event(&Event::KeyDown { key: Key::Left }); // Should stay at 0
+        input.event(&Event::key_down(Key::Left));
+        input.event(&Event::key_down(Key::Left));
+        input.event(&Event::key_down(Key::Left)); // Should stay at 0
         assert_eq!(input.cursor, 0);
 
         // Right boundary
-        input.event(&Event::KeyDown { key: Key::End });
-        input.event(&Event::KeyDown { key: Key::Right }); // Should stay at end
+        input.event(&Event::key_down(Key::End));
+        input.event(&Event::key_down(Key::Right)); // Should stay at end
         assert_eq!(input.cursor, 5);
     }
 
@@ -1170,9 +1162,7 @@ mod tests {
         input.event(&Event::FocusIn);
         input.cursor = 0;
 
-        let result = input.event(&Event::KeyDown {
-            key: Key::Backspace,
-        });
+        let result = input.event(&Event::key_down(Key::Backspace));
         assert_eq!(input.get_value(), "hello"); // Unchanged
         assert!(result.is_none()); // No change message
     }
@@ -1184,7 +1174,7 @@ mod tests {
         input.event(&Event::FocusIn);
         input.cursor = 5;
 
-        let result = input.event(&Event::KeyDown { key: Key::Delete });
+        let result = input.event(&Event::key_down(Key::Delete));
         assert_eq!(input.get_value(), "hello"); // Unchanged
         assert!(result.is_none());
     }

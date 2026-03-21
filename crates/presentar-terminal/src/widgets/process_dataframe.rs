@@ -715,21 +715,23 @@ impl Widget for ProcessDataFrame {
         match event {
             Event::KeyDown {
                 key: Key::Up | Key::K,
+                ..
             } => {
                 self.scroll_up();
                 None
             }
             Event::KeyDown {
                 key: Key::Down | Key::J,
+                ..
             } => {
                 self.scroll_down();
                 None
             }
-            Event::KeyDown { key: Key::S } => {
+            Event::KeyDown { key: Key::S, .. } => {
                 self.cycle_sort();
                 None
             }
-            Event::KeyDown { key: Key::R } => {
+            Event::KeyDown { key: Key::R, .. } => {
                 self.toggle_sort_direction();
                 None
             }
@@ -1594,7 +1596,7 @@ mod tests {
         ]);
         df.selected_row = Some(1);
 
-        let result = df.event(&Event::KeyDown { key: Key::Up });
+        let result = df.event(&Event::key_down(Key::Up));
         assert!(result.is_none());
         assert_eq!(df.selected_row, Some(0));
     }
@@ -1614,7 +1616,7 @@ mod tests {
         ]);
         df.selected_row = Some(1);
 
-        let result = df.event(&Event::KeyDown { key: Key::K });
+        let result = df.event(&Event::key_down(Key::K));
         assert!(result.is_none());
         assert_eq!(df.selected_row, Some(0));
     }
@@ -1634,7 +1636,7 @@ mod tests {
             },
         ]);
 
-        let result = df.event(&Event::KeyDown { key: Key::Down });
+        let result = df.event(&Event::key_down(Key::Down));
         assert!(result.is_none());
         assert_eq!(df.selected_row, Some(0));
     }
@@ -1654,7 +1656,7 @@ mod tests {
             },
         ]);
 
-        let result = df.event(&Event::KeyDown { key: Key::J });
+        let result = df.event(&Event::key_down(Key::J));
         assert!(result.is_none());
         assert_eq!(df.selected_row, Some(0));
     }
@@ -1664,7 +1666,7 @@ mod tests {
         let mut df = ProcessDataFrame::new();
         assert_eq!(df.sort_column, ProcessSortColumn::Cpu);
 
-        df.event(&Event::KeyDown { key: Key::S });
+        df.event(&Event::key_down(Key::S));
         assert_eq!(df.sort_column, ProcessSortColumn::Mem);
     }
 
@@ -1673,14 +1675,14 @@ mod tests {
         let mut df = ProcessDataFrame::new();
         assert!(df.sort_desc);
 
-        df.event(&Event::KeyDown { key: Key::R });
+        df.event(&Event::key_down(Key::R));
         assert!(!df.sort_desc);
     }
 
     #[test]
     fn test_event_unhandled() {
         let mut df = ProcessDataFrame::new();
-        let result = df.event(&Event::KeyDown { key: Key::Escape });
+        let result = df.event(&Event::key_down(Key::Escape));
         assert!(result.is_none());
     }
 

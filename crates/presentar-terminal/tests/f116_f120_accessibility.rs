@@ -339,13 +339,13 @@ fn f119_process_table_keyboard_nav() {
     let initial_selection = table.selected();
 
     // Navigate down
-    let down_event = Event::KeyDown { key: Key::Down };
+    let down_event = Event::key_down(Key::Down);
     table.event(&down_event);
 
     let after_down = table.selected();
 
     // Navigate up
-    let up_event = Event::KeyDown { key: Key::Up };
+    let up_event = Event::key_down(Key::Up);
     table.event(&up_event);
 
     let after_up = table.selected();
@@ -369,13 +369,13 @@ fn f119_keyboard_boundary_handling() {
     table.layout(Rect::new(0.0, 0.0, 80.0, 10.0));
 
     // Try to go up from first item
-    let up_event = Event::KeyDown { key: Key::Up };
+    let up_event = Event::key_down(Key::Up);
     table.event(&up_event);
     assert_eq!(table.selected(), 0, "Up at top should stay at top");
 
     // Go to last item
     table.select(1);
-    let down_event = Event::KeyDown { key: Key::Down };
+    let down_event = Event::key_down(Key::Down);
     table.event(&down_event);
     assert_eq!(table.selected(), 1, "Down at bottom should stay at bottom");
 }
@@ -390,10 +390,10 @@ fn f119_empty_table_keyboard() {
     table.set_processes(vec![]);
     table.layout(Rect::new(0.0, 0.0, 80.0, 10.0));
 
-    let down_event = Event::KeyDown { key: Key::Down };
+    let down_event = Event::key_down(Key::Down);
     table.event(&down_event);
 
-    let up_event = Event::KeyDown { key: Key::Up };
+    let up_event = Event::key_down(Key::Up);
     table.event(&up_event);
 
     // Should not panic

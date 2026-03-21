@@ -79,7 +79,13 @@ impl InputHandler {
             _ => non_char_key(key.code)?,
         };
 
-        Some(Event::KeyDown { key: presentar_key })
+        let modifiers = presentar_core::Modifiers {
+            ctrl: key.modifiers.contains(KeyModifiers::CONTROL),
+            alt: key.modifiers.contains(KeyModifiers::ALT),
+            shift: key.modifiers.contains(KeyModifiers::SHIFT),
+            meta: key.modifiers.contains(KeyModifiers::SUPER),
+        };
+        Some(Event::KeyDown { key: presentar_key, modifiers })
     }
 
     fn convert_mouse(&self, mouse: crossterm::event::MouseEvent) -> Event {

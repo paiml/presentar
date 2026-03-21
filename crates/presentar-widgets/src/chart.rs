@@ -1560,9 +1560,7 @@ mod tests {
     #[test]
     fn test_chart_event_returns_none() {
         let mut chart = Chart::new();
-        let result = chart.event(&presentar_core::Event::KeyDown {
-            key: presentar_core::Key::Down,
-        });
+        let result = chart.event(&presentar_core::Event::key_down(presentar_core::Key::Down));
         assert!(result.is_none());
     }
 

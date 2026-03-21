@@ -250,12 +250,14 @@ impl Widget for Button {
             }
             Event::KeyDown {
                 key: presentar_core::Key::Enter | presentar_core::Key::Space,
+                ..
             } => {
                 self.pressed = true;
                 None
             }
             Event::KeyUp {
                 key: presentar_core::Key::Enter | presentar_core::Key::Space,
+                ..
             } => {
                 self.pressed = false;
                 Some(Box::new(ButtonClicked))
@@ -769,7 +771,7 @@ mod tests {
         let mut button = Button::new("Test");
         button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
 
-        let result = button.event(&Event::KeyDown { key: Key::Enter });
+        let result = button.event(&Event::key_down(Key::Enter));
         assert!(button.pressed);
         assert!(result.is_none()); // KeyDown doesn't emit click
     }
@@ -779,7 +781,7 @@ mod tests {
         let mut button = Button::new("Test");
         button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
 
-        let result = button.event(&Event::KeyDown { key: Key::Space });
+        let result = button.event(&Event::key_down(Key::Space));
         assert!(button.pressed);
         assert!(result.is_none());
     }
@@ -790,11 +792,11 @@ mod tests {
         button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
 
         // Key down first
-        button.event(&Event::KeyDown { key: Key::Enter });
+        button.event(&Event::key_down(Key::Enter));
         assert!(button.pressed);
 
         // Key up emits click
-        let result = button.event(&Event::KeyUp { key: Key::Enter });
+        let result = button.event(&Event::key_up(Key::Enter));
         assert!(!button.pressed);
         assert!(result.is_some());
     }
@@ -804,8 +806,8 @@ mod tests {
         let mut button = Button::new("Test");
         button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
 
-        button.event(&Event::KeyDown { key: Key::Space });
-        let result = button.event(&Event::KeyUp { key: Key::Space });
+        button.event(&Event::key_down(Key::Space));
+        let result = button.event(&Event::key_up(Key::Space));
         assert!(!button.pressed);
         assert!(result.is_some());
     }
@@ -815,7 +817,7 @@ mod tests {
         let mut button = Button::new("Test");
         button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
 
-        let result = button.event(&Event::KeyDown { key: Key::Escape });
+        let result = button.event(&Event::key_down(Key::Escape));
         assert!(!button.pressed);
         assert!(result.is_none());
     }
@@ -848,7 +850,7 @@ mod tests {
         let mut button = Button::new("Test").disabled(true);
         button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
 
-        let result = button.event(&Event::KeyDown { key: Key::Enter });
+        let result = button.event(&Event::key_down(Key::Enter));
         assert!(!button.pressed);
         assert!(result.is_none());
     }
@@ -858,7 +860,7 @@ mod tests {
         let mut button = Button::new("Test").disabled(true);
         button.layout(Rect::new(0.0, 0.0, 100.0, 40.0));
 
-        let result = button.event(&Event::KeyUp { key: Key::Enter });
+        let result = button.event(&Event::key_up(Key::Enter));
         assert!(result.is_none());
     }
 

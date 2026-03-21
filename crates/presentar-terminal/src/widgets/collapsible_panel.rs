@@ -435,6 +435,7 @@ impl Widget for CollapsiblePanel {
         match event {
             Event::KeyDown {
                 key: Key::Enter | Key::Space,
+                ..
             } => {
                 self.toggle();
                 Some(Box::new(self.collapsed))
@@ -851,7 +852,7 @@ mod tests {
     #[test]
     fn test_event_enter_toggles() {
         let mut panel = CollapsiblePanel::new("Test");
-        let event = Event::KeyDown { key: Key::Enter };
+        let event = Event::key_down(Key::Enter);
         let result = panel.event(&event);
         assert!(result.is_some());
         assert!(panel.is_collapsed());
@@ -860,7 +861,7 @@ mod tests {
     #[test]
     fn test_event_space_toggles() {
         let mut panel = CollapsiblePanel::new("Test");
-        let event = Event::KeyDown { key: Key::Space };
+        let event = Event::key_down(Key::Space);
         let result = panel.event(&event);
         assert!(result.is_some());
         assert!(panel.is_collapsed());
@@ -869,7 +870,7 @@ mod tests {
     #[test]
     fn test_event_other_keys_ignored() {
         let mut panel = CollapsiblePanel::new("Test");
-        let event = Event::KeyDown { key: Key::Left };
+        let event = Event::key_down(Key::Left);
         let result = panel.event(&event);
         assert!(result.is_none());
         assert!(panel.is_expanded());
@@ -878,7 +879,7 @@ mod tests {
     #[test]
     fn test_event_returns_state() {
         let mut panel = CollapsiblePanel::new("Test");
-        let event = Event::KeyDown { key: Key::Enter };
+        let event = Event::key_down(Key::Enter);
         let result = panel.event(&event);
         // Result should be the new collapsed state
         if let Some(boxed) = result {

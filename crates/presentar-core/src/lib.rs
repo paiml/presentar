@@ -683,8 +683,8 @@ mod tests {
 
         #[test]
         fn test_event_key() {
-            let e = Event::KeyDown { key: Key::Enter };
-            if let Event::KeyDown { key } = e {
+            let e = Event::key_down(Key::Enter);
+            if let Event::KeyDown { key, .. } = e {
                 assert_eq!(key, Key::Enter);
             } else {
                 panic!("Expected KeyDown event");

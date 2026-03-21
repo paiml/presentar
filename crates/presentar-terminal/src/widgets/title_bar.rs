@@ -426,21 +426,22 @@ impl Widget for TitleBar {
 
     fn event(&mut self, event: &Event) -> Option<Box<dyn Any + Send>> {
         match event {
-            Event::KeyDown { key: Key::Slash } if !self.search_active => {
+            Event::KeyDown { key: Key::Slash, .. } if !self.search_active => {
                 self.search_active = true;
                 None
             }
-            Event::KeyDown { key: Key::Escape } if self.search_active => {
+            Event::KeyDown { key: Key::Escape, .. } if self.search_active => {
                 self.search_active = false;
                 self.search_text.clear();
                 None
             }
-            Event::KeyDown { key: Key::Enter } if self.search_active => {
+            Event::KeyDown { key: Key::Enter, .. } if self.search_active => {
                 self.search_active = false;
                 None
             }
             Event::KeyDown {
                 key: Key::Backspace,
+                ..
             } if self.search_active && !self.search_text.is_empty() => {
                 self.search_text.pop();
                 None
@@ -791,7 +792,7 @@ mod tests {
         let mut bar = TitleBar::new("test");
         assert!(!bar.search_active);
 
-        let event = Event::KeyDown { key: Key::Slash };
+        let event = Event::key_down(Key::Slash);
         bar.event(&event);
         assert!(bar.search_active);
     }
@@ -800,7 +801,7 @@ mod tests {
     fn test_title_bar_event_slash_ignored_when_active() {
         let mut bar = TitleBar::new("test").with_search_active(true);
 
-        let event = Event::KeyDown { key: Key::Slash };
+        let event = Event::key_down(Key::Slash);
         bar.event(&event);
         assert!(bar.search_active); // Still active
     }
@@ -811,7 +812,7 @@ mod tests {
             .with_search_active(true)
             .with_search_text("filter");
 
-        let event = Event::KeyDown { key: Key::Escape };
+        let event = Event::key_down(Key::Escape);
         bar.event(&event);
         assert!(!bar.search_active);
         assert!(bar.search_text.is_empty()); // Cleared
@@ -821,7 +822,7 @@ mod tests {
     fn test_title_bar_event_escape_ignored_when_inactive() {
         let mut bar = TitleBar::new("test");
 
-        let event = Event::KeyDown { key: Key::Escape };
+        let event = Event::key_down(Key::Escape);
         bar.event(&event);
         assert!(!bar.search_active);
     }
@@ -832,7 +833,7 @@ mod tests {
             .with_search_active(true)
             .with_search_text("filter");
 
-        let event = Event::KeyDown { key: Key::Enter };
+        let event = Event::key_down(Key::Enter);
         bar.event(&event);
         assert!(!bar.search_active);
         assert_eq!(bar.search_text, "filter"); // Preserved
@@ -888,7 +889,7 @@ mod tests {
     fn test_title_bar_event_unhandled() {
         let mut bar = TitleBar::new("test");
 
-        let event = Event::KeyDown { key: Key::Tab };
+        let event = Event::key_down(Key::Tab);
         let result = bar.event(&event);
         assert!(result.is_none());
     }

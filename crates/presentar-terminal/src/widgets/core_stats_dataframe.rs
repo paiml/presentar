@@ -647,6 +647,7 @@ impl Widget for CoreStatsDataFrame {
         match event {
             Event::KeyDown {
                 key: Key::Up | Key::K,
+                ..
             } => {
                 if let Some(sel) = self.selected_row {
                     if sel > 0 {
@@ -659,6 +660,7 @@ impl Widget for CoreStatsDataFrame {
             }
             Event::KeyDown {
                 key: Key::Down | Key::J,
+                ..
             } => {
                 if let Some(sel) = self.selected_row {
                     if sel < self.rows.len().saturating_sub(1) {
@@ -669,11 +671,11 @@ impl Widget for CoreStatsDataFrame {
                 }
                 None
             }
-            Event::KeyDown { key: Key::S } => {
+            Event::KeyDown { key: Key::S, .. } => {
                 self.cycle_sort();
                 None
             }
-            Event::KeyDown { key: Key::R } => {
+            Event::KeyDown { key: Key::R, .. } => {
                 self.toggle_sort_direction();
                 None
             }
@@ -970,7 +972,7 @@ mod tests {
         df.update_cores(make_test_cores());
         df.layout(Rect::new(0.0, 0.0, 100.0, 10.0));
 
-        let event = Event::KeyDown { key: Key::Down };
+        let event = Event::key_down(Key::Down);
         let _ = df.event(&event);
     }
 
@@ -980,7 +982,7 @@ mod tests {
         df.update_cores(make_test_cores());
         df.layout(Rect::new(0.0, 0.0, 100.0, 10.0));
 
-        let event = Event::KeyDown { key: Key::Up };
+        let event = Event::key_down(Key::Up);
         let _ = df.event(&event);
     }
 
@@ -989,7 +991,7 @@ mod tests {
         let mut df = CoreStatsDataFrame::new();
         df.update_cores(make_test_cores());
 
-        let event = Event::KeyDown { key: Key::S };
+        let event = Event::key_down(Key::S);
         let _ = df.event(&event);
         // Sort should have cycled
         assert_eq!(df.sort_column, CoreStatsSortColumn::Total);
@@ -1000,7 +1002,7 @@ mod tests {
         let mut df = CoreStatsDataFrame::new();
         df.update_cores(make_test_cores());
 
-        let event = Event::KeyDown { key: Key::R };
+        let event = Event::key_down(Key::R);
         let _ = df.event(&event);
         // Sort direction should have toggled
         assert!(df.sort_desc);

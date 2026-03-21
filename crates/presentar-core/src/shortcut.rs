@@ -12,7 +12,7 @@ use crate::widget::WidgetId;
 use std::collections::HashMap;
 
 /// Modifier keys for keyboard shortcuts.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize)]
 pub struct Modifiers {
     /// Control key (Cmd on Mac).
     pub ctrl: bool,

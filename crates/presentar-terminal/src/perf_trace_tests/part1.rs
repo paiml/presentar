@@ -1898,3 +1898,10 @@ mod tests {
     #[test]
     fn f_pct_013_percentile_us() {
         let mut pt = PercentileTracker::new();
+        for i in 0..100 {
+            pt.record_ms(i as f64);
+        }
+        let us = pt.percentile_us(0.5);
+        assert!(us > 0, "percentile_us should return microseconds");
+    }
+}

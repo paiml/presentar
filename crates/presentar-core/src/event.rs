@@ -36,11 +36,17 @@ pub enum Event {
     KeyDown {
         /// Key pressed
         key: Key,
+        /// Active modifier keys (Ctrl, Alt, Shift, Meta)
+        #[serde(default)]
+        modifiers: crate::shortcut::Modifiers,
     },
     /// Key released
     KeyUp {
         /// Key released
         key: Key,
+        /// Active modifier keys (Ctrl, Alt, Shift, Meta)
+        #[serde(default)]
+        modifiers: crate::shortcut::Modifiers,
     },
     /// Text input received
     TextInput {
@@ -428,6 +434,24 @@ pub enum Key {
 }
 
 impl Event {
+    /// Create a key down event with no modifiers.
+    #[must_use]
+    pub const fn key_down(key: Key) -> Self {
+        Self::KeyDown {
+            key,
+            modifiers: crate::shortcut::Modifiers::NONE,
+        }
+    }
+
+    /// Create a key up event with no modifiers.
+    #[must_use]
+    pub const fn key_up(key: Key) -> Self {
+        Self::KeyUp {
+            key,
+            modifiers: crate::shortcut::Modifiers::NONE,
+        }
+    }
+
     /// Check if this is a mouse event.
     #[must_use]
     pub const fn is_mouse(&self) -> bool {
@@ -646,12 +670,12 @@ mod tests {
         }
         .is_mouse());
         assert!(Event::MouseEnter.is_mouse());
-        assert!(!Event::KeyDown { key: Key::Enter }.is_mouse());
+        assert!(!Event::key_down(Key::Enter).is_mouse());
     }
 
     #[test]
     fn test_event_is_keyboard() {
-        assert!(Event::KeyDown { key: Key::A }.is_keyboard());
+        assert!(Event::key_down(Key::A).is_keyboard());
         assert!(Event::TextInput {
             text: "x".to_string()
         }
@@ -666,7 +690,7 @@ mod tests {
     fn test_event_is_focus() {
         assert!(Event::FocusIn.is_focus());
         assert!(Event::FocusOut.is_focus());
-        assert!(!Event::KeyDown { key: Key::Tab }.is_focus());
+        assert!(!Event::key_down(Key::Tab).is_focus());
     }
 
     #[test]
@@ -719,7 +743,7 @@ mod tests {
 
     #[test]
     fn test_event_key_up() {
-        let event = Event::KeyUp { key: Key::Space };
+        let event = Event::key_up(Key::Space);
         assert!(event.is_keyboard());
         assert!(!event.is_mouse());
     }
@@ -1155,7 +1179,7 @@ mod tests {
             Key::Z,
         ];
         for key in &letters {
-            let event = Event::KeyDown { key: *key };
+            let event = Event::key_down(*key);
             assert!(event.is_keyboard());
         }
     }
@@ -1175,7 +1199,7 @@ mod tests {
             Key::Num9,
         ];
         for key in &numbers {
-            let event = Event::KeyDown { key: *key };
+            let event = Event::key_down(*key);
             assert!(event.is_keyboard());
         }
     }
@@ -1197,7 +1221,7 @@ mod tests {
             Key::F12,
         ];
         for key in &function_keys {
-            let event = Event::KeyDown { key: *key };
+            let event = Event::key_down(*key);
             assert!(event.is_keyboard());
         }
     }
@@ -1218,7 +1242,7 @@ mod tests {
             Key::PageDown,
         ];
         for key in &control_keys {
-            let event = Event::KeyDown { key: *key };
+            let event = Event::key_down(*key);
             assert!(event.is_keyboard());
         }
     }
@@ -1227,7 +1251,7 @@ mod tests {
     fn test_key_arrow_keys() {
         let arrows = [Key::Up, Key::Down, Key::Left, Key::Right];
         for key in &arrows {
-            let event = Event::KeyDown { key: *key };
+            let event = Event::key_down(*key);
             assert!(event.is_keyboard());
         }
     }
@@ -1245,7 +1269,7 @@ mod tests {
             Key::MetaRight,
         ];
         for key in &modifiers {
-            let event = Event::KeyDown { key: *key };
+            let event = Event::key_down(*key);
             assert!(event.is_keyboard());
         }
     }
@@ -1266,7 +1290,7 @@ mod tests {
             Key::Slash,
         ];
         for key in &punctuation {
-            let event = Event::KeyDown { key: *key };
+            let event = Event::key_down(*key);
             assert!(event.is_keyboard());
         }
     }
@@ -1396,8 +1420,8 @@ mod tests {
                 delta_x: 1.0,
                 delta_y: -1.0,
             },
-            Event::KeyDown { key: Key::A },
-            Event::KeyUp { key: Key::B },
+            Event::key_down(Key::A),
+            Event::key_up(Key::B),
             Event::TextInput {
                 text: "test".to_string(),
             },

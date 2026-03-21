@@ -1151,9 +1151,7 @@ mod tests {
     #[test]
     fn test_data_card_event_returns_none() {
         let mut card = DataCard::new("data");
-        let result = card.event(&presentar_core::Event::KeyDown {
-            key: presentar_core::Key::Down,
-        });
+        let result = card.event(&presentar_core::Event::key_down(presentar_core::Key::Down));
         assert!(result.is_none());
     }
 

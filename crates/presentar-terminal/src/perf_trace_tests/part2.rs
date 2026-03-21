@@ -1,3 +1,12 @@
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
+mod tests {
+    use super::*;
+
+    /// F-PCT-013b: percentile_us/ms consistency
+    #[test]
+    fn f_pct_013b_percentile_us_ms_consistency() {
+        let mut pt = PercentileTracker::new();
         pt.record_ms(5.0); // 5000 us
         let p50_us = pt.percentile_us(50.0);
         let p50_ms = pt.percentile_ms(50.0);
@@ -1898,3 +1907,5 @@
         cp.success();
         cp.failure();
         assert_eq!(cp.total(), 3);
+    }
+}

@@ -376,7 +376,7 @@ impl Widget for Table {
 
     fn event(&mut self, event: &Event) -> Option<Box<dyn Any + Send>> {
         match event {
-            Event::KeyDown { key } => {
+            Event::KeyDown { key, .. } => {
                 match key {
                     Key::Up | Key::K => self.select_prev(),
                     Key::Down | Key::J => self.select_next(),

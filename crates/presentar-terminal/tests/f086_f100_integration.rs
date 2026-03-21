@@ -417,13 +417,13 @@ fn f094_keyboard_event_handling() {
     assert_eq!(table.selected(), 0);
 
     // Send key down event
-    table.event(&Event::KeyDown { key: Key::J });
+    table.event(&Event::key_down(Key::J));
     assert_eq!(table.selected(), 1, "J key should move selection down");
 
-    table.event(&Event::KeyDown { key: Key::K });
+    table.event(&Event::key_down(Key::K));
     assert_eq!(table.selected(), 0, "K key should move selection up");
 
-    table.event(&Event::KeyDown { key: Key::Down });
+    table.event(&Event::key_down(Key::Down));
     assert_eq!(table.selected(), 1, "Down arrow should move selection down");
 }
 
@@ -436,14 +436,14 @@ fn f094_sort_key_handling() {
     ]);
 
     // Default sort is CPU descending
-    table.event(&Event::KeyDown { key: Key::P });
+    table.event(&Event::key_down(Key::P));
     assert_eq!(
         table.current_sort(),
         presentar_terminal::ProcessSort::Pid,
         "P key should sort by PID"
     );
 
-    table.event(&Event::KeyDown { key: Key::M });
+    table.event(&Event::key_down(Key::M));
     assert_eq!(
         table.current_sort(),
         presentar_terminal::ProcessSort::Memory,
