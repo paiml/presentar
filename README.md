@@ -300,6 +300,10 @@ cargo bench -p presentar-core
 | [`presentar-layout`](https://crates.io/crates/presentar-layout) | Layout engine |
 | [`presentar-terminal`](https://crates.io/crates/presentar-terminal) | btop-style terminal widgets |
 
+## See Also
+
+- [Sovereign AI Cookbook](https://github.com/paiml/sovereign-ai-cookbook) — recipes and examples
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
