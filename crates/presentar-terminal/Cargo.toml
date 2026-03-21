@@ -1,4 +1,5 @@
 [package]
+exclude = ["tests/", "benches/", "docs/", ".github/", ".pmat/", "target/", ".profraw", ".profdata", ".vscode/", ".idea/", "proptest-regressions/"]
 name = "presentar-terminal"
 description = "Terminal backend for Presentar UI framework with zero-allocation rendering"
 version.workspace = true

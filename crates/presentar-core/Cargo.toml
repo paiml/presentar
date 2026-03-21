@@ -1,4 +1,5 @@
 [package]
+exclude = ["tests/", "benches/", "docs/", ".github/", ".pmat/", "target/", ".profraw", ".profdata", ".vscode/", ".idea/", "proptest-regressions/"]
 name = "presentar-core"
 description = "Core types and traits for Presentar UI framework"
 version.workspace = true

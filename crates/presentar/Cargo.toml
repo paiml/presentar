@@ -1,4 +1,5 @@
 [package]
+exclude = ["tests/", "benches/", "docs/", ".github/", ".pmat/", "target/", ".profraw", ".profdata", ".vscode/", ".idea/", "proptest-regressions/"]
 name = "presentar"
 description = "WASM-first visualization and rapid application framework"
 version.workspace = true
