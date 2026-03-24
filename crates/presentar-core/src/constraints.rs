@@ -16,6 +16,7 @@
 //! ```
 
 use crate::geometry::Size;
+use provable_contracts_macros::contract;
 use serde::{Deserialize, Serialize};
 
 /// Layout constraints that specify minimum and maximum sizes.
@@ -79,6 +80,7 @@ impl Constraints {
 
     /// Constrain a size to fit within these constraints.
     #[must_use]
+    #[contract("constraints-layout-v1", equation = "constrain")]
     pub fn constrain(&self, size: Size) -> Size {
         Size::new(
             size.width.clamp(self.min_width, self.max_width),

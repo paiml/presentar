@@ -13,6 +13,11 @@ rust-version.workspace = true
 serde = { workspace = true }
 serde_json = { workspace = true }
 trueno = { workspace = true, optional = true }
+provable-contracts-macros = { path = "../../../provable-contracts/crates/provable-contracts-macros" }
+
+[build-dependencies]
+serde = { workspace = true }
+serde_yaml_ng = { workspace = true }
 
 [features]
 # PROBAR-SPEC-009: Brick Architecture is MANDATORY, not optional

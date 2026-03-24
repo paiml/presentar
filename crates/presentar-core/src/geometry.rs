@@ -28,6 +28,7 @@
 //! assert_eq!(inter.width, 50.0);
 //! ```
 
+use provable_contracts_macros::contract;
 use serde::{Deserialize, Serialize};
 use std::ops::{Add, Sub};
 
@@ -257,6 +258,7 @@ impl Rect {
 
     /// Calculate intersection with another rectangle.
     #[must_use]
+    #[contract("rect-geometry-v1", equation = "intersection")]
     pub fn intersection(&self, other: &Self) -> Option<Self> {
         let x = self.x.max(other.x);
         let y = self.y.max(other.y);
@@ -283,6 +285,7 @@ impl Rect {
 
     /// Create a new rectangle inset by the given amount on all sides.
     #[must_use]
+    #[provable_contracts_macros::contract("rect-geometry-v1", equation = "inset")]
     pub fn inset(&self, amount: f32) -> Self {
         Self::new(
             self.x + amount,

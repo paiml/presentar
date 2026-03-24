@@ -1651,8 +1651,10 @@ version = "0.3.5"
 dependencies = [
  "criterion",
  "proptest",
+ "provable-contracts-macros",
  "serde",
  "serde_json",
+ "serde_yaml_ng",
  "trueno 0.15.0",
 ]
 
@@ -1769,6 +1771,15 @@ dependencies = [
  "rusty-fork",
  "tempfile",
  "unarray",
+]
+
+[[package]]
+name = "provable-contracts-macros"
+version = "0.1.1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

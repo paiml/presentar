@@ -17,6 +17,7 @@
 //! assert_eq!(Color::WHITE, Color::rgb(1.0, 1.0, 1.0));
 //! ```
 
+use provable_contracts_macros::contract;
 use serde::{Deserialize, Serialize};
 
 /// RGBA color with values in the range [0.0, 1.0].
@@ -145,6 +146,7 @@ impl Color {
     ///
     /// See: <https://www.w3.org/TR/WCAG21/#dfn-contrast-ratio>
     #[must_use]
+    #[contract("color-wcag-v1", equation = "contrast_ratio")]
     pub fn contrast_ratio(&self, other: &Self) -> f32 {
         let l1 = self.relative_luminance();
         let l2 = other.relative_luminance();
@@ -156,6 +158,7 @@ impl Color {
 
     /// Linear interpolation between two colors.
     #[must_use]
+    #[contract("color-wcag-v1", equation = "lerp")]
     pub fn lerp(&self, other: &Self, t: f32) -> Self {
         let t = t.clamp(0.0, 1.0);
         Self::new(

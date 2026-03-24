@@ -96,9 +96,18 @@ fn main() {
 
                     let total = implemented + partial + not_implemented;
                     println!(
-                        "cargo:warning=[contract] Binding: {implemented}/{total} implemented, \
+                        "cargo:warning=[contract] AllImplemented: {implemented}/{total} implemented, \
                          {partial} partial, {not_implemented} gaps"
                     );
+
+                    // AllImplemented policy: fail build on any gap
+                    if not_implemented > 0 {
+                        panic!(
+                            "[contract] AllImplemented policy violation: {not_implemented} \
+                             binding(s) are not_implemented."
+                        );
+                    }
+
                     println!("cargo:rustc-env=CONTRACT_BINDING_SOURCE=binding.yaml");
                 } else {
                     println!("cargo:warning=[contract] Failed to parse binding.yaml");
