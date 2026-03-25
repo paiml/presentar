@@ -31,6 +31,10 @@ proptest = { workspace = true }
 criterion = { workspace = true }
 
 [[bench]]
+name = "benchmarks"
+harness = false
+
+[[bench]]
 name = "layout"
 harness = false
 
