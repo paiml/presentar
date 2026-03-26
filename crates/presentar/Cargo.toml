@@ -36,6 +36,7 @@ console_error_panic_hook = { workspace = true }
 getrandom = { workspace = true }
 
 [dev-dependencies]
+provable-contracts = { path = "../../../provable-contracts/crates/provable-contracts" }
 presentar-test = { workspace = true }
 sha2 = "0.10"
 hex = "0.4"
