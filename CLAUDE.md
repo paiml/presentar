@@ -45,6 +45,16 @@ See: `docs/specifications/pixel-by-pixel-demo-ptop-ttop.md` Part 0: Epistemologi
 
 ---
 
+## CRITICAL: Contract-First Design
+
+**NEVER write code before writing a provable contract.**
+
+All code changes MUST have a corresponding contract (YAML in ../provable-contracts/contracts/<project>/ or .pmat-work/<TICKET>/contract.json) BEFORE implementation. This is enforced by `pmat comply` CB-1400.
+
+- Use `pmat comply check` to verify contract coverage
+- Minimum verification level: L1 (recommended L3+)
+- See docs/agent-instructions/provable-contract-first-agents.md for the full workflow
+
 ## Project Overview
 
 Presentar is a **WASM-first visualization and rapid application framework** built on the Sovereign AI Stack (Trueno, Aprender, Realizar, Pacha). It eliminates Python/CUDA/cloud dependencies for fully self-hosted AI workloads.
