@@ -3,7 +3,7 @@
 //! Benchmarks color parsing, constraint computation, geometry operations,
 //! and SIMD batch operations which are hot paths in the rendering pipeline.
 
-#![allow(clippy::unwrap_used)]
+#![allow(clippy::unwrap_used, clippy::disallowed_methods, clippy::cast_lossless)]
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use presentar_core::{Color, Constraints, Point, Rect, Size};
@@ -30,7 +30,7 @@ fn bench_constraints_constrain(c: &mut Criterion) {
     let constraints = Constraints::new(0.0, 200.0, 0.0, 100.0);
     c.bench_function("constraints_constrain", |b| {
         b.iter(|| {
-            constraints.constrain(black_box(Size::new(300.0, 150.0)));
+            let _ = constraints.constrain(black_box(Size::new(300.0, 150.0)));
         });
     });
 }
@@ -39,7 +39,7 @@ fn bench_rect_operations(c: &mut Criterion) {
     let rect = Rect::new(10.0, 20.0, 100.0, 50.0);
     c.bench_function("rect_contains_point", |b| {
         b.iter(|| {
-            rect.contains_point(&black_box(Point::new(50.0, 40.0)));
+            let _ = rect.contains_point(&black_box(Point::new(50.0, 40.0)));
         });
     });
 }

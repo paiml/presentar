@@ -36,20 +36,14 @@ fn main() {
         return;
     }
 
-    let yaml = match std::fs::read_to_string(&binding_path) {
-        Ok(s) => s,
-        Err(_) => {
-            println!("cargo:rustc-env=CONTRACT_BINDING_SOURCE=none");
-            return;
-        }
+    let Ok(yaml) = std::fs::read_to_string(&binding_path) else {
+        println!("cargo:rustc-env=CONTRACT_BINDING_SOURCE=none");
+        return;
     };
 
-    let bindings: BindingFile = match serde_yaml_ng::from_str(&yaml) {
-        Ok(b) => b,
-        Err(_) => {
-            println!("cargo:rustc-env=CONTRACT_BINDING_SOURCE=none");
-            return;
-        }
+    let Ok(bindings) = serde_yaml_ng::from_str::<BindingFile>(&yaml) else {
+        println!("cargo:rustc-env=CONTRACT_BINDING_SOURCE=none");
+        return;
     };
 
     let mut implemented = 0u32;

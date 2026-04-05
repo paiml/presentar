@@ -1,6 +1,7 @@
 // build.rs — Read contracts/*.yaml and provable-contracts binding.yaml,
 // emit CONTRACT_* env vars for compile-time assertion checking.
 
+#[allow(clippy::too_many_lines)]
 fn main() {
     // Phase 1: contract assertion env vars from local contracts/
     {
@@ -14,7 +15,7 @@ fn main() {
             for e in es.flatten() {
                 let p = e.path();
                 if p.extension().and_then(|x| x.to_str()) != Some("yaml") { continue; }
-                if p.file_name().map_or(false, |n| n.to_string_lossy().contains("binding")) { continue; }
+                if p.file_name().is_some_and(|n| n.to_string_lossy().contains("binding")) { continue; }
                 println!("cargo:rerun-if-changed={}", p.display());
                 let s = p.file_stem().and_then(|x| x.to_str()).unwrap_or("x").to_uppercase().replace('-', "_");
                 if let Ok(c) = std::fs::read_to_string(&p) {
@@ -101,12 +102,11 @@ fn main() {
                     );
 
                     // AllImplemented policy: fail build on any gap
-                    if not_implemented > 0 {
-                        panic!(
-                            "[contract] AllImplemented policy violation: {not_implemented} \
-                             binding(s) are not_implemented."
-                        );
-                    }
+                    assert!(
+                        not_implemented == 0,
+                        "[contract] AllImplemented policy violation: {not_implemented} \
+                         binding(s) are not_implemented."
+                    );
 
                     println!("cargo:rustc-env=CONTRACT_BINDING_SOURCE=binding.yaml");
                 } else {
