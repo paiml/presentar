@@ -1195,9 +1195,13 @@ fn test_testable_backend_enable_mouse_capture() {
     assert!(!backend.is_mouse_captured());
     backend.enable_mouse_capture().unwrap();
     assert!(backend.is_mouse_captured());
-    // Verify escape sequence was written
-    let output = backend.into_writer();
-    assert!(!output.is_empty());
+    // Verify escape sequence was written (Unix only — on Windows, crossterm
+    // uses the Console API instead of writing ANSI escape sequences)
+    #[cfg(not(target_os = "windows"))]
+    {
+        let output = backend.into_writer();
+        assert!(!output.is_empty());
+    }
 }
 
 #[test]
